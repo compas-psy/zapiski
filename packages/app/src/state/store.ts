@@ -404,10 +404,7 @@ export class AppController {
     });
     /* Отложенные переименования файла по заголовку — 2 с (BEHAVIOR §2.2). */
     this.renameTimer = setInterval(() => {
-      void vault.flushRenames().then((results) => {
-        const updated = results.reduce((sum, result) => sum + result.updatedLinks, 0);
-        if (updated > 0) this.toast({ message: this.strings.errors.linksUpdated(updated) });
-      });
+      void this.flushRenamesNow();
     }, 1000);
     this.startLockWatch();
     await this.refresh();
@@ -788,12 +785,79 @@ export class AppController {
   }
 
   /**
+   * Тик таймера переименований — и всё, что обязано случиться следом.
+   *
+   * Отдельным методом, а не телом `setInterval`, по двум причинам. Во-первых,
+   * его можно вызвать в тесте: раньше тесты дёргали `vault.flushRenames()`
+   * напрямую и потому не видели, куда после переименования смотрит само
+   * приложение. Во-вторых, здесь живёт то, чего в теле таймера не было и
+   * из-за чего заметки размножались.
+   *
+   * Что происходило. Заметка рождается как «Без названия.md». Через две
+   * секунды vault переименовывает файл по заголовку (BEHAVIOR §2.2) — выходит
+   * «Привет!.md». Экран продолжал держать СТАРЫЙ путь, и следующее
+   * автосохранение писало по нему: `write` создавал файл заново. Дальше цикл
+   * повторялся, а раз «Привет!.md» уже занят, следующее переименование давало
+   * «Привет! 2.md». Пользователь просто печатал, а заметки плодились.
+   */
+  async flushRenamesNow(force = false): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    const results = await vault.flushRenames(force);
+    if (results.length === 0) return;
+
+    for (const result of results) {
+      if (!result.renamed) continue;
+      /* Переезды помним недолго, но помним: правка редактора уходит по
+         debounce 500 мс, а таймер тикает раз в секунду — сохранение вполне
+         может прилететь уже со старым путём. `save` проводит путь через эту
+         карту и попадает в живой файл, а не создаёт покойника заново. */
+      this.recentRenames.set(result.from, result.to);
+      if (this.state.route.name === 'note' && this.state.route.id === result.from) {
+        this.patch({ route: { name: 'note', id: result.to } });
+      }
+      if (this.state.lastOpened.includes(result.from)) {
+        /* Список недавних тоже держит пути. Оставить в нём покойника значит
+           показать в «недавних» строку, которая никуда не открывается. */
+        const lastOpened = this.state.lastOpened.map((item) =>
+          item === result.from ? result.to : item,
+        );
+        this.patch({ lastOpened });
+        void this.host.prefs.set(PREF.lastOpened, lastOpened);
+      }
+    }
+
+    const updated = results.reduce((sum, result) => sum + result.updatedLinks, 0);
+    if (updated > 0) this.toast({ message: this.strings.errors.linksUpdated(updated) });
+    await this.refresh();
+  }
+
+  /** Куда переехали недавно переименованные файлы. Ключ — старый путь. */
+  private readonly recentRenames = new Map<VaultPath, VaultPath>();
+
+  /**
+   * Проводит путь через цепочку недавних переездов. Цепочка, а не один шаг:
+   * «Без названия.md» → «Привет!.md» → «Привет! (2).md» — вполне возможная
+   * последовательность, если заголовок правили дважды подряд.
+   */
+  private followRenames(path: VaultPath): VaultPath {
+    let current = path;
+    for (let step = 0; step < 8; step += 1) {
+      const next = this.recentRenames.get(current);
+      if (next === undefined || next === current) return current;
+      current = next;
+    }
+    return current;
+  }
+
+  /**
    * Автосохранение (BEHAVIOR §0): вызывается редактором по debounce 500 мс и
    * на blur. Слова «Сохранить» в UI нет — кнопки, вызывающей это, не существует.
    */
-  async save(path: VaultPath, body: string): Promise<void> {
+  async save(requested: VaultPath, body: string): Promise<void> {
     const vault = this.vault;
     if (!vault) return;
+    const path = this.followRenames(requested);
     const unlocked = this.state.unlocked[path];
     if (unlocked) {
       /* Зашифрованная заметка: открытый текст на диск не попадает никогда. */
