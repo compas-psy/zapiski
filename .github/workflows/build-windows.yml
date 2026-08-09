@@ -124,16 +124,27 @@ jobs:
 
       # Без ключа `createUpdaterArtifacts: true` уронит сборку невнятной
       # ошибкой в середине бандлинга. Проверяем заранее и говорим прямо.
-      - name: Проверить наличие ключа подписи
+      #
+      # Публичный ключ проверяется тем же шагом: с ключом-заглушкой сборка
+      # прошла бы, а автообновление молча не работало бы у пользователей —
+      # плагин отвергает манифест, который не проверился.
+      - name: Проверить ключи подписи
         env:
           SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${SIGNING_KEY}" ]; then
-            echo '::error::Секрет TAURI_SIGNING_PRIVATE_KEY не задан. Ключ генерируется командой `pnpm --filter @zapiski/desktop tauri signer generate`; публичная половина кладётся в apps/desktop/src-tauri/tauri.conf.json, приватная — только в секреты репозитория.'
+            echo '::error::Секрет TAURI_SIGNING_PRIVATE_KEY не задан. Пара ключей генерируется командой `pnpm --filter @zapiski/desktop tauri signer generate`: публичная половина кладётся в apps/desktop/src-tauri/tauri.conf.json (plugins.updater.pubkey), приватная — только в секреты репозитория.'
             exit 1
           fi
-          echo 'Ключ подписи на месте.'
+          pubkey="$(node -e "process.stdout.write(require('./apps/desktop/src-tauri/tauri.conf.json').plugins.updater.pubkey || '')")"
+          case "${pubkey}" in
+            ''|*ЗАМЕНИТЬ*)
+              echo '::error::В apps/desktop/src-tauri/tauri.conf.json стоит заглушка вместо публичного ключа обновлений. Подставьте публичную половину ключа, приватная половина которого лежит в секрете TAURI_SIGNING_PRIVATE_KEY.'
+              exit 1
+              ;;
+          esac
+          echo 'Ключи подписи на месте.'
 
       - name: Сборка установщика
         env:
@@ -164,15 +175,34 @@ jobs:
              он нужен для развёртывания политиками домена. */
           const nsisDir = path.join(bundle, 'nsis');
           const files = fs.existsSync(nsisDir) ? fs.readdirSync(nsisDir) : [];
-          const installer = files.find((name) => name.endsWith('-setup.exe'));
-          if (!installer) {
+          const built = files.find((name) => name.endsWith('-setup.exe'));
+          if (!built) {
             console.log(`::error::В ${nsisDir} нет установщика NSIS`);
             process.exit(1);
           }
-          const signaturePath = path.join(nsisDir, `${installer}.sig`);
+          const signaturePath = path.join(nsisDir, `${built}.sig`);
           if (!fs.existsSync(signaturePath)) {
             console.log('::error::Установщик не подписан: нет файла .sig');
             process.exit(1);
+          }
+
+          /* Бандлер называет установщик по productName, а он у нас
+             кириллический («КОМПАС.ЗАПИСКИ_0.1.0_x64-setup.exe»). Такое имя
+             уехало бы в URL манифеста в percent-encoded виде и в имя файла на
+             сервере — лишний способ ошибиться на каждом шаге пути. Поэтому
+             наружу файлы едут под латинскими именами. Подпись считается по
+             байтам, а не по имени, так что переименование её не ломает. */
+          const installer = `zapiski-${config.version}-x64-setup.exe`;
+          fs.mkdirSync('release', { recursive: true });
+          fs.copyFileSync(path.join(nsisDir, built), path.join('release', installer));
+          fs.copyFileSync(signaturePath, path.join('release', `${installer}.sig`));
+
+          const msiDir = path.join(bundle, 'msi');
+          for (const name of fs.existsSync(msiDir) ? fs.readdirSync(msiDir) : []) {
+            const ascii = name.endsWith('.msi')
+              ? `zapiski-${config.version}-x64.msi`
+              : `zapiski-${config.version}-x64.msi${path.extname(name)}`;
+            fs.copyFileSync(path.join(msiDir, name), path.join('release', ascii));
           }
 
           const manifest = {
@@ -186,17 +216,6 @@ jobs:
               },
             },
           };
-
-          /* Всё, что уедет и в артефакт, и на сервер, — в одном каталоге. */
-          fs.mkdirSync('release', { recursive: true });
-          fs.copyFileSync(path.join(nsisDir, installer), path.join('release', installer));
-          fs.copyFileSync(signaturePath, path.join('release', `${installer}.sig`));
-
-          const msiDir = path.join(bundle, 'msi');
-          for (const name of fs.existsSync(msiDir) ? fs.readdirSync(msiDir) : []) {
-            fs.copyFileSync(path.join(msiDir, name), path.join('release', name));
-          }
-
           fs.writeFileSync('release/latest.json', `${JSON.stringify(manifest, null, 2)}\n`);
 
           const bytes = fs.statSync(path.join('release', installer)).size;
@@ -210,7 +229,7 @@ jobs:
             `bytes=${bytes}`,
           ].join('\n');
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `${out}\n`);
-          console.log(`Установщик: ${installer}`);
+          console.log(`Установщик: ${installer} (собран как ${built})`);
           console.log(`Размер: ${(bytes / 1024 / 1024).toFixed(2)} МБ`);
           console.log(`SHA-256: ${sha}`);
           NODE

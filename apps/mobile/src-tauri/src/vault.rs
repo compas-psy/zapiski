@@ -136,7 +136,7 @@ pub async fn vault_write_atomic<R: Runtime>(
 
 /// tmp → fsync → rename. Именно в этом порядке и без возврата управления
 /// наружу между шагами.
-fn write_atomic(target: &Path, data: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_atomic(target: &Path, data: &[u8]) -> std::io::Result<()> {
     let parent = target.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "у пути нет каталога")
     })?;

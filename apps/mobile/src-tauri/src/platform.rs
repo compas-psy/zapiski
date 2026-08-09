@@ -63,6 +63,12 @@ fn app() -> Option<&'static AppHandle> {
     APP.get()
 }
 
+/// Хэндл приложения для тех, кто пришёл из Java и не имеет доступа к
+/// состоянию Tauri.
+pub fn app_handle() -> Option<AppHandle> {
+    APP.get().cloned()
+}
+
 /// Разобрать JSON от Kotlin и положить payload в очередь + отправить событие.
 ///
 /// Разбор терпимый: неизвестный `kind` или битый JSON просто игнорируются.

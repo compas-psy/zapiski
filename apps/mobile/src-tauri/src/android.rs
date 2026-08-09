@@ -425,16 +425,15 @@ mod api {
         platform::emit_quick_note();
     }
 
-    /// Тап по чекбоксу в виджете «Закреплённая».
+    /// В очереди виджетов что-то появилось — тап по чекбоксу в «Закреплённой».
+    /// Полезной нагрузки нет намеренно: команда уже лежит в файле очереди,
+    /// и забрать её оттуда — единственный способ не выдать одну отметку дважды.
     #[no_mangle]
     pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeWidgetCommand(
-        mut env: JNIEnv,
+        _env: JNIEnv,
         _this: JObject,
-        json: JString,
     ) {
-        if let Ok(value) = env.get_string(&json) {
-            widgets::accept_command(&String::from(value));
-        }
+        widgets::poke();
     }
 }
 
