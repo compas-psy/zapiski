@@ -807,24 +807,7 @@ export class AppController {
     if (results.length === 0) return;
 
     for (const result of results) {
-      if (!result.renamed) continue;
-      /* Переезды помним недолго, но помним: правка редактора уходит по
-         debounce 500 мс, а таймер тикает раз в секунду — сохранение вполне
-         может прилететь уже со старым путём. `save` проводит путь через эту
-         карту и попадает в живой файл, а не создаёт покойника заново. */
-      this.recentRenames.set(result.from, result.to);
-      if (this.state.route.name === 'note' && this.state.route.id === result.from) {
-        this.patch({ route: { name: 'note', id: result.to } });
-      }
-      if (this.state.lastOpened.includes(result.from)) {
-        /* Список недавних тоже держит пути. Оставить в нём покойника значит
-           показать в «недавних» строку, которая никуда не открывается. */
-        const lastOpened = this.state.lastOpened.map((item) =>
-          item === result.from ? result.to : item,
-        );
-        this.patch({ lastOpened });
-        void this.host.prefs.set(PREF.lastOpened, lastOpened);
-      }
+      if (result.renamed) this.noteMoved(result.from, result.to);
     }
 
     const updated = results.reduce((sum, result) => sum + result.updatedLinks, 0);
@@ -832,19 +815,67 @@ export class AppController {
     await this.refresh();
   }
 
+  /**
+   * Единственное место, где приложение узнаёт, что заметка сменила путь.
+   *
+   * Отдельным методом, потому что путь меняется НЕ в одном месте:
+   * переименование по заголовку, перемещение в папку, шифрование и снятие
+   * шифрования, восстановление из корзины. Размножение заметок случилось
+   * ровно потому, что следование за путём было написано (точнее, не написано)
+   * по месту в одном из них. Каждый новый способ сдвинуть файл обязан звать
+   * этот метод, а `path-follow.test.ts` перечисляет их списком.
+   */
+  private noteMoved(from: VaultPath, to: VaultPath): void {
+    if (from === to) return;
+    /* Переезды помним недолго, но помним: правка редактора уходит по debounce
+       500 мс, а таймер тикает раз в секунду — сохранение вполне может
+       прилететь уже со старым путём. `save` проводит путь через эту карту и
+       попадает в живой файл, а не создаёт покойника заново. */
+    this.recentRenames.set(from, to);
+    if (this.state.route.name === 'note' && this.state.route.id === from) {
+      this.patch({ route: { name: 'note', id: to } });
+    }
+    if (this.state.lastOpened.includes(from)) {
+      /* Список недавних тоже держит пути. Оставить в нём покойника значит
+         показать в «недавних» строку, которая никуда не открывается. */
+      const lastOpened = this.state.lastOpened.map((item) => (item === from ? to : item));
+      this.patch({ lastOpened });
+      void this.host.prefs.set(PREF.lastOpened, lastOpened);
+    }
+  }
+
   /** Куда переехали недавно переименованные файлы. Ключ — старый путь. */
   private readonly recentRenames = new Map<VaultPath, VaultPath>();
 
   /**
-   * Проводит путь через цепочку недавних переездов. Цепочка, а не один шаг:
-   * «Без названия.md» → «Привет!.md» → «Привет! (2).md» — вполне возможная
-   * последовательность, если заголовок правили дважды подряд.
+   * Куда на самом деле писать, если путь пришёл из редактора со сдвигом.
+   *
+   * Здесь легко сделать хуже, чем было, и я сделал: первая версия слепо
+   * проводила путь через карту переездов. Но «Без названия.md» — имя
+   * ПОВТОРНО ИСПОЛЬЗУЕМОЕ: следующая новая заметка рождается с ним же. Слепая
+   * подстановка отправляла её текст в файл предыдущей заметки и затирала
+   * чужое содержимое. Диагностика показала это прямо: на диске оставались
+   * «Без названия.md» и «Своя.md», а текст «Своей» уехал в «Чужую».
+   *
+   * Поэтому правило теперь такое: **существующий файл всегда главнее карты**.
+   * Карта отвечает на вопрос «куда делся файл, которого больше нет», и только
+   * на него. Если по запрошенному пути что-то лежит — пишем туда и не
+   * умничаем.
    */
-  private followRenames(path: VaultPath): VaultPath {
-    let current = path;
+  private async resolveSavePath(requested: VaultPath): Promise<VaultPath> {
+    const vault = this.vault;
+    if (!vault) return requested;
+    /* Спрашиваем хранилище, а не индекс: индекс — производная и может
+       отставать на такт, а ошибка здесь стоит чужого текста. */
+    if ((await vault.storage.stat(requested)) !== null) {
+      /* Путь занят — значит, это живой файл, а запись в карте протухла. */
+      this.recentRenames.delete(requested);
+      return requested;
+    }
+    let current = requested;
     for (let step = 0; step < 8; step += 1) {
       const next = this.recentRenames.get(current);
-      if (next === undefined || next === current) return current;
+      if (next === undefined || next === current) break;
       current = next;
     }
     return current;
@@ -857,7 +888,7 @@ export class AppController {
   async save(requested: VaultPath, body: string): Promise<void> {
     const vault = this.vault;
     if (!vault) return;
-    const path = this.followRenames(requested);
+    const path = await this.resolveSavePath(requested);
     const unlocked = this.state.unlocked[path];
     if (unlocked) {
       /* Зашифрованная заметка: открытый текст на диск не попадает никогда. */
@@ -931,6 +962,11 @@ export class AppController {
     const vault = this.vault;
     if (!vault) return;
     const result = await vault.move(path, folder);
+    /* Перемещение — такая же смена пути, как переименование по заголовку.
+       Без этой строки открытая заметка оставалась бы на старом пути, и
+       следующее автосохранение создало бы её заново в корне — ровно то
+       размножение, которое нашёл пользователь, только другим способом. */
+    if (result.renamed) this.noteMoved(result.from, result.to);
     await this.refresh();
     if (result.updatedLinks > 0) {
       this.toast({ message: this.strings.errors.linksUpdated(result.updatedLinks) });
