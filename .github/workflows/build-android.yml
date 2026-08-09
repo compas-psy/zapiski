@@ -80,6 +80,14 @@ jobs:
       # её артефакт нужен job'у release.
       cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
+    env:
+      # Флаг «есть куда доставить сборку». Считается здесь, а не в `if`
+      # шага: контекст `secrets` в условиях шагов недоступен, и файл с
+      # такой ссылкой GitHub отвергает целиком — прогон падает за секунду
+      # с именем файла вместо названия workflow. В env у job'а secrets
+      # разрешены, а env в условии шага — да.
+      HAS_SERVER: ${{ secrets.SERVER_HOST != '' && secrets.SSH_PRIVATE_KEY != '' }}
+
     outputs:
       version: ${{ steps.version.outputs.version }}
       signed: ${{ steps.keystore.outputs.signed }}
@@ -608,7 +616,7 @@ jobs:
       - name: Отдать APK на сервер
         id: ship
         continue-on-error: true
-        if: ${{ secrets.SERVER_HOST != '' && secrets.SSH_PRIVATE_KEY != '' }}
+        if: env.HAS_SERVER == 'true'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}

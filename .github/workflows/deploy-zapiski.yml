@@ -29,14 +29,27 @@ name: Деплой zapiski.cmpas.ru
 # же сервере крутится чужой боевой КОМПАС.Дневник, и выкатывать туда каждый
 # промежуточный коммит соседних агентов — плохая идея (ADR-0003).
 on:
+  # Ветка по умолчанию у этого репозитория — НЕ `main`: репозиторий создавался
+  # пустым, и веткой по умолчанию стала первая запушенная. Одного `main` здесь
+  # хватало ровно на то, чтобы деплой не запускался никогда и молча — за всё
+  # время он стартовал только руками через workflow_dispatch. Имя перечислено
+  # буквально, потому что в `on:` выражения не работают; так же сделано в
+  # build-android.yml. Переименуете ветку по умолчанию — правьте здесь.
+  #
+  # Выкладку это не расширяет: job `deploy` всё равно проверяет, что ref равен
+  # ветке по умолчанию репозитория.
   push:
-    branches: ["main"]
+    branches:
+      - main
+      - claude/cloud-deployment-cross-platform-9nenw7
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
       - '.github/workflows/provision-zapiski.yml'
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
+      - claude/cloud-deployment-cross-platform-9nenw7
     paths-ignore:
       - 'docs/**'
       - '**/*.md'

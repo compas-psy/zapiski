@@ -53,6 +53,39 @@ step 'Сборка PWA' pnpm --filter '@zapiski/web...' build
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
 step 'Скрипты, исполняемые на сервере' bash -c 'bash -n deploy/deploy-production-remote.sh && bash -n deploy/merge-update-manifest.sh'
 
+# Битый workflow не даёт ни одного job'а: прогон падает за секунду, и в списке
+# вместо названия стоит путь к файлу. Понять по такому прогону, что случилось,
+# нельзя — логов нет. Поэтому разбираем файлы здесь.
+workflows_check() {
+  python3 - <<'PY'
+import glob, re, sys, yaml
+
+problems = []
+for path in sorted(glob.glob('.github/workflows/*.yml')):
+    text = open(path, encoding='utf-8').read()
+    try:
+        yaml.safe_load(text)
+    except Exception as error:
+        problems.append(f'{path}: не разбирается как YAML — {error}')
+        continue
+
+    # `secrets` в условии шага GitHub не принимает: контекст там недоступен, и
+    # файл отвергается целиком. Значение кладут в env у job'а и проверяют его.
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if re.match(r'^-?\s*if\s*:', stripped) and 'secrets.' in stripped:
+            problems.append(
+                f'{path}:{number}: `secrets` в условии — недопустимо. '
+                'Положите значение в env у job\'а и проверяйте env.'
+            )
+
+for problem in problems:
+    print(problem, file=sys.stderr)
+sys.exit(1 if problems else 0)
+PY
+}
+step 'Файлы workflow' workflows_check
+
 compose_check() {
   # Значение живёт только внутри проверки: compose обязан видеть переменную,
   # иначе `${VAR:?}` прервёт разбор ещё до синтаксической проверки.
