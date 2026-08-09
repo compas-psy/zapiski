@@ -90,6 +90,11 @@ jobs:
 
           REPO_HTTPS_URL="$1"
           SITE='zapiski.cmpas.ru'
+          # Псевдоним: 301 на канонический домен. Сертификат обязан покрывать
+          # оба имени, иначе редирект по HTTPS упрётся в ошибку сертификата
+          # раньше, чем сработает. Оба домена — наши; сертификат cmpas.ru
+          # по-прежнему не переоформляется (ADR-0003 §6).
+          ALIAS='notes.cmpas.ru'
           DOCROOT="/var/www/${SITE}"
           CHECKOUT='/var/www/zapiski'
           AVAILABLE="/etc/nginx/sites-available/${SITE}"
@@ -133,7 +138,7 @@ jobs:
           # и его сертификат не задеты в любом случае.
           if [ ! -e "/etc/letsencrypt/live/${SITE}/fullchain.pem" ]; then
             log 'Сертификата нет — выпускаем.'
-            if certbot --nginx -d "${SITE}" --non-interactive --agree-tos \
+            if certbot --nginx -d "${SITE}" -d "${ALIAS}" --non-interactive --agree-tos \
                  -m admin@cmpas.ru --redirect; then
               log "OK: TLS выпущен для ${SITE}."
             else
@@ -141,7 +146,7 @@ jobs:
             fi
           elif [ "${had_tls_in_conf}" -eq 1 ] && ! grep -q 'ssl_certificate' "${AVAILABLE}"; then
             log 'Сертификат есть, но перезапись конфига убрала ssl-директивы — переустанавливаем их.'
-            if certbot --nginx -d "${SITE}" --non-interactive --agree-tos \
+            if certbot --nginx -d "${SITE}" -d "${ALIAS}" --non-interactive --agree-tos \
                  -m admin@cmpas.ru --redirect --reinstall; then
               log 'OK: ssl-директивы возвращены в vhost.'
             else
