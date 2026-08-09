@@ -47,6 +47,12 @@ const schema = z.object({
   PUBLIC_BASE_URL: z.string().url().default('https://zapiski.cmpas.ru'),
   /** Куда перенаправить браузер после успешного входа. Пусто — отдать JSON. */
   AUTH_SUCCESS_REDIRECT: z.string().optional(),
+  /**
+   * То же для настольного приложения: там перехватить https-ссылку нечем, и
+   * возврат идёт по собственной схеме (`zapiski://auth/callback`). Пусто —
+   * используется AUTH_SUCCESS_REDIRECT, то есть поведение как было.
+   */
+  AUTH_SUCCESS_REDIRECT_DESKTOP: z.string().optional(),
 
   /** ADR-0003 §7: существующий postfix на хосте, новых почтовых сервисов нет. */
   SMTP_HOST: z.string().default('localhost'),

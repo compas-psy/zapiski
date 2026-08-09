@@ -583,17 +583,68 @@ jobs:
             fi
           fi
 
+      # ── Две дороги наружу ────────────────────────────────────────────────
+      #
+      # То же, что в сборке Windows, и по той же причине: квота хранилища
+      # артефактов одна на весь аккаунт, и когда она полная, upload-artifact
+      # отвечает отказом за секунду — уже собранный APK при этом годен.
+      # Падение любой одной дороги сборку не роняет; падение обеих — роняет.
+      #
+      # 7 дней, а не 90 по умолчанию: нужен APK надолго — он приезжает в
+      # GitHub Release по тегу, а не из вкладки Actions.
       - name: Приложить APK
+        id: artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.collect.outputs.artifact }}
           path: artifacts/*.apk
           if-no-files-found: error
-          # 7, а не 90: квота артефактов аккаунта одна на все репозитории и
-          # недавно упиралась в потолок — главным образом из-за APK Дневника,
-          # лежавших по 90 дней. Нужен APK надолго — он приезжает в GitHub
-          # Release по тегу, а не из вкладки Actions.
           retention-days: 7
+
+      # Каталог сборок, а не фид обновлений: debug-подпись рядом с latest.json
+      # заставила бы клиентов ставить отладочный пакет поверх релизного —
+      # Android откажет, а пользователь увидит вечное «доступно обновление».
+      - name: Отдать APK на сервер
+        id: ship
+        continue-on-error: true
+        if: ${{ secrets.SERVER_HOST != '' && secrets.SSH_PRIVATE_KEY != '' }}
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
+          target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
+
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
+          scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
+          echo "APK лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
+
+      - name: APK должен быть хоть где-то
+        env:
+          ARTIFACT: ${{ steps.artifact.outcome }}
+          SHIP: ${{ steps.ship.outcome }}
+        run: |
+          set -euo pipefail
+          echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
+          if [ "${ARTIFACT}" = 'success' ] || [ "${SHIP}" = 'success' ]; then
+            if [ "${ARTIFACT}" != 'success' ]; then
+              echo '::warning::Артефакт GitHub не сохранён (обычная причина — исчерпанная квота хранилища аккаунта). APK забирайте с сервера.'
+            fi
+            if [ "${SHIP}" != 'success' ] && [ "${SHIP}" != 'skipped' ]; then
+              echo '::warning::APK не уехал на сервер. Он есть в артефактах прогона.'
+            fi
+            exit 0
+          fi
+          echo '::error::APK собран, но не сохранён нигде: и артефакт, и доставка на сервер не удались. Скачать нечего.'
+          exit 1
 
       - name: Убрать ключ подписи
         if: always()

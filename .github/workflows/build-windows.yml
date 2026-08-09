@@ -395,17 +395,80 @@ jobs:
           fi
           echo "Тег и версия совпадают: ${VERSION}."
 
-      # retention-days: 7, а не 90 по умолчанию. Установщик — 10–25 МБ на
-      # прогон, а квота артефактов аккаунта недавно упиралась в потолок;
-      # держать месячную историю .exe незачем, релизные версии живут в
-      # GitHub Release.
+      # ── Две дороги наружу ────────────────────────────────────────────────
+      #
+      # Установщик собирается за восемь минут, а потом его надо куда-то деть.
+      # Дважды подряд сборка падала здесь и только здесь: хранилище артефактов
+      # аккаунта общее на все репозитории, и когда оно полное, upload-artifact
+      # отвечает отказом за секунду. Софт при этом собран и годен.
+      #
+      # Поэтому дорог две — артефакт GitHub и каталог на нашем же сервере, —
+      # и падение любой ОДНОЙ не роняет сборку. Роняет только потеря обеих:
+      # зелёная сборка, после которой установщика нет нигде, хуже красной.
+      #
+      # retention-days: 7, а не 90 по умолчанию: держать месячную историю
+      # .exe незачем, релизные версии живут в GitHub Release.
       - name: Сохранить артефакты
+        id: artifact
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.manifest.outputs.artifact }}
           path: release/**
           if-no-files-found: error
           retention-days: 7
+
+      # Каталог сборок, а НЕ фид обновлений. Неподписанный установщик рядом с
+      # latest.json был бы вреден: апдейтер предложил бы его пользователям.
+      # Здесь он лежит отдельно, скачивается руками и ни на что не влияет.
+      - name: Отдать установщик на сервер
+        id: ship
+        continue-on-error: true
+        if: ${{ secrets.SERVER_HOST != '' && secrets.SSH_PRIVATE_KEY != '' }}
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          VERSION: ${{ steps.manifest.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key || true
+          # OpenSSH под Windows проверяет не режим файла, а ACL, и `chmod` их
+          # не трогает. Без этой строки ключ отвергается как «слишком
+          # доступный». Ошибку глушим: на не-Windows раннере icacls нет.
+          icacls "$(cygpath -w ~/.ssh/deploy_key)" /inheritance:r /grant:r "${USERNAME}:F" >/dev/null 2>&1 || true
+          ssh-keyscan -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Ветка в имени каталога: параллельные ветки не затирают друг друга.
+          # Всё, кроме букв, цифр и дефиса, схлопывается — из имени ветки
+          # приходят слэши, а они создали бы дерево каталогов.
+          slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
+          target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
+
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
+          scp -i ~/.ssh/deploy_key release/* "${SERVER_USER}@${SERVER_HOST}:${target}/"
+          echo "Установщик ${VERSION} лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
+
+      - name: Установщик должен быть хоть где-то
+        env:
+          ARTIFACT: ${{ steps.artifact.outcome }}
+          SHIP: ${{ steps.ship.outcome }}
+        run: |
+          set -euo pipefail
+          echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
+          if [ "${ARTIFACT}" = 'success' ] || [ "${SHIP}" = 'success' ]; then
+            if [ "${ARTIFACT}" != 'success' ]; then
+              echo '::warning::Артефакт GitHub не сохранён (обычная причина — исчерпанная квота хранилища аккаунта). Установщик забирайте с сервера.'
+            fi
+            if [ "${SHIP}" != 'success' ] && [ "${SHIP}" != 'skipped' ]; then
+              echo '::warning::Установщик не уехал на сервер. Он есть в артефактах прогона.'
+            fi
+            exit 0
+          fi
+          echo '::error::Установщик собран, но не сохранён нигде: и артефакт, и доставка на сервер не удались. Скачать нечего.'
+          exit 1
 
   # ───────────────────────────────────────────────────────────────────────────
   # RELEASE — только на теге

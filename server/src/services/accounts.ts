@@ -147,7 +147,7 @@ export async function createMagicToken(
 }
 
 export type MagicConsumeResult =
-  | { ok: true; email: string; deviceKey: string }
+  | { ok: true; email: string; deviceKey: string; platform: string | null }
   | { ok: false; reason: 'unknown' | 'expired' | 'used' | 'device_mismatch' };
 
 /**
@@ -169,10 +169,11 @@ export async function consumeMagicToken(
       id: string;
       email: string;
       device_key: string;
+      platform: string | null;
       expires_at: Date;
       used_at: Date | null;
     }>(
-      `SELECT id, email, device_key, expires_at, used_at
+      `SELECT id, email, device_key, platform, expires_at, used_at
          FROM magic_tokens WHERE token_hash = $1 FOR UPDATE`,
       [tokenHash],
     );
@@ -184,7 +185,7 @@ export async function consumeMagicToken(
     if (row.device_key !== deviceKey) return { ok: false, reason: 'device_mismatch' };
 
     await client.query(`UPDATE magic_tokens SET used_at = $2 WHERE id = $1`, [row.id, now]);
-    return { ok: true, email: row.email, deviceKey: row.device_key };
+    return { ok: true, email: row.email, deviceKey: row.device_key, platform: row.platform };
   });
 }
 

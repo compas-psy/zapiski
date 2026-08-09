@@ -106,7 +106,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       now,
     );
 
-    const url = buildMagicLinkUrl(ctx, issued.token);
+    const url = buildMagicLinkUrl(ctx, issued.token, deviceId, platform ?? null);
     try {
       await ctx.mailer.sendMagicLink({
         to: email,
@@ -155,8 +155,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const user = await upsertUserByEmail(ctx.db, result.email);
-    const session = await issueSession(ctx, user.id, deviceKey, null);
-    return respondWithSession(ctx, reply, session, parsed.data.format);
+    const session = await issueSession(ctx, user.id, deviceKey, result.platform);
+    return respondWithSession(ctx, reply, session, parsed.data.format, result.platform);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
     const user = await upsertUserByYandex(ctx.db, identity.id, identity.email);
     const session = await issueSession(ctx, user.id, deviceKey, platform);
-    return respondWithSession(ctx, reply, session, undefined);
+    return respondWithSession(ctx, reply, session, undefined, platform);
   });
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -348,14 +348,25 @@ async function issueSession(
  * По умолчанию отдаём JSON: эндпоинт зовёт приложение. Если задан
  * AUTH_SUCCESS_REDIRECT, браузер уводится по deep-link, а токены едут во
  * фрагменте — фрагмент не уходит на сервер и не оседает в логах nginx.
+ *
+ * Адрес возврата зависит от платформы, и одним значением тут не обойтись:
+ * вебу и Android нужен `https://…/auth/callback` (у Android он же App Link,
+ * у веба — обычная страница), а настольному приложению — только собственная
+ * схема `zapiski://`. Платформа берётся из того же токена, которым вход
+ * начинался, поэтому подменить её из браузера нельзя.
  */
 function respondWithSession(
   ctx: AppContext,
   reply: FastifyReply,
   session: SessionResponse,
   format: 'json' | 'redirect' | undefined,
+  platform: string | null,
 ): FastifyReply {
-  const redirect = ctx.env.AUTH_SUCCESS_REDIRECT;
+  const desktop = ctx.env.AUTH_SUCCESS_REDIRECT_DESKTOP;
+  const redirect =
+    platform !== null && CANNOT_CATCH_HTTPS.has(platform) && desktop !== undefined && desktop.length > 0
+      ? desktop
+      : ctx.env.AUTH_SUCCESS_REDIRECT;
   if (format !== 'json' && redirect !== undefined && redirect.length > 0) {
     const fragment = new URLSearchParams({
       access_token: session.accessToken,
@@ -367,9 +378,45 @@ function respondWithSession(
   return reply.send(session);
 }
 
-function buildMagicLinkUrl(ctx: AppContext, token: string): string {
+/**
+ * Платформы, которые не могут перехватить https-ссылку из письма.
+ *
+ * Android умеет App Links, браузер — сам себе адресная строка; настольное
+ * приложение не умеет ни того, ни другого: Windows отдаёт приложению только
+ * собственную схему (`zapiski://`), а письмо открывается в браузере.
+ */
+const CANNOT_CATCH_HTTPS = new Set<string>(['windows']);
+
+/**
+ * Ссылка из письма.
+ *
+ * `device_id` кладётся в ссылку **только для настольного приложения** — и это
+ * осознанный размен, а не недосмотр. Обмен требует device_id, а браузер, в
+ * котором открылось письмо, идентификатор настольного приложения знать не
+ * может: приложение ему ничего не передавало. Без этого параметра вход на
+ * Windows не замыкается вообще.
+ *
+ * Что при этом теряется: на Windows ссылка становится обычным magic-link'ом —
+ * кто ею завладел, тот и войдёт. На вебе и Android привязка к устройству
+ * инициации сохраняется полностью: там device_id подставляет приложение, и
+ * письмо, открытое на чужом устройстве, даёт `device_mismatch`.
+ *
+ * Сам device_id секретом не является (его придумывает клиент и шлёт открытым
+ * запросом), так что добавление его в ссылку не раскрывает ничего сверх того,
+ * что уже несёт сам токен.
+ */
+function buildMagicLinkUrl(
+  ctx: AppContext,
+  token: string,
+  deviceKey: string,
+  platform: string | null,
+): string {
   const base = ctx.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
-  return `${base}/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token)}`;
+  const query = new URLSearchParams({ token });
+  if (platform !== null && CANNOT_CATCH_HTTPS.has(platform)) {
+    query.set('device_id', deviceKey);
+  }
+  return `${base}/api/v1/auth/magic-link/callback?${query.toString()}`;
 }
 
 function headerDeviceId(request: FastifyRequest): string | undefined {

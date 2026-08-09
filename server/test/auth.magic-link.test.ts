@@ -194,3 +194,106 @@ describe.skipIf(noDatabase())('magic-link', () => {
     );
   });
 });
+
+/**
+ * Возврат в приложение зависит от платформы, и это единственное место, где
+ * разница между платформами узаконена. Она вынужденная: настольное окно не
+ * может перехватить https-ссылку из письма — Windows отдаёт приложению только
+ * его собственную схему. Поэтому Windows получает device_id прямо в ссылке и
+ * возврат по `zapiski://`, а веб и Android — прежнюю строгую привязку.
+ *
+ * Тесты ниже стерегут ровно это: послабление не должно расползтись на другие
+ * платформы, а строгость — не должна вернуться на настольную и снова оборвать
+ * вход.
+ */
+describe.skipIf(noDatabase())('magic-link: возврат по платформам', () => {
+  let harness: Harness;
+
+  beforeAll(async () => {
+    harness = await createHarness({
+      env: {
+        AUTH_SUCCESS_REDIRECT: 'https://zapiski.test/auth/callback',
+        AUTH_SUCCESS_REDIRECT_DESKTOP: 'zapiski://auth/callback',
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  async function linkFor(email: string, deviceId: string, platform: string): Promise<URL> {
+    harness.mailer.reset();
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/magic-link',
+      payload: { email, deviceId, platform },
+    });
+    expect(response.statusCode).toBe(202);
+    const sent = harness.mailer.last();
+    expect(sent).toBeDefined();
+    return new URL(sent!.url);
+  }
+
+  it('ссылка для Windows несёт device_id и замыкает вход без подсказок клиента', async () => {
+    const email = `magicwin.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-win', 'windows');
+    expect(url.searchParams.get('device_id')).toBe('device-magic-win');
+
+    // Браузер идёт по ссылке как есть — ни заголовка X-Device-Id, ни query
+    // сверх того, что было в письме. Именно так это выглядит на Windows.
+    const callback = await harness.app.inject({
+      method: 'GET',
+      url: `${url.pathname}${url.search}`,
+    });
+    expect(callback.statusCode).toBe(302);
+    const location = callback.headers['location'] as string;
+    expect(location.startsWith('zapiski://auth/callback#')).toBe(true);
+    expect(location).toContain('access_token=');
+    // Токены едут во фрагменте: он не уходит на сервер и не оседает в логах.
+    expect(location.split('#')[0]).not.toContain('access_token');
+  });
+
+  it('ссылка для веба device_id не несёт — привязка к устройству цела', async () => {
+    const email = `magicweb.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-web', 'web');
+    expect(url.searchParams.get('device_id')).toBeNull();
+
+    const blind = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(blind.statusCode).toBe(400);
+
+    const withDevice = await harness.app.inject({
+      method: 'GET',
+      url: `${url.pathname}${url.search}&device_id=device-magic-web`,
+    });
+    expect(withDevice.statusCode).toBe(302);
+    expect((withDevice.headers['location'] as string).startsWith('https://zapiski.test/auth/callback#')).toBe(true);
+  });
+
+  it('ссылка для Android device_id не несёт: App Links доставляют его сами', async () => {
+    const email = `magicdroid.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-droid', 'android');
+    expect(url.searchParams.get('device_id')).toBeNull();
+  });
+
+  it('чужое устройство по ссылке Windows не входит: токен привязан к своему', async () => {
+    const email = `magicwin2.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-win-2', 'windows');
+    url.searchParams.set('device_id', 'device-someone-else');
+
+    const stolen = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(stolen.statusCode).toBe(410);
+  });
+
+  it('format=json перебивает редирект: так ходит само приложение', async () => {
+    const email = `magicjson.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-json', 'windows');
+
+    const response = await harness.app.inject({
+      method: 'GET',
+      url: `${url.pathname}${url.search}&format=json`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect((response.json() as { accessToken: string }).accessToken).toBeTruthy();
+  });
+});
