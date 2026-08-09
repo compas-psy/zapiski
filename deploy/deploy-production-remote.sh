@@ -60,6 +60,11 @@ check_prereqs() {
   docker compose version >/dev/null 2>&1 \
     || fail 'нет docker compose v2 (плагин compose). Скрипт рассчитан на `docker compose`, а не `docker-compose`.'
 
+  # curl нужен финальной проверке снаружи (verify_public). Без него деплой
+  # прошёл бы «успешно», ни разу не постучавшись в собственный сайт.
+  command -v curl >/dev/null 2>&1 \
+    || fail 'на сервере нет curl — им проверяется, что сайт отвечает снаружи.'
+
   # Каталог обновлений монтируется в контейнер API только на чтение
   # (deploy/docker-compose.yml). Если его нет, docker создал бы его сам от
   # root, и nginx потом не смог бы отдавать оттуда файлы. Создаём явно.

@@ -26,7 +26,7 @@ const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
 const CROSSFADE_MS = 200;
 
 export interface ThemeContextValue {
-  /** Что выбрал пользователь: system | paper | graphite | ink. */
+  /** Что выбрал пользователь: system | simpas | graphite | ink. */
   preference: ThemePreference;
   /** Что реально применено к DOM (system уже разрешён). */
   theme: Theme;

@@ -1,6 +1,8 @@
 /* Полный стилевой слой @zapiski/ui.
-   Порядок важен: токены → шрифты → база → типографика. */
+   Порядок важен: система СИМПАС (+ self-hosted шрифты) → наши алиасы-токены →
+   база → типографика. Всё, что ниже слоя системы, только ссылается на её
+   переменные (DS-ALIGNMENT.md §2). */
+@import './simpas-offline.css';
 @import './tokens.css';
-@import './fonts.css';
 @import './base.css';
 @import './typography.css';

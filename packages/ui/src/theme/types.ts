@@ -1,17 +1,27 @@
 /**
- * Модель темизации — DESIGN_TOKENS.md §1–§2.
+ * Модель темизации — DS-ALIGNMENT.md §2–§5.
  * Два независимых измерения (тема × акцент) + пользовательские настройки
  * редактора, которые работают как МНОЖИТЕЛИ над базовыми токенами.
  */
 
-export const THEMES = ['paper', 'graphite', 'ink'] as const;
+/**
+ * `simpas` — светлая тема дизайн-системы, базовая и единственная «дневная»
+ * (DS-ALIGNMENT §2; прежняя `paper` удалена вместе со своей палитрой).
+ * `graphite` и `ink` — наше расширение: у СИМПАСА тёмной темы нет (§5).
+ */
+export const THEMES = ['simpas', 'graphite', 'ink'] as const;
 export type Theme = (typeof THEMES)[number];
 
 /** Что выбирает пользователь. По умолчанию — `system` (следует за ОС). */
 export const THEME_PREFERENCES = ['system', ...THEMES] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
-export const ACCENTS = ['garnet', 'pine', 'gold', 'blueberry', 'heather', 'slate'] as const;
+/**
+ * Шесть пресетов акцента — DS-ALIGNMENT §3: Хвоя, Лес, Золото, Сумерки,
+ * Гранит, Глина. Терракоты в наборе НЕТ: `#C8604A` — цвет идентичности,
+ * а не интерфейса, предлагать пользователю красить в него интерфейс нельзя.
+ */
+export const ACCENTS = ['pine', 'forest', 'gold', 'dusk', 'granite', 'clay'] as const;
 export type Accent = (typeof ACCENTS)[number];
 
 /** Размер текста в редакторе — 5 ступеней (DESIGN_TOKENS.md §2). */
@@ -58,15 +68,16 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 
 export const DEFAULT_APPEARANCE: AppearanceState = {
   theme: 'system',
-  accent: 'garnet',
+  /** «Хвоя» — основное действие дизайн-системы (DS-ALIGNMENT §3). */
+  accent: 'pine',
   editor: DEFAULT_EDITOR_PREFERENCES,
 };
 
 /** Ключ в localStorage. Выбор пользователя переживает перезапуск. */
 export const APPEARANCE_STORAGE_KEY = 'zapiski.appearance';
 
-/** `system` → конкретная тема: светлая ОС → paper, тёмная → graphite. */
+/** `system` → конкретная тема: светлая ОС → simpas, тёмная → graphite. */
 export function resolveTheme(preference: ThemePreference, prefersDark: boolean): Theme {
   if (preference !== 'system') return preference;
-  return prefersDark ? 'graphite' : 'paper';
+  return prefersDark ? 'graphite' : 'simpas';
 }

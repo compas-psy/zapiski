@@ -181,8 +181,15 @@ jobs:
             -v "${PWD}/deploy/zapiski.cmpas.ru.nginx.conf:/etc/nginx/conf.d/zapiski.conf:ro" \
             nginx:stable-alpine nginx -t
 
-      - name: Проверить скрипт удалённого деплоя
-        run: bash -n deploy/deploy-production-remote.sh
+      # Скрипты уезжают на сервер и исполняются там, где чинить их дорого,
+      # поэтому синтаксис проверяем здесь. Оба лежат в deploy/ и доставляются
+      # одним и тем же rsync'ом.
+      - name: Проверить скрипты, исполняемые на сервере
+        run: |
+          set -euo pipefail
+          bash -n deploy/deploy-production-remote.sh
+          bash -n deploy/merge-update-manifest.sh
+          echo 'Скрипты деплоя синтаксически валидны.'
 
       # Артефакт с собранной статикой здесь НЕ выгружается.
       # Раньше выгружался, чтобы передать dist в job deploy, — и деплой

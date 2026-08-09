@@ -1,18 +1,36 @@
 /* ===========================================================================
-   КОМПАС.ЗАПИСКИ — токены
-   Единственный файл во всём репозитории, где разрешены hex/rgb-литералы
-   (ARCHITECTURE.md §3.4, DESIGN_TOKENS.md §4, проверяется scripts/lint-tokens.mjs).
+   ЗАПИСКИ — токены продукта.
 
-   Все значения — ДОСЛОВНО из docs/spec/DESIGN_TOKENS.md.
-   Производные значения получены через color-mix() от токенов, а не выдуманы
-   новыми hex-литералами; каждое такое место помечено «производное».
+   Это НЕ независимая палитра, а слой алиасов поверх дизайн-системы СИМПАС
+   (DS-ALIGNMENT.md §2). Система подключается в `index.css` через
+   `simpas-offline.css`; здесь её переменные получают продуктовые имена.
+
+   ── Откуда берутся значения ───────────────────────────────────────────────
+   Источник истины — СНИМОК системы (`./simpas/vendor/tokens/*.css`), а не
+   таблицы в прозе DS-ALIGNMENT. При расхождении выигрывает снимок; каждое
+   такое место помечено «снимок ≠ §N».
+
+   Литерал (hex/rgba) в этом файле допустим ровно в трёх случаях, и каждый
+   помечен маркером:
+     [§3]  значения акцентов, которых в снимке нет (Сумерки, Гранит, Глина,
+           текстовое золото) — берутся из таблицы DS-ALIGNMENT §3;
+     [§4]  роль `*-text` — правка CONTRAST-DECISION, оставленная в силе §4;
+     [§5]  тёмные темы — у СИМПАСА тёмной темы нет, это наше расширение.
+   Больше литералов быть не должно: всё остальное — `var(--*)` системы.
+   (Проверяется scripts/lint-tokens.mjs + test/contrast.test.ts.)
+
+   ── Осторожно: имена, которые уже заняты системой ─────────────────────────
+   Система объявляет `--accent: var(--gold-500)` и `--accent-foreground`.
+   Мы намеренно перекрываем `--accent`: у ЗАПИСОК акцент — ось темизации из
+   шести пресетов (§3), а не одно фирменное золото. Перекрытие работает
+   каскадом (наши правила ниже по источнику), сам снимок не тронут.
 
    Измерения темизации:
-     data-theme  = paper | graphite | ink      (surface)
-     data-accent = garnet | pine | gold | blueberry | heather | slate
-     data-density  = comfortable | compact     (компактный режим)
-     data-typeface = sans | serif              (sans ↔ serif в редакторе)
-   `system` разрешается в paper/graphite на стороне ThemeProvider — в CSS
+     data-theme  = simpas | graphite | ink        (surface)
+     data-accent = pine | forest | gold | dusk | granite | clay
+     data-density  = comfortable | compact
+     data-typeface = sans | serif                 (только текст заметки)
+   `system` разрешается в simpas/graphite на стороне ThemeProvider — в CSS
    попадает всегда конкретная тема (см. src/theme/initScript.ts).
    =========================================================================== */
 
@@ -20,12 +38,16 @@
    Размеры шрифтов — в rem (масштаб шрифта ОС до 200% не ломает layout, ТЗ §6).
    В комментарии — исходное значение из спецификации в px при корне 16px.     */
 :root {
-  /* Семейства. Шрифты self-hosted (src/styles/fonts.css), без CDN в рантайме. */
-  --font-sans: 'Golos Text', 'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  /* Семейства. `--font-sans` и `--font-mono` объявлены самой системой
+     (simpas/vendor/tokens/typography.css: Geist / Geist Mono) — мы их НЕ
+     переопределяем, это и есть «алиас поверх». Файлы шрифтов self-hosted
+     (src/styles/fonts.css), без CDN в рантайме — см. simpas-offline.css. */
   --font-serif: 'Source Serif 4', 'Noto Serif', Georgia, 'Times New Roman', serif;
-  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Roboto Mono', 'Noto Sans Mono', ui-monospace, monospace;
 
-  /* Типографика — DESIGN_TOKENS.md §2 */
+  /* Типографика — DESIGN_TOKENS.md §2. Шкала сохраняется без изменений
+     (DS-ALIGNMENT §6: меняется только семейство). Собственная шкала системы
+     (--text-page-title и т.д.) рассчитана на дашборд cmpas.ru и не подходит
+     редактору заметок — здесь она не используется. */
   --fs-h1: 1.875rem;          /* 30 */
   --lh-h1: 1.2;
   --fw-h1: 700;
@@ -85,7 +107,8 @@
   --editor-pad-block: 2.25rem; /* 36 */
   --editor-pad-inline: 2rem;   /* 32 */
 
-  /* Spacing — база 4, шкала 4/8/12/16/20/24/32/40 (DESIGN_TOKENS.md §3) */
+  /* Spacing — база 4 (DESIGN_TOKENS.md §3). Шкала совпадает со шкалой системы
+     (--space-1…-10), поэтому это прямые алиасы; в rem, чтобы масштаб ОС работал. */
   --sp-4: 0.25rem;
   --sp-8: 0.5rem;
   --sp-12: 0.75rem;
@@ -106,20 +129,26 @@
   --pad-field-block: 0.75rem;   /* 12 — поле 12×15 */
   --pad-field-inline: 0.9375rem;/* 15 */
 
-  /* Радиусы */
-  --r-xs: 6px;      /* чекбокс */
-  --r-sm: 10px;     /* чипы-поля, мелкие кнопки, сегмент-контейнер */
-  --r-md: 12px;     /* плитки, плашки */
-  --r-field: 13px;  /* поля ввода */
-  --r-lg: 14px;     /* кнопки, карточки-опции */
-  --r-xl: 16px;     /* модалки, bottom sheet (только верхние углы) */
-  --r-full: 99px;   /* чипы, теги, аватары, поисковая «пилюля» */
-  --r-cell: 11px;   /* ячейки кода/пароля */
-  --r-drawer: 22px; /* drawer 0 22 22 0 */
-  --r-inline-mark: 3px; /* инлайн-подсветка diff */
-  --r-block-mark: 8px;  /* блочная подсветка diff */
-  --r-fab: 18px;
-  --r-swipe: 12px;  /* строка «уезжает» с радиусом 12 слева */
+  /* ── Радиусы — DS-ALIGNMENT §7, алиасы шкалы системы ──────────────────
+     8 / 12 / 16 / 20 / 24 / pill (simpas/vendor/tokens/radius.css).
+     Поля и мелкие чипы 12 · кнопки 16 · карточки и модалки 20 · крупные
+     панели и sheet 24 · пилюли full. Ни одного собственного значения,
+     кроме чекбокса и инлайн-подсветки — их в системе нет.               */
+  --r-xs: 6px;                    /* чекбокс 18×18 — вне шкалы системы */
+  --r-sm: var(--radius-sm);       /* 8  — мелкие ховер-плитки: тулбар, дерево, меню */
+  --r-field: var(--radius-md);    /* 12 — поля ввода */
+  --r-md: var(--radius-md);       /* 12 — мелкие чипы, плашки, сегмент-контейнер */
+  --r-lg: var(--radius-lg);       /* 16 — кнопки */
+  --r-card: var(--radius-xl);     /* 20 — карточки настроек, опций, paywall */
+  --r-xl: var(--radius-xl);       /* 20 — модалки */
+  --r-sheet: var(--radius-2xl);   /* 24 — bottom sheet: 24 24 0 0 */
+  --r-drawer: var(--radius-2xl);  /* 24 — drawer: 0 24 24 0 */
+  --r-full: var(--radius-full);   /* пилюли, теги, аватары */
+  --r-cell: var(--radius-md);     /* 12 — ячейки кода/пароля */
+  --r-inline-mark: 3px;           /* инлайн-подсветка diff — вне шкалы системы */
+  --r-block-mark: var(--radius-sm); /* 8 — блочная подсветка diff */
+  --r-fab: var(--radius-xl);      /* 20 */
+  --r-swipe: var(--radius-md);    /* 12 — строка «уезжает» с радиусом слева */
 
   /* Метрики интерактивных элементов. Touch-target ≥44 всегда. */
   --tap-min: 44px;
@@ -171,261 +200,343 @@
   --z-tooltip: 80;
 }
 
-/* ── 2. Темы (surface) — DESIGN_TOKENS.md §1, дословно ───────────────────
+/* ── 2. Темы (surface) ────────────────────────────────────────────────────
+   `simpas` — базовая и единственная «дневная» (DS-ALIGNMENT §2). Прежняя
+   `paper` с кремово-коричневой палитрой удалена целиком, «альтернативной
+   светлой» не осталось.
+
    Как и акценты, тема переопределяется на любом поддереве: это нужно для
    плиток выбора темы и живого превью в разделе «Внешний вид» (SCREENS §8). */
-[data-theme='paper'],
+[data-theme='simpas'],
 :root:not([data-theme]) {
   color-scheme: light;
-  --bg:            #FBFAF7;  /* фон приложения */
-  --surface:       #F3F1EA;  /* панели, поля, чипы */
-  --surface-alt:   #F7F5EF;  /* сайдбар, тулбар */
-  --line:          #EAE6DB;  /* разделители, границы */
-  --line-soft:     #F0EDE4;  /* строки списка */
-  --text:          #38342E;  /* основной текст */
-  --text-secondary:#726C60;  /* сниппеты, подписи; было #8A8375 — 3.60:1 */
-  --text-tertiary: #B6AFA2;  /* даты, счётчики, плейсхолдеры */
-  --text-disabled: #C8C1B4;  /* пустой чекбокс, неактивное */
-  --scrim:         rgba(30, 26, 22, 0.32);
+  --bg:             var(--background);   /* --cream  #F7F8F4 */
+  --surface:        var(--card);         /* --white  — карточки белые, не бежевые */
+  --surface-alt:    var(--sage-50);      /* #F6FAF6 сайдбар, тулбар */
+  --surface-sunken: var(--muted);        /* #F2F4EF поля, чипы, сегмент */
+  --line:           var(--border);       /* #E4E9E3 */
+  --line-soft:      var(--sage-100);     /* #EEF4EF строки списка (снимок ≠ §2: там #EEF1EC) */
+  --text:           var(--foreground);   /* --ink-900 #142018 */
+  --text-secondary: var(--muted-foreground); /* --ink-500 #5F6C64 — то, что читают */
+  --text-tertiary:  #7E8A83;  /* [§3] метаданные; в снимке шкалы ниже ink-500 нет */
+  --text-disabled:  #A3ADA7;  /* [§3] неактивные контролы */
+  --text-ghost:     #C2CBC5;  /* [§3] markdown вне курсора, хвост расшифровки */
+  --scrim:          rgba(20, 32, 24, 0.32);
 
   /* Поверхности, различающиеся между светлыми и тёмными темами */
-  --field-bg:          #FFFFFF; /* поля ввода: белый в светлых темах */
-  --segment-active-bg: #FFFFFF; /* активный сегмент: белый в светлых темах */
-  --on-accent:         #FFFFFF; /* текст на заливке акцентом */
-  --elev-search: 0 6px 22px rgba(56, 52, 46, 0.10);
-  --elev-segment: 0 1px 2px rgba(56, 52, 46, 0.10);
+  --field-bg:          var(--input);   /* --white */
+  --segment-active-bg: var(--card);    /* --white */
+  --elev-search:  var(--shadow-card);
+  --elev-segment: var(--shadow-xs);
 }
 
+/* ── Тёмные темы — [§5] целиком ──────────────────────────────────────────
+   У СИМПАСА тёмной темы нет; наши остаются как расширение продукта, но
+   уходят из тёплого коричневого в холодный форест. Значения дословно из
+   DS-ALIGNMENT §5; литералы здесь разрешены и помечены.                  */
 [data-theme='graphite'] {
   color-scheme: dark;
-  --bg:            #232120;
-  --surface:       #2C2A28;
-  --surface-alt:   #2C2A28;
-  --line:          #393630;
-  --line-soft:     #2C2A28;
-  --text:          #E9E5DC;
-  --text-secondary:#9B948A;
-  --text-tertiary: #6E675C;
-  --text-disabled: #55504A;
-  --scrim:         rgba(0, 0, 0, 0.35);
+  --bg:             #121A15;
+  --surface:        #1A241E;
+  --surface-alt:    #16201A;
+  --surface-sunken: #16201A;
+  --line:           #26332B;
+  --line-soft:      #1E2A23;
+  --text:           #EEF4EF;
+  --text-secondary: #9FB0A6;
+  --text-tertiary:  #75847B;
+  --text-disabled:  #56635B;
+  --text-ghost:     #3A4841;
+  --scrim:          rgba(0, 0, 0, 0.45);
 
   --field-bg:          var(--surface);
   --segment-active-bg: var(--line);
-  --on-accent:         #241511; /* тёмный на светлом акценте */
-  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.30);
-  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --elev-search:  0 6px 22px rgba(0, 0, 0, 0.3);
+  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.3);
+
+  /* Семантические имена самой системы — чтобы её базовые правила
+     (vendor/tokens/base.css) не тянули кремовый фон в тёмной теме. */
+  --background: #121A15;
+  --foreground: #EEF4EF;
+  --card:       #1A241E;
+  --popover:    #1A241E;
+  --input:      #1A241E;
+  --border:     #26332B;
 }
 
 [data-theme='ink'] {          /* OLED: истинный чёрный */
   color-scheme: dark;
-  --bg:            #000000;
-  --surface:       #151412;
-  --surface-alt:   #0D0C0B;
-  --line:          #26231E;
-  --line-soft:     #1A1917;
-  --text:          #E9E5DC;
-  --text-secondary:#8F887D;
-  --text-tertiary: #635D54;
-  --text-disabled: #4A453D;
-  --scrim:         rgba(0, 0, 0, 0.5);
+  --bg:             #000000;
+  --surface:        #0D1310;
+  --surface-alt:    #080C0A;
+  --surface-sunken: #0D1310;
+  --line:           #1B241E;
+  --line-soft:      #121915;
+  --text:           #EEF4EF;
+  --text-secondary: #93A399;
+  --text-tertiary:  #6C7B72;
+  --text-disabled:  #4E5A53;
+  --text-ghost:     #333E38;
+  --scrim:          rgba(0, 0, 0, 0.5);
 
   --field-bg:          var(--surface);
   --segment-active-bg: var(--line);
-  --on-accent:         #241511;
-  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.45);
+  --elev-search:  0 6px 22px rgba(0, 0, 0, 0.45);
   --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.45);
+
+  --background: #000000;
+  --foreground: #EEF4EF;
+  --card:       #0D1310;
+  --popover:    #0D1310;
+  --input:      #0D1310;
+  --border:     #1B241E;
 }
 
-/* ── 3. Функциональные цвета — «ошибки не кричат» ─────────────────────── */
-[data-theme='paper'],
-:root:not([data-theme]) {
-  --success:      #5C8A6E;
-  --success-soft: #E7F0E8;
-  --warning:      #B08430;
-  --warning-soft: #F5EBD8;
-  --danger:       #A85045;
-  --danger-soft:  #F6E5E2;
-  --info:         #4C6B94;
-  --info-soft:    #E4EAF2;
+/* ── 3. Функциональные цвета — DS-ALIGNMENT §4 ────────────────────────────
+   Разведение «цвет статуса ≠ текст статуса» остаётся в силе: 3:1 для
+   нетекстового индикатора (точка, галочка, иконка) и 4.5:1 для текста —
+   один цвет не обслуживает обе роли.
 
-  /* Подсветка кода — пастельная, светлый набор */
-  --code-keyword:  #8E7BA3;
-  --code-string:   #5C8A6E;
-  --code-number:   #B08430;
+   `--success-soft`, `--red-soft`, `--blue-soft`, `--amber-soft` объявлены
+   самой системой; переопределять их своим же именем нельзя (цикл var), да и
+   незачем — компоненты берут их напрямую.                                  */
+[data-theme='simpas'],
+:root:not([data-theme]) {
+  --success:      var(--success-500);  /* #3B8F5A — индикатор */
+  --success-text: #2C6B44;             /* [§4] текст бейджа «бесплатно» */
+  --warning:      var(--gold-500);     /* #CC9E50 — только заливка/индикатор */
+  --warning-soft: var(--amber-soft);   /* #FBF3E3 */
+  --warning-text: #886522;             /* [§4] бейдж «подписка», ценник */
+  --danger:       var(--destructive);  /* #E35D4F */
+  --danger-soft:  var(--red-soft);     /* #FFF0EE */
+  --danger-text:  #B23B2E;             /* [§4] текст ошибки на плашке */
+  --info:         var(--blue-500);     /* #3B82F6 */
+  --info-soft:    var(--blue-soft);    /* #EAF2FF */
+  --info-text:    #2C5FA8;             /* [§4] */
+
+  /* Подсветка кода — только цвета системы, никаких новых литералов. */
+  --code-keyword:  #4A4E78;             /* [§3] «Сумерки» */
+  --code-string:   var(--success-text);
+  --code-number:   var(--warning-text);
   --code-comment:  var(--text-tertiary);
-  --code-function: #4C6B94;
-  --code-bg:       var(--surface);
+  --code-function: var(--info-text);
+  --code-bg:       var(--surface-sunken);
 }
 
 [data-theme='graphite'],
 [data-theme='ink'] {
-  --success:      #7FB894;
-  --success-soft: rgba(127, 184, 148, 0.16);
-  --warning:      #D6B26A;
-  --warning-soft: rgba(214, 178, 106, 0.16);
-  --danger:       #D08476;
-  --danger-soft:  rgba(208, 132, 118, 0.16);
-  --info:         #7C9DC9;
-  --info-soft:    rgba(124, 157, 201, 0.16);
+  /* [§5] тёмные наборы — осветлённые версии тех же ролей */
+  --success:      #6FC08D;
+  --success-soft: rgba(111, 192, 141, 0.16);
+  --success-text: #A9E0C0;
+  --warning:      var(--gold-400);          /* #D8AE67 */
+  --warning-soft: rgba(216, 174, 103, 0.16);
+  --warning-text: #EBCE96;
+  --danger:       #E08074;
+  --danger-soft:  rgba(224, 128, 116, 0.16);
+  --danger-text:  #F0AFA6;
+  --info:         #7FA6E0;
+  --info-soft:    rgba(127, 166, 224, 0.16);
+  --info-text:    #B4CCEE;
 
-  /* Подсветка кода — пастельная, тёмный набор */
-  --code-keyword:  #B7A2CC;
-  --code-string:   #7FB894;
-  --code-number:   #D6B26A;
+  --code-keyword:  #B4B8E4;
+  --code-string:   var(--success-text);
+  --code-number:   var(--warning-text);
   --code-comment:  var(--text-tertiary);
-  --code-function: #7C9DC9;
-  --code-bg:       var(--surface);
+  --code-function: var(--info-text);
+  --code-bg:       var(--surface-sunken);
 }
 
-/* ── 4. Акценты — DESIGN_TOKENS.md §1, таблица 1:1 ────────────────────────
-   Тройка: --accent (заливка/интерактив) · --accent-soft (фон чипа/подсветки)
-   · --accent-on-soft (текст на soft). Значения различаются для светлых и
-   тёмных тем, поэтому на каждый акцент два правила: светлое и тёмное.
+/* ── 4. Акценты — DS-ALIGNMENT §3 ─────────────────────────────────────────
+   Шесть пресетов, по умолчанию «Хвоя». Терракота `#C8604A` из набора
+   ИСКЛЮЧЕНА: это цвет идентичности, а не интерфейса — красить в него
+   интерфейс нельзя (§1, §9). В интерфейсных токенах её нет; она живёт
+   только как `--svc-zapiski-bg` в четырёх разрешённых местах.
 
-   Селекторы намеренно не привязаны к :root — акцент можно переопределить на
-   любом поддереве (кружки выбора акцента, живое превью заметки в настройках,
-   виджеты). Для корня работают компаунд-селекторы, для вложенных узлов —
-   те же правила через потомка.                                              */
+   Четвёрка на пресет:
+     --accent       заливка/интерактив/текст-акцент
+     --accent-fill  чем заливается основное действие (совпадает с --accent
+                    везде, кроме «Золота»: там фирменное #CC9E50)
+     --accent-soft  фон чипа активного фильтра, подложка
+     --accent-on-soft  текст на soft
+     --on-accent    подпись на заливке
 
-/* garnet — по умолчанию */
-[data-accent='garnet'],
+   Селекторы намеренно не привязаны к :root — акцент переопределяется на
+   любом поддереве (кружки выбора акцента, живое превью, виджеты).          */
+
+/* pine · «Хвоя» — по умолчанию */
+[data-accent='pine'],
 :root:not([data-accent]) {
-  --accent:         #B5503C;
-  --accent-soft:    #F6E7E2;
-  --accent-on-soft: #93412F;
-}
-[data-theme='graphite'][data-accent='garnet'],
-[data-theme='graphite'] [data-accent='garnet'],
-[data-theme='ink'][data-accent='garnet'],
-[data-theme='ink'] [data-accent='garnet'],
-:root[data-theme='graphite']:not([data-accent]),
-:root[data-theme='ink']:not([data-accent]) {
-  --accent:         #D0765B;
-  --accent-soft:    rgba(208, 118, 91, 0.18);
-  --accent-on-soft: #F0B9A4;
-}
-
-/* pine — семейный КОМПАС */
-[data-accent='pine'] {
-  --accent:         #2E6B4F;
-  --accent-soft:    #E2EDE6;
-  --accent-on-soft: #256247;
+  --accent:         var(--primary);              /* --forest-800 #1D4735 */
+  --accent-soft:    var(--sage-150);             /* #E7F0EA */
+  --accent-on-soft: var(--primary);
+  --on-accent:      var(--primary-foreground);   /* белый */
 }
 [data-theme='graphite'][data-accent='pine'],
 [data-theme='graphite'] [data-accent='pine'],
 [data-theme='ink'][data-accent='pine'],
-[data-theme='ink'] [data-accent='pine'] {
-  --accent:         #5FA97A;
-  --accent-soft:    rgba(95, 169, 122, 0.18);
-  --accent-on-soft: #A8D9BB;
+[data-theme='ink'] [data-accent='pine'],
+:root[data-theme='graphite']:not([data-accent]),
+:root[data-theme='ink']:not([data-accent]) {
+  --accent:         var(--forest-500);           /* [§5] осветление до #3B8F5A */
+  --accent-soft:    rgba(59, 143, 90, 0.18);
+  --accent-on-soft: #8FD3A8;
 }
 
-/* gold */
+/* forest · «Лес» */
+[data-accent='forest'] {
+  --accent:         var(--forest-500);           /* #3B8F5A */
+  --accent-soft:    var(--success-soft);         /* #EAF7EE */
+  --accent-on-soft: var(--forest-600);           /* #2F6A52 (снимок ≠ §3: там #256B41) */
+  --on-accent:      var(--primary-foreground);
+}
+[data-theme='graphite'][data-accent='forest'],
+[data-theme='graphite'] [data-accent='forest'],
+[data-theme='ink'][data-accent='forest'],
+[data-theme='ink'] [data-accent='forest'] {
+  --accent:         #6FC08D;                     /* [§5] */
+  --accent-soft:    rgba(111, 192, 141, 0.18);
+  --accent-on-soft: #A9E0C0;
+}
+
+/* gold · «Золото» — единственный пресет, где заливка и текст разного тона.
+   Фирменное золото #CC9E50 остаётся ТОЛЬКО заливкой и никогда не текстом
+   (§3, сноска ¹): как текст на кремовом оно даёт 2.30:1. Текстовая роль —
+   затемнённое #8F6B26; подпись на золотой заливке — тёмный форест-ink. */
 [data-accent='gold'] {
-  --accent:         #8F6B26;  /* было #B08430 — 3.25:1 на --bg */
-  --accent-soft:    #F5EBD8;
-  --accent-on-soft: #886522;  /* было #8E6A24 — 4.19:1 на soft */
+  --accent:         #8F6B26;                     /* [§3] золото как текст/штрих */
+  --accent-soft:    var(--amber-soft);           /* #FBF3E3 */
+  --accent-on-soft: #886522;                     /* [§3] */
+  --on-accent:      var(--forest-900);           /* #143D2F тёмный, не белый */
 }
 [data-theme='graphite'][data-accent='gold'],
 [data-theme='graphite'] [data-accent='gold'],
 [data-theme='ink'][data-accent='gold'],
 [data-theme='ink'] [data-accent='gold'] {
-  --accent:         #CC9E50;
-  --accent-soft:    rgba(204, 158, 80, 0.18);
+  --accent:         var(--gold-400);             /* [§5] #D8AE67 */
+  --accent-soft:    rgba(216, 174, 103, 0.18);
   --accent-on-soft: #E8C88A;
+  --on-accent:      var(--forest-900);
 }
 
-/* blueberry */
-[data-accent='blueberry'] {
-  --accent:         #4C6B94;
-  --accent-soft:    #E4EAF2;
-  --accent-on-soft: #3D577A;
+/* dusk · «Сумерки» */
+[data-accent='dusk'] {
+  --accent:         #4A4E78;                     /* [§3] */
+  --accent-soft:    #ECEDF5;                     /* [§3] */
+  --accent-on-soft: #3E4266;                     /* [§3] */
+  --on-accent:      var(--primary-foreground);
 }
-[data-theme='graphite'][data-accent='blueberry'],
-[data-theme='graphite'] [data-accent='blueberry'],
-[data-theme='ink'][data-accent='blueberry'],
-[data-theme='ink'] [data-accent='blueberry'] {
-  --accent:         #7C9DC9;
-  --accent-soft:    rgba(124, 157, 201, 0.18);
-  --accent-on-soft: #B4CBE6;
-}
-
-/* heather */
-[data-accent='heather'] {
-  --accent:         #7C6390;
-  --accent-soft:    #EFE9F3;
-  --accent-on-soft: #654E78;
-}
-[data-theme='graphite'][data-accent='heather'],
-[data-theme='graphite'] [data-accent='heather'],
-[data-theme='ink'][data-accent='heather'],
-[data-theme='ink'] [data-accent='heather'] {
-  --accent:         #A88BBD;
-  --accent-soft:    rgba(168, 139, 189, 0.18);
-  --accent-on-soft: #D2BFE0;
+[data-theme='graphite'][data-accent='dusk'],
+[data-theme='graphite'] [data-accent='dusk'],
+[data-theme='ink'][data-accent='dusk'],
+[data-theme='ink'] [data-accent='dusk'] {
+  --accent:         #9297C9;                     /* [§5] */
+  --accent-soft:    rgba(146, 151, 201, 0.18);
+  --accent-on-soft: #BFC2E4;
 }
 
-/* slate */
-[data-accent='slate'] {
-  --accent:         #6B675F;
-  --accent-soft:    #EDEBE6;
-  --accent-on-soft: #54514A;
+/* granite · «Гранит» */
+[data-accent='granite'] {
+  --accent:         #6A5F63;                     /* [§3] */
+  --accent-soft:    #F1EEEF;                     /* [§3] */
+  --accent-on-soft: #584E52;                     /* [§3] */
+  --on-accent:      var(--primary-foreground);
 }
-[data-theme='graphite'][data-accent='slate'],
-[data-theme='graphite'] [data-accent='slate'],
-[data-theme='ink'][data-accent='slate'],
-[data-theme='ink'] [data-accent='slate'] {
-  --accent:         #9B948A;
-  --accent-soft:    rgba(155, 148, 138, 0.18);
-  --accent-on-soft: #CBC5BB;
+[data-theme='graphite'][data-accent='granite'],
+[data-theme='graphite'] [data-accent='granite'],
+[data-theme='ink'][data-accent='granite'],
+[data-theme='ink'] [data-accent='granite'] {
+  --accent:         #A99CA1;                     /* [§5] */
+  --accent-soft:    rgba(169, 156, 161, 0.18);
+  --accent-on-soft: #CFC5C9;
+}
+
+/* clay · «Глина» */
+[data-accent='clay'] {
+  --accent:         #A47864;                     /* [§3] */
+  --accent-soft:    #F6EFEA;                     /* [§3] */
+  --accent-on-soft: #7E5A4A;                     /* [§3] */
+  --on-accent:      var(--primary-foreground);
+}
+[data-theme='graphite'][data-accent='clay'],
+[data-theme='graphite'] [data-accent='clay'],
+[data-theme='ink'][data-accent='clay'],
+[data-theme='ink'] [data-accent='clay'] {
+  --accent:         #C99C86;                     /* [§5] */
+  --accent-soft:    rgba(201, 156, 134, 0.18);
+  --accent-on-soft: #E4C2B0;
 }
 
 /* ── 5. Производные от акцента ────────────────────────────────────────────
-   Ни одного нового hex: всё через color-mix() от токенов. Объявлены и на
-   :root, и на [data-accent], чтобы вложенное превью пересчитывало свои
+   Ни одного нового литерала: всё через color-mix() от токенов. Объявлены и
+   на :root, и на [data-accent], чтобы вложенное превью пересчитывало свои
    кольца фокуса и hover от собственного акцента.                            */
 :root,
 [data-accent] {
+  /* По умолчанию заливка совпадает с акцентом; «Золото» переопределяет её выше. */
+  --accent-fill: var(--accent);
   /* hover заливок — «на один шаг темнее» (COMPONENTS.md §1) */
-  --accent-hover: color-mix(in srgb, var(--accent) 86%, #000000);
-  --accent-border: color-mix(in srgb, var(--accent) 38%, transparent); /* рамка активного фильтра 35–40% */
+  --accent-hover: color-mix(in srgb, var(--accent-fill) 86%, #000000);
+  --accent-border: color-mix(in srgb, var(--accent) 38%, transparent); /* рамка активного фильтра */
   --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);    /* кольцо фокуса 35–45% */
   --field-ring: color-mix(in srgb, var(--accent) 20%, transparent);    /* кольцо поля 18–22% */
-  --fab-shadow-color: color-mix(in srgb, var(--accent) 35%, transparent);
-  --surface-hover: var(--surface-alt);  /* hover нефоновых кнопок: --surface → --surface-alt */
-  --mark-bg: var(--accent-soft);        /* ==подсветка== в тексте заметки */
+  --fab-shadow-color: color-mix(in srgb, var(--accent-fill) 30%, transparent);
+  --surface-hover: var(--surface-sunken);  /* прозрачное → «утопленное» */
+  /* «утопленное» → на шаг темнее */
+  --sunken-hover: color-mix(in srgb, var(--surface-sunken) 93%, var(--text));
+  /* ==подсветка== в тексте заметки — амбер, НЕ акцент (DS-ALIGNMENT §10) */
+  --mark-bg: var(--amber-soft);
   --toast-bg: var(--text);              /* тост инверсный */
   --toast-fg: var(--surface);
   --toast-action: color-mix(in srgb, var(--accent) 72%, #FFFFFF); /* «акцентом посветлее» */
 }
-/* В тёмных темах «на шаг темнее» читается хуже, чем «на шаг светлее».
-   Там же --surface и --surface-alt совпадают, поэтому hover пришлось бы
-   не заметить: берём производное от --text на 6%. */
+/* «Золото» — единственный пресет, где заливка ≠ акцент: фирменное #CC9E50
+   вместо текстового #8F6B26. Объявлено ПОСЛЕ общего `--accent-fill: var(--accent)`
+   выше — иначе то правило (равная специфичность, ниже по источнику) его перебьёт. */
+[data-accent='gold'] {
+  --accent-fill: var(--gold-500);
+}
+/* В тёмных темах «на шаг темнее» читается хуже, чем «на шаг светлее». */
 [data-theme='graphite'],
 [data-theme='ink'],
 [data-theme='graphite'] [data-accent],
 [data-theme='ink'] [data-accent] {
-  --accent-hover: color-mix(in srgb, var(--accent) 88%, #FFFFFF);
+  --accent-hover: color-mix(in srgb, var(--accent-fill) 88%, #FFFFFF);
   --toast-action: color-mix(in srgb, var(--accent) 78%, #000000);
   --surface-hover: color-mix(in srgb, var(--surface-alt) 94%, var(--text));
+  --sunken-hover: color-mix(in srgb, var(--surface-sunken) 92%, var(--text));
+  --mark-bg: rgba(216, 174, 103, 0.22);  /* [§5] тот же амбер, но на тёмном */
+  --on-accent: #0D1310;  /* [§5] тёмная подпись на осветлённой заливке */
 }
-/* Единственный hover, заданный спецификацией явно: #B5503C → #9C432F. */
-[data-theme='paper'][data-accent='garnet'],
-[data-theme='paper'] [data-accent='garnet'],
-:root:not([data-theme]):not([data-accent]),
-:root:not([data-theme])[data-accent='garnet'],
-:root[data-theme='paper']:not([data-accent]) {
-  --accent-hover: #9C432F;
+/* «Золото» и в тёмной теме: заливка — осветлённое золото, подпись — форест-ink. */
+[data-theme='graphite'][data-accent='gold'],
+[data-theme='graphite'] [data-accent='gold'],
+[data-theme='ink'][data-accent='gold'],
+[data-theme='ink'] [data-accent='gold'] {
+  --accent-fill: var(--gold-400);
+  --on-accent: var(--forest-900);
 }
 
-/* ── 6. Тени и elevation ──────────────────────────────────────────────────
-   Тонкие разделители 1px --line ВМЕСТО карточек с тенью.
-   Elevation — только для модальных слоёв.                                   */
+/* ── 6. Тени и elevation — DS-ALIGNMENT §7 ────────────────────────────────
+   Мягкие, с зелёным подтоном; hover приподнимает. Резких падающих теней нет.
+   Значения — шкала системы (simpas/vendor/tokens/shadows.css).
+   Тонкие разделители 1px --line ВМЕСТО карточек с тенью остаются.           */
 :root {
-  --elev-sheet: 0 -12px 40px var(--scrim);
-  --elev-modal: 0 24px 60px var(--scrim);
-  --elev-drawer: 12px 0 40px var(--scrim);
+  --elev-card:       var(--shadow-card);
+  --elev-card-hover: var(--shadow-card-hover);
+  --elev-sheet:      var(--shadow-floating);
+  --elev-modal:      var(--shadow-floating);
+  --elev-drawer:     var(--shadow-floating);
   --elev-fab: 0 8px 24px var(--fab-shadow-color);
+}
+[data-theme='graphite'],
+[data-theme='ink'] {
+  /* [§5] на тёмном зелёный подтон не читается — нужна плотность. */
+  --elev-card:       0 8px 30px rgba(0, 0, 0, 0.35);
+  --elev-card-hover: 0 10px 34px rgba(0, 0, 0, 0.45);
+  --elev-sheet:      0 -12px 40px rgba(0, 0, 0, 0.5);
+  --elev-modal:      0 18px 44px rgba(0, 0, 0, 0.5);
+  --elev-drawer:     12px 0 40px rgba(0, 0, 0, 0.5);
 }
 
 /* ── 7. Плотность и гарнитура редактора (множители, не отдельные наборы) ── */
@@ -436,6 +547,9 @@
   --editor-line-height: calc(var(--lh-body-compact) * var(--editor-line-scale));
 }
 
+/* Serif — ТОЛЬКО режим чтения заметки (DS-ALIGNMENT §6). В интерфейсной
+   хромоте serif не появляется нигде: `--editor-font-family` применяется
+   исключительно к телу заметки. */
 :root[data-typeface='serif'] {
   --editor-font-family: var(--font-serif);
   --editor-font-size: calc(var(--fs-body-serif) * var(--editor-font-scale));

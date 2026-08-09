@@ -14,12 +14,12 @@ import { APPEARANCE_STORAGE_KEY } from './types';
  */
 export const themeInitScript = `(function(){try{
 var K=${JSON.stringify(APPEARANCE_STORAGE_KEY)};
-var T=["paper","graphite","ink"],A=["garnet","pine","gold","blueberry","heather","slate"];
+var T=["simpas","graphite","ink"],A=["pine","forest","gold","dusk","granite","clay"];
 var s={};try{s=JSON.parse(localStorage.getItem(K)||"{}")||{}}catch(e){s={}}
 var e=s.editor||{};
 var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
-var t=s.theme;if(T.indexOf(t)<0)t=dark?"graphite":"paper";
-var a=A.indexOf(s.accent)<0?"garnet":s.accent;
+var t=s.theme;if(T.indexOf(t)<0)t=dark?"graphite":"simpas";
+var a=A.indexOf(s.accent)<0?"pine":s.accent;
 var r=document.documentElement;
 r.setAttribute("data-theme",t);
 r.setAttribute("data-accent",a);
