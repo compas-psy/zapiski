@@ -235,13 +235,16 @@ function ButtonsSection(): ReactNode {
             <IconButton icon={<IconPin size={19} />} label="Закрепить" disabled />
           </div>
           <div className="z-gallery__row">
-            <Button loading={loading} loadingLabel="Отправляем" onClick={() => setLoading(!loading)}>
+            <Button loading={loading} loadingLabel="Отправляем">
               Отправить ссылку
             </Button>
-            <span className="z-gallery__label">
-              ширина не меняется при переключении загрузки
-            </span>
+            <Button size="compact" variant="outline" onClick={() => setLoading(!loading)}>
+              Переключить загрузку
+            </Button>
           </div>
+          <span className="z-gallery__label">
+            Ширина кнопки не меняется при переключении: обе подписи лежат в одной ячейке грида.
+          </span>
         </Panel>
         <Panel label="Компактные 36 и на всю ширину">
           <div className="z-gallery__row">

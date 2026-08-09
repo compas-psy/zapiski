@@ -173,6 +173,10 @@ function main() {
       `Найдено нарушений: ${violations.length}. Используйте var(--*) из ${TOKEN_FILES.join(', ')}.`,
     );
     console.error('Правило: ARCHITECTURE.md §3.4, docs/spec/DESIGN_TOKENS.md §4.');
+    console.error(
+      'Если файл обязан содержать цвет (например, самодостаточный экспортный документ),\n' +
+        'исключение добавляется осознанно в TOKEN_FILES этого скрипта — с обоснованием в ревью.',
+    );
     process.exit(1);
   }
 

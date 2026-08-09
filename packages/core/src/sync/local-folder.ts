@@ -25,20 +25,27 @@ export class LocalFolderBackend implements SyncBackend {
     this.includeCrdt = options.includeCrdt ?? true;
   }
 
-  private syncable(path: VaultPath): boolean {
+  /** Файл подлежит синку: заметки, вложения и — по настройке — CRDT-логи. */
+  private syncableFile(path: VaultPath): boolean {
     if (!isMetaPath(path)) return true;
-    return this.includeCrdt && (path === CRDT_DIR || path.startsWith(`${CRDT_DIR}/`));
+    return this.includeCrdt && path.startsWith(`${CRDT_DIR}/`);
+  }
+
+  /** В служебный каталог заходим, только если внутри может лежать CRDT-лог. */
+  private canDescend(dir: VaultPath): boolean {
+    if (!isMetaPath(dir)) return true;
+    return this.includeCrdt && (CRDT_DIR.startsWith(dir) || dir.startsWith(CRDT_DIR));
   }
 
   async list(): Promise<RemoteEntry[]> {
     const out: RemoteEntry[] = [];
     const walk = async (dir: VaultPath): Promise<void> => {
       for (const entry of await this.storage.list(dir).catch(() => [])) {
-        if (!this.syncable(entry.path)) continue;
         if (entry.isDirectory) {
-          await walk(entry.path);
+          if (this.canDescend(entry.path)) await walk(entry.path);
           continue;
         }
+        if (!this.syncableFile(entry.path)) continue;
         const stat = await this.storage.stat(entry.path);
         if (!stat) continue;
         out.push({ path: entry.path, etag: etagOf(stat.mtime, stat.size), mtime: stat.mtime, size: stat.size });

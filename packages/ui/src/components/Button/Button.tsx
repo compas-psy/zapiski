@@ -39,7 +39,7 @@ export function Button({
     <button
       {...rest}
       type={type}
-      disabled={disabled ?? loading}
+      disabled={disabled === true || loading}
       aria-busy={loading || undefined}
       className={cx(
         'z-btn',
