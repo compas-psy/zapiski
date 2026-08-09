@@ -12,22 +12,53 @@
  *                   заметки — плитка Quick Settings и виджет 1×1 (§8);
  *   shareTarget   — есть, `intent-filter` ACTION_SEND;
  *   updater       — есть, свой (встроенный апдейтер Tauri на Android не
- *                   работает — см. updater.ts).
+ *                   работает — см. updater.ts);
+ *   vaultFolders  — есть, и только здесь: на Android выбор папки идёт с
+ *                   оговоркой про атомарность записи (см. ниже).
  *
  * `null` означает «UI **скроет** элемент», а не «покажет выключенным»
  * (BEHAVIOR §5.1). Поэтому подделывать возможности нельзя ни при каких
  * обстоятельствах: скрытый тумблер честен, выключенный — обманывает.
  */
-import type { PlatformCapabilities } from '@zapiski/core';
+import type { PlatformCapabilities, VaultLocation, VaultLocationInfo } from '@zapiski/core';
+import type { PreferencesStore } from '@zapiski/app';
 
 import { createBiometrics } from './biometrics';
 import { createHaptics } from './haptics';
 import { COMMANDS, call } from './ipc';
+import { createSafStorage, pickSafTree, probeSafTree, writeModeOf, type SafTree } from './saf';
 import { createShareTarget } from './share';
 import { createUpdater } from './updater';
 import { defaultVaultRoot, openVault } from './vault';
 
-export function createPlatform(): PlatformCapabilities {
+/**
+ * Дерево SAF, выбранное пользователем. Лежит в настройках рядом с остальным:
+ * это не секрет, а адрес папки, и он обязан пережить перезапуск — иначе
+ * заметки «пропадут» вместе с выбором.
+ */
+export const PREF_SAF_TREE = 'storage.androidTree';
+
+/** Имя каталога приложения в интерфейсе — не путь: путь пользователю не нужен. */
+const APP_FOLDER_LABEL = 'Записки';
+
+function safLocation(tree: SafTree): VaultLocation {
+  return {
+    kind: 'user',
+    writeMode: writeModeOf(tree),
+    label: tree.label,
+    storage: createSafStorage(tree.uri),
+  };
+}
+
+export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
+  /** Каталог приложения: настоящие `.md`, запись атомарна (ТЗ §4.3). */
+  const openAppFolder = async (): Promise<VaultLocation | null> => {
+    const root = await defaultVaultRoot();
+    const storage = await openVault(root);
+    if (!storage) return null;
+    return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL, storage };
+  };
+
   return {
     kind: 'android',
     biometrics: createBiometrics(),
@@ -45,16 +76,50 @@ export function createPlatform(): PlatformCapabilities {
     },
 
     async pickVaultDirectory() {
-      // На Android «выбор папки» вырождается: произвольный каталог общей
-      // памяти приложению недоступен (scoped storage), а SAF отдаёт дерево
-      // `content://`, поверх которого нет ни атомарного rename, ни обычного
-      // пути для Rust. Поэтому диалога нет — есть каталог приложения во
-      // внешней памяти, настоящие файлы `.md` на настоящей ФС.
-      //
-      // Сценарий «мой vault в другой папке» на Android закрывается синком
-      // (LocalFolder на компьютере ↔ облако ↔ телефон), а не выбором папки.
-      const root = await defaultVaultRoot();
-      return openVault(root);
+      // Умолчание и надёжный путь: каталог приложения во внешней памяти —
+      // настоящие файлы `.md` на настоящей ФС с атомарной записью. Выбор
+      // произвольной папки живёт в `vaultFolders` и идёт с предупреждением:
+      // смешивать их в одну кнопку значило бы обещать §4.3 там, где его нет.
+      const location = await openAppFolder();
+      return location?.storage ?? null;
+    },
+
+    /**
+     * Выбор произвольной папки (ТЗ §4.1 п. 1: «LocalFolder — в т.ч. папка,
+     * которую синкает сторонний клиент»).
+     *
+     * Раньше этого выбора не было вовсе: SAF не даёт атомарной записи, и мы
+     * решали за пользователя. Цена оказалась выше пользы — на Android
+     * закрывался весь бесплатный сценарий синхронизации через чужой клиент.
+     * Теперь решает пользователь, а мы честно говорим, чем он платит.
+     */
+    vaultFolders: {
+      async chooseFolder() {
+        const tree = await pickSafTree();
+        if (!tree) return null;
+        await prefs.set(PREF_SAF_TREE, tree.uri);
+        return safLocation(tree);
+      },
+
+      async useAppFolder() {
+        await prefs.set(PREF_SAF_TREE, null);
+        return openAppFolder();
+      },
+
+      async current(): Promise<VaultLocationInfo | null> {
+        const uri = await prefs.get<string | null>(PREF_SAF_TREE, null);
+        if (uri === null) {
+          return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
+        }
+        const tree = await probeSafTree(uri).catch(() => null);
+        if (!tree) {
+          // Разрешение на папку отозвано или папка удалена: возвращаемся в
+          // каталог приложения, а не делаем вид, что всё на месте.
+          await prefs.set(PREF_SAF_TREE, null);
+          return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
+        }
+        return { kind: 'user', writeMode: writeModeOf(tree), label: tree.label };
+      },
     },
   };
 }

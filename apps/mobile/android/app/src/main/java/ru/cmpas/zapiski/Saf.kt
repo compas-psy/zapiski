@@ -28,9 +28,11 @@ import org.json.JSONObject
  * делаем максимум возможного и называем результат честно:
  *
  *   `staged` — провайдер умеет `FLAG_SUPPORTS_RENAME`: байты уходят во
- *              временный документ, затем старый удаляется и временный
- *              занимает его имя. Длинная часть записи безопасна, окно риска —
- *              доли секунды между удалением и переименованием;
+ *              временный документ, старая заметка отводится в сторону под
+ *              служебным именем, и только потом временный занимает её место.
+ *              Полная копия на диске есть в любой момент; если питание
+ *              пропало между двумя переименованиями, отведённая версия
+ *              возвращается на место при следующем обходе каталога;
  *   `direct` — не умеет: пишем прямо в целевой документ.
  *
  * Врать в эту сторону нельзя: интерфейс показывает пользователю ровно тот
@@ -39,9 +41,9 @@ import org.json.JSONObject
  * ── Про производительность ──────────────────────────────────────────────────
  *
  * У SAF нет «открыть по пути»: путь разбирается по сегментам, каждый — запрос
- * к провайдеру. Кэш `docId` на дерево спасает обход папок и повторные чтения;
- * инвалидация грубая (по записи в родителя), потому что тихо устаревший
- * `docId` дороже лишнего запроса.
+ * к провайдеру. Кэш `documentId` спасает и обход папок, и повторные чтения;
+ * при записи, удалении и переименовании чистится ровно затронутый путь вместе
+ * с тем, что под ним.
  */
 object Saf {
 
@@ -50,10 +52,61 @@ object Saf {
     const val MODE_DIRECT = "direct"
 
     private const val MIME_DIR = DocumentsContract.Document.MIME_TYPE_DIR
-    private const val MIME_FILE = "text/markdown"
 
-    /** `дерево|путь` → `documentId`. Чистится при любой правке дерева. */
+    /**
+     * Тип по расширению.
+     *
+     * Это не косметика. `createDocument` вправе ДОПИСАТЬ к имени расширение,
+     * выведенное из типа: `Заметка.md` с типом `application/octet-stream`
+     * штатный провайдер Android превращает в `Заметка.md.bin`. Путь заметки
+     * обязан совпадать с именем файла байт в байт, поэтому тип подбирается
+     * под расширение, а результат создания всё равно проверяется по имени.
+     */
+    private val MIME_BY_EXTENSION = mapOf(
+        "md" to "text/markdown",
+        "txt" to "text/plain",
+        "csv" to "text/csv",
+        "json" to "application/json",
+        "pdf" to "application/pdf",
+        "png" to "image/png",
+        "jpg" to "image/jpeg",
+        "jpeg" to "image/jpeg",
+        "gif" to "image/gif",
+        "webp" to "image/webp",
+        "svg" to "image/svg+xml",
+        "mp3" to "audio/mpeg",
+        "m4a" to "audio/mp4",
+        "ogg" to "audio/ogg",
+        "wav" to "audio/x-wav",
+        "mp4" to "video/mp4",
+        "zip" to "application/zip",
+    )
+
+    /**
+     * Тип для незнакомого расширения (`.md.enc`, `.bin`).
+     *
+     * Именно незнакомый системе: у известного типа провайдер попытается
+     * привести имя к «правильному» расширению, а у незнакомого — оставит имя
+     * как есть. Нам нужно второе.
+     */
+    private const val MIME_OPAQUE = "application/x-zapiski"
+
+    /**
+     * Имя отведённой в сторону заметки: `.<имя>.<наносекунды>.old.tmp`.
+     * Из него восстанавливается исходное имя, если запись оборвалась.
+     */
+    private val BACKUP_NAME = Regex("""^\.(.+)\.\d+\.old\.tmp$""")
+
+    private fun mimeOf(name: String): String {
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return MIME_BY_EXTENSION[extension] ?: MIME_OPAQUE
+    }
+
+    /** `дерево|путь` → `documentId`. Чистится точечно, по изменённым путям. */
     private val cache = HashMap<String, String>()
+
+    /** `дерево` → умеет ли провайдер переименование. */
+    private val renameSupport = HashMap<String, Boolean>()
 
     // ── Дерево ──────────────────────────────────────────────────────────────
 
@@ -81,14 +134,23 @@ object Saf {
         }
     }
 
-    /** Умеет ли провайдер переименование — от этого зависит режим записи. */
+    /**
+     * Умеет ли провайдер переименование — от этого зависит режим записи.
+     *
+     * Ответ кэшируется: его спрашивает каждая запись, а запись случается на
+     * каждом автосохранении (BEHAVIOR §0, debounce 500 мс). Свойство дерева
+     * за время сеанса не меняется.
+     */
     fun supportsRename(context: Context, tree: String): Boolean {
+        renameSupport[tree]?.let { return it }
         val uri = Uri.parse(tree)
         val root = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri))
         val flags = query(context.contentResolver, root, DocumentsContract.Document.COLUMN_FLAGS) { cursor ->
             cursor.getInt(0)
         } ?: return false
-        return flags and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0
+        val supported = flags and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0
+        renameSupport[tree] = supported
+        return supported
     }
 
     // ── Операции `VaultStorage` ─────────────────────────────────────────────
@@ -99,7 +161,11 @@ object Saf {
         val treeUri = Uri.parse(tree)
         val parent = documentId(context, tree, path, create = false) ?: return null
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parent)
-        val out = JSONArray()
+
+        val rows = ArrayList<JSONObject>()
+        val names = HashSet<String>()
+        /** Отведённые в сторону заметки: `имя` → `documentId` копии. */
+        val backups = HashMap<String, String>()
 
         resolver.query(
             children,
@@ -108,6 +174,7 @@ object Saf {
                 DocumentsContract.Document.COLUMN_MIME_TYPE,
                 DocumentsContract.Document.COLUMN_SIZE,
                 DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+                DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             ),
             null,
             null,
@@ -115,9 +182,17 @@ object Saf {
         )?.use { cursor ->
             while (cursor.moveToNext()) {
                 val name = cursor.getString(0) ?: continue
-                // Временные документы наши: наружу они не заметки и не файлы.
-                if (name.startsWith(".") && name.endsWith(".tmp")) continue
-                out.put(
+                if (name.startsWith(".") && name.endsWith(".tmp")) {
+                    // Временные документы наши, и наружу они не отдаются. Но
+                    // отведённую в сторону заметку надо запомнить: если её
+                    // место осталось пустым, значит запись оборвалась.
+                    BACKUP_NAME.find(name)?.let { match ->
+                        backups[match.groupValues[1]] = cursor.getString(4)
+                    }
+                    continue
+                }
+                names.add(name)
+                rows.add(
                     JSONObject().apply {
                         put("name", name)
                         put("isDirectory", cursor.getString(1) == MIME_DIR)
@@ -128,6 +203,33 @@ object Saf {
             }
         } ?: return null
 
+        // Запись оборвалась между двумя переименованиями: новая версия не
+        // встала на место, старая лежит рядом под служебным именем. Возвращаем
+        // её — пользователь остаётся с прежней версией заметки, а не без неё
+        // (ТЗ §2.1.4: потерь не бывает).
+        for ((name, id) in backups) {
+            if (names.contains(name)) continue
+            val restored = runCatching {
+                DocumentsContract.renameDocument(
+                    resolver,
+                    DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
+                    name,
+                )
+            }.getOrNull() ?: continue
+            forgetPath(tree, if (path.isEmpty()) name else "$path/$name")
+            val size = query(resolver, restored, DocumentsContract.Document.COLUMN_SIZE) { it.getLong(0) } ?: 0L
+            rows.add(
+                JSONObject().apply {
+                    put("name", name)
+                    put("isDirectory", false)
+                    put("size", size)
+                    put("mtime", 0L)
+                },
+            )
+        }
+
+        val out = JSONArray()
+        for (row in rows) out.put(row)
         return out.toString()
     }
 
@@ -170,9 +272,10 @@ object Saf {
      * Запись документа. Возвращает фактический режим (`staged`/`direct`).
      *
      * Порядок в `staged` выбран так, чтобы потеря питания в любой момент
-     * оставляла на диске либо старую заметку целиком, либо новую целиком:
-     * сначала полностью записывается временный документ, и только потом,
-     * двумя короткими операциями, он занимает место старого.
+     * оставляла на диске полную копию заметки — старую либо новую: сначала
+     * целиком записывается временный документ, затем старая заметка отводится
+     * в сторону, и лишь потом временный занимает её имя. Ни в одной точке нет
+     * состояния «обеих версий нет».
      */
     fun write(context: Context, tree: String, path: String, data: ByteArray): String {
         val resolver = context.contentResolver
@@ -184,14 +287,17 @@ object Saf {
 
         if (!supportsRename(context, tree)) {
             val target = childId(resolver, treeUri, parent, name)
-                ?: createChild(resolver, treeUri, parent, MIME_FILE, name)
+                ?: createChild(resolver, treeUri, parent, mimeOf(name), name, verifyName = true)
             writeBytes(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, target), data)
             remember(tree, path, target)
             return MODE_DIRECT
         }
 
+        // Имя временного документа проверять незачем: работаем по его
+        // `documentId`, а нужное имя он получит переименованием — и вот там
+        // провайдер уже обязан взять имя как есть.
         val temporary = ".$name.${System.nanoTime()}.tmp"
-        val staged = createChild(resolver, treeUri, parent, MIME_FILE, temporary)
+        val staged = createChild(resolver, treeUri, parent, mimeOf(name), temporary, verifyName = false)
         val stagedUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, staged)
         try {
             writeBytes(resolver, stagedUri, data)
@@ -201,17 +307,47 @@ object Saf {
             throw error
         }
 
+        // Старую заметку не удаляем, а отводим в сторону: между удалением и
+        // переименованием есть момент, когда файла с нужным именем нет вовсе,
+        // и падение ровно в нём стоило бы пользователю заметки. После отвода
+        // на диске всегда есть хотя бы одна полная копия.
         val previous = childId(resolver, treeUri, parent, name)
-        if (previous != null) {
-            DocumentsContract.deleteDocument(
+        val backup = previous?.let { id ->
+            val moved = DocumentsContract.renameDocument(
                 resolver,
-                DocumentsContract.buildDocumentUriUsingTree(treeUri, previous),
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, id),
+                ".$name.${System.nanoTime()}.old.tmp",
             )
+            // `null` — имя сменилось, а адрес документа прежний.
+            if (moved == null) id else DocumentsContract.getDocumentId(moved)
         }
-        val renamed = DocumentsContract.renameDocument(resolver, stagedUri, name)
-            ?: throw IllegalStateException("не удалось переименовать временный документ")
-        forget(tree)
-        remember(tree, path, DocumentsContract.getDocumentId(renamed))
+
+        val renamedUri = try {
+            // `null` в этом API означает «имя сменилось, адрес прежний».
+            DocumentsContract.renameDocument(resolver, stagedUri, name) ?: stagedUri
+        } catch (error: Throwable) {
+            restore(resolver, treeUri, backup, name)
+            runCatching { DocumentsContract.deleteDocument(resolver, stagedUri) }
+            throw error
+        }
+
+        val actual = query(resolver, renamedUri, DocumentsContract.Document.COLUMN_DISPLAY_NAME) { it.getString(0) }
+        if (actual != name) {
+            // Провайдер дал документу другое имя. Молча оставить его нельзя:
+            // путь заметки в vault'е и имя файла разошлись бы, а заметка
+            // «пропала» бы из списка. Возвращаем старую и говорим прямо.
+            runCatching { DocumentsContract.deleteDocument(resolver, renamedUri) }
+            restore(resolver, treeUri, backup, name)
+            throw IllegalStateException("провайдер переименовал «$name» в «${actual ?: "без имени"}»")
+        }
+
+        backup?.let {
+            runCatching {
+                DocumentsContract.deleteDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(treeUri, it))
+            }
+        }
+        forgetPath(tree, path)
+        remember(tree, path, DocumentsContract.getDocumentId(renamedUri))
         return MODE_STAGED
     }
 
@@ -224,7 +360,7 @@ object Saf {
         val id = documentId(context, tree, path, create = false) ?: return
         val uri = DocumentsContract.buildDocumentUriUsingTree(Uri.parse(tree), id)
         DocumentsContract.deleteDocument(context.contentResolver, uri)
-        forget(tree)
+        forgetPath(tree, path)
     }
 
     /**
@@ -242,9 +378,15 @@ object Saf {
         val sameFolder = from.substringBeforeLast('/', "") == to.substringBeforeLast('/', "")
         if (sameFolder && supportsRename(context, tree)) {
             val uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
-            DocumentsContract.renameDocument(resolver, uri, to.substringAfterLast('/'))
-                ?: throw IllegalStateException("не удалось переименовать: $from")
-            forget(tree)
+            val target = to.substringAfterLast('/')
+            // `null` в этом API означает «имя сменилось, адрес прежний».
+            val renamedUri = DocumentsContract.renameDocument(resolver, uri, target) ?: uri
+            val actual = query(resolver, renamedUri, DocumentsContract.Document.COLUMN_DISPLAY_NAME) {
+                it.getString(0)
+            }
+            if (actual != target) throw IllegalStateException("не удалось переименовать: $from")
+            forgetPath(tree, from)
+            forgetPath(tree, to)
             return
         }
 
@@ -254,6 +396,22 @@ object Saf {
     }
 
     // ── Внутреннее ──────────────────────────────────────────────────────────
+
+    /**
+     * Вернуть отведённую в сторону заметку на её место. Вызывается на любом
+     * пути отказа записи: пользователь остаётся с прежней версией, а не без
+     * заметки вовсе (ТЗ §2.1.4 — потерь не бывает).
+     */
+    private fun restore(resolver: ContentResolver, treeUri: Uri, backup: String?, name: String) {
+        if (backup == null) return
+        runCatching {
+            DocumentsContract.renameDocument(
+                resolver,
+                DocumentsContract.buildDocumentUriUsingTree(treeUri, backup),
+                name,
+            )
+        }
+    }
 
     private fun writeBytes(resolver: ContentResolver, uri: Uri, data: ByteArray) {
         // "wt" — усечь до нуля перед записью: иначе хвост прежнего документа
@@ -293,9 +451,8 @@ object Saf {
             current = when {
                 found != null -> found
                 !create -> return null
-                // Последний сегмент пути создаётся папкой только в `mkdir`:
-                // файлы создаёт `write`, и создавать их «по дороге» нельзя.
-                else -> createChild(resolver, treeUri, current, MIME_DIR, segment)
+                // По дороге создаются только папки: файл создаёт `write`.
+                else -> createChild(resolver, treeUri, current, MIME_DIR, segment, verifyName = true)
             }
             cache[key] = current
         }
@@ -322,19 +479,25 @@ object Saf {
         return null
     }
 
+    /**
+     * Создать документ. `verifyName` — обязана ли фактическая запись
+     * называться именно так: провайдер вправе дать своё имя (`Заметка (1).md`,
+     * `Заметка.md.bin`), а путь заметки и имя файла обязаны совпадать.
+     */
     private fun createChild(
         resolver: ContentResolver,
         treeUri: Uri,
         parent: String,
         mime: String,
         name: String,
+        verifyName: Boolean,
     ): String {
         val parentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, parent)
         val created = DocumentsContract.createDocument(resolver, parentUri, mime, name)
             ?: throw IllegalStateException("провайдер не дал создать «$name»")
         val id = DocumentsContract.getDocumentId(created)
-        // Провайдер вправе дать другое имя (`Заметка (1).md`) — тогда наш путь
-        // указывает не туда, и молча делать вид, что всё в порядке, нельзя.
+        if (!verifyName) return id
+
         val actual = query(resolver, created, DocumentsContract.Document.COLUMN_DISPLAY_NAME) { it.getString(0) }
         if (actual != null && actual != name) {
             runCatching { DocumentsContract.deleteDocument(resolver, created) }
@@ -352,9 +515,16 @@ object Saf {
         cache["$tree|$path"] = id
     }
 
-    /** Дерево изменилось — старые `documentId` больше не обязаны быть верны. */
-    private fun forget(tree: String) {
-        cache.keys.removeAll { it.startsWith("$tree|") }
+    /**
+     * Путь изменился — его `documentId` (и всё, что под ним) больше не
+     * обязан быть верным. Чистим точечно: полная очистка на каждом
+     * автосохранении заставляла бы заново обходить дерево при следующем
+     * чтении, а обход в SAF — запрос на каждый сегмент пути.
+     */
+    private fun forgetPath(tree: String, path: String) {
+        val exact = "$tree|$path"
+        val nested = "$exact/"
+        cache.keys.removeAll { it == exact || it.startsWith(nested) }
     }
 
     // ── Выбор папки ─────────────────────────────────────────────────────────

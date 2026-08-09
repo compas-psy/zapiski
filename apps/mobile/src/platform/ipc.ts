@@ -13,6 +13,16 @@ export const COMMANDS = {
   vaultRoot: 'vault_root',
   vaultDefaultRoot: 'vault_default_root',
   vaultWriteAtomic: 'vault_write_atomic',
+  /* Папка пользователя через SAF (ТЗ §4.1 п. 1) — `src-tauri/src/saf.rs`. */
+  safPick: 'saf_pick',
+  safProbe: 'saf_probe',
+  safList: 'saf_list',
+  safRead: 'saf_read',
+  safWrite: 'saf_write',
+  safStat: 'saf_stat',
+  safMkdir: 'saf_mkdir',
+  safRemove: 'saf_remove',
+  safRename: 'saf_rename',
   secureFlag: 'secure_flag',
   hapticImpact: 'haptic_impact',
   biometricsAvailable: 'biometrics_available',
@@ -24,6 +34,7 @@ export const COMMANDS = {
   updaterCheck: 'updater_check',
   updaterInstall: 'updater_download_install',
   shareTake: 'share_take',
+  authTake: 'auth_take',
   widgetsPublish: 'widgets_publish',
   widgetsTakeCommands: 'widgets_take_commands',
 } as const;
@@ -42,6 +53,8 @@ export const EVENTS = {
   widgetCommand: 'zapiski://widget-command',
   /** Прогресс скачивания обновления, 0…1. */
   updateProgress: 'zapiski://update-progress',
+  /** Возврат после входа: deep-link или App Link (ТЗ §5.5). */
+  authCallback: 'zapiski://auth-callback',
 } as const;
 
 /** `invoke` без аргументов-заглушек и с человеческим типом. */

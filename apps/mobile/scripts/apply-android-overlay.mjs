@@ -128,6 +128,21 @@ const APPLICATION_CHILDREN = `
         </intent-filter>
     </activity>
 
+    <!--
+      Системный выбор папки (ТЗ §4.1 п. 1: LocalFolder — в т.ч. папка, которую
+      синкает сторонний клиент). Невидимая активность: диалог рисует система,
+      а результат нужно принять в onActivityResult — переопределять для этого
+      сгенерированную MainActivity значило бы форкать шаблон Tauri.
+
+      Она не exported: её зовём только мы, снаружи она никому не нужна.
+    -->
+    <activity
+        android:name=".FolderPickActivity"
+        android:exported="false"
+        android:excludeFromRecents="true"
+        android:taskAffinity=""
+        android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
     <!-- Плитка Quick Settings — эквивалент быстрой заметки (ТЗ §5.4). -->
     <service
         android:name=".QuickNoteTileService"
@@ -392,6 +407,7 @@ const EXPECTATIONS = [
   ['share-target: SEND_MULTIPLE', 'android.intent.action.SEND_MULTIPLE'],
   ['share-target: текст', 'android:mimeType="text/plain"'],
   ['share-target: картинка', 'android:mimeType="image/*"'],
+  ['выбор папки: активность', 'android:name=".FolderPickActivity"'],
   ['возврат входа: активность', 'android:name=".AuthActivity"'],
   ['возврат входа: схема zapiski://', 'android:scheme="zapiski"'],
   ['возврат входа: App Link на /auth', 'android:pathPrefix="/auth"'],

@@ -11,6 +11,7 @@ import {
   Vault,
   VersionHistory,
   WebCryptoProvider,
+  YandexDiskBackend,
   catalog as coreCatalog,
   countWords,
   decryptNoteFile,
@@ -258,6 +259,8 @@ const PREF = {
    */
   unlockGuard: 'security.unlockGuard',
   account: 'account',
+  /** Токен доступа к Яндекс.Диску — он от Диска, а не от входа в аккаунт. */
+  yandexToken: 'sync.yandexToken',
   onboarded: 'onboarded',
 } as const;
 
@@ -462,7 +465,12 @@ export class AppController {
     const chosen = await picker.chooseFolder().catch(() => null);
     if (!chosen) return null;
     await this.switchVaultLocation(chosen);
-    this.toast({ message: this.storageStrings.chosen(chosen.label) });
+    /* Итог выбора называется вслух, и вместе с ним — цена, если она есть.
+       Предупреждение живёт и в настройках (`vaultLocationWarning`), но сказать
+       о нём в момент выбора обязательно: молчание здесь было бы обманом. */
+    const warning = this.vaultLocationWarning;
+    const chosenText = this.storageStrings.chosen(chosen.label);
+    this.toast({ message: warning === null ? chosenText : `${chosenText}. ${warning}` });
     return this.state.vaultLocation;
   }
 
@@ -593,10 +601,31 @@ export class AppController {
     return true;
   }
 
-  /** Молчаливое восстановление облака при старте: вошли — значит подключаем. */
+  /**
+   * Яндекс.Диск как бэкенд синка (ТЗ §4.1).
+   *
+   * Токен здесь — от Диска, а не от входа: вход в аккаунт открывает облако
+   * СИМПАС, а доступ к чужому хранилищу — отдельное разрешение, которого наш
+   * OAuth не запрашивает (`server/src/services/yandex.ts`: только `login:*`).
+   */
+  async connectYandexDisk(token: string): Promise<boolean> {
+    if (token.trim() === '') return false;
+    await this.host.prefs.set(PREF.yandexToken, token);
+    this.attachBackend(new YandexDiskBackend({ token, locale: this.state.locale }));
+    return true;
+  }
+
+  /** Молчаливое восстановление бэкенда при старте: как было, так и осталось. */
   private async resumeCloud(): Promise<void> {
-    if (this.session.current() === null) return;
     const stored = await this.host.prefs.get<SyncBackend['id'] | null>(PREF.backend, null);
+    if (stored === 'yandex') {
+      const token = await this.host.prefs.get<string | null>(PREF.yandexToken, null);
+      if (token !== null && token !== '') {
+        await this.connectYandexDisk(token);
+        return;
+      }
+    }
+    if (this.session.current() === null) return;
     if (stored !== null && stored !== 'kompas') return;
     await this.connectCloud();
   }

@@ -23,6 +23,8 @@ const ASSET_CACHE = `zapiski-assets-${VERSION}`;
 const SHELL_URL = '/index.html';
 /** Адрес из письма (`server/src/routes/auth.ts`, `buildMagicLinkUrl`). */
 const MAGIC_LINK_CALLBACK = '/api/v1/auth/magic-link/callback';
+/** Куда приходит возврат после входа. Это маршрут приложения, а не файл. */
+const AUTH_ROUTE = '/auth';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -59,12 +61,21 @@ self.addEventListener('fetch', (event) => {
      делает оно (`packages/app/src/state/session.ts`). Ответ API при этом не
      кэшируется — здесь только маршрут, ни байта данных. */
   if (request.mode === 'navigate' && url.pathname === MAGIC_LINK_CALLBACK) {
-    event.respondWith(Response.redirect(`/auth/callback${url.search}`, 303));
+    // Адрес обязан быть абсолютным: относительный `Response.redirect` бросает.
+    const target = new URL(`/auth/callback${url.search}`, self.location.origin);
+    event.respondWith(Response.redirect(target.toString(), 303));
     return;
   }
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    /* Возврат после входа — маршрут приложения, а не файл на диске: отдаём
+       оболочку, не спрашивая сеть. Иначе статика ответила бы 404 на адрес,
+       которого в ней нет, и токен пропал бы вместе со страницей. */
+    if (url.pathname === AUTH_ROUTE || url.pathname.startsWith(`${AUTH_ROUTE}/`)) {
+      event.respondWith(appShell());
+      return;
+    }
     event.respondWith(networkFirstShell(request));
     return;
   }
@@ -79,6 +90,16 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') void self.skipWaiting();
 });
+
+/** Оболочка приложения: из кэша, а если её там нет — с сервера. */
+async function appShell() {
+  const cache = await caches.open(SHELL_CACHE);
+  const cached = (await cache.match(SHELL_URL)) ?? (await cache.match('/'));
+  if (cached) return cached;
+  const response = await fetch(SHELL_URL);
+  if (response.ok) cache.put(SHELL_URL, response.clone());
+  return response;
+}
 
 async function networkFirstShell(request) {
   try {

@@ -51,6 +51,7 @@ export { MemoryVaultStorage, type MemoryVaultStorageOptions } from './memory-sto
 // ── Утилиты путей и текста ─────────────────────────────────────────────────
 export {
   ancestorDirs,
+  ATTACHMENT_EXTENSIONS,
   ATTACHMENTS_DIR,
   baseName,
   CONFIG_FILE,
@@ -58,6 +59,8 @@ export {
   dirName,
   extName,
   INDEX_FILE,
+  isAttachmentPath,
+  isCrdtLogPath,
   isEncryptedPath,
   isInside,
   isMetaPath,

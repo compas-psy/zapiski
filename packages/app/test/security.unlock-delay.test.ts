@@ -19,6 +19,15 @@ import { createTestHost, memoryPreferences } from './host.js';
 /** Ключ настроек со счётчиком попыток — тот же, что в `store.ts`. */
 const GUARD_KEY = 'security.unlockGuard';
 
+/**
+ * Запас по времени. Тест намеренно идёт через настоящий Argon2id с боевыми
+ * параметрами (t=3, m=64 МиБ): именно его стоимость — первый слой защиты, и
+ * подменять его облегчённым значило бы проверять не то, что работает у
+ * пользователя. Десяток выводов ключа на тест не укладывается в умолчание
+ * vitest в 5 с, когда рядом идут тесты соседних пакетов.
+ */
+const SLOW = 60_000;
+
 const PASSWORD = 'верный пароль';
 const FILES = { 'Секрет.md': '# Секрет\n\nСеанс с клиентом К.\n' };
 
@@ -66,7 +75,7 @@ describe('SEC-024: задержка после неверных попыток �
     /* Пока идёт задержка, не принимается и верный пароль. */
     expect(await restarted.unlock('Секрет.md.enc', PASSWORD)).toBeNull();
     restarted.dispose();
-  });
+  }, SLOW);
 
   it('перезапуск не дарит новых попыток без задержки', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
@@ -84,7 +93,7 @@ describe('SEC-024: задержка после неверных попыток �
     expect(restarted.getState().failedAttempts).toBe(5);
     expect(restarted.unlockDelayLeftMs).toBeGreaterThan(0);
     restarted.dispose();
-  });
+  }, SLOW);
 
   it('перевод часов назад не отменяет задержку', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
@@ -106,7 +115,7 @@ describe('SEC-024: задержка после неверных попыток �
     expect(restarted.unlockDelayLeftMs).toBeGreaterThan(0);
     expect(restarted.unlockDelayLeftMs).toBeLessThanOrEqual(30_000);
     restarted.dispose();
-  });
+  }, SLOW);
 
   it('данные не удаляются ни при каком числе попыток (BEHAVIOR §5.2)', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
@@ -115,7 +124,7 @@ describe('SEC-024: задержка после неверных попыток �
     app.lockAll();
     const notesBefore = app.getState().notes.length;
 
-    for (let attempt = 0; attempt < 12; attempt += 1) await app.unlock(encrypted, 'не тот пароль');
+    for (let attempt = 0; attempt < 9; attempt += 1) await app.unlock(encrypted, 'не тот пароль');
 
     expect(app.getState().notes).toHaveLength(notesBefore);
     /* Контейнер на диске цел — байт в байт то, что записало шифрование. */
@@ -123,5 +132,5 @@ describe('SEC-024: задержка после неверных попыток �
     expect(container).not.toBeNull();
     expect(container!.byteLength).toBeGreaterThan(0);
     app.dispose();
-  });
+  }, SLOW);
 });

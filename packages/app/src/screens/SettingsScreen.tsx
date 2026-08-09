@@ -257,6 +257,7 @@ function SyncSection(): ReactNode {
   const strings = useStrings();
   const copy = strings.settings.sync;
   const [webdav, setWebdav] = useState({ url: '', user: '', password: '' });
+  const [yandexToken, setYandexToken] = useState('');
 
   const screenState = app.screenState('settingsSync', false);
   const status =
@@ -291,8 +292,9 @@ function SyncSection(): ReactNode {
       return;
     }
     if (id === 'yandex') {
-      /* Токен приходит из входа; без него отправляем на экран входа. */
-      app.beginSignIn({ name: 'settings', section: 'sync' });
+      /* Токен Диска — отдельное разрешение, вход в аккаунт его не даёт
+         (наш OAuth просит только `login:*`, см. server/services/yandex.ts). */
+      void app.connectYandexDisk(yandexToken);
       return;
     }
     app.navigate({ name: 'paywall' });
@@ -345,9 +347,24 @@ function SyncSection(): ReactNode {
           <span className="za-card__title">{copy.yandex}</span>
           {state.backendId === 'yandex' ? <Badge tone="success">{copy.connected}</Badge> : null}
         </span>
-        <Button variant="text" size="compact" onClick={() => connect('yandex')}>
-          {copy.connect}
-        </Button>
+        <div className="za-stack za-stack--tight" style={{ paddingBlockStart: 12 }}>
+          <TextField
+            type="password"
+            mono
+            label={copy.yandexToken}
+            value={yandexToken}
+            onChange={(event) => setYandexToken(event.target.value)}
+          />
+          <p className="za-muted">{copy.yandexHint}</p>
+          <Button
+            variant="text"
+            size="compact"
+            disabled={yandexToken.trim() === ''}
+            onClick={() => connect('yandex')}
+          >
+            {copy.connect}
+          </Button>
+        </div>
       </div>
 
       <div className="za-card za-card--dashed za-card--static">
@@ -546,6 +563,8 @@ function StorageSection(): ReactNode {
       </Button>
       <p className="za-muted">{copy.changeFolderHint}</p>
 
+      <VaultLocationChoice />
+
       <Button
         variant="secondary"
         onClick={() => {
@@ -561,6 +580,70 @@ function StorageSection(): ReactNode {
         {copy.rebuild}
       </Button>
       <p className="za-muted">{copy.rebuildHint}</p>
+    </>
+  );
+}
+
+/**
+ * Выбор папки для заметок там, где он вообще существует (сейчас — Android).
+ *
+ * Экран показывается только если платформа объявила порт `vaultFolders`:
+ * отсутствующая возможность **скрыта, а не выключена** (ARCHITECTURE §1,
+ * ТЗ §8 D3). На вебе и Windows выбранная пользователем папка ничем не хуже
+ * умолчания, и разделять их незачем — там работает «Сменить папку» выше.
+ *
+ * Почему предупреждение показывается ДО выбора, а не после. В папке
+ * приложения запись атомарна: сбой питания не портит заметку. В папке,
+ * которую отдаёт системный провайдер, атомарности нет — и человек имеет
+ * право узнать цену до того, как заплатит, а не в тосте после. Взамен
+ * названа и польза: такую папку синхронизирует, например, клиент
+ * Яндекс.Диска — бесплатно и мимо нашего облака (ТЗ §4.1 п. 1).
+ */
+function VaultLocationChoice(): ReactNode {
+  const app = useApp();
+  const state = useAppState();
+  const copy = app.storageStrings;
+
+  if (!app.canChooseVaultFolder) return null;
+
+  const location = state.vaultLocation;
+  const warning = app.vaultLocationWarning;
+  const inAppFolder = location === null || location.kind === 'app';
+
+  return (
+    <>
+      <div className="za-info__row">
+        <span>{copy.title}</span>
+        <span className="za-info__value">{location?.label ?? copy.appFolder}</span>
+      </div>
+
+      {/* Оговорка про выбранную папку — постоянно на виду, а не одним тостом. */}
+      {warning !== null ? (
+        <InfoNote icon={<IconInfo size={15} />}>
+          <strong>{copy.warningTitle}</strong>
+          <br />
+          {warning}
+        </InfoNote>
+      ) : (
+        <p className="za-muted">{copy.appFolderNote}</p>
+      )}
+
+      <p className="za-muted">{copy.why}</p>
+
+      {inAppFolder ? (
+        <Button variant="secondary" onClick={() => void app.chooseVaultFolder()}>
+          {copy.chooseFolder}
+        </Button>
+      ) : (
+        <>
+          <Button variant="secondary" onClick={() => void app.chooseVaultFolder()}>
+            {copy.chooseFolder}
+          </Button>
+          <Button variant="secondary" onClick={() => void app.useAppVaultFolder()}>
+            {copy.useAppFolder}
+          </Button>
+        </>
+      )}
     </>
   );
 }

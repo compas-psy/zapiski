@@ -311,6 +311,8 @@ export const en: AppCatalog = {
       webdavUser: 'Login',
       webdavPassword: 'Password',
       yandex: 'Yandex.Disk',
+      yandexToken: 'Yandex.Disk access token',
+      yandexHint: 'Disk access is granted separately from signing in',
       kompas: 'SIMPAS cloud',
       kompasBadge: 'ZAPISKI+',
       localFolder: 'Folder on this device',

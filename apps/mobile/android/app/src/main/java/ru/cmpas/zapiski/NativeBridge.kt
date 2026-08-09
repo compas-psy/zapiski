@@ -234,6 +234,64 @@ object NativeBridge {
     fun saveToDownloads(name: String, mime: String, sourcePath: String): String? =
         Downloads.save(requireContext(), name, mime, sourcePath)
 
+    // ── Папка пользователя через SAF (ТЗ §4.1 п. 1) ─────────────────────────
+    //
+    // Все методы, кроме `safPickFolder`, синхронны: Rust зовёт их с рабочего
+    // потока. Неудача — исключение (Rust превратит его в ошибку команды),
+    // `null` — «такого документа нет», а это законный ответ, а не сбой.
+
+    /**
+     * Системный выбор папки. Ответ придёт в `result`: адрес дерева при
+     * выборе, пустая строка при отмене (отмена — не ошибка, BEHAVIOR §0).
+     */
+    @JvmStatic
+    fun safPickFolder(requestId: Long) {
+        val current = activity?.get()
+        val context = current ?: appContext
+        if (context == null) {
+            result(requestId, false, "выбор папки возможен только при открытом приложении", null)
+            return
+        }
+        val intent = Intent(context, FolderPickActivity::class.java)
+            .putExtra(FolderPickActivity.EXTRA_REQUEST_ID, requestId)
+        // Из активности — тем же стеком задач; из контекста приложения иначе
+        // нельзя вовсе, там NEW_TASK обязателен.
+        if (current == null) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    }
+
+    @JvmStatic
+    fun safHasAccess(tree: String): Boolean = Saf.hasAccess(requireContext(), tree)
+
+    @JvmStatic
+    fun safLabel(tree: String): String? = Saf.label(requireContext(), tree)
+
+    @JvmStatic
+    fun safSupportsRename(tree: String): Boolean = Saf.supportsRename(requireContext(), tree)
+
+    @JvmStatic
+    fun safList(tree: String, path: String): String? = Saf.list(requireContext(), tree, path)
+
+    @JvmStatic
+    fun safRead(tree: String, path: String): ByteArray? = Saf.read(requireContext(), tree, path)
+
+    @JvmStatic
+    fun safStat(tree: String, path: String): String? = Saf.stat(requireContext(), tree, path)
+
+    /** Возвращает фактический режим записи: `staged` либо `direct`. */
+    @JvmStatic
+    fun safWrite(tree: String, path: String, data: ByteArray): String =
+        Saf.write(requireContext(), tree, path, data)
+
+    @JvmStatic
+    fun safMkdir(tree: String, path: String) = Saf.mkdir(requireContext(), tree, path)
+
+    @JvmStatic
+    fun safRemove(tree: String, path: String) = Saf.remove(requireContext(), tree, path)
+
+    @JvmStatic
+    fun safRename(tree: String, from: String, to: String) = Saf.rename(requireContext(), tree, from, to)
+
     // ── Виджеты ─────────────────────────────────────────────────────────────
 
     @JvmStatic

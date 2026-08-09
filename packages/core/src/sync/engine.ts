@@ -17,7 +17,18 @@ import { CrdtStore } from '../crdt/store.js';
 import { NoteDoc } from '../crdt/doc.js';
 import { catalog, DEFAULT_LOCALE, type Locale } from '../i18n/i18n.js';
 import { fnv1a, fromUtf8, utf8 } from '../util/bytes.js';
-import { CRDT_DIR, dirName, isEncryptedPath, isMetaPath, META_DIR, normalizePath, stemOf } from '../util/path.js';
+import {
+  CRDT_DIR,
+  dirName,
+  isAttachmentPath,
+  isCrdtLogPath,
+  isEncryptedPath,
+  isMetaPath,
+  isNotePath,
+  META_DIR,
+  normalizePath,
+  stemOf,
+} from '../util/path.js';
 import { readJson, writeAtomic, writeJsonAtomic } from '../vault/atomic.js';
 import type { Vault } from '../vault/vault.js';
 import { diff3 } from './diff3.js';
@@ -60,6 +71,11 @@ export interface SyncEngineOptions {
   mode?: SyncMode;
   /** Синкать ли CRDT-логи — нужно для three-way merge. */
   syncCrdt?: boolean;
+  /**
+   * Куда сообщать о том, что синк отказался принести (SEC-023). Пользователю
+   * это не показывается: чужие файлы в общей папке — норма, а не сбой.
+   */
+  onIgnored?: (path: VaultPath, reason: string) => void;
 }
 
 export interface SyncOutcome extends SyncStatus {
@@ -69,6 +85,11 @@ export interface SyncOutcome extends SyncStatus {
   conflicts: number;
   /** Тексты для тостов — строго из реестра BEHAVIOR §11. */
   messages: string[];
+  /**
+   * Пути, которые синк отказался принести в vault (SEC-023). Это не ошибка и
+   * не повод для тоста — материал для лога и отладочного меню.
+   */
+  ignored: VaultPath[];
 }
 
 export class SyncEngine {
@@ -81,6 +102,10 @@ export class SyncEngine {
   private readonly now: () => number;
   private readonly mode: SyncMode;
   private readonly syncCrdt: boolean;
+  /** Куда сообщать о пропущенных путях (SEC-023). */
+  private readonly onIgnored: ((path: VaultPath, reason: string) => void) | undefined;
+  /** Что пропустили за текущий проход — без повторов. */
+  private ignored = new Set<VaultPath>();
   private state: SyncStateFile = { version: STATE_VERSION, lastSyncAt: null, entries: {} };
   private loaded = false;
   private running: Promise<SyncOutcome> | null = null;
@@ -96,6 +121,7 @@ export class SyncEngine {
     this.now = options.now ?? (() => Date.now());
     this.mode = options.mode ?? 'peer';
     this.syncCrdt = options.syncCrdt ?? true;
+    this.onIgnored = options.onIgnored;
     this.queue = new ChangeQueue(this.storage, this.now);
     this.versions = new VersionHistory(this.storage, this.now);
     this.crdt = new CrdtStore(this.storage, this.deviceName);
@@ -149,6 +175,7 @@ export class SyncEngine {
 
   private async runSync(): Promise<SyncOutcome> {
     await this.load();
+    this.ignored = new Set<VaultPath>();
     const outcome: SyncOutcome = {
       state: 'synced',
       lastSyncAt: this.state.lastSyncAt,
@@ -159,6 +186,7 @@ export class SyncEngine {
       merged: 0,
       conflicts: 0,
       messages: [],
+      ignored: [],
     };
 
     let remote: Map<VaultPath, { etag: string; mtime: number; size: number }>;
@@ -196,13 +224,51 @@ export class SyncEngine {
     outcome.noteCount = notes.length;
     outcome.bytes = Object.values(this.state.entries).reduce((sum, entry) => sum + (entry.base?.length ?? 0), 0);
     outcome.lastSyncAt = this.state.lastSyncAt;
+    outcome.ignored = [...this.ignored];
     if (outcome.state === 'synced' && this.queue.size > 0) outcome.state = 'syncing';
     return outcome;
   }
 
+  /**
+   * Что синк вообще соглашается положить в vault — БЕЛЫЙ список (SEC-023).
+   *
+   * Раньше здесь был чёрный: «запрещено служебное, разрешено остальное». Имя
+   * файла назначает `list()` бэкенда, то есть сторона, которую модель угроз
+   * (THREAT-MODEL §2.2) считает враждебной, а корень vault'а выбирает
+   * пользователь — ТЗ §2.1.1 прямо поощряет указать на существующую папку с
+   * документами. Указать на домашний каталог никто не мешает, и тогда
+   * враждебный сервер писал бы `~/.bashrc` или `~/.config/autostart/*.desktop`
+   * — то есть выполнял код при следующем входе в систему.
+   *
+   * Разрешены ровно три вещи: заметки (`.md`, `.md.enc`), вложения в
+   * `attachments/` с известными расширениями и CRDT-логи. Всё остальное
+   * пропускается молча для пользователя (чужие файлы в общей папке — норма,
+   * а не сбой) и с записью в лог для нас.
+   */
   private isSyncable(path: VaultPath): boolean {
-    if (!isMetaPath(path)) return true;
-    return this.syncCrdt && path.startsWith(`${CRDT_DIR}/`);
+    if (isMetaPath(path)) {
+      if (this.syncCrdt && isCrdtLogPath(path)) return true;
+      this.ignore(path, 'служебный путь vault’а');
+      return false;
+    }
+    if (isNotePath(path) || isAttachmentPath(path)) return true;
+    this.ignore(path, 'не заметка, не вложение и не CRDT-лог');
+    return false;
+  }
+
+  /**
+   * Запись о пропущенном пути. Лога как подсистемы в ядре нет, поэтому
+   * запись уходит двумя путями: в результат прохода (его видит приложение) и
+   * в необязательный обработчик, который платформа может увести в свой лог.
+   *
+   * Пути здесь — недоверенный ввод, поэтому в лог они попадают обрезанными:
+   * длинное имя от противника не должно распирать журнал.
+   */
+  private ignore(path: VaultPath, reason: string): void {
+    const trimmed = path.length > 200 ? `${path.slice(0, 200)}…` : path;
+    if (this.ignored.has(trimmed)) return;
+    this.ignored.add(trimmed);
+    this.onIgnored?.(trimmed, reason);
   }
 
   private async syncablePaths(): Promise<VaultPath[]> {

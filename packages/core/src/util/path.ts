@@ -105,6 +105,56 @@ export function isMetaPath(path: VaultPath): boolean {
   return segments[0] === meta;
 }
 
+/**
+ * Логи CRDT: ровно `.zapiski/crdt/<что-то>.bin` и ничего больше (SEC-023).
+ *
+ * Проверка регистронезависимая по той же причине, что и `isMetaPath`: имя
+ * приходит из `list()` бэкенда синка, то есть им управляет противоположная
+ * сторона, а Windows и macOS регистр не различают.
+ */
+export function isCrdtLogPath(path: VaultPath): boolean {
+  const normalized = lower(normalizePath(path));
+  const prefix = `${lower(CRDT_DIR)}/`;
+  if (!normalized.startsWith(prefix)) return false;
+  const rest = normalized.slice(prefix.length);
+  return rest.length > '.bin'.length && rest.endsWith('.bin') && !rest.includes('/');
+}
+
+/**
+ * Расширения вложений, которые синк соглашается принести в vault (SEC-023).
+ *
+ * Список продуктовый: изображения и файлы, которые люди прикладывают к
+ * заметкам (ТЗ §3.2, §5.1 «вложения»). Исполняемого в нём нет и быть не
+ * может: `.exe`, `.desktop`, `.sh`, `.bat`, `.apk` — ровно те расширения,
+ * ради которых белый список и вводился.
+ *
+ * Расширить список дешевле, чем объяснять пользователю потерянный файл, —
+ * но каждое новое расширение обязано быть данными, а не кодом.
+ */
+export const ATTACHMENT_EXTENSIONS: readonly string[] = [
+  // изображения
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.heic', '.heif', '.bmp', '.svg',
+  // документы
+  '.pdf', '.txt', '.rtf', '.csv', '.json', '.docx', '.odt', '.xlsx', '.ods', '.pptx', '.odp',
+  // звук и видео (диктовка ОС, VOICE §V0)
+  '.mp3', '.m4a', '.aac', '.ogg', '.opus', '.wav', '.mp4', '.mov', '.webm',
+  // архив: экспорт и импорт кладут рядом с заметками именно zip
+  '.zip',
+];
+
+/**
+ * Вложение: файл внутри `attachments/` с известным расширением (SEC-023).
+ *
+ * Каталог именно `attachments/` — единая конвенция ТЗ §3.2 на всех
+ * платформах. Вложение в подпапке допускается: импорт чужого vault'а
+ * сохраняет структуру.
+ */
+export function isAttachmentPath(path: VaultPath): boolean {
+  const normalized = lower(normalizePath(path));
+  if (!normalized.startsWith(`${lower(ATTACHMENTS_DIR)}/`)) return false;
+  return ATTACHMENT_EXTENSIONS.some((extension) => normalized.endsWith(extension));
+}
+
 export function isInside(dir: VaultPath, path: VaultPath): boolean {
   const d = normalizePath(dir);
   if (d === '') return true;

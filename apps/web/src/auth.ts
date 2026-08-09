@@ -16,10 +16,7 @@
  *  3. служебный путь `/auth/…` заменяется корнем: перезагрузка страницы после
  *     входа не должна упираться в маршрут, которого нет в статике.
  */
-import { parseAuthCallback, stripAuthParams, type AuthCallback } from '@zapiski/app';
-
-/** Путь, на который сервер уводит браузер после успешного обмена. */
-const AUTH_PATH = '/auth';
+import { takeAuthFromAddressBar, type AuthCallback } from '@zapiski/app';
 
 type Handler = (callback: AuthCallback) => void;
 
@@ -27,26 +24,10 @@ const handlers = new Set<Handler>();
 /** Возврат, пойманный до монтирования React. Забирается ровно один раз. */
 let pending: AuthCallback | null = null;
 
-/**
- * Снять возврат с текущего адреса и вычистить адресную строку.
- * Возвращает `null`, если ко входу адрес отношения не имеет.
- */
+/** Снять возврат с текущего адреса и вычистить адресную строку. */
 function capture(): AuthCallback | null {
   if (typeof window === 'undefined') return null;
-  const href = window.location.href;
-  const callback = parseAuthCallback(href);
-  if (callback === null) return null;
-
-  const cleaned = new URL(stripAuthParams(href));
-  if (cleaned.pathname === AUTH_PATH || cleaned.pathname.startsWith(`${AUTH_PATH}/`)) {
-    cleaned.pathname = '/';
-  }
-  try {
-    window.history.replaceState(window.history.state, '', cleaned.toString());
-  } catch {
-    /* Приватный режим или sandbox: адрес не переписался, но токен уже снят. */
-  }
-  return callback;
+  return takeAuthFromAddressBar(window);
 }
 
 /**

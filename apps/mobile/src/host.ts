@@ -5,10 +5,12 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 
-import { createPlatform } from './platform/capabilities';
+import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
+import { createPlatform, PREF_SAF_TREE } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
+import { createSafStorage, probeSafTree } from './platform/saf';
 import { currentVaultRoot, defaultVaultRoot, openVault } from './platform/vault';
 
 /**
@@ -23,9 +25,12 @@ const CLOUD_BASE_URL =
   'https://zapiski.cmpas.ru/api/v1';
 
 export function createHost(): AppHost {
+  /* Настройки нужны и платформе: в них лежит выбранная папка (ТЗ §4.1 п. 1). */
+  const prefs = createPreferences();
+
   return {
-    platform: createPlatform(),
-    prefs: createPreferences(),
+    platform: createPlatform(prefs),
+    prefs,
     cloudBaseUrl: CLOUD_BASE_URL,
 
     // Печать есть: её делает системный конвейер Android (platform/pdf.ts),
@@ -34,16 +39,30 @@ export function createHost(): AppHost {
 
     saveFile,
 
+    /** Возврат после входа: `zapiski://` и App Links (см. `platform/auth.ts`). */
+    takeInitialAuthCallback,
+    onAuthCallback,
+
     /**
-     * На Android vault ровно один и лежит в каталоге приложения, поэтому
-     * восстановление всегда удаётся: онбординг с выбором места хранения на
-     * этой платформе не нужен — там нечего выбирать (см. `pickVaultDirectory`).
+     * Где лежат заметки. Порядок такой:
      *
-     * `null` вернётся только если каталог не удалось создать или открыть —
+     *  1. папка, выбранная пользователем через SAF (ТЗ §4.1 п. 1) — если
+     *     разрешение на неё ещё действует. Отозвали разрешение или удалили
+     *     папку — молча падаем на умолчание, а не пишем в пустоту;
+     *  2. каталог приложения — умолчание и надёжный путь с атомарной
+     *     записью (ТЗ §4.3).
+     *
+     * `null` вернётся, только если и каталог приложения открыть не удалось —
      * например, внешняя память отключена. Тогда `packages/app` покажет
      * онбординг, а не пустой список: BEHAVIOR §11 «Папка недоступна…».
      */
     async restoreVault() {
+      const tree = await prefs.get<string | null>(PREF_SAF_TREE, null);
+      if (tree !== null) {
+        const alive = await probeSafTree(tree).catch(() => null);
+        if (alive) return createSafStorage(alive.uri);
+        await prefs.set(PREF_SAF_TREE, null);
+      }
       const known = await currentVaultRoot().catch(() => null);
       const root = known ?? (await defaultVaultRoot().catch(() => null));
       if (root === null) return null;
