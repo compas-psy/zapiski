@@ -8,6 +8,7 @@
 import type { Note } from '../contract.js';
 import { parseBlocks, type Block, type Inline } from '../markdown/ast.js';
 import { splitFrontmatter } from '../markdown/frontmatter.js';
+import { PRINT_PALETTE as C, PRINT_FONTS as F } from './print-palette.js';
 
 export function escapeHtml(text: string): string {
   return text
@@ -15,6 +16,54 @@ export function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/**
+ * Белый список схем для адресов, попадающих в экспортный документ.
+ *
+ * Экранирования кавычек мало: `[текст](javascript:...)` даёт валидный
+ * `<a href="javascript:...">`, и клик по нему исполняет скрипт — в браузере
+ * при открытии выгруженного `.html`, а при печати в PDF (`export/pdf.ts`)
+ * ещё и внутри WebView приложения. Тело заметки — недоверенный ввод: оно
+ * может приехать синком от скомпрометированной стороны (docs/dev/security/THREAT-MODEL.md,
+ * актёр «вредоносная заметка по синку»).
+ *
+ * Пустая строка на выходе означает «адрес небезопасен» — вызывающий рисует
+ * текст без ссылки.
+ */
+const SAFE_LINK_SCHEME = /^(https?|mailto):/i;
+const SAFE_IMAGE_DATA = /^data:image\/(png|jpe?g|gif|webp|avif);base64,[A-Za-z0-9+/=\s]*$/i;
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** Схлопывает пробелы и управляющие символы: `java\tscript:` — классический обход. */
+function collapse(value: string): string {
+  let out = '';
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    // Пробелы и управляющие символы (включая DEL) выбрасываем.
+    if (code <= 0x20 || code === 0x7f) continue;
+    out += char;
+  }
+  return out;
+}
+
+export function safeLinkUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed === '') return '';
+  const collapsed = collapse(trimmed);
+  if (HAS_SCHEME.test(collapsed)) return SAFE_LINK_SCHEME.test(collapsed) ? trimmed : '';
+  // Без схемы — относительный путь или якорь: исполняемым он стать не может.
+  return trimmed;
+}
+
+export function safeImageUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed === '') return '';
+  const collapsed = collapse(trimmed);
+  if (!HAS_SCHEME.test(collapsed)) return trimmed;
+  if (/^https?:/i.test(collapsed)) return trimmed;
+  // data: только растровые картинки; svg умеет носить в себе скрипт.
+  return SAFE_IMAGE_DATA.test(collapsed) ? trimmed : '';
 }
 
 function renderInline(nodes: Inline[]): string {
@@ -39,17 +88,30 @@ function renderInline(nodes: Inline[]): string {
       case 'code':
         out += `<code>${escapeHtml(node.text)}</code>`;
         break;
-      case 'link':
-        out += `<a href="${escapeHtml(node.href)}">${renderInline(node.children)}</a>`;
+      case 'link': {
+        // Адрес с запрещённой схемой теряет ссылку, но не текст: содержимое
+        // заметки при экспорте не пропадает никогда.
+        const href = safeLinkUrl(node.href);
+        out += href === ''
+          ? renderInline(node.children)
+          : `<a href="${escapeHtml(href)}">${renderInline(node.children)}</a>`;
         break;
-      case 'wiki':
-        out += `<a class="wiki" href="${escapeHtml(node.target)}.html">${escapeHtml(
-          node.label === '' ? node.target : node.label,
-        )}</a>`;
+      }
+      case 'wiki': {
+        const label = escapeHtml(node.label === '' ? node.target : node.label);
+        const target = safeLinkUrl(node.target);
+        out += target === ''
+          ? `<span class="wiki">${label}</span>`
+          : `<a class="wiki" href="${escapeHtml(target)}.html">${label}</a>`;
         break;
-      case 'image':
-        out += `<img src="${escapeHtml(node.src)}" alt="${escapeHtml(node.alt)}">`;
+      }
+      case 'image': {
+        const src = safeImageUrl(node.src);
+        out += src === ''
+          ? `<span class="image-blocked">${escapeHtml(node.alt)}</span>`
+          : `<img src="${escapeHtml(src)}" alt="${escapeHtml(node.alt)}">`;
         break;
+      }
       case 'footnote':
         out += `<sup class="fn">${escapeHtml(node.label)}</sup>`;
         break;
@@ -121,29 +183,35 @@ export function markdownToHtml(body: string): string {
 
 /**
  * Стили печати. Тема «Бумага», колонка 640, без интерфейса (BEHAVIOR §9).
- * Значения зашиты здесь намеренно: экспортный документ покидает приложение и
- * не может зависеть от рантайм-токенов темы.
+ *
+ * Цвета литеральные — экспортный документ покидает приложение и не может
+ * ссылаться на рантайм-токены темы. Но пишутся они не руками: `print-palette.ts`
+ * генерируется из `packages/ui/src/styles/tokens.css`
+ * (`node scripts/gen-print-palette.mjs`), а тест сторожит синхронность.
+ * Раньше значения были зашиты вручную и разъехались с дизайн-системой —
+ * подсветка `==текст==` стала золотистой вместо `--accent-soft`.
  */
 const PRINT_CSS = `
 :root { color-scheme: light; }
-body { margin: 0; background: #FBFAF7; color: #1D1B18; font-family: "Georgia", "Iowan Old Style", serif;
-  font-size: 17px; line-height: 1.62; }
+body { margin: 0; background: ${C.bg}; color: ${C.text}; font-family: ${F.serif};
+  font-size: 17px; line-height: 1.7; }
 main { max-width: 640px; margin: 0 auto; padding: 48px 24px 96px; }
-h1, h2, h3, h4, h5, h6 { font-family: "Inter", "Segoe UI", system-ui, sans-serif; line-height: 1.25; margin: 1.6em 0 0.6em; }
+h1, h2, h3, h4, h5, h6 { font-family: ${F.sans}; line-height: 1.25; margin: 1.6em 0 0.6em; }
 h1 { font-size: 30px; margin-top: 0; }
 p { margin: 0 0 1em; }
-a { color: #2F6F5E; }
-mark { background: #F3E7B8; padding: 0 2px; }
-code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.9em; background: #F1EFE9; padding: 1px 4px; border-radius: 4px; }
-pre { background: #F1EFE9; padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
+a { color: ${C.accent}; text-decoration: underline; text-decoration-style: dashed; }
+mark { background: ${C.accentSoft}; padding: 0 2px; }
+code { font-family: ${F.mono}; font-size: 0.9em; background: ${C.surface}; padding: 1px 4px; border-radius: 4px; }
+pre { background: ${C.surface}; padding: 14px 16px; border-radius: 12px; overflow-x: auto; }
 pre code { background: none; padding: 0; }
-blockquote { margin: 0 0 1em; padding-left: 16px; border-left: 2px solid #D9D5CB; color: #55524B; }
+blockquote { margin: 0 0 1em; padding-left: 16px; border-left: 2.5px solid ${C.line}; color: ${C.textSecondary}; font-style: italic; }
 img { max-width: 100%; border-radius: 12px; }
 table { border-collapse: collapse; width: 100%; margin: 0 0 1em; }
-th, td { border: 1px solid #D9D5CB; padding: 6px 10px; text-align: left; }
+th, td { border: 1px solid ${C.line}; padding: 6px 10px; text-align: left; }
+th { background: ${C.surface}; }
 li.task { list-style: none; margin-left: -1.2em; }
-.meta { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px; color: #8A867D; margin-bottom: 32px; }
-.footnote { font-size: 14px; color: #55524B; }
+.meta { font-family: ${F.mono}; font-size: 12px; color: ${C.textTertiary}; margin-bottom: 32px; }
+.footnote { font-size: 14px; color: ${C.textSecondary}; }
 @page { margin: 18mm; }
 `;
 

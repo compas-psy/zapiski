@@ -33,7 +33,8 @@
     "@lezer/common": "^1.5.2",
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.7.2",
-    "style-mod": "^4.1.3"
+    "style-mod": "^4.1.3",
+    "@zapiski/core": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.0.0",

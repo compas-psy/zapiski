@@ -23,7 +23,16 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = resolve(SCRIPT_DIR, '..');
 
 /** Единственное место в репозитории, где цветовые литералы разрешены. */
-const TOKEN_FILES = ['packages/ui/src/styles/tokens.css'];
+const TOKEN_FILES = [
+  'packages/ui/src/styles/tokens.css',
+
+  // Палитра экспорта. Исключение осознанное и безопасное: файл СГЕНЕРИРОВАН из
+  // tokens.css (`node scripts/gen-print-palette.mjs`), руками не правится, а
+  // тест `packages/core/test/export-palette.test.ts` падает, если он разошёлся
+  // с источником. Литеральные цвета здесь неизбежны: экспортный документ
+  // покидает приложение и не может ссылаться на рантайм-переменные темы.
+  'packages/core/src/export/print-palette.ts',
+];
 
 /** Что вообще имеет смысл читать как текст. */
 const SCANNED_EXTENSIONS = new Set([

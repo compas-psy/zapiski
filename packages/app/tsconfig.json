@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "@zapiski/core": ["../core/src/index.ts"],
+      "@zapiski/core/contract": ["../core/src/contract.ts"],
+      "@zapiski/editor": ["../editor/src/index.ts"],
+      "@zapiski/ui": ["../ui/src/index.ts"]
+    }
+  },
+  "include": ["src", "test"]
+}
