@@ -3,11 +3,13 @@
 Как собираются веб, Windows и Android, какие workflow'ы за что отвечают, как
 работает автообновление и какие секреты для этого нужны.
 
-> **Честное состояние на 0.1.0.** Работают три конвейера: сервер и статика
+> **Честное состояние на 0.1.0.** Конвейеров пять: сервер и статика
 > (`deploy-zapiski.yml` + `provision-zapiski.yml`), установщик Windows
-> (`build-windows.yml`) и проверки инфобеза (`security.yml`). **Сборки Android
-> нет**: у `apps/mobile` нет `package.json`, не сгенерирован gradle-проект и
-> нет workflow. Разделы про Android ниже помечены явно.
+> (`build-windows.yml`), APK Android (`build-android.yml`) и проверки инфобеза
+> (`security.yml`). Ни один клиентский артефакт **ещё ни разу не собран и не
+> запущен**: Windows-тулчейна и Android SDK в разработке нет, релизных тегов не
+> ставили. Описанное ниже — это то, что делает код workflow'ов, а не отчёт об
+> успешных прогонах.
 
 ---
 
@@ -83,51 +85,62 @@ pnpm --filter @zapiski/desktop tauri build --target x86_64-pc-windows-msvc
 
 ## Android (Tauri 2 Mobile)
 
-> ⏳ **Собрать нельзя.** Кода написано много — TypeScript-порты, Rust-команды и
-> Kotlin-сторона (биометрия, share-target, виджеты, Quick Settings, печать,
-> обновление). Не хватает трёх вещей, и каждая блокирует сборку:
->
-> 1. **нет `apps/mobile/package.json`** — каталог не входит в воркспейс pnpm,
->    у него нет ни `build`, ни `typecheck`;
-> 2. **не сгенерирован gradle-проект** `apps/mobile/src-tauri/gen/android`
->    (`tauri android init`). Каталог `apps/mobile/android` — это оверлей
->    **поверх** сгенерированного проекта; без него `AndroidManifest.xml` не
->    существует, а значит `intent-filter` share-target, провайдеры виджетов и
->    плитка Quick Settings никуда не объявлены;
-> 3. **нет workflow сборки** и нет keystore (`apps/mobile/keystore/` пуст).
+`apps/mobile` — оболочка Tauri 2 Mobile. Собирается **только в CI**: Android
+SDK и NDK в разработке нет.
 
-Что запланировано, когда это будет закрыто:
+```bash
+pnpm -r --filter "./packages/**" build
+pnpm --filter @zapiski/mobile typecheck
+pnpm --filter @zapiski/mobile build:vite                 # фронтенд → apps/mobile/dist
+pnpm --filter @zapiski/mobile android:overlay:selftest   # проверка патча манифеста без SDK
 
-* сборка на раннере GitHub Actions (Android SDK/NDK локально нет);
-* бюджет ТЗ §6: APK < 30 МБ;
-* **риск-зона №1** из ТЗ §2.2: качество WebView-редактора на Android (IME,
-  Gboard / Яндекс.Клавиатура / SwiftKey, автозамена, свайп-ввод, кириллица).
-  Защита в коде уже написана — см.
-  [modules/editor.md](modules/editor.md#проблема-ime), но подтверждать её
-  придётся на реальных устройствах.
+pnpm --filter @zapiski/mobile exec tauri android init    # генерирует gen/android
+pnpm --filter @zapiski/mobile android:overlay            # накладывает Kotlin и патчит манифест
+pnpm --filter @zapiski/mobile exec tauri android build --apk
+```
 
-**Про подпись Android — важное.** Алиас и keystore **нельзя менять после первой
+**Порядок обязателен.** `src-tauri/gen/android` — сгенерированный проект
+Gradle, он в `.gitignore`; в git лежит только оверлей `apps/mobile/android/**`,
+который накладывает `scripts/apply-android-overlay.mjs`. Он же патчит
+`AndroidManifest.xml` по маркерам: разрешения, share-target, плитка Quick
+Settings, `FileProvider`, провайдеры виджетов. Обоснование — в шапке скрипта и
+в [modules/platforms.md](modules/platforms.md#оверлей-вместо-genandroid-в-git).
+
+Ещё одна тонкость порядка: `cargo check`/`cargo build` в `src-tauri` требуют
+существующего `../dist` — кодогенерация Tauri читает `frontendDist`. Сначала
+`build:vite`, потом Rust.
+
+**Про подпись — важное.** Алиас и keystore **нельзя менять после первой
 публикации**: обновление с другой подписью не встанет поверх установленного
 приложения, пользователю придётся удалять и ставить заново, теряя данные.
+Пока секретов `ANDROID_KEYSTORE_*` нет, workflow собирает **debug-APK** и
+печатает notice: он ставится на устройство, но релизом не является.
 
-Полный список того, что осталось, — [modules/platforms.md](modules/platforms.md#android-что-осталось).
+Что не закрыто и не может быть закрыто здесь: **риск-зона №1** из ТЗ §2.2 —
+качество WebView-редактора на Android (IME, Gboard / Яндекс.Клавиатура /
+SwiftKey, автозамена, свайп-ввод, кириллица). Защита в коде написана
+([modules/editor.md](modules/editor.md#проблема-ime)), но подтверждать её
+придётся на реальных устройствах.
+
+Остальные незакрытые концы — [modules/platforms.md](modules/platforms.md#android-что-осталось).
 
 ---
 
 ## Workflow'ы
 
-В репозитории их четыре, все с комментариями по-русски прямо в файлах.
+В репозитории их пять, все с комментариями по-русски прямо в файлах.
 
 | Файл | Когда идёт | Что делает |
 | --- | --- | --- |
 | `provision-zapiski.yml` | Вручную и на изменения в `deploy/**` в `main` | Разовая подготовка сервера: docroot, vhost, TLS |
 | `deploy-zapiski.yml` | Каждый push в `main` (кроме `docs/**` и `*.md`) и каждый PR | Проверки, сборка PWA, выкладка статики и API |
 | `build-windows.yml` | Теги `v*`, PR по `apps/desktop/**` и `packages/**`, вручную | Установщик Windows; на теге — GitHub Release и выкладка обновления |
+| `build-android.yml` | Теги `v*`, PR по `apps/mobile/**` и `packages/**`, вручную | APK; на теге — GitHub Release и выкладка APK с манифестом |
 | `security.yml` | Push в `main`, каждый PR (включая форки), еженедельно | Проверки инфобеза |
 
-Все три job'а, которые трогают сервер, делят группу concurrency
-`zapiski-server` с `cancel-in-progress: false`: начатую выкладку на прод не
-обрывают, и одновременно сервер трогает кто-то один.
+Все job'ы, которые трогают сервер, делят группу concurrency `zapiski-server` с
+`cancel-in-progress: false`: начатую выкладку на прод не обрывают, и
+одновременно сервер трогает кто-то один.
 
 ### `provision-zapiski.yml` — «Провижн zapiski.cmpas.ru (nginx + TLS)»
 
@@ -217,6 +230,27 @@ pnpm --filter @zapiski/desktop tauri build --target x86_64-pc-windows-msvc
 Ничего не удаляется: `rsync --delete` здесь не используется, nginx не
 трогается вовсе.
 
+### `build-android.yml` — «Сборка Android»
+
+**Job `build`** (`ubuntu-latest`: JDK 21, Android SDK, NDK, Rust с
+Android-таргетами, кэш cargo и pnpm store):
+
+1. `pnpm install`, сборка `packages/**`;
+2. `pnpm --filter @zapiski/mobile typecheck` и сборка фронтенда;
+3. тесты Rust-части оболочки;
+4. **самопроверка оверлея** — патч манифеста прогоняется на эталонном файле и
+   валидируется `xmllint`, без Android SDK;
+5. `tauri android init` → `android:overlay` → `tauri android build`;
+6. подготовка keystore: есть секреты `ANDROID_KEYSTORE_*` — релизная подпись;
+   нет — debug-APK с явным notice в логе, что это не релиз;
+7. бюджет ТЗ §6 (APK < 30 МБ) проверяется, но **не роняет сборку**: печатается
+   `::warning::`. В отличие от Windows, где превышение бюджета — ошибка.
+
+**Job `release`** (только на теге `v*`): GitHub Release, затем по ssh — APK и
+`latest.json` в `/var/www/zapiski.cmpas.ru/updates/`. APK кладётся под
+временным именем и переименовывается: клиент, скачавший файл в момент выкладки,
+не должен получить половину.
+
 ### `security.yml` — «Безопасность»
 
 Отделён от деплоя намеренно: проверки обязаны идти на каждый PR, **включая PR
@@ -294,10 +328,18 @@ vhost: `latest.json` — `no-cache` (иначе клиент неделю не �
 бинарники — час. `try_files … =404` принципиален: апдейтер должен получить
 честный 404, а не HTML SPA-фолбэка.
 
-**Состояние:** конвейер Windows работает целиком — от тега до файла в
-`updates/`. Android-части конвейера нет (нет сборки APK). Пока в томе нет
-файла, фид честно отвечает `204`, и это корректное поведение «релизов ещё не
-было», а не поломка.
+**Состояние:** конвейеры описаны для обеих платформ — от тега до файла в
+`updates/`. Ни один ни разу не отработал: релизных тегов не ставили. Пока в
+томе нет файла, фид честно отвечает `204`, и это корректное поведение «релизов
+ещё не было», а не поломка.
+
+> ⚠️ **Асимметрия, о которой нужно знать.** `latest.json` один на обе
+> платформы. Android-релиз это учитывает: он забирает текущий манифест с
+> сервера и **доливает** свою запись, сохраняя `windows-x86_64` той же версии.
+> Windows-релиз собирает манифест с нуля и запись `android-universal`
+> **затрёт**. Поэтому при релизе одной версии на две платформы порядок имеет
+> значение: сначала Windows, потом Android. На момент 0.1.0 это не проверено —
+> релизов ещё не было.
 
 ---
 
@@ -327,13 +369,18 @@ GitHub отдаёт их только раннеру во время испол�
 
 Плюс `SERVER_HOST` / `SERVER_USER` / `SSH_PRIVATE_KEY` — те же, что у деплоя.
 
+### Для релиза Android
+
+| Секрет | Для чего |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Keystore подписи APK в base64. Нет — собирается debug-APK, который релизом не является |
+| `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` | Там же |
+
 ### По мере готовности функций
 
 | Секрет | Для чего | Когда |
 | --- | --- | --- |
 | `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET` | Яндекс ID (OAuth) — основной вход | Вместе с аккаунтами |
-| `ANDROID_KEYSTORE_BASE64` | Keystore подписи APK в base64 | Первый релиз Android |
-| `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD` | Там же | Там же |
 
 Секреты, которые живут **только на сервере**, в `/var/www/zapiski/deploy/.env`
 (в git его нет): пароль БД и `AUTH_SECRET` — генерируются скриптом деплоя при

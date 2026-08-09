@@ -73,6 +73,55 @@ importers:
         specifier: ^8.2.1
         version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)
 
+  apps/mobile:
+    dependencies:
+      '@tauri-apps/api':
+        specifier: ^2.9.0
+        version: 2.11.1
+      '@tauri-apps/plugin-fs':
+        specifier: ^2.4.0
+        version: 2.5.1
+      '@tauri-apps/plugin-opener':
+        specifier: ^2.5.0
+        version: 2.5.4
+      '@tauri-apps/plugin-store':
+        specifier: ^2.4.0
+        version: 2.4.4
+      '@zapiski/app':
+        specifier: workspace:*
+        version: link:../../packages/app
+      '@zapiski/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@zapiski/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      react:
+        specifier: ^19.2.8
+        version: 19.2.8
+      react-dom:
+        specifier: ^19.2.8
+        version: 19.2.8(react@19.2.8)
+    devDependencies:
+      '@tauri-apps/cli':
+        specifier: ^2.9.0
+        version: 2.11.4
+      '@types/react':
+        specifier: ^19.2.18
+        version: 19.2.18
+      '@types/react-dom':
+        specifier: ^19.2.4
+        version: 19.2.4(@types/react@19.2.18)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.5
+        version: 6.0.5(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2))
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.2.1
+        version: 8.2.1(@types/node@26.2.0)(esbuild@0.28.2)
+
   apps/web:
     dependencies:
       '@zapiski/app':
@@ -244,6 +293,12 @@ importers:
 
   packages/ui:
     devDependencies:
+      '@fontsource/geist-mono':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/geist-sans':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/golos-text':
         specifier: ^5.3.0
         version: 5.3.0
@@ -737,6 +792,12 @@ packages:
 
   '@fastify/websocket@11.3.0':
     resolution: {integrity: sha512-g89ag4BCcD9YP5wBZXixzoLnuf5j89p/sXFcfpCiv2pdEkYYukBEoK3heVzqsp0EAtszVDc2BBZG0KZqeAShIA==}
+
+  '@fontsource/geist-mono@5.3.0':
+    resolution: {integrity: sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg==}
+
+  '@fontsource/geist-sans@5.3.0':
+    resolution: {integrity: sha512-AmG7cE1AvE4NHROPaOl1sN+a02cB5xy6pA/ZV76HXqWTCsJTV2SCBc9DTFHfJqnVOODm7HhXIYtUIb75NP5QXQ==}
 
   '@fontsource/golos-text@5.3.0':
     resolution: {integrity: sha512-R+gM4qOZSrge4TtEGps0zTpU8X4e7e32L+3yy0J/2LnVB/IERlidEpXPWSZVGzTaL5QnPRVmoebRXSuVtjUIVg==}
@@ -2848,6 +2909,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
+  '@fontsource/geist-mono@5.3.0': {}
+
+  '@fontsource/geist-sans@5.3.0': {}
+
   '@fontsource/golos-text@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
@@ -4357,7 +4422,7 @@ snapshots:
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/expect': 3.2.7
-      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@26.2.0)(lightningcss@1.33.0))
+      '@vitest/mocker': 3.2.7(vite@7.3.6(@types/node@22.20.1)(lightningcss@1.33.0))
       '@vitest/pretty-format': 3.2.7
       '@vitest/runner': 3.2.7
       '@vitest/snapshot': 3.2.7

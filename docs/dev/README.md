@@ -3,20 +3,27 @@
 Точка входа для разработчика. Здесь — как поднять окружение, как устроено
 монорепо, куда что класть и по каким правилам мы работаем.
 
-> **Статус сборки 0.1.0** (сверено на коммите `c6ed823`). Готовы и покрыты
-> тестами шесть слоёв: ядро (`packages/core`), редактор (`packages/editor`),
-> дизайн-система (`packages/ui`), экраны (`packages/app`), веб-оболочка
-> (`apps/web`), оболочка Windows (`apps/desktop`) и облачный бэкенд (`server`).
-> `pnpm build`, `pnpm dev`, `pnpm -r typecheck` и `pnpm -r test` работают из
+> **Статус сборки 0.1.0.** Готовы и покрыты тестами семь слоёв: ядро
+> (`packages/core`), редактор (`packages/editor`), дизайн-система
+> (`packages/ui`), экраны (`packages/app`), веб-оболочка (`apps/web`), оболочка
+> Windows (`apps/desktop`) и облачный бэкенд (`server`) — 695 автотестов,
+> покрытие ядра 94 %. `pnpm build`, `pnpm dev` и `pnpm -r test` работают из
 > корня; веб собирается примерно за полторы секунды.
 >
-> **Не готова оболочка Android** (`apps/mobile`): TypeScript-порты, Rust-команды
-> и Kotlin-сторона написаны, но у каталога нет `package.json` (значит, он вне
-> воркспейса) и не сгенерирован gradle-проект — собрать APK нечем. Разбор —
-> [modules/platforms.md](modules/platforms.md#android-что-осталось).
+> **Оболочка Android** (`apps/mobile`) дописана позже остальных и обкатана
+> меньше: есть TypeScript-порты, Rust-команды, Kotlin-сторона, оверлей манифеста
+> и workflow `build-android.yml`, но APK ни разу не собирался, а
+> `pnpm-lock.yaml` про этот пакет ещё не знает — из-за чего `pnpm install
+> --frozen-lockfile` и `pnpm --filter @zapiski/mobile typecheck` сейчас падают.
+> Разбор — [modules/platforms.md](modules/platforms.md#android-что-осталось).
+>
+> Ни один клиентский артефакт не запускался на устройстве или в браузере
+> пользователя: ни APK, ни установщика Windows не собирали, релизных тегов не
+> ставили. Ограничения среды зафиксированы в
+> [`../ACCEPTANCE.md`](../ACCEPTANCE.md).
 >
 > Проверить состояние на сейчас: `pnpm -r test && pnpm -r typecheck`.
-> Известные ограничения — [getting-started.md](getting-started.md#известные-грабли).
+> Известные грабли — [getting-started.md](getting-started.md#известные-грабли).
 
 ## Документы
 
@@ -45,12 +52,14 @@
 
 Проверки инфобеза идут отдельным workflow `.github/workflows/security.yml` на
 каждый PR, включая PR из форка, — см.
-[build-and-release.md](build-and-release.md#security-yml--безопасность).
+[build-and-release.md](build-and-release.md#securityyml--безопасность).
 
 Отдельно: [`../design/CONTRAST-BRIEF.md`](../design/CONTRAST-BRIEF.md) — бриф
-дизайнеру по контрасту токенов. Вопрос **закрыт** 2026-08-09, все 90 пар из DoD
-проходят 4.5:1; бриф оставлен как обоснование трёх изменённых значений
-(см. [modules/ui.md](modules/ui.md#контраст)).
+дизайнеру по контрасту токенов, и ответ на него —
+[`../spec/CONTRAST-DECISION.md`](../spec/CONTRAST-DECISION.md). Список DoD
+**закрыт** 2026-08-09: все 90 пар проходят 4.5:1. Но три дополнительные правки
+из ответа (роли `*-text` и сдвиг шкалы вторичного текста) в `tokens.css` ещё не
+внесены — разбор в [modules/ui.md](modules/ui.md#контраст).
 
 ## Документы, которыми владеет не эта команда
 
@@ -85,7 +94,7 @@ packages/editor   CodeMirror 6 live-preview + React-обёртка
 packages/app      ВСЕ экраны и всё поведение
 apps/web          оболочка PWA
 apps/desktop      оболочка Tauri 2 (Windows)
-apps/mobile       оболочка Tauri 2 (Android)     ← вне воркспейса: нет package.json
+apps/mobile       оболочка Tauri 2 Mobile (Android)
 server            KompasCloud API (Node 22 + Fastify + PostgreSQL)
 deploy            nginx, Docker Compose, скрипты развёртывания
 scripts           lint-tokens.mjs — «ни одного hex вне токенов»
@@ -93,10 +102,8 @@ docs              документация (этот каталог) и ТЗ
 ```
 
 Пакеты воркспейса объявлены в `pnpm-workspace.yaml`: `packages/*`, `apps/*`,
-`server`. Каталог попадает в воркспейс только когда у него есть
-`package.json`, поэтому `pnpm -r` видит **семь** проектов из восьми: у
-`apps/mobile` его нет. Из-за этого Android-оболочка не типизируется и не
-собирается вместе со всеми — [modules/platforms.md](modules/platforms.md#android-что-осталось).
+`server`. Каталог попадает в воркспейс только когда у него есть `package.json`;
+сейчас их девять вместе с корнем.
 
 ## Куда что класть
 

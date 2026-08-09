@@ -32,15 +32,20 @@
 
 | | `apps/web` | `apps/desktop` | `apps/mobile` |
 | --- | --- | --- | --- |
-| Технология | Vite + PWA | Tauri 2 (Windows) | Tauri 2 (Android) |
-| Пакет воркспейса | `@zapiski/web` | `@zapiski/desktop` | ⏳ **нет `package.json`** |
-| Собирается | ✅ `vite build`, ~1.5 с | ✅ `tauri build` в CI на `windows-latest` | ⏳ нет: gradle-проект (`src-tauri/gen/android`) не сгенерирован |
-| Типы проверяются `pnpm -r typecheck` | ✅ | ✅ | ⏳ нет (пакет вне воркспейса) |
-| Workflow | `deploy-zapiski.yml` | `build-windows.yml` | ⏳ нет |
-| Что готово | Все порты, service worker, манифест PWA | Все порты + трей, автозапуск, ассоциация `.md`, единственный экземпляр | Порты на TypeScript, Rust-команды, Kotlin-сторона (биометрия, share, виджеты, печать, обновление) |
+| Технология | Vite + PWA | Tauri 2 (Windows) | Tauri 2 Mobile (Android) |
+| Пакет воркспейса | `@zapiski/web` | `@zapiski/desktop` | `@zapiski/mobile` |
+| Собирается | ✅ `vite build`, ~1.5 с | ✅ `tauri build` в CI на `windows-latest` | 🟡 `tauri android build` в CI; локально нужны SDK и NDK |
+| Workflow | `deploy-zapiski.yml` | `build-windows.yml` | `build-android.yml` |
+| Проверено на устройстве | — | — | — |
+| Что готово | Все порты, service worker, манифест PWA | Все порты + трей, автозапуск, ассоциация `.md`, единственный экземпляр | Все порты + Kotlin-сторона: биометрия, share, виджеты, Quick Settings, печать, обновление |
 
-`apps/mobile` — единственная незавершённая оболочка. Что именно ей осталось —
-в разделе [«Android: что осталось»](#android-что-осталось).
+Ни одна из трёх оболочек **не запускалась на реальном устройстве или в
+реальном браузере пользователя** — этого нет в среде разработки, и это честно
+зафиксировано в [`../../ACCEPTANCE.md`](../../ACCEPTANCE.md). Утверждения ниже
+опираются на код, типы и тесты, а не на прогон.
+
+Незакрытые концы Android — в разделе
+[«Android: что осталось»](#android-что-осталось).
 
 ---
 
@@ -60,8 +65,18 @@
 | `UpdaterProvider` | `null` (обновляет браузер) | ✓ апдейтер Tauri + подпись | ✓ свой: фид → APK → системный установщик |
 | `secureFlag(on)` | no-op | no-op | ✓ настоящий `FLAG_SECURE` |
 | `PdfRenderer` | ✓ печать скрытого iframe | ✓ WebView2 `PrintToPdf` | ✓ `PrintDocumentAdapter` |
-| `saveFile()` | ✓ «Скачать» | ✓ системный диалог, путь через Rust | ⏳ **не подставлен в `AppHost`** |
+| `saveFile()` | ✓ «Скачать» | ✓ системный диалог, путь через Rust | ✓ «Загрузки» через MediaStore |
 | `PreferencesStore` | ✓ `localStorage` + событие `storage` | ✓ `plugin-store` → `%APPDATA%` | ✓ `plugin-store` |
+| `takeInitialIntent` / `onIntent` | ⏳ не объявлены | ⏳ не объявлены | ⏳ не объявлены |
+| `publishWidgetSnapshot` | `null` по природе | `null` по природе | ⏳ механизм готов, порт не объявлен |
+
+Три последних поля `AppHost` — необязательные (`?`) и появились в контракте
+позже остальных, по итогам сборки Android-оболочки. **Пока их не объявляет ни
+одна оболочка и не вызывает `packages/app`**: виджет «Записать», плитка Quick
+Settings, чекбоксы в виджете «Закреплённая», открытие `.md` из проводника
+Windows и глобальный `Ctrl+Alt+N` доставляют своё событие до границы контракта
+и там останавливаются. Исключение — быстрая заметка на Windows: `App.tsx`
+обходит дыру, вызывая `createNote()` прямо из `globalHotkey`.
 
 ### Почему `null` — это не недоделка
 
@@ -167,9 +182,39 @@
 
 | Слой | Файлы | Что там |
 | --- | --- | --- |
-| TypeScript | `src/platform/*.ts` | Порты `VaultStorage`, биометрия, хэптика, share, updater, виджеты, PDF, настройки; `ipc.ts` — команды и события |
-| Rust | `src-tauri/src/*.rs` | `vault_write_atomic`, `secure_flag`, `haptic_impact`, `share_take`, биометрия, печать, обновление, виджеты. Весь JNI — в одном модуле `android.rs`; на не-Android целях он возвращает честную ошибку, а не тихую заглушку |
+| TypeScript | `src/platform/*.ts` | Порты `VaultStorage`, биометрия, хэптика, share, updater, виджеты, PDF, `saveFile`, настройки; `ipc.ts` — команды и события |
+| Rust | `src-tauri/src/*.rs` | `vault_write_atomic`, `secure_flag`, `haptic_impact`, `share_take`, биометрия, печать, файлы, обновление, виджеты. Весь JNI — в одном модуле `android.rs`; на не-Android целях он возвращает честную ошибку, а не тихую заглушку |
 | Kotlin | `android/app/src/main/java/ru/cmpas/zapiski/` | `Biometrics.kt`, `ShareActivity.kt`, `Widgets.kt` + `WidgetData.kt`, `QuickNoteTileService.kt`, `PdfPrint.kt`, `Updates.kt`, `Inbox.kt`, `NativeBridge.kt` |
+
+### Оверлей вместо `gen/android` в git
+
+`src-tauri/gen/android` — **сгенерированный** проект Gradle, он в `.gitignore`:
+его создаёт `tauri android init` по своему шаблону, вместе с `gradlew`,
+`buildSrc` и бинарным `gradle-wrapper.jar`. Держать это в репозитории значило
+бы хранить чужой артефакт и ловить конфликт при каждом обновлении Tauri.
+
+Поэтому в git лежит только своё — `apps/mobile/android/**`, а
+`scripts/apply-android-overlay.mjs` копирует его в сгенерированный проект и
+**патчит** `AndroidManifest.xml` по маркерам: разрешения, share-target, плитка
+Quick Settings, `FileProvider`, провайдеры виджетов. Патч, а не замена: шаблон
+Tauri задаёт активность, тему и `usesCleartextTraffic`, и полная замена файла
+означала бы молчаливый откат его изменений при обновлении CLI. Скрипт
+идемпотентен.
+
+Порядок обязателен и проверяется в CI:
+
+```bash
+pnpm --filter @zapiski/mobile build:vite                 # cargo-кодогенерация читает ../dist
+pnpm --filter @zapiski/mobile exec tauri android init
+pnpm --filter @zapiski/mobile android:overlay
+pnpm --filter @zapiski/mobile exec tauri android build --apk
+```
+
+Патч манифеста проверяется без Android SDK — на эталонном манифесте:
+
+```bash
+pnpm --filter @zapiski/mobile android:overlay:selftest    # 22 проверки + xmllint
+```
 
 Что уже сделано целиком:
 
@@ -194,21 +239,17 @@
 
 ### Android: что осталось
 
-| Что | Почему это блокирует |
+| Что | Состояние |
 | --- | --- |
-| **Нет `package.json`** | Каталог не входит в воркспейс pnpm: нет ни `build`, ни `typecheck`, `pnpm -r` его не видит |
-| **Нет gradle-проекта** (`src-tauri/gen/android`) | Не сгенерирован `tauri android init`; `android/` — оверлей поверх него. Без gradle нет `AndroidManifest.xml`, и объявленные `intent-filter`, провайдеры виджетов и плитка в манифест не попадают |
-| **Нет workflow сборки** | APK нигде не собирается; `apps/mobile/keystore/` пуст |
-| **`AppHost` собран не полностью** | `src/host.ts` не подставляет `pdf` и `saveFile`, хотя реализация `PdfRenderer` в оболочке есть. Пока их нет, экспорт в PDF и сохранение файла на Android работать не будут |
-| **Нет порта виджетов в `AppHost`** | Оболочка умеет опубликовать снимок и принять команду, но позвать её приложению нечем. Рисовать содержимое виджета в оболочке нельзя — это продуктовое поведение (ARCHITECTURE §1) |
-| **Нет порта быстрой заметки** | Плитка Quick Settings и виджет 1×1 доставляют событие `zapiski://quick-note`, подписка в `main.tsx` пустая: открыть новую заметку оболочка не вправе. Та же дыра, что у глобального хоткея на Windows, — но там `App.tsx` обходит её, вызывая `createNote()` из `globalHotkey` |
+| **Порты намерений ОС не подключены** | `takeInitialIntent`, `onIntent`, `publishWidgetSnapshot` объявлены в `AppHost` (необязательными), но `apps/mobile/src/host.ts` их не отдаёт, а `packages/app` не вызывает. Пока это так, **виджеты честно показывают пустое состояние**, плитка Quick Settings и виджет 1×1 доставляют `zapiski://quick-note` в пустой обработчик, а тап по строке виджета «Последние» ничего не открывает. Оболочка сделала свою половину; вторая — в `packages/app` |
+| **Keystore** | `apps/mobile/keystore/` пуст; без секретов `ANDROID_KEYSTORE_*` workflow собирает **debug-APK**. Он ставится на устройство, но релизом не является и не встанет обновлением поверх релизной сборки |
+| **APK ни разу не собран** | Локально нет Android SDK/NDK; в CI сборка описана, но её результата пока нет |
+| **Риск-зона №1 не закрыта** | Качество ввода на Gboard / Яндекс.Клавиатуре / SwiftKey требует физических устройств — [`../../ACCEPTANCE.md`](../../ACCEPTANCE.md) |
 
-Пока это не закрыто, ответ на вопрос «одинаковый ли функционал» звучит так:
-**архитектурно — да, фактически на Android — ещё не проверено**, потому что
-сборки под Android не существует. Риск-зона №1 из ТЗ §2.2 (качество ввода на
-Gboard, Яндекс.Клавиатуре, SwiftKey) остаётся незакрытой и без устройств
-закрыта быть не может — зафиксировано в
-[`../../ACCEPTANCE.md`](../../ACCEPTANCE.md).
+Ответ на вопрос «одинаковый ли функционал» на сегодня звучит так: **по коду —
+да** (продуктового кода в `apps/*` нет вообще, и это проверяется тестом
+инвариантов), **по проверке — на Android ещё нет**, потому что собранного APK
+никто не запускал.
 
 ---
 

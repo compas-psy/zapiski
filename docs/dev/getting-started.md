@@ -125,12 +125,19 @@ curl localhost:3100/health
 
 ## Известные грабли
 
-### `pnpm -r` видит семь проектов, а не восемь
+### `pnpm-lock.yaml` не знает про `apps/mobile`
 
-Так и есть: у `apps/mobile` нет `package.json`, поэтому Android-оболочка не
-входит в воркспейс — её не затрагивают ни `pnpm -r test`, ни `pnpm -r
-typecheck`, ни `pnpm install`. Это незавершённая работа, а не настройка;
-подробности — [modules/platforms.md](modules/platforms.md#android-что-осталось).
+На момент сверки в lock-файле нет записи для `apps/mobile`, хотя
+`package.json` там появился. Следствия:
+
+* `pnpm --filter @zapiski/mobile typecheck` падает с
+  `Cannot find type definition file for 'vite/client'` — зависимости оболочки
+  просто не установлены;
+* `pnpm install --frozen-lockfile`, которым начинается **каждый** workflow,
+  откажется ставить: lock не соответствует воркспейсу.
+
+Лечится одним `pnpm install` с последующим коммитом обновлённого
+`pnpm-lock.yaml`.
 
 ### Перф-тесты падают при полном прогоне
 
