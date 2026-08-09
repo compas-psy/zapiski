@@ -182,6 +182,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       },
       ctx.env.AUTH_SECRET,
       600,
+      ctx.now().getTime(),
     );
 
     return reply.redirect(yandex.authorizeUrl(state), 302);
@@ -244,6 +245,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       { sub: user.id, sid: rotated.session.id, did: rotated.session.device_id, typ: 'access' },
       ctx.env.AUTH_SECRET,
       ctx.env.AUTH_ACCESS_TTL_SECONDS,
+      ctx.now().getTime(),
     );
 
     const body: SessionResponse = {
@@ -326,6 +328,7 @@ async function issueSession(
     { sub: userId, sid: session.sessionId, did: deviceId, typ: 'access' },
     ctx.env.AUTH_SECRET,
     ctx.env.AUTH_ACCESS_TTL_SECONDS,
+    ctx.now().getTime(),
   );
 
   const user = await findUserById(ctx.db, userId);

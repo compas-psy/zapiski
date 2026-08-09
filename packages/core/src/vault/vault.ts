@@ -387,19 +387,19 @@ export class Vault {
   }
 
   /**
-   * Служебные поля пишутся во frontmatter ТОЛЬКО если он в файле уже есть
-   * (ТЗ §3.2: «сохраняем при наличии, не требуем»). Иначе — в индекс.
+   * Служебные поля живут во frontmatter, ЕСЛИ он в файле есть, и в индексе,
+   * если его нет (ТЗ §3.2). Сам frontmatter мы никогда не создаём: файлы
+   * чужого Obsidian-vault'а должны оставаться такими, какими пришли.
    */
   private stampFrontmatter(body: string, service: ServiceMeta): string {
     const split = splitFrontmatter(body);
     if (!split.frontmatter) return body;
     const fm = split.frontmatter as Frontmatter;
-    if (fm.has('id') || fm.has('created') || fm.has('updated')) {
-      if (fm.has('id')) service.id = fm.getString('id') ?? service.id;
-      else fm.set('id', service.id);
-      if (fm.has('created')) fm.set('created', new Date(service.createdAt).toISOString());
-      fm.set('updated', new Date(service.updatedAt).toISOString());
-    }
+    // Чужой id имеет приоритет: заметка не должна терять себя при переносе.
+    if (fm.has('id')) service.id = fm.getString('id') ?? service.id;
+    else fm.set('id', service.id);
+    if (!fm.has('created')) fm.set('created', new Date(service.createdAt).toISOString());
+    fm.set('updated', new Date(service.updatedAt).toISOString());
     return joinFrontmatter(fm, split.body);
   }
 

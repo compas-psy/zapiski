@@ -101,14 +101,42 @@ const schema = z.object({
 
   /** Origin'ы веб-клиента через запятую. Пусто — CORS выключен. */
   CORS_ORIGINS: z.string().optional(),
-  /** Доверять X-Forwarded-* (сервер за nginx). */
-  TRUST_PROXY: bool(true),
+  /**
+   * Кому верить в X-Forwarded-For. Значение по умолчанию — `1`: один прокси
+   * (nginx), и адрес клиента берётся на один переход левее конца цепочки.
+   *
+   * `true` здесь было бы дырой: Fastify взял бы самый левый элемент, а его
+   * пишет сам клиент. Тогда любой, кто дотянется до порта приложения, может
+   * назваться каким угодно адресом — и обойти всё, что смотрит на `request.ip`.
+   */
+  TRUST_PROXY: z.string().optional(),
 });
 
-export type Env = Omit<z.infer<typeof schema>, 'CORS_ORIGINS' | 'YOOKASSA_ALLOWED_CIDRS'> & {
+export type TrustProxySetting = boolean | number | string[];
+
+export type Env = Omit<
+  z.infer<typeof schema>,
+  'CORS_ORIGINS' | 'YOOKASSA_ALLOWED_CIDRS' | 'TRUST_PROXY'
+> & {
   corsOrigins: string[];
   yookassaAllowedCidrs: string[];
+  trustProxy: TrustProxySetting;
 };
+
+/**
+ * `false` / `0` — не верить заголовку вовсе;
+ * целое N — доверять N ближайшим прокси;
+ * список IP/CIDR — доверять только этим адресам;
+ * `true` — доверять всей цепочке (только для отладки, в проде не ставить).
+ */
+export function parseTrustProxy(raw: string | undefined): TrustProxySetting {
+  if (raw === undefined || raw.trim().length === 0) return 1;
+  const value = raw.trim();
+  if (value === 'false' || value === '0') return false;
+  if (value === 'true') return true;
+  if (/^\d+$/.test(value)) return Number(value);
+  return splitList(value);
+}
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = schema.safeParse(source);
@@ -116,11 +144,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Конфигурация окружения не прошла проверку:\n${lines.join('\n')}`);
   }
-  const { CORS_ORIGINS, YOOKASSA_ALLOWED_CIDRS, ...rest } = parsed.data;
+  const { CORS_ORIGINS, YOOKASSA_ALLOWED_CIDRS, TRUST_PROXY, ...rest } = parsed.data;
   return {
     ...rest,
     corsOrigins: splitList(CORS_ORIGINS),
     yookassaAllowedCidrs: splitList(YOOKASSA_ALLOWED_CIDRS),
+    trustProxy: parseTrustProxy(TRUST_PROXY),
   };
 }
 

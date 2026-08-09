@@ -77,6 +77,24 @@ describe('LAYOUT НЕ СДВИГАЕТСЯ (BEHAVIOR §2.1, приёмочный
     expect(closing?.class).toBe('cm-z-mark cm-z-mark-on');
   });
 
+  it.each([
+    ['заголовок', '# Заголовок', '#', 0],
+    ['цитата', '> Цитата', '>', 0],
+    ['жирный', 'а **ж** б', '**', 2],
+    ['подсветка', 'а ==п== б', '==', 2],
+    ['wiki', 'а [[Цель]] б', '[[', 2],
+    ['код', 'а `код` б', '`', 2],
+    ['ссылка', 'а [т](u) б', '[', 2],
+  ])('символ разметки %s занимает место и фейдится, а не исчезает', (_name, doc, mark, at) => {
+    const state = makeState(doc, { selection: { anchor: doc.length } });
+    const deco = decorationsOf(state).find(
+      (d) => d.from === at && d.to === at + mark.length && d.class?.startsWith('cm-z-mark'),
+    );
+    expect(deco, `нет декорации для «${mark}» в «${doc}»`).toBeDefined();
+    // Диапазон совпадает с символами: они остались в потоке текста.
+    expect(doc.slice(deco?.from ?? 0, deco?.to ?? 0)).toBe(mark);
+  });
+
   it('выделение, накрывающее узел, проявляет его разметку', () => {
     const doc = 'Текст **жирный** дальше.';
     const decos = decorationsOf(

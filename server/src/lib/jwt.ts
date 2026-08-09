@@ -27,8 +27,18 @@ export type SignableClaims = Omit<JwtClaims, 'iat' | 'exp'> & Record<string, unk
 
 const HEADER = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
 
-export function signJwt(claims: SignableClaims, secret: string, ttlSeconds: number): string {
-  const now = Math.floor(Date.now() / 1000);
+/**
+ * `nowMs` передаётся явно, а не берётся из `Date.now()`: подпись и проверка
+ * обязаны смотреть на одни и те же часы. Иначе тест с управляемым временем
+ * (и любая будущая логика на смещённых часах) получает токен «из будущего».
+ */
+export function signJwt(
+  claims: SignableClaims,
+  secret: string,
+  ttlSeconds: number,
+  nowMs: number = Date.now(),
+): string {
+  const now = Math.floor(nowMs / 1000);
   const payload: JwtClaims = { ...claims, iat: now, exp: now + ttlSeconds } as JwtClaims;
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signingInput = `${HEADER}.${body}`;

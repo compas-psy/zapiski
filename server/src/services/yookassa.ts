@@ -4,13 +4,20 @@ import { isIPv4 } from 'node:net';
 /**
  * ЮKassa: приём уведомлений и разбор их содержимого (ТЗ §5.5).
  *
- * Подлинность проверяется двумя независимыми способами, оба необязательны по
- * отдельности, но хотя бы один обязан быть включён в проде:
+ * Подлинность проверяется подписью — и только ею:
  *
  * 1. `YOOKASSA_WEBHOOK_SECRET` — HMAC-SHA256 по сырому телу запроса,
- *    сравнение с заголовком. Сравнение — timing-safe.
- * 2. `YOOKASSA_ALLOWED_CIDRS` — список сетей, из которых ЮKassa шлёт
- *    уведомления. Проверяется адрес после доверия X-Forwarded-For от nginx.
+ *    сравнение с заголовком, timing-safe. **Обязателен.** Без него вебхук
+ *    отвечает 503 и ничего не применяет.
+ * 2. `YOOKASSA_ALLOWED_CIDRS` — необязательное дополнительное сужение по
+ *    сети отправителя. Само по себе оно ничего не подтверждает и никогда не
+ *    заменяет подпись.
+ *
+ * Почему адрес не может быть единственным доказательством: сервис стоит за
+ * nginx, то есть адрес клиента приходит из `X-Forwarded-For`. Этот заголовок
+ * может подделать кто угодно, кто дотянется до порта приложения, — и подделка
+ * IP «из сетей ЮKassa» выдала бы подписку без единого рубля. Список сетей
+ * полезен как второй забор, но забором первым он быть не может.
  *
  * Само тело уведомления не содержит данных заметок и в квоту не попадает.
  */
@@ -18,7 +25,7 @@ import { isIPv4 } from 'node:net';
 export const SIGNATURE_HEADERS = ['x-yookassa-signature', 'signature'] as const;
 
 export type SignatureCheck =
-  | { ok: true; via: 'hmac' | 'cidr' | 'both' }
+  | { ok: true; via: 'hmac' | 'hmac+cidr' }
   | { ok: false; reason: 'no_signature' | 'bad_signature' | 'ip_not_allowed' | 'not_configured' };
 
 export interface VerifyInput {
@@ -31,30 +38,26 @@ export interface VerifyInput {
 
 export function verifyNotification(input: VerifyInput): SignatureCheck {
   const secret = input.secret !== undefined && input.secret.length > 0 ? input.secret : null;
-  const hasCidrs = input.allowedCidrs.length > 0;
 
-  if (secret === null && !hasCidrs) return { ok: false, reason: 'not_configured' };
+  // Подпись обязательна всегда. Список сетей её не заменяет: адрес приходит из
+  // X-Forwarded-For и потому подделываем.
+  if (secret === null) return { ok: false, reason: 'not_configured' };
 
-  let hmacOk = false;
-  if (secret !== null) {
-    if (input.signatureHeader === undefined || input.signatureHeader.length === 0) {
-      return { ok: false, reason: 'no_signature' };
-    }
-    if (!signatureMatches(input.rawBody, secret, input.signatureHeader)) {
-      return { ok: false, reason: 'bad_signature' };
-    }
-    hmacOk = true;
+  if (input.signatureHeader === undefined || input.signatureHeader.length === 0) {
+    return { ok: false, reason: 'no_signature' };
+  }
+  if (!signatureMatches(input.rawBody, secret, input.signatureHeader)) {
+    return { ok: false, reason: 'bad_signature' };
   }
 
-  let cidrOk = false;
-  if (hasCidrs) {
+  if (input.allowedCidrs.length > 0) {
     if (input.remoteAddress === undefined || !ipInAnyCidr(input.remoteAddress, input.allowedCidrs)) {
       return { ok: false, reason: 'ip_not_allowed' };
     }
-    cidrOk = true;
+    return { ok: true, via: 'hmac+cidr' };
   }
 
-  return { ok: true, via: hmacOk && cidrOk ? 'both' : hmacOk ? 'hmac' : 'cidr' };
+  return { ok: true, via: 'hmac' };
 }
 
 /**

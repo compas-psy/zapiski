@@ -71,7 +71,10 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 
   const db = createPool(url, 5);
   const mailer = new MemoryMailer();
-  let now = new Date('2026-08-09T10:00:00.000Z');
+  // Часы стартуют от настоящего времени, а не от зашитой даты: часть проверок
+  // (срок версии, `used_at`) смотрит на `now()` самой базы, и зашитая дата
+  // разъезжалась бы с ней тем сильнее, чем позже прогон.
+  let now = new Date();
 
   const ctx: AppContext = {
     env,
@@ -170,6 +173,7 @@ export async function createUser(
     { sub: user.id, sid: session.sessionId, did: deviceId, typ: 'access' },
     TEST_AUTH_SECRET,
     harness.ctx.env.AUTH_ACCESS_TTL_SECONDS,
+    now.getTime(),
   );
 
   return {

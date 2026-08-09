@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EditorView } from '@codemirror/view';
 import { htmlToMarkdown } from '../src/paste/html-to-markdown.js';
+import { plainPaste } from '../src/paste/smart-paste.js';
 import { makeView } from './helpers.js';
 
 let view: EditorView | null = null;
@@ -107,6 +108,25 @@ describe('вставка в редактор', () => {
     paste(v, clipboard({ text: 'https://example.org' }));
     // Наш обработчик пропустил событие дальше — вставку сделал сам CodeMirror.
     expect(v.state.doc.toString()).toBe('https://example.org');
+  });
+
+  it('Ctrl+Shift+V вставляет без форматирования', () => {
+    const v = makeView('', { selection: { anchor: 0 } });
+    view = v;
+    // Команда только помечает режим, вставку делает браузер.
+    expect(plainPaste(v)).toBe(false);
+    paste(v, clipboard({ text: 'Раз Два', html: '<h2>Раз</h2><p>Два</p>' }));
+    expect(v.state.doc.toString()).toBe('Раз Два');
+  });
+
+  it('после обычной вставки метка «без форматирования» сбрасывается', () => {
+    const v = makeView('', { selection: { anchor: 0 } });
+    view = v;
+    plainPaste(v);
+    paste(v, clipboard({ text: 'Раз', html: '<h2>Раз</h2>' }));
+    v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: '' } });
+    paste(v, clipboard({ text: 'Два', html: '<h2>Два</h2>' }));
+    expect(v.state.doc.toString()).toBe('## Два');
   });
 
   it('картинка уходит в колбэк и вставляется как ![](attachments/…)', async () => {
