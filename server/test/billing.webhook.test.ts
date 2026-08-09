@@ -167,6 +167,76 @@ describe.skipIf(noDatabase())('вебхук ЮKassa', () => {
     expect((status.json() as { canWrite: boolean }).canWrite).toBe(true);
   });
 
+  /**
+   * Регрессия. Список сетей ЮKassa раньше принимался как самостоятельное
+   * доказательство подлинности. Сервис стоит за nginx, значит адрес клиента
+   * приходит из X-Forwarded-For — заголовка, который подделает кто угодно,
+   * дотянувшийся до порта приложения. Подделанный адрес «из сети ЮKassa»
+   * включал подписку без единого рубля.
+   *
+   * Теперь подпись обязательна всегда, а сети — только дополнительное сужение.
+   */
+  it('подделанный X-Forwarded-For не включает подписку', async () => {
+    const guarded = await createHarness({
+      env: {
+        YOOKASSA_WEBHOOK_SECRET: WEBHOOK_SECRET,
+        YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27',
+      },
+    });
+    try {
+      const user = await createUser(guarded, { subscribed: false });
+      const { payload } = sign(succeeded(user.userId, 'yearly', 'pay-spoof-1'));
+
+      const response = await guarded.app.inject({
+        method: 'POST',
+        url: '/api/v1/billing/yookassa/webhook',
+        headers: {
+          'content-type': 'application/json',
+          // Адрес из разрешённой сети — но без подписи.
+          'x-forwarded-for': '185.71.76.5',
+        },
+        payload,
+      });
+      expect(response.statusCode).toBe(400);
+
+      const status = await guarded.app.inject({
+        method: 'GET',
+        url: '/api/v1/billing/status',
+        headers: user.authHeader,
+      });
+      expect((status.json() as { canWrite: boolean }).canWrite).toBe(false);
+      expect((status.json() as { plan: string }).plan).toBe('free');
+    } finally {
+      await guarded.close();
+    }
+  });
+
+  it('одного лишь списка сетей недостаточно: без секрета вебхук выключен', async () => {
+    const cidrOnly = await createHarness({
+      env: { YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27' },
+    });
+    try {
+      const user = await createUser(cidrOnly, { subscribed: false });
+      const response = await cidrOnly.app.inject({
+        method: 'POST',
+        url: '/api/v1/billing/yookassa/webhook',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '185.71.76.5' },
+        payload: JSON.stringify(succeeded(user.userId, 'yearly', 'pay-spoof-2')),
+      });
+      // 503 «не настроено», а не 200: непроверенное уведомление не применяется.
+      expect(response.statusCode).toBe(503);
+
+      const status = await cidrOnly.app.inject({
+        method: 'GET',
+        url: '/api/v1/billing/status',
+        headers: user.authHeader,
+      });
+      expect((status.json() as { canWrite: boolean }).canWrite).toBe(false);
+    } finally {
+      await cidrOnly.close();
+    }
+  });
+
   it('уведомление без metadata не роняет обработчик', async () => {
     const { payload, signature } = sign({
       type: 'notification',

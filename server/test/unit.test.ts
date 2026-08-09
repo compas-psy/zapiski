@@ -274,6 +274,50 @@ describe('ЮKassa', () => {
     ).toEqual({ ok: false, reason: 'not_configured' });
   });
 
+  /**
+   * Регрессия: список сетей — не аутентификация. Адрес приходит из
+   * X-Forwarded-For и подделывается тривиально, поэтому сам по себе он не
+   * пропускает уведомление ни при каких условиях.
+   */
+  it('один лишь список сетей не подтверждает уведомление', () => {
+    expect(
+      verifyNotification({
+        rawBody: body,
+        signatureHeader: undefined,
+        remoteAddress: '185.71.76.5',
+        secret: undefined,
+        allowedCidrs: ['185.71.76.0/27'],
+      }),
+    ).toEqual({ ok: false, reason: 'not_configured' });
+  });
+
+  it('сети сужают проверку поверх подписи, но не заменяют её', () => {
+    const secret = 'webhook-секрет';
+    const signature = createHmac('sha256', secret).update(body).digest('hex');
+    const allowedCidrs = ['185.71.76.0/27'];
+
+    expect(
+      verifyNotification({
+        rawBody: body,
+        signatureHeader: signature,
+        remoteAddress: '185.71.76.5',
+        secret,
+        allowedCidrs,
+      }),
+    ).toEqual({ ok: true, via: 'hmac+cidr' });
+
+    // Верная подпись, но чужая сеть — отказ.
+    expect(
+      verifyNotification({
+        rawBody: body,
+        signatureHeader: signature,
+        remoteAddress: '8.8.8.8',
+        secret,
+        allowedCidrs,
+      }),
+    ).toEqual({ ok: false, reason: 'ip_not_allowed' });
+  });
+
   it('фильтр по сетям работает', () => {
     expect(ipInCidr('185.71.76.20', '185.71.76.0/27')).toBe(true);
     expect(ipInCidr('185.71.77.20', '185.71.76.0/27')).toBe(false);

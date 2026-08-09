@@ -32,7 +32,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       serializers,
       redact: { paths: redactPaths, censor: '[скрыто]' },
     },
-    trustProxy: ctx.env.TRUST_PROXY,
+    trustProxy: ctx.env.trustProxy,
     bodyLimit: DEFAULT_BODY_LIMIT,
     routerOptions: { ignoreTrailingSlash: true },
   });
