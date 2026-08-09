@@ -15,7 +15,13 @@ import {
   type NoteMeta,
   type VaultPath,
 } from '@zapiski/core';
-import { Editor, editorCommands, toolbarCommands, type EditorHandle } from '@zapiski/editor';
+import {
+  Editor,
+  editorCommands,
+  insertImage as insertImageCommand,
+  toolbarCommands,
+  type EditorHandle,
+} from '@zapiski/editor';
 import {
   EditorToolbar,
   IconArrowLeft,
@@ -58,6 +64,16 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const strings = useStrings();
   const layout = useLayout();
   const editorRef = useRef<EditorHandle>(null);
+  /**
+   * Скрытый выбор файла для кнопки «фото» (BEHAVIOR §2.6).
+   *
+   * Именно `<input type="file">`, а не отдельный системный вызов: он один
+   * работает во всех трёх оболочках — в вебе, в WebView2 на Windows и в
+   * Android WebView, где с `accept="image/*"` система сама предлагает и
+   * галерею, и камеру. Своего API выбора файла в контракте хоста нет, и
+   * заводить его ради этого пришлось бы трижды.
+   */
+  const imageInput = useRef<HTMLInputElement>(null);
   /* Предыдущий путь — чтобы отличить «открыли другую заметку» от
      «эта же заметка переехала». Разница принципиальна: во втором случае
      перечитывать с диска нельзя, см. эффект ниже. */
@@ -204,6 +220,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               }}
               /* Автосохранение: debounce 500 мс + blur. Кнопки нет нигде. */
               onSave={(next) => void app.save(path, next)}
+              /* Картинка из буфера — второй путь к вложению (BEHAVIOR §2.6).
+                 Редактор ждал этот колбэк с самого начала, а никто его не
+                 передавал: вставка картинки молча ничего не делала. */
+              onPasteImage={async (file) => (await app.attachImage(file))?.path ?? null}
               wikiExists={(target) =>
                 state.notes.some((item) => item.title.toLowerCase() === target.toLowerCase())
               }
@@ -261,6 +281,23 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
             ) : null}
           </div>
         </div>
+
+        {/* Выбор картинки. Вне экрана, но в дереве: `click()` по нему —
+            единственный способ открыть системный выбор файла из кода. */}
+        <input
+          ref={imageInput}
+          type="file"
+          accept="image/*"
+          className="z-visually-hidden"
+          tabIndex={-1}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            /* Значение сбрасывается всегда: без этого второй выбор ТОГО ЖЕ
+               файла не поднимет `change`, и кнопка «сломается» через раз. */
+            event.target.value = '';
+            if (file) void attachAndInsert(file);
+          }}
+        />
 
         {/* Тулбар над клавиатурой — только mobile (SCREENS §4). */}
         {isMobile && !state.focusMode ? (
@@ -336,17 +373,40 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     );
   }
 
+  /**
+   * Файл → `attachments/` → ссылка в тексте (BEHAVIOR §2.6).
+   *
+   * Тост об ошибке поднимает контроллер: он один знает, что копирование не
+   * удалось. Здесь остаётся только не вставлять ссылку на файл, которого нет.
+   */
+  async function attachAndInsert(file: File): Promise<void> {
+    const result = await app.attachImage(file);
+    if (!result) return;
+    const view = editorRef.current?.view;
+    if (view) insertImageCommand(result.markdown)(view);
+    editorRef.current?.focus();
+  }
+
   /** Первая строка тулбара: H · B · I · список · чекбокс · фото · микрофон · ⋯ */
-  function mainToolbar(): Array<{ id: string; icon: ReactNode; label: string; onSelect: () => void }> {
+  function mainToolbar(): Array<{
+    id: string;
+    icon: ReactNode;
+    label: string;
+    onSelect: () => void;
+    hidden?: boolean;
+  }> {
     return [
       { id: 'h', icon: <IconHeading size={18} />, label: strings.note.toolbar.heading, onSelect: call(toolbarCommands.cycleHeading) },
       { id: 'b', icon: <IconBold size={18} />, label: strings.note.toolbar.bold, onSelect: runCommand('format.bold') },
       { id: 'i', icon: <IconItalic size={18} />, label: strings.note.toolbar.italic, onSelect: runCommand('format.italic') },
       { id: 'list', icon: <IconList size={18} />, label: strings.note.toolbar.list, onSelect: runCommand('format.bulletList') },
       { id: 'task', icon: <IconCheckSquare size={18} />, label: strings.note.toolbar.checkbox, onSelect: runCommand('format.task') },
-      { id: 'image', icon: <IconImage size={18} />, label: strings.note.toolbar.image, onSelect: () => undefined },
-      /* Микрофон — ход 3 (VOICE.md); экран записи ещё не реализован. */
-      { id: 'mic', icon: <IconMic size={18} />, label: strings.note.toolbar.voice, onSelect: () => undefined },
+      { id: 'image', icon: <IconImage size={18} />, label: strings.note.toolbar.image, onSelect: () => imageInput.current?.click() },
+      /* Микрофон — ход 3 (VOICE.md); экрана записи ещё нет, поэтому кнопки нет
+         тоже. ARCHITECTURE §2: отсутствующая возможность СКРЫВАЕТСЯ, а не
+         висит нажимаемой пустышкой. Мёртвая кнопка врёт дважды — обещает
+         возможность и заставляет думать, что приложение сломалось. */
+      { id: 'mic', icon: <IconMic size={18} />, label: strings.note.toolbar.voice, onSelect: () => undefined, hidden: true },
       { id: 'more', icon: <span aria-hidden="true">⋯</span>, label: strings.note.toolbar.more, onSelect: () => setToolbarExtra(true) },
     ];
   }

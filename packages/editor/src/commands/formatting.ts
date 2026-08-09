@@ -259,6 +259,32 @@ export const insertTable: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/**
+ * Тулбар → фото: готовая разметка `![](attachments/…)` в позицию курсора.
+ *
+ * Файл к этому моменту уже скопирован в `attachments/` — команда только
+ * вставляет ссылку на него. Разделение намеренное: копирование зависит от
+ * хранилища и умеет падать, а вставка текста — нет.
+ */
+export function insertImage(markdown: string): StateCommand {
+  return ({ state, dispatch }) => {
+    const range = state.selection.main;
+    const line = state.doc.lineAt(range.head);
+    /* Картинка в середине абзаца ломает чтение — ставим её своим блоком. */
+    const prefix = line.text.trim().length ? '\n\n' : '';
+    const at = line.to;
+    dispatch(
+      state.update({
+        changes: { from: at, insert: `${prefix}${markdown}\n` },
+        selection: { anchor: at + prefix.length + markdown.length + 1 },
+        scrollIntoView: true,
+        userEvent: 'input.format',
+      }),
+    );
+    return true;
+  };
+}
+
 /** Тулбар «⋯» → разделитель. */
 export const insertDivider: StateCommand = ({ state, dispatch }) => {
   const line = state.doc.lineAt(state.selection.main.head);

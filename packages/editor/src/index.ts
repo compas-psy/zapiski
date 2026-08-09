@@ -108,6 +108,7 @@ export {
   insertTable,
   insertDivider,
   insertFootnote,
+  insertImage,
   splitLine,
 } from './commands/formatting.js';
 export type { LineParts } from './commands/formatting.js';

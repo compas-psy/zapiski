@@ -767,6 +767,41 @@ export class AppController {
     return result.changed;
   }
 
+  /**
+   * Вложить изображение: файл едет в `attachments/`, наружу уходит готовая
+   * разметка `![](attachments/…)` (BEHAVIOR §2.6).
+   *
+   * `Vault.addAttachment` был написан и покрыт тестом — и не вызывался НИОТКУДА:
+   * ни кнопка «фото» в тулбаре, ни вставка картинки из буфера к нему подключены
+   * не были. Строка «Не удалось вставить изображение · Повторить» тоже лежала в
+   * реестре с самого начала, и поднять её было нечему.
+   *
+   * `null` означает неудачу; вызывающий на этом останавливается, а человек
+   * видит тост, а не пустоту.
+   *
+   * Возвращаются оба поля, потому что вызывающим нужно разное: вставка из
+   * буфера строит `![](…)` внутри редактора и ждёт ПУТЬ, а тулбар вставляет
+   * готовую разметку, которую собрало ядро, — там учтено, картинка это или
+   * файл. Возврат чего-то одного заставил бы второго собирать строку вслепую.
+   */
+  async attachImage(file: File): Promise<{ path: string; markdown: string } | null> {
+    const vault = this.vault;
+    if (!vault) return null;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      /* Расширение берём из имени файла: тип из `File.type` на Android бывает
+         пустым, а имя есть всегда. */
+      const dot = file.name.lastIndexOf('.');
+      const extension = dot > 0 ? file.name.slice(dot + 1) : 'png';
+      const result = await vault.addAttachment(bytes, extension);
+      await this.refresh();
+      return result;
+    } catch {
+      this.toast({ message: this.strings.errors.imageInsertFailed });
+      return null;
+    }
+  }
+
   // ── Папки (BEHAVIOR, дерево папок) ─────────────────────────────────────────
   //
   // До этого места добраться было нельзя: в меню стояло «Новая подпапка»,

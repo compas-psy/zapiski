@@ -259,6 +259,19 @@ function SyncSection(): ReactNode {
   const [webdav, setWebdav] = useState({ url: '', user: '', password: '' });
   const [yandexToken, setYandexToken] = useState('');
 
+  /**
+   * Заметки-копии, которые синк оставил при расхождении версий.
+   *
+   * Признак — суффикс из реестра (`notes.conflictSuffix`), тот же, которым
+   * копию называет `SyncEngine`. Берём его из строк, а не из литерала: иначе
+   * при смене формулировки счётчик тихо станет нулевым и никто не заметит.
+   *
+   * Сверяем ПУТЬ, а не заголовок: заголовок берётся из первой строки текста и
+   * суффикса не содержит — у копии он тот же, что у оригинала.
+   */
+  const conflictMark = strings.notes.conflictSuffix('').replace(/\s*\)?$/, '');
+  const conflicted = state.notes.filter((note) => note.path.includes(conflictMark));
+
   const screenState = app.screenState('settingsSync', false);
   const status =
     screenState === 'offline'
@@ -403,15 +416,30 @@ function SyncSection(): ReactNode {
         </Button>
       </div>
 
-      {/* Конфликты: экрана «выберите файл» не существует (SCREENS §8). */}
-      <InfoNote icon={<IconMerge size={15} />}>
-        <span className="za-row-between">
-          {copy.conflictsMonth(0)}
-          <Button variant="text" size="compact" onClick={() => undefined}>
-            {copy.historyLink}
-          </Button>
-        </span>
-      </InfoNote>
+      {/*
+        Конфликты (SCREENS §8). Экрана «выберите файл» не существует — ссылка
+        ведёт прямо в историю версий той заметки, где конфликт и случился.
+
+        Счётчик был литеральным нулём, а кнопка — пустым обработчиком: плашка
+        стояла всегда и не значила ничего. Теперь считаются настоящие копии,
+        которые синк оставляет рядом с заметкой при расхождении, и без них
+        плашки нет вовсе: сообщение «конфликтов: 0» занимает место и не несёт
+        сведений.
+      */}
+      {conflicted.length > 0 ? (
+        <InfoNote icon={<IconMerge size={15} />}>
+          <span className="za-row-between">
+            {copy.conflictsMonth(conflicted.length)}
+            <Button
+              variant="text"
+              size="compact"
+              onClick={() => app.navigate({ name: 'versions', noteId: conflicted[0]!.id })}
+            >
+              {copy.historyLink}
+            </Button>
+          </span>
+        </InfoNote>
+      ) : null}
     </>
   );
 }

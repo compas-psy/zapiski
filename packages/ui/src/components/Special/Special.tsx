@@ -12,6 +12,14 @@ export interface ToolbarItem {
   label: string;
   active?: boolean;
   disabled?: boolean;
+  /**
+   * Пункт исчезает целиком (ARCHITECTURE §2), а не становится серым.
+   *
+   * Разница существенная: `disabled` говорит «сейчас нельзя, но бывает», а
+   * `hidden` — «этой возможности в сборке нет». Пустая кнопка на месте
+   * нереализованного обещает то, чего не будет, и выглядит поломкой.
+   */
+  hidden?: boolean;
   onSelect: () => void;
 }
 
@@ -26,7 +34,7 @@ export interface EditorToolbarProps {
 export function EditorToolbar({ items, label, className }: EditorToolbarProps): ReactNode {
   return (
     <div className={cx('z-toolbar', className)} role="toolbar" aria-label={label}>
-      {items.map((item) => (
+      {items.filter((item) => !item.hidden).map((item) => (
         <button
           key={item.id}
           type="button"
