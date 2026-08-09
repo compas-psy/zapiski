@@ -1,0 +1,196 @@
+# Стек КОМПАС.ЗАПИСКИ на сервере cmpas.ru.
+#
+# Реализует инварианты изоляции из
+# docs/adr/0003-backend-na-node-i-izolyaciya-na-cmpas-ru.md.
+#
+# ПОЧЕМУ ЭТОТ СТЕК НЕ МОЖЕТ ЗАДЕТЬ КОМПАС.Дневник:
+#   * ADR-0003 §3 — свой project name `zapiski`. Compose адресует контейнеры,
+#     сети и тома по префиксу проекта, поэтому `docker compose down` здесь
+#     физически не видит объектов проекта Дневника (`/var/www/cmpas.ru`).
+#   * ADR-0003 §3 — свои container_name (`zapiski-api`, `zapiski-postgres`).
+#     Имена `cmpas-app`, `cmpas-postgres`, `cmpas-mailer` тут не встречаются
+#     ни разу, значит ни одна команда из этого файла до них не дотянется.
+#   * ADR-0003 §2 — API публикуется на 127.0.0.1:3100. Порт 3000 не занимается.
+#   * ADR-0003 §4 — своя база в своём контейнере, свой том. Строки подключения
+#     к базе Дневника нет.
+#   * ADR-0003 §7 — почта идёт в УЖЕ СУЩЕСТВУЮЩИЙ postfix Дневника; своего
+#     мейлера мы не поднимаем и порт 25 не занимаем.
+#
+# Запуск — только через deploy/deploy-production-remote.sh.
+
+name: zapiski
+
+services:
+  # ───────────────────────────────────────────────────────────────────────────
+  # KompasCloud API — Node 22 + Fastify (ADR-0003)
+  # ───────────────────────────────────────────────────────────────────────────
+  api:
+    container_name: zapiski-api
+    build:
+      # Контекст — каталог сервера (у него свой package-lock.json и свой npm,
+      # ядро он не тянет). Dockerfile лежит в deploy/, потому что это
+      # деплойный артефакт, а server/ принадлежит команде бэкенда.
+      # Если в server/ когда-нибудь появится собственный Dockerfile —
+      # замените строку ниже на `dockerfile: Dockerfile` и удалите
+      # deploy/api.Dockerfile.
+      context: ../server
+      dockerfile: ../deploy/api.Dockerfile
+    restart: always
+
+    # ADR-0003 §2. Привязка к 127.0.0.1 — не косметика: без неё Docker открыл
+    # бы 3100 на всех интерфейсах в обход nginx и firewall'а. Наружу API
+    # доступен ровно через vhost zapiski.cmpas.ru (deploy/zapiski.cmpas.ru.nginx.conf).
+    ports:
+      - "127.0.0.1:3100:3100"
+
+    # Секреты (пароль БД, ключи Яндекс ID) приходят только отсюда.
+    # Файл создаётся и заполняется на сервере скриптом деплоя, в git его нет.
+    env_file:
+      - .env
+
+    # Имена переменных — контракт server/src/config/env.ts. Секреты
+    # (AUTH_SECRET, YANDEX_*, YOOKASSA_*) сюда не пишутся: они приходят
+    # из deploy/.env выше.
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Слушать внутри контейнера на всех интерфейсах обязательно — иначе
+      # публикация порта не работает. Наружу это всё равно loopback хоста.
+      HOST: 0.0.0.0
+      PORT: "3100"
+      PUBLIC_BASE_URL: https://zapiski.cmpas.ru
+      CORS_ORIGINS: https://zapiski.cmpas.ru
+      # nginx терминирует TLS и ставит X-Forwarded-*; без этого сервер будет
+      # видеть адрес контейнера вместо адреса клиента.
+      TRUST_PROXY: "true"
+
+      # ADR-0003 §4: подключаемся по имени сервиса внутри своей сети,
+      # к базе Дневника обращений нет. Пароль — единственный источник правды
+      # в deploy/.env, генерируется при первом деплое.
+      DATABASE_URL: "postgresql://zapiski:${ZAPISKI_DB_PASSWORD:?нет ZAPISKI_DB_PASSWORD в deploy/.env}@postgres:5432/zapiski"
+
+      # ADR-0003 §7. Postfix живёт в ЧУЖОМ compose-проекте (/var/www/cmpas.ru),
+      # поэтому его docker-сеть нам недоступна по имени `mailer`. Он публикует
+      # 25 на хост, а адрес шлюза docker0 (по умолчанию 172.17.0.1) виден из
+      # любой bridge-сети.
+      #
+      # Настраиваемо: EMAIL_SERVER_HOST / EMAIL_SERVER_PORT / EMAIL_FROM
+      # правятся в deploy/.env, если на сервере другая подсеть docker0 или
+      # удобнее host.docker.internal. Этот файл при этом не меняется.
+      SMTP_HOST: ${EMAIL_SERVER_HOST:-172.17.0.1}
+      SMTP_PORT: ${EMAIL_SERVER_PORT:-25}
+      # Локальный релей без TLS и без пароля — трафик не выходит за пределы
+      # хоста, наружу письмо отправляет уже сам postfix.
+      SMTP_SECURE: "false"
+      # ALLOWED_SENDER_DOMAINS у postfix — cmpas.ru, поэтому отправитель
+      # обязан быть в этом домене, иначе письмо будет отклонено релеем.
+      MAIL_FROM: "${EMAIL_FROM:-ЗАПИСКИ <zapiski@cmpas.ru>}"
+
+      # Зашифрованные блобы (ТЗ §2.1.5 — zero-knowledge, сервер не понимает
+      # содержимого) лежат в своём томе, а не на хостовой ФС.
+      BLOB_ROOT: /data/blobs
+
+    volumes:
+      - zapiski_blobs:/data/blobs
+
+    # Альтернатива 172.17.0.1: положить в deploy/.env
+    # EMAIL_SERVER_HOST=host.docker.internal — резолв уже настроен здесь.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    # Контракт с сервером: GET /api/v1/health отвечает 2xx, когда API готов
+    # обслуживать запросы. Проверяем через node, а не curl/wget — они могут
+    # отсутствовать в slim/distroless-образе, node есть гарантированно.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          node -e "fetch('http://127.0.0.1:3100/api/v1/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+    # ADR-0003, раздел «Минусы»: второй рантайм на сервере компенсируется
+    # лимитами. Без лимита утечка в Node может выесть память и утащить за
+    # собой Дневник — этого допустить нельзя.
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 192M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    networks:
+      - zapiski
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # PostgreSQL ЗАПИСОК — ADR-0003 §4
+  # ───────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: zapiski-postgres
+    restart: always
+
+    # ports: ЗДЕСЬ НЕТ И НЕ ДОЛЖНО БЫТЬ.
+    # ADR-0003 §4: порт 5432 на хост не пробрасывается. У Дневника свой
+    # postgres, тоже без проброса; если бы мы заняли 5432, его последующий
+    # деплой упал бы на «port is already allocated». API ходит в базу по
+    # внутренней сети проекта.
+
+    environment:
+      POSTGRES_USER: zapiski
+      POSTGRES_DB: zapiski
+      POSTGRES_PASSWORD: ${ZAPISKI_DB_PASSWORD:?нет ZAPISKI_DB_PASSWORD в deploy/.env}
+
+    volumes:
+      - zapiski_db_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zapiski -d zapiski"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - zapiski
+
+# ADR-0003 §3: свои тома с явными именами. Явное `name:` важно — иначе
+# Compose дал бы им префикс проекта, и имя стало бы зависеть от того, из
+# какого каталога запустили команду.
+volumes:
+  zapiski_db_data:
+    name: zapiski_db_data
+  zapiski_blobs:
+    name: zapiski_blobs
+
+# Своя bridge-сеть. Контейнеры Дневника в неё не входят, а значит `postgres`
+# внутри неё резолвится в НАШ postgres и ни во что другое.
+networks:
+  zapiski:
+    name: zapiski_net
+    driver: bridge

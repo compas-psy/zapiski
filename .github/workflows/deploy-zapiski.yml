@@ -1,0 +1,322 @@
+name: Деплой zapiski.cmpas.ru
+
+# Регулярная выкладка КОМПАС.ЗАПИСОК:
+#   preflight — типы, тесты, сборка PWA на раннере;
+#   deploy    — статика едет rsync'ом в /var/www/zapiski.cmpas.ru,
+#               API-стек поднимается на сервере из /var/www/zapiski.
+#
+# ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ КОМПАС.Дневник:
+#   * nginx здесь не упоминается вообще. Конфиг ставится один раз
+#     провижном (provision-zapiski.yml) — обычный деплой к веб-серверу
+#     не подходит (ADR-0003 §5).
+#   * rsync пишет строго в /var/www/zapiski.cmpas.ru (ADR-0003 §1).
+#     Каталог /var/www/cmpas.ru в этом файле не встречается.
+#   * На сервере запускается только deploy/deploy-production-remote.sh,
+#     который работает с compose-проектом `zapiski` (ADR-0003 §3).
+#   * Порт для API — 3100, публикуется на loopback. 3000 и 25 не трогаем
+#     (ADR-0003 §2, §7).
+#
+# Перед первым запуском обязателен provision-zapiski.yml — см. deploy/SETUP.md.
+
+on:
+  push:
+    branches: ["main"]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/workflows/provision-zapiski.yml'
+  pull_request:
+    branches: ["main"]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '.github/workflows/provision-zapiski.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Concurrency объявлена на уровне job'ов, а не workflow: проверки можно
+# отменять при новом пуше, а вот job `deploy` делит группу `zapiski-server`
+# с provision-zapiski.yml, чтобы провижн и деплой никогда не выполнялись
+# одновременно (иначе деплой может стартовать раньше, чем появится docroot).
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # PREFLIGHT
+  # ───────────────────────────────────────────────────────────────────────────
+  # Монорепо разворачивается постепенно, поэтому шаги включаются сами, когда
+  # соответствующий пакет появляется. Принцип: НЕ глушим ошибки — определяем,
+  # существует ли скрипт, и если существует, то его падение валит сборку.
+  # `|| true` тут нет нигде.
+  preflight:
+    name: Проверки и сборка PWA
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    concurrency:
+      group: zapiski-preflight-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Встроенный кэш actions/setup-node падает, пока нет pnpm-lock.yaml,
+      # поэтому кэшируем store вручную: ключ без лок-файла тоже валиден.
+      - name: Кэш pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Установка зависимостей
+        run: |
+          set -euo pipefail
+          pnpm config set store-dir ~/.pnpm-store
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::notice::pnpm-lock.yaml ещё нет — ставим без --frozen-lockfile"
+            pnpm install --no-frozen-lockfile
+          fi
+
+      # Какие скрипты РЕАЛЬНО объявлены в воркспейсе. Шаги ниже включаются
+      # по этим флагам, а не по `|| echo`, — так настоящая ошибка не спрячется.
+      - name: Определить состав воркспейса
+        id: scripts
+        run: |
+          set -euo pipefail
+          node - >> "$GITHUB_OUTPUT" <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const dirs = [];
+          for (const root of ['packages', 'apps']) {
+            if (!fs.existsSync(root)) continue;
+            for (const e of fs.readdirSync(root, { withFileTypes: true })) {
+              if (e.isDirectory()) dirs.push(path.join(root, e.name));
+            }
+          }
+          if (fs.existsSync('server')) dirs.push('server');
+
+          const read = (p) =>
+            fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, 'utf8')) : null;
+
+          const scripts = new Set();
+          for (const d of dirs) {
+            const pkg = read(path.join(d, 'package.json'));
+            if (!pkg) continue;
+            for (const s of Object.keys(pkg.scripts || {})) scripts.add(s);
+          }
+
+          const web = read('apps/web/package.json');
+          const webBuildable = Boolean(web && web.name && (web.scripts || {}).build);
+
+          const out = [
+            `typecheck=${scripts.has('typecheck')}`,
+            `test=${scripts.has('test')}`,
+            `web_buildable=${webBuildable}`,
+            `web_pkg=${webBuildable ? web.name : ''}`,
+            `tokens_lint=${fs.existsSync('scripts/lint-tokens.mjs')}`,
+          ];
+          console.log(out.join('\n'));
+          NODE
+          echo "--- определено ---"
+          cat "$GITHUB_OUTPUT"
+
+      - name: Проверка типов
+        if: steps.scripts.outputs.typecheck == 'true'
+        run: pnpm -r typecheck
+
+      # ARCHITECTURE §3.4: «ни одного hex вне токенов», проверяется в CI.
+      - name: Линт токенов
+        if: steps.scripts.outputs.tokens_lint == 'true'
+        run: pnpm run lint:tokens
+
+      - name: Тесты
+        if: steps.scripts.outputs.test == 'true'
+        run: pnpm -r test
+
+      # `имя...` — собрать пакет вместе с его зависимостями по графу
+      # воркспейса, то есть packages/* соберутся сами и в правильном порядке.
+      - name: Сборка PWA
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: pnpm --filter "${{ steps.scripts.outputs.web_pkg }}..." build
+
+      # Compose-файл — такой же артефакт, как код: битый YAML обнаружится
+      # здесь, а не на проде в момент `up -d`.
+      - name: Проверить deploy/docker-compose.yml
+        run: |
+          set -euo pipefail
+          # Значение существует ровно на время валидации и никуда не уезжает:
+          # compose обязан видеть переменную, иначе `${VAR:?}` прервёт разбор.
+          export ZAPISKI_DB_PASSWORD="$(openssl rand -hex 16)"
+          touch deploy/.env
+          docker compose --file deploy/docker-compose.yml config --quiet
+          rm -f deploy/.env
+          echo 'deploy/docker-compose.yml валиден.'
+
+      - name: Проверить синтаксис vhost
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${PWD}/deploy/zapiski.cmpas.ru.nginx.conf:/etc/nginx/conf.d/zapiski.conf:ro" \
+            nginx:stable-alpine nginx -t
+
+      - name: Проверить скрипт удалённого деплоя
+        run: bash -n deploy/deploy-production-remote.sh
+
+      # Артефакт нужен job'у deploy: пересобирать там второй раз незачем.
+      - name: Сохранить собранную статику
+        if: steps.scripts.outputs.web_buildable == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-web-dist
+          path: apps/web/dist
+          if-no-files-found: error
+          retention-days: 7
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # DEPLOY
+  # ───────────────────────────────────────────────────────────────────────────
+  deploy:
+    name: Выкладка на cmpas.ru
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Общая группа с provision-zapiski.yml: сервер трогает кто-то один.
+    # cancel-in-progress: false — начатую выкладку на прод не обрывают.
+    concurrency:
+      group: zapiski-server
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Пока apps/web не существует, артефакта нет — это нормально,
+      # деплой API от этого не отменяется.
+      - name: Забрать собранную статику
+        id: dist
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: zapiski-web-dist
+          path: apps/web/dist
+
+      - name: Загрузить SSH-ключ
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Проверить, что провижн уже выполнен
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" 'bash -s' <<'REMOTE'
+          set -Eeuo pipefail
+          missing=0
+          [ -d /var/www/zapiski.cmpas.ru ] || { echo 'нет /var/www/zapiski.cmpas.ru' >&2; missing=1; }
+          [ -d /var/www/zapiski/.git ]     || { echo 'нет рабочей копии /var/www/zapiski' >&2; missing=1; }
+          if [ "$missing" -ne 0 ]; then
+            echo 'Сначала запустите workflow «Провижн zapiski.cmpas.ru» (см. deploy/SETUP.md).' >&2
+            exit 1
+          fi
+          mkdir -p /var/www/zapiski.cmpas.ru/updates
+          echo 'Провижн на месте.'
+          REMOTE
+
+      # ADR-0003 §1: пишем ровно в свой docroot.
+      # --delete держит docroot равным сборке, но `updates/` исключён —
+      # там лежат подписанные .msi/.apk и latest.json, выкладываемые
+      # релизным пайплайном, и обычный деплой веба не должен их сносить.
+      # `.well-known/` исключён, чтобы не мешать проверкам certbot.
+      - name: Выложить статику PWA
+        run: |
+          set -euo pipefail
+          if [ -d apps/web/dist ] && [ -n "$(ls -A apps/web/dist 2>/dev/null)" ]; then
+            rsync -az --delete \
+              --exclude 'updates/' \
+              --exclude '.well-known/' \
+              -e "ssh -i ~/.ssh/deploy_key" \
+              apps/web/dist/ \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/zapiski.cmpas.ru/"
+            echo 'Статика выложена.'
+          else
+            echo "::notice::apps/web/dist пуст или отсутствует — статика не выкладывается, docroot не изменён"
+          fi
+
+      - name: Поднять API-стек на сервере
+        env:
+          # Секреты приходят из GitHub Secrets, уезжают в окружение удалённой
+          # сессии, а оттуда — в deploy/.env скриптом деплоя. В лог не
+          # печатаются никогда: deploy-production-remote.sh пишет только имя
+          # ключа, но не значение.
+          YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
+          YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
+        run: |
+          set -euo pipefail
+          # Секреты уезжают одним base64-блобом, а не отдельными аргументами.
+          # Две причины:
+          #   1) значение попадает в удалённую командную строку, и апостроф
+          #      или `;` внутри него иначе исполнился бы как код — после
+          #      base64 в аргументе остаётся только [A-Za-z0-9+/=];
+          #   2) пустой аргумент схлопывается при склейке ssh-команды, и
+          #      незаданный ID сдвинул бы SECRET на его место. Один блоб
+          #      непустой всегда, поэтому позиции не разъезжаются.
+          payload_b64="$(printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\n' \
+            "${YANDEX_CLIENT_ID}" "${YANDEX_CLIENT_SECRET}" | base64 -w0)"
+
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'bash -s' -- "${payload_b64}" <<'REMOTE'
+          set -Eeuo pipefail
+
+          # export "$k=$v" без eval: значение секрета не интерпретируется.
+          while IFS='=' read -r k v; do
+            if [ -n "${k}" ]; then export "${k}=${v}"; fi
+          done <<< "$(printf '%s' "${1:-}" | base64 -d)"
+
+          # ADR-0003 §3: работаем только в своём каталоге.
+          cd /var/www/zapiski
+          git fetch --prune origin main
+          git reset --hard origin/main
+
+          set +e
+          bash deploy/deploy-production-remote.sh 2>&1 | tee /tmp/zapiski-deploy.log
+          status=${PIPESTATUS[0]}
+          exit "${status}"
+          REMOTE
+
+      - name: Скачать удалённый лог деплоя
+        if: failure()
+        continue-on-error: true
+        run: |
+          mkdir -p deploy-diagnostics
+          scp -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/zapiski-deploy.log" \
+            deploy-diagnostics/zapiski-deploy.log
+
+      - name: Приложить диагностику
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-deploy-${{ github.sha }}
+          path: deploy-diagnostics/**
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Убрать SSH-ключ
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

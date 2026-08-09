@@ -1,0 +1,196 @@
+name: Провижн zapiski.cmpas.ru (nginx + TLS)
+
+# ОДНОРАЗОВАЯ (но идемпотентная) подготовка сервера под КОМПАС.ЗАПИСКИ:
+# ставит ОТДЕЛЬНЫЙ vhost nginx, выпускает СВОЙ сертификат Let's Encrypt,
+# создаёт docroot и клонирует репозиторий в /var/www/zapiski.
+#
+# Это единственный workflow ЗАПИСОК, который вообще подходит к nginx.
+# Он намеренно отделён от регулярного деплоя (deploy-zapiski.yml), чтобы
+# ежедневная выкладка кода никогда не оказывалась рядом с веб-сервером.
+# Запускается сам, только когда меняется что-то в deploy/**, и по кнопке.
+#
+# ПОЧЕМУ ЭТО НЕ МОЖЕТ СЛОМАТЬ cmpas.ru (ADR-0003 §5, §6):
+#   * Мы только СОЗДАЁМ свои файлы: /etc/nginx/sites-available/zapiski.cmpas.ru
+#     и симлинк на него. Vhost Дневника не читается, не копируется, не
+#     редактируется — его имени нет ни в одной команде ниже.
+#   * Порядок жёсткий: включили симлинк → `nginx -t` на ПОЛНОМ конфиге →
+#     reload ТОЛЬКО при успехе. Если тест провалился, симлинк снимается,
+#     и в sites-enabled остаются исключительно конфиги, проходящие `nginx -t`.
+#     Значит ни последующий деплой Дневника, ни автопродление сертификата
+#     не унаследуют от нас битый файл.
+#   * `systemctl reload nginx` — graceful, без обрыва соединений. Никогда
+#     не restart: restart на пару секунд гасит и Дневник тоже.
+#   * certbot строго `-d zapiski.cmpas.ru` — правит только наш server-блок,
+#     сертификат cmpas.ru не переоформляется. Провал certbot не валит
+#     workflow: ЗАПИСКИ остаются на HTTP, Дневник не задет вообще.
+#   * Docker-стек, база и почта Дневника здесь не упоминаются ни разу.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'deploy/**'
+      - '.github/workflows/provision-zapiski.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Группа общая с job'ом `deploy` из deploy-zapiski.yml: провижн и выкладка
+# никогда не идут на сервер одновременно.
+concurrency:
+  group: zapiski-server
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    name: Установить vhost, выпустить TLS, подготовить каталоги
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Дешёвая страховка: синтаксис vhost проверяется в контейнере ДО того,
+      # как файл попадёт на сервер. На сервере ошибка стоила бы отката
+      # симлинка, здесь — просто красного шага.
+      - name: Проверить синтаксис vhost локально
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v "${PWD}/deploy/zapiski.cmpas.ru.nginx.conf:/etc/nginx/conf.d/zapiski.conf:ro" \
+            nginx:stable-alpine nginx -t
+
+      - name: Загрузить SSH-ключ
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Отправить конфиг vhost на сервер
+        run: |
+          set -euo pipefail
+          scp -i ~/.ssh/deploy_key \
+            deploy/zapiski.cmpas.ru.nginx.conf \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/zapiski.cmpas.ru.nginx.conf"
+
+      - name: Провижн nginx + TLS + каталоги (идемпотентно)
+        env:
+          # Не секрет: публичный URL этого же репозитория, вычисляется из
+          # контекста, чтобы не хардкодить организацию и имя.
+          REPO_HTTPS_URL: ${{ github.server_url }}/${{ github.repository }}.git
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'bash -s' -- "${REPO_HTTPS_URL}" <<'REMOTE'
+          set -Eeuo pipefail
+
+          REPO_HTTPS_URL="$1"
+          SITE='zapiski.cmpas.ru'
+          DOCROOT="/var/www/${SITE}"
+          CHECKOUT='/var/www/zapiski'
+          AVAILABLE="/etc/nginx/sites-available/${SITE}"
+          ENABLED="/etc/nginx/sites-enabled/${SITE}"
+
+          log() { printf '[provision] %s\n' "$*"; }
+
+          # ── 1. Свои каталоги (ADR-0003 §1). Ничего чужого не создаём. ──────
+          mkdir -p "${DOCROOT}" "${DOCROOT}/updates"
+          log "docroot: ${DOCROOT}, каталог обновлений: ${DOCROOT}/updates"
+
+          # ── 2. Ставим vhost в sites-available. ────────────────────────────
+          # Файл принадлежит только ЗАПИСКАМ. Конфиг Дневника лежит рядом и
+          # этой командой не затрагивается: install пишет строго по пути ниже.
+          #
+          # Если certbot уже дописывал сюда ssl-директивы, перезапись их
+          # снимет — это лечится шагом 4 (--reinstall), сайт на минуту
+          # окажется на HTTP. Для cmpas.ru это не значит ничего.
+          had_tls_in_conf=0
+          if [ -f "${AVAILABLE}" ] && grep -q 'ssl_certificate' "${AVAILABLE}"; then
+            had_tls_in_conf=1
+          fi
+          install -m 644 /tmp/zapiski.cmpas.ru.nginx.conf "${AVAILABLE}"
+
+          # ── 3. Включаем и проверяем. ADR-0003 §5. ─────────────────────────
+          ln -sfn "${AVAILABLE}" "${ENABLED}"
+          if nginx -t; then
+            systemctl reload nginx
+            log 'OK: vhost ЗАПИСОК включён, nginx перечитал конфиг. cmpas.ru не затронут.'
+          else
+            rm -f "${ENABLED}"
+            # Возвращаем sites-enabled в заведомо валидное состояние и
+            # убеждаемся, что оно действительно валидно.
+            nginx -t || log 'ВНИМАНИЕ: nginx -t не проходит и БЕЗ нашего файла — проблема не в ЗАПИСКАХ.'
+            log 'ОШИБКА: nginx -t не прошёл. Симлинк ЗАПИСОК снят, reload НЕ выполнялся, cmpas.ru работает как работал.' >&2
+            exit 1
+          fi
+
+          # ── 4. TLS. ADR-0003 §6: строго -d zapiski.cmpas.ru. ──────────────
+          # Провал certbot не валит шаг: сайт остаётся на HTTP, Дневник
+          # и его сертификат не задеты в любом случае.
+          if [ ! -e "/etc/letsencrypt/live/${SITE}/fullchain.pem" ]; then
+            log 'Сертификата нет — выпускаем.'
+            if certbot --nginx -d "${SITE}" --non-interactive --agree-tos \
+                 -m admin@cmpas.ru --redirect; then
+              log "OK: TLS выпущен для ${SITE}."
+            else
+              log "ПРЕДУПРЕЖДЕНИЕ: certbot не отработал — ${SITE} пока на HTTP. Проверьте A-запись DNS и перезапустите workflow. cmpas.ru не затронут."
+            fi
+          elif [ "${had_tls_in_conf}" -eq 1 ] && ! grep -q 'ssl_certificate' "${AVAILABLE}"; then
+            log 'Сертификат есть, но перезапись конфига убрала ssl-директивы — переустанавливаем их.'
+            if certbot --nginx -d "${SITE}" --non-interactive --agree-tos \
+                 -m admin@cmpas.ru --redirect --reinstall; then
+              log 'OK: ssl-директивы возвращены в vhost.'
+            else
+              log "ПРЕДУПРЕЖДЕНИЕ: certbot --reinstall не отработал — ${SITE} временно на HTTP. cmpas.ru не затронут."
+            fi
+          else
+            log "TLS для ${SITE} уже на месте, certbot не запускаем."
+          fi
+
+          # ── 5. Рабочая копия репозитория для деплоя API. ──────────────────
+          # Именно отсюда deploy-zapiski.yml запускает
+          # deploy/deploy-production-remote.sh. Каталог свой, /var/www/cmpas.ru
+          # не трогается (ADR-0003 §3).
+          if [ -d "${CHECKOUT}/.git" ]; then
+            log "Рабочая копия уже есть: ${CHECKOUT}"
+          else
+            log "Клонируем репозиторий в ${CHECKOUT}..."
+            mkdir -p "$(dirname "${CHECKOUT}")"
+            if git clone --branch main "${REPO_HTTPS_URL}" "${CHECKOUT}"; then
+              log 'OK: репозиторий склонирован по HTTPS.'
+            else
+              # Приватный репозиторий по анонимному HTTPS не отдаётся.
+              # Пробуем SSH — сработает, если на сервере настроен deploy key.
+              ssh_url="$(printf '%s' "${REPO_HTTPS_URL}" \
+                | sed -E 's#^https?://([^/]+)/#git@\1:#')"
+              log 'HTTPS-клон не удался, пробуем SSH (deploy key)...'
+              if git clone --branch main "${ssh_url}" "${CHECKOUT}"; then
+                log 'OK: репозиторий склонирован по SSH.'
+              else
+                rm -rf "${CHECKOUT}"
+                {
+                  echo 'ОШИБКА: не удалось склонировать репозиторий на сервер.'
+                  echo 'Репозиторий приватный, и у сервера нет доступа к GitHub.'
+                  echo 'Сделайте ОДИН раз руками (см. deploy/SETUP.md):'
+                  echo '  1) ssh на сервер;'
+                  echo '  2) ssh-keygen -t ed25519 -C zapiski-deploy (если ключа ещё нет);'
+                  echo '  3) добавьте публичный ключ в Settings → Deploy keys репозитория (read-only);'
+                  echo "  4) git clone --branch main ${ssh_url} ${CHECKOUT}"
+                  echo 'После этого перезапустите этот workflow.'
+                  echo 'ВАЖНО: nginx и TLS уже настроены успешно, cmpas.ru не затронут.'
+                } >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          log 'Провижн завершён.'
+          REMOTE
+
+      - name: Убрать SSH-ключ
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
