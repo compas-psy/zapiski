@@ -55,9 +55,28 @@ describe('реестр текстов BEHAVIOR §11', () => {
     ['Заметка удалена', ru.errors.noteTrashed],
   ];
 
+  /**
+   * Приведение к дизайн-системе (`DS-ALIGNMENT.md` §9) переименовало бренд:
+   * КОМПАС → СИМПАС, «КОМПАС.ЗАПИСКИ» → «ЗАПИСКИ», «КОМПАС.Дневник» → «ДНЕВНИК».
+   * `BEHAVIOR.md` §11 при этом остался в прежней редакции, и требование
+   * «дословно» вступило в противоречие с требованием переименовать.
+   *
+   * Приоритет документов задан самим DS-ALIGNMENT §0: он выше BEHAVIOR.
+   * Поэтому эталон из BEHAVIOR приводится к новому именованию ПЕРЕД сверкой —
+   * так тест продолжает сторожить формулировки дословно, но не заставляет
+   * тащить в интерфейс отменённое имя бренда.
+   */
+  const rename = (text: string): string =>
+    text
+      .replace(/КОМПАС\.ЗАПИСКИ/g, 'ЗАПИСКИ')
+      .replace(/КОМПАС\.Дневник/g, 'ДНЕВНИК')
+      .replace(/КОМПАС/g, 'СИМПАС');
+
   for (const [situation, actual] of cases) {
     it(`«${situation}» совпадает дословно`, () => {
-      expect(actual).toBe(table.get(situation));
+      const expected = table.get(situation);
+      expect(expected, `в BEHAVIOR §11 нет строки «${situation}»`).toBeTruthy();
+      expect(actual).toBe(rename(expected!));
     });
   }
 
