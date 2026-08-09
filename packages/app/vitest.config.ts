@@ -21,6 +21,10 @@ export default defineConfig({
       '@zapiski/ui': resolveSource('../ui/src/index.ts'),
     },
   },
+  /* Тесты читают ТЗ из `docs/spec/` — корень воркспейса должен быть доступен. */
+  server: {
+    fs: { allow: [resolveSource('../..')] },
+  },
   test: {
     environment: 'happy-dom',
     include: ['test/**/*.test.{ts,tsx}'],

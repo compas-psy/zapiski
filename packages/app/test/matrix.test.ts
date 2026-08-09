@@ -44,8 +44,14 @@ function parseSpecMatrix(): Array<boolean[]> {
     )
     /* Отбрасываем шапку и разделитель. */
     .filter((cells) => cells.length === 6 && !cells[0]?.startsWith('---') && cells[0] !== 'Экран');
-  /* Прочерк «—» = ячейки нет; любой другой текст = ячейка заполнена. */
-  return rows.map((cells) => cells.slice(1).map((cell) => cell !== '—' && cell !== ''));
+  /*
+   * Ячейки нет, если стоит прочерк «—» либо ТЗ прямо пишет «Нет»
+   * (у поиска состояние загрузки описано как «Нет (мгновенно)»).
+   * Всё остальное — заполненная ячейка, которую обязано уметь приложение.
+   */
+  return rows.map((cells) =>
+    cells.slice(1).map((cell) => cell !== '—' && cell !== '' && !cell.startsWith('Нет')),
+  );
 }
 
 describe('матрица BEHAVIOR §12', () => {

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Zapiski",
+  "mainBinaryName": "zapiski-mobile",
+  "version": "0.1.0",
+  "identifier": "ru.cmpas.zapiski",
+  "build": {
+    "beforeDevCommand": "pnpm run dev:vite",
+    "devUrl": "http://localhost:5184",
+    "beforeBuildCommand": "pnpm run build:vite",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Zapiski",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost https://asset.localhost data: blob:; font-src 'self' data:; media-src 'self' asset: http://asset.localhost https://asset.localhost blob: data:; connect-src 'self' ipc: http://ipc.localhost https: wss: data: blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "publisher": "КОМПАС",
+    "copyright": "КОМПАС",
+    "category": "Productivity",
+    "shortDescription": "Заметки в Markdown",
+    "longDescription": "КОМПАС.ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
+    "android": {
+      "minSdkVersion": 24
+    }
+  },
+  "plugins": {}
+}
