@@ -6,6 +6,9 @@
  * этих измерений не зависит: всё, что мы проверяем, — состояние и декорации.
  */
 
+// React 19 требует явного признака act-окружения для синхронных проверок.
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 const emptyRect = (): DOMRect =>
   ({
     x: 0,
