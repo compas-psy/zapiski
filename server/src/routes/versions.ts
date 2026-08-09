@@ -139,7 +139,9 @@ export async function registerVersionRoutes(app: FastifyInstance): Promise<void>
       const source = (headerValue(request, 'x-version-source') ?? 'local').slice(0, 120);
       const merged = headerValue(request, 'x-version-merged') === '1';
 
-      const stored = await ctx.blobs.putContent(auth.userId, data);
+      // Адрес считаем заранее, пишем после проверки квоты — см. тот же приём
+      // в PUT блоба: отказ по квоте не должен занимать место в томе.
+      const stored = ctx.blobs.describeContent(auth.userId, data);
       const entitlement = await getEntitlement(ctx.db, auth.userId, ctx.retention, ctx.now());
       const expiresAt = new Date(
         ctx.now().getTime() + entitlement.versionRetentionDays * 86_400_000,
@@ -155,6 +157,8 @@ export async function registerVersionRoutes(app: FastifyInstance): Promise<void>
         );
         const chargeable = dup.length > 0 ? 0 : stored.size;
         if (!fits(usage, chargeable, ctx.env.QUOTA_BYTES)) throw errors.quotaExceeded();
+
+        await ctx.blobs.putContent(auth.userId, data);
 
         const { rows } = await client.query<VersionRow>(
           `INSERT INTO versions

@@ -20,7 +20,7 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage --exclude test/perf.test.ts"
   },
   "dependencies": {
     "fflate": "^0.8.2",

@@ -149,7 +149,9 @@ describe('YandexDiskBackend (ТЗ §4.1)', () => {
       fetch: async (url, init) => {
         expect((init?.headers as Record<string, string>)['Authorization']).toBe('OAuth oauth-token');
         if (url.includes('/download')) return new Response(JSON.stringify({ href: 'https://storage/1' }));
-        if (url.startsWith('https://storage/')) return new Response(utf8('# Идея\n'), { headers: { etag: '"e1"' } });
+        if (url.startsWith('https://storage/')) {
+          return new Response(utf8('# Идея\n') as unknown as BodyInit, { headers: { etag: '"e1"' } });
+        }
         return new Response(
           JSON.stringify({
             name: 'ЗАПИСКИ',
@@ -254,28 +256,28 @@ describe('KompasCloudBackend (ADR-0003)', () => {
   });
 
   it('websocket-подписка отдаёт изменившиеся пути (BEHAVIOR §6)', () => {
-    let handler: ((event: { data: unknown }) => void) | null = null;
-    let closed = false;
+    const handlers: Array<(event: { data: unknown }) => void> = [];
+    const state = { closed: false };
     const backend = new KompasCloudBackend({
       token: 'jwt',
       deviceId: 'd',
       fetch: async () => new Response(''),
       websocket: () => ({
-        addEventListener: (_type, listener) => {
-          handler = listener;
+        addEventListener: (_type: 'message', listener: (event: { data: unknown }) => void) => {
+          handlers.push(listener);
         },
         close: () => {
-          closed = true;
+          state.closed = true;
         },
       }),
     });
     const seen: string[] = [];
     const unsubscribe = backend.subscribe((path) => seen.push(path));
-    handler?.({ data: JSON.stringify({ type: 'changed', path: 'Идея.md' }) });
-    handler?.({ data: 'мусор' });
+    handlers[0]?.({ data: JSON.stringify({ type: 'changed', path: 'Идея.md' }) });
+    handlers[0]?.({ data: 'мусор' });
     expect(seen).toEqual(['Идея.md']);
     unsubscribe();
-    expect(closed).toBe(true);
+    expect(state.closed).toBe(true);
   });
 });
 

@@ -10,7 +10,8 @@
  * ```
  */
 
-import { autocompletion, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
+import { closeSearchPanel } from '@codemirror/search';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting } from '@codemirror/language';
 import type { LanguageDescription } from '@codemirror/language';
@@ -31,7 +32,7 @@ import { autoformat } from './input/autoformat.js';
 import { smartPaste } from './paste/smart-paste.js';
 import { tagCompletionSource, wikiCompletionSource, COMPLETION_LIMIT } from './completion/sources.js';
 import { findPanel } from './search/panel.js';
-import { focusMode } from './focus/focus-mode.js';
+import { focusMode, exitFocusMode } from './focus/focus-mode.js';
 import { autosave } from './save/autosave.js';
 import { typography, defaultTypography } from './typography.js';
 import type { TypographySettings } from './typography.js';
@@ -90,6 +91,15 @@ export function zapiskiEditor(options: ZapiskiEditorOptions = {}): Extension[] {
     EditorState.readOnly.of(options.readOnly ?? false),
 
     zapiskiKeymap,
-    keymap.of([...closeBracketsKeymap, ...completionKeymap, ...historyKeymap, ...defaultKeymap]),
+    keymap.of([
+      // Esc по очереди: закрыть подсказку → закрыть поиск → выйти из фокуса →
+      // упростить выделение. Каждая команда возвращает false, когда ей нечего
+      // делать, поэтому цепочка не «съедает» чужой Esc (BEHAVIOR §7).
+      ...completionKeymap,
+      { key: 'Escape', run: closeSearchPanel },
+      { key: 'Escape', run: exitFocusMode },
+      ...historyKeymap,
+      ...defaultKeymap,
+    ]),
   ];
 }

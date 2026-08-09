@@ -37,7 +37,7 @@ import { completeDivider, completeFencedCode } from '../input/autoformat.js';
 import { dedentListItem, indentListItem, listBackspace, listNewline } from '../input/lists.js';
 import { toggleTaskAtCursor } from '../live-preview/interactions.js';
 import { toggleRawMode } from '../live-preview/raw-mode.js';
-import { exitFocusMode, toggleFocusMode } from '../focus/focus-mode.js';
+import { toggleFocusMode } from '../focus/focus-mode.js';
 import { openFind, openReplace } from '../search/panel.js';
 import { plainPaste } from '../paste/smart-paste.js';
 
@@ -46,6 +46,12 @@ export interface EditorCommandSpec {
   id: string;
   key: string;
   run: KeyBinding['run'];
+  /**
+   * По умолчанию событие гасится: иначе Ctrl+D откроет закладки браузера,
+   * а Ctrl+H — историю. Исключение — Ctrl+Shift+V: там вставку выполняет
+   * сам браузер, и гасить событие нельзя.
+   */
+  preventDefault?: boolean;
 }
 
 export const editorCommands: EditorCommandSpec[] = [
@@ -75,7 +81,7 @@ export const editorCommands: EditorCommandSpec[] = [
   { id: 'note.replace', key: 'Mod-h', run: openReplace },
   { id: 'view.raw', key: 'Mod-e', run: toggleRawMode },
   { id: 'view.focus', key: 'Mod-Shift-f', run: toggleFocusMode },
-  { id: 'paste.plain', key: 'Mod-Shift-v', run: plainPaste },
+  { id: 'paste.plain', key: 'Mod-Shift-v', run: plainPaste, preventDefault: false },
 ];
 
 /** Команды без хоткея — только для тулбара и палитры (BEHAVIOR §2.7). */
@@ -87,9 +93,11 @@ export const toolbarCommands = {
 } as const;
 
 const bindings: KeyBinding[] = [
-  ...editorCommands.map(({ key, run }) => ({ key, run, preventDefault: true })),
-  // Esc: сначала выход из фокуса, дальше — панель поиска и всё остальное.
-  { key: 'Escape', run: exitFocusMode },
+  ...editorCommands.map(({ key, run, preventDefault }) => ({
+    key,
+    run,
+    preventDefault: preventDefault ?? true,
+  })),
   // Enter: код-блок → разделитель → продолжение списка → обычный перевод строки.
   { key: 'Enter', run: completeFencedCode },
   { key: 'Enter', run: completeDivider },

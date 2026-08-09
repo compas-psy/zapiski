@@ -62,20 +62,31 @@ export class BlobStore {
     return path.posix.join('published', digest.slice(0, 2), digest.slice(2, 4), digest);
   }
 
-  /** Кладёт шифротекст и возвращает его адрес. Повторный вызов — no-op. */
-  async putContent(userId: string, data: Uint8Array): Promise<StoredBlob> {
+  /**
+   * Считает адрес содержимого, ничего не записывая. Нужно, чтобы проверить
+   * etag и квоту до того, как байты займут место в томе.
+   */
+  describeContent(userId: string, data: Uint8Array): StoredBlob {
     const digest = createHash('sha256').update(data).digest();
     const sha256 = digest.toString('hex');
-    const storageKey = this.keyForContent(userId, sha256);
-    const etag = `"${digest.toString('base64url')}"`;
+    return {
+      storageKey: this.keyForContent(userId, sha256),
+      size: data.byteLength,
+      sha256,
+      etag: `"${digest.toString('base64url')}"`,
+      written: false,
+    };
+  }
 
-    const existing = await this.size(storageKey);
-    if (existing === data.byteLength) {
-      return { storageKey, size: data.byteLength, sha256, etag, written: false };
-    }
+  /** Кладёт шифротекст и возвращает его адрес. Повторный вызов — no-op. */
+  async putContent(userId: string, data: Uint8Array): Promise<StoredBlob> {
+    const described = this.describeContent(userId, data);
 
-    await this.writeAt(storageKey, data);
-    return { storageKey, size: data.byteLength, sha256, etag, written: true };
+    const existing = await this.size(described.storageKey);
+    if (existing === data.byteLength) return described;
+
+    await this.writeAt(described.storageKey, data);
+    return { ...described, written: true };
   }
 
   /** Атомарная запись по конкретному ключу: tmp → fsync → rename. */

@@ -153,17 +153,17 @@ describe('экспорт нескольких заметок', () => {
 
 describe('экспорт в PDF', () => {
   it('отдаёт печатный HTML платформенному рендереру с нужными настройками', async () => {
-    let seen: { html: string; setup: PdfPageSetup } | null = null;
+    const captured: { html: string; setup: PdfPageSetup }[] = [];
     const renderer = {
       async render(html: string, setup: PdfPageSetup): Promise<Uint8Array> {
-        seen = { html, setup };
+        captured.push({ html, setup });
         return utf8('%PDF-1.7');
       },
     };
     const data = await exportPdf(makeNote(), renderer);
     expect(fromUtf8(data)).toContain('%PDF');
-    expect(seen?.setup).toEqual(PDF_PAGE_SETUP);
+    expect(captured[0]?.setup).toEqual(PDF_PAGE_SETUP);
     expect(PDF_PAGE_SETUP).toEqual({ columnWidth: 640, marginMm: 18, theme: 'paper' });
-    expect(seen?.html).toContain('max-width: 640px');
+    expect(captured[0]?.html).toContain('max-width: 640px');
   });
 });

@@ -150,7 +150,11 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
       const noteId = headerValue(request, 'x-note-id');
       const mtime = ctx.now().getTime();
 
-      const stored = await ctx.blobs.putContent(auth.userId, data);
+      // Адрес содержимого считаем заранее, а на диск пишем уже внутри
+      // транзакции — после проверок If-Match и квоты. Иначе отказ по квоте
+      // всё равно оставлял бы байты в томе, и упереться в лимит означало бы
+      // «можно бесконечно занимать место отклонёнными запросами».
+      const stored = await ctx.blobs.describeContent(auth.userId, data);
 
       const result = await withTransaction(ctx.db, async (client) => {
         const usage = await lockUsage(client, auth.userId);
@@ -185,6 +189,11 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
             merged: headerValue(request, 'x-version-merged') === '1',
           });
         }
+
+        // Проверки пройдены — кладём байты. Содержимое адресуется хешем,
+        // поэтому запись ничего не затирает: при откате транзакции остаётся
+        // файл, на который никто не ссылается, а не испорченная версия.
+        await ctx.blobs.putContent(auth.userId, data);
 
         await client.query(
           `INSERT INTO blobs (user_id, path, path_hash, etag, size, mtime, storage_key)

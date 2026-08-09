@@ -30,17 +30,17 @@ export interface VerifyInput {
 }
 
 export function verifyNotification(input: VerifyInput): SignatureCheck {
-  const hasSecret = typeof input.secret === 'string' && input.secret.length > 0;
+  const secret = input.secret !== undefined && input.secret.length > 0 ? input.secret : null;
   const hasCidrs = input.allowedCidrs.length > 0;
 
-  if (!hasSecret && !hasCidrs) return { ok: false, reason: 'not_configured' };
+  if (secret === null && !hasCidrs) return { ok: false, reason: 'not_configured' };
 
   let hmacOk = false;
-  if (hasSecret) {
+  if (secret !== null) {
     if (input.signatureHeader === undefined || input.signatureHeader.length === 0) {
       return { ok: false, reason: 'no_signature' };
     }
-    if (!signatureMatches(input.rawBody, input.secret as string, input.signatureHeader)) {
+    if (!signatureMatches(input.rawBody, secret, input.signatureHeader)) {
       return { ok: false, reason: 'bad_signature' };
     }
     hmacOk = true;
