@@ -2,7 +2,7 @@
   "name": "@zapiski/ui",
   "version": "0.1.0",
   "private": true,
-  "description": "КОМПАС.ЗАПИСКИ: токены тем (3 темы × 6 акцентов) и библиотека компонентов",
+  "description": "ЗАПИСКИ: токены поверх дизайн-системы СИМПАС (3 темы × 6 акцентов) и библиотека компонентов",
   "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.ts",

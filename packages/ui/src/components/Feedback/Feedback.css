@@ -48,7 +48,7 @@
   display: block;
   block-size: 100%;
   border-radius: 2px;
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   transition: inline-size var(--dur-base) var(--ease-out);
 }
 .z-progress--indeterminate .z-progress__fill {
@@ -111,7 +111,7 @@
   box-sizing: border-box;
   padding: var(--sp-12);
   border-radius: var(--r-md);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
   font-size: var(--fs-sm-plus);
   line-height: 1.5;
@@ -122,9 +122,10 @@
   margin-block-start: 1px;
   color: var(--text-tertiary);
 }
+/* Текст плашки — роль `*-text` (4.5:1), а не индикаторный цвет (DS-ALIGNMENT §4). */
 .z-note--success {
   background-color: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
 }
 .z-note--success .z-note__icon,
 .z-note--warning .z-note__icon,
@@ -135,15 +136,15 @@
 }
 .z-note--warning {
   background-color: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-text);
 }
 .z-note--danger {
   background-color: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .z-note--info {
   background-color: var(--info-soft);
-  color: var(--info);
+  color: var(--info-text);
 }
 .z-note--accent {
   background-color: var(--accent-soft);
@@ -153,7 +154,10 @@
   min-inline-size: 0;
 }
 
-/* ── Пустое состояние: круг 64, ровно одна кнопка ───────────────────────── */
+/* ── Пустое состояние: круг 64, ровно одна кнопка ─────────────────────────
+   Единственное место в библиотеке, где допустима терракота: пустые состояния
+   входят в четвёрку брендовых мест (DS-ALIGNMENT §9). Берётся только через
+   `--svc-zapiski-bg` из цветов сервисов — в интерфейсных токенах её нет. */
 .z-empty {
   display: flex;
   flex-direction: column;
@@ -169,8 +173,8 @@
   inline-size: 64px;
   block-size: 64px;
   border-radius: var(--r-full);
-  background-color: var(--surface);
-  color: var(--accent);
+  background-color: var(--svc-zapiski-bg);
+  color: var(--svc-zapiski-fg);
 }
 .z-empty__title {
   margin: 0;

@@ -73,7 +73,7 @@
 
 /* ── Варианты ────────────────────────────────────────────────────────────── */
 .z-btn--primary {
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
 }
 /* «Никогда не уменьшать непрозрачность для основной кнопки» — только цвет */
@@ -82,11 +82,11 @@
 }
 
 .z-btn--secondary {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text);
 }
 .z-btn--secondary:hover:not(:disabled) {
-  background-color: var(--surface-hover);
+  background-color: var(--sunken-hover);
 }
 
 .z-btn--outline {
@@ -95,7 +95,7 @@
   color: var(--text);
 }
 .z-btn--outline:hover:not(:disabled) {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
 }
 
 .z-btn--text {
@@ -107,9 +107,11 @@
   background-color: var(--accent-soft);
 }
 
+/* Текст — --danger-text, не --danger: на soft-подложке нужен текстовый порог
+   4.5:1, а не 3:1 индикатора (DS-ALIGNMENT §4). */
 .z-btn--destructive {
   background-color: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .z-btn--destructive:hover:not(:disabled) {
   background-color: color-mix(in srgb, var(--danger-soft) 88%, var(--danger));
@@ -127,7 +129,7 @@
   padding: 0;
   border: var(--border-w) solid transparent;
   border-radius: var(--r-lg);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -138,7 +140,7 @@
     transform var(--dur-press) var(--ease-out);
 }
 .z-icon-btn:hover:not(:disabled) {
-  background-color: var(--surface-hover);
+  background-color: var(--sunken-hover);
   color: var(--text);
 }
 .z-icon-btn:focus {
@@ -160,7 +162,7 @@
   background-color: transparent;
 }
 .z-icon-btn--accent {
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
 }
 .z-icon-btn--accent:hover:not(:disabled) {
@@ -191,7 +193,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--r-fab);
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
   box-shadow: var(--elev-fab);
   cursor: pointer;

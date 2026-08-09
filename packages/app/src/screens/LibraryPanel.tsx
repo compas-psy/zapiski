@@ -6,7 +6,16 @@
  */
 import { useMemo, useState, type ReactNode } from 'react';
 import type { FolderNode } from '@zapiski/core';
-import { Button, IconFolder, IconHash, IconPin, IconTrash, Tree, type TreeNode } from '@zapiski/ui';
+import {
+  Button,
+  IconFolder,
+  IconHash,
+  IconPin,
+  IconTrash,
+  ServiceMark,
+  Tree,
+  type TreeNode,
+} from '@zapiski/ui';
 import { IconArchive } from '../components/icons.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { EmptyBlock, Section, TreeSkeleton } from '../components/ScreenStates.js';
@@ -31,7 +40,12 @@ export function LibraryPanel(): ReactNode {
   return (
     <div className="za-library">
       <div className="za-library__head">
-        <span className="za-wordmark">{strings.app.wordmark}</span>
+        {/* Знак сервиса в шапке — одно из четырёх мест, где терракота
+            допустима внутри продукта (DS-ALIGNMENT §9). */}
+        <span className="za-brand">
+          <ServiceMark size={22} />
+          <span className="za-wordmark">{strings.app.wordmark}</span>
+        </span>
         <SyncIndicator />
       </div>
 

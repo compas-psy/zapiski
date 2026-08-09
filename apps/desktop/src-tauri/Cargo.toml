@@ -53,6 +53,15 @@ windows = { version = "0.61", features = [
   "Win32_Foundation",
 ] }
 webview2-com = "0.38"
+
+# Без этой строки Windows-сборка не компилируется.
+# `windows` 0.61 подключает `windows-future` с `default-features = false`,
+# а в нём модуль `future` (все `impl IntoFuture`) закрыт под `#[cfg(feature =
+# "std")]`. Без него `IAsyncOperation`/`IAsyncAction` не являются футурами,
+# и каждый `.await` в hello.rs даёт E0277 «is not a future» — 8 ошибок.
+# Унификация фич Cargo включает `std` для всего графа, поэтому hello.rs
+# остаётся без изменений.
+windows-future = { version = "0.2.1", features = ["std"] }
 aes-gcm = "0.10"
 sha2 = "0.10"
 getrandom = "0.3"

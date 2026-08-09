@@ -1,5 +1,10 @@
 /**
- * @zapiski/ui — токены тем и библиотека компонентов КОМПАС.ЗАПИСКИ.
+ * @zapiski/ui — токены тем и библиотека компонентов ЗАПИСОК.
+ *
+ * Токены — алиасы поверх дизайн-системы СИМПАС, компоненты — временная
+ * реализация её `Button`/`Badge`/`Card`/`Input`/`Separator`/`SegmentedControl`/
+ * `Icon`/`ServiceMark` до открытия пакета `@simpas/design-system`.
+ * Карта соответствия и план замены — packages/ui/DS-MAPPING.md.
  *
  * Публичный API пакета — только этот файл (ARCHITECTURE.md §5).
  * Стили подключаются здесь же: смена темы работает без ререндера React.
@@ -164,6 +169,14 @@ export {
   type WaveformProps,
 } from './components/Special/Special';
 export { Tree, type TreeNode, type TreeProps } from './components/Special/Tree';
+
+/* ── Знак сервиса ────────────────────────────────────────────────────────── */
+export {
+  MIN_READABLE_SIZE,
+  ServiceMark,
+  type ServiceId,
+  type ServiceMarkProps,
+} from './components/ServiceMark/ServiceMark';
 
 /* ── Иконки ──────────────────────────────────────────────────────────────── */
 export * from './icons';

@@ -36,7 +36,7 @@
   transition: transform var(--dur-base) var(--ease-out);
 }
 .z-switch__input:checked + .z-switch__track {
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
 }
 .z-switch__input:checked + .z-switch__track .z-switch__thumb {
   transform: translateX(16px);
@@ -100,8 +100,8 @@
   transition: stroke-dashoffset var(--dur-check) var(--ease-out);
 }
 .z-check__input:checked + .z-check__box {
-  background-color: var(--accent);
-  border-color: var(--accent);
+  background-color: var(--accent-fill);
+  border-color: var(--accent-fill);
 }
 .z-check__input:checked + .z-check__box .z-check__mark path {
   stroke-dashoffset: 0;
@@ -150,12 +150,12 @@
 }
 /* выбранный — кольцо 5 px акцента */
 .z-radio__input:checked + .z-radio__dot {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 5px var(--accent);
+  border-color: var(--accent-fill);
+  box-shadow: inset 0 0 0 5px var(--accent-fill);
 }
 .z-radio__input:focus-visible + .z-radio__dot {
   box-shadow:
-    inset 0 0 0 5px var(--accent),
+    inset 0 0 0 5px var(--accent-fill),
     0 0 0 var(--focus-ring-w) var(--focus-ring);
 }
 .z-radio__label {
@@ -176,8 +176,8 @@
   grid-auto-columns: 1fr;
   box-sizing: border-box;
   padding: 3px;
-  border-radius: var(--r-sm);
-  background-color: var(--surface);
+  border-radius: var(--r-md);
+  background-color: var(--surface-sunken);
   min-block-size: 38px;
 }
 .z-segmented__indicator {

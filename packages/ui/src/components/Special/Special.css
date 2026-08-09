@@ -40,7 +40,7 @@
   inset: calc((var(--tap-min) - var(--toolbar-item)) / -2);
 }
 .z-toolbar__item:hover:not(:disabled) {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text);
 }
 .z-toolbar__item:active:not(:disabled) {
@@ -84,7 +84,7 @@
   padding: 0;
   border: 0;
   border-radius: var(--r-full);
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
   cursor: pointer;
   transition:
@@ -136,7 +136,7 @@
   cursor: pointer;
 }
 .z-player__speed:hover {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text);
 }
 .z-player__speed:focus {
@@ -185,8 +185,10 @@
 .z-timecode--active {
   background-color: var(--accent-soft);
 }
+/* Таймкод остаётся третичным даже в активной строке: маркеры и таймкоды
+   акцентом не красятся (DS-ALIGNMENT §10). Активность держит подложка. */
 .z-timecode--active .z-timecode__time {
-  color: var(--accent);
+  color: var(--text-tertiary);
 }
 
 /* ── Вейвформа записи: столбцы 3, gap 3, радиус 2, 8%–100% ─────────────── */
@@ -225,7 +227,7 @@
 }
 .z-diff__line--remove {
   background-color: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
   text-decoration: line-through;
 }
 .z-diff-inline {
@@ -237,7 +239,7 @@
 }
 .z-diff-inline--remove {
   background-color: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
   text-decoration: line-through;
 }
 
@@ -270,7 +272,7 @@
   transition: background-color var(--dur-base) var(--ease-out);
 }
 .z-tree__item:hover {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
 }
 .z-tree__item:focus {
   outline: none;

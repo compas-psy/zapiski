@@ -6,7 +6,7 @@
  * не требует ничего, а шаг 3 — это уже редактор: отдельного экрана «успех» нет.
  */
 import { useState, type ReactNode } from 'react';
-import { Badge, Button, IconLock, IconPen, IconRefresh } from '@zapiski/ui';
+import { Badge, Button, IconLock, IconPen, IconRefresh, ServiceMark } from '@zapiski/ui';
 import { useApp, useStrings } from '../state/context.js';
 
 export interface OnboardingScreenProps {
@@ -28,7 +28,12 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
       <div className="za-screen">
         <div className="za-page za-stack">
           <Steps current={1} />
-          <span className="za-wordmark">{strings.app.wordmark}</span>
+          {/* Брендовый экран онбординга — второе из четырёх мест терракоты
+              (DS-ALIGNMENT §9). Дальше по флоу знака больше нет. */}
+          <span className="za-brand za-brand--hero">
+            <ServiceMark size={44} />
+            <span className="za-wordmark">{strings.app.wordmark}</span>
+          </span>
           <h1 className="za-h1">{strings.onboarding.step1.title}</h1>
           <p className="za-muted">{strings.onboarding.step1.subtitle}</p>
 

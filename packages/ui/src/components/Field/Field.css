@@ -75,11 +75,12 @@
     inset 0 0 0 0.5px var(--danger),
     0 0 0 var(--focus-ring-w) color-mix(in srgb, var(--danger) 20%, transparent);
 }
+/* Подпись ошибки — текстовая роль, значит --danger-text (DS-ALIGNMENT §4). */
 .z-field__message {
   margin-block-start: -2px;
   font-size: var(--fs-sm);
   line-height: 1.4;
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .z-field__hint {
   margin-block-start: -2px;
@@ -90,7 +91,7 @@
 
 /* Disabled: фон --surface, текст --text-tertiary, opacity .7 */
 .z-field--disabled .z-field__control {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-tertiary);
   opacity: 0.7;
   cursor: not-allowed;
@@ -102,7 +103,7 @@
 /* ── Поиск: радиус full, фон --surface, лупа 15 слева, отступ 9 ─────────── */
 .z-search .z-field__control {
   border-radius: var(--r-full);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   padding-inline: var(--sp-16);
 }
 .z-search__clear {
@@ -176,7 +177,7 @@
   inline-size: 2px;
   block-size: 20px;
   border-radius: 1px;
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   animation: z-caret 1000ms steps(2, start) infinite;
 }
 @keyframes z-caret {

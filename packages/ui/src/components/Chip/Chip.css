@@ -12,30 +12,52 @@
   flex: none;
 }
 
+/* ── Тег ─────────────────────────────────────────── DS-ALIGNMENT §10 ────
+   Чип тега ТЕРЯЕТ ЗАЛИВКУ: текст акцентом на прозрачном, соседи разделены
+   точкой. Заливка `--accent-soft` осталась ровно в одном месте — у активного
+   фильтра ниже. Причина продуктовая, не косметическая: активность уже отдана
+   цвету иконки, добирать её внутри продукта нельзя.                        */
 .z-tag {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
   box-sizing: border-box;
-  padding: var(--sp-4) 11px;
-  border: var(--border-w) solid transparent;
-  border-radius: var(--r-full);
-  background-color: var(--accent-soft);
-  color: var(--accent-on-soft);
+  padding-block: var(--sp-4);
+  border: 0;
+  background-color: transparent;
+  color: var(--accent);
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
 }
+/* Разделитель — точка между соседними тегами, а не рамка вокруг каждого. */
+.z-tag + .z-tag::before {
+  content: '·';
+  margin-inline-end: var(--sp-8);
+  color: var(--text-tertiary);
+}
+/* Варианты с подложкой остаются для НЕ-теговых применений (служебные метки,
+   значения фильтров): там чип несёт границу поля, а не имя тега. */
 .z-tag--outline {
-  background-color: transparent;
-  border-color: var(--line);
+  padding-inline: 11px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-full);
   color: var(--text-secondary);
 }
 .z-tag--surface {
-  background-color: var(--surface);
+  padding-inline: 11px;
+  border-radius: var(--r-full);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
+}
+.z-tag--outline + .z-tag::before,
+.z-tag--surface + .z-tag::before,
+.z-tag + .z-tag--outline::before,
+.z-tag + .z-tag--surface::before {
+  content: none;
+  margin-inline-end: 0;
 }
 
 /* ── Фильтр ──────────────────────────────────────────────────────────────
@@ -75,7 +97,7 @@
   inset-block: calc((var(--tap-min) - 32px) / -2);
 }
 .z-filter:hover:not(:disabled) {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text);
 }
 .z-filter:active:not(:disabled) {
@@ -155,7 +177,7 @@
   box-sizing: border-box;
   padding: 2px var(--sp-8);
   border-radius: var(--r-full);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
@@ -163,21 +185,23 @@
   line-height: 1.5;
   white-space: nowrap;
 }
+/* Подпись бейджа — текст, поэтому роль `*-text` (4.5:1), а не индикаторный
+   цвет (`--success`/`--warning`/…, у которого порог 3:1). DS-ALIGNMENT §4. */
 .z-badge--success {
   background-color: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
 }
 .z-badge--warning {
   background-color: var(--warning-soft);
-  color: var(--warning);
+  color: var(--warning-text);
 }
 .z-badge--danger {
   background-color: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .z-badge--info {
   background-color: var(--info-soft);
-  color: var(--info);
+  color: var(--info-text);
 }
 .z-badge--accent {
   background-color: var(--accent-soft);

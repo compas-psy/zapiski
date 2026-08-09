@@ -4,9 +4,9 @@ name: Сборка Android
 #
 # Android SDK и NDK есть только здесь: на машине разработчика `tauri android
 # build` не выполняется в принципе, поэтому этот workflow — единственное место,
-# где APK вообще появляется. Всё, что можно проверить без SDK (валидность
-# tauri.conf.json, патч манифеста, компиляция Rust под хост, типы фронтенда),
-# проверяется до сборки — чтобы падение случилось на понятном шаге.
+# где APK вообще появляется. Всё, что можно проверить без устройства
+# (валидность tauri.conf.json, патч манифеста, компиляция Rust под хост, типы
+# фронтенда), проверяется до сборки — чтобы падение случилось на понятном шаге.
 #
 # ПОДПИСЬ — САМОЕ ВАЖНОЕ МЕСТО ФАЙЛА.
 #   Android ставит обновление поверх установленного приложения, только если
@@ -16,15 +16,37 @@ name: Сборка Android
 #     * ключ приезжает ровно из секретов ANDROID_KEYSTORE_BASE64 / …,
 #     * после подписи в лог печатается отпечаток сертификата (`apksigner
 #       verify --print-certs`), и его можно сверить с предыдущим релизом,
-#     * ключ подписи в репозитории не хранится никогда (.gitignore, *.jks).
+#     * ключ подписи в репозитории не хранится никогда (.gitignore, *.jks;
+#       исключений там нет и добавлять их нельзя — стережёт security.yml).
 #
-# Секретов подписи нет — собираем debug и честно пишем об этом в лог.
-# Падать нельзя: сборка на ветке должна работать и до того, как выпущен ключ.
+# СЕКРЕТОВ ПОДПИСИ ПОКА НЕТ, И ЭТО НЕ ПОВОД ПАДАТЬ.
+#   Без ключа собирается DEBUG-APK: он подписан отладочным ключом, который
+#   AGP заводит сам, ставится на устройство и годится для проверки. В логе об
+#   этом пишется `::warning::`, в имени артефакта появляется `-debug`, а job
+#   `release` (GitHub Release + latest.json на сервере) не запускается вовсе:
+#   неподписанное нашим ключом обновление клиент отвергнет, а манифест с
+#   ссылкой на debug-сборку собьёт с толку тех, у кого уже стоит релиз.
 
 on:
+  # ПОЧЕМУ У `push` НЕТ ФИЛЬТРА `paths`.
+  # GitHub требует совпадения ОБОИХ фильтров сразу: с `paths` тег `v*`,
+  # поставленный на коммит без изменений в apps/mobile, тихо не запустил бы
+  # релиз — а узнали бы мы об этом, когда пользователи не увидели обновления.
+  # Те же грабли уже описаны в build-windows.yml.
   push:
-    branches: ["main"]
+    # Ветка по умолчанию у репозитория — не `main`: репозиторий создавался
+    # пустым, и веткой по умолчанию стала первая запушенная. В `on:` выражения
+    # (`github.event.repository.default_branch`) не работают, поэтому имя ветки
+    # перечислено буквально. Если ветку по умолчанию переименуют — правьте
+    # здесь, иначе сборка молча перестанет запускаться.
+    branches:
+      - main
+      - claude/cloud-deployment-cross-platform-9nenw7
     tags: ["v*"]
+  pull_request:
+    branches:
+      - main
+      - claude/cloud-deployment-cross-platform-9nenw7
     paths:
       - 'apps/mobile/**'
       - 'packages/**'
@@ -32,17 +54,15 @@ on:
       - 'pnpm-workspace.yaml'
       - 'package.json'
       - '.github/workflows/build-android.yml'
-  pull_request:
-    branches: ["main"]
-    paths:
-      - 'apps/mobile/**'
-      - 'packages/**'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  # Версия NDK, на которой сборка описана и проверена. Если в образе раннера
+  # её нет — берётся то, что есть, с предупреждением в логе (шаг «NDK»).
+  ZAPISKI_NDK_VERSION: '27.1.12297006'
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
@@ -51,21 +71,45 @@ jobs:
   build:
     name: APK
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # 60 минут не хватает на холодный кэш: два Rust-таргета под Android плюс
+    # хостовая сборка tauri (webkit) — это десятки минут на пустом cargo-кэше.
+    timeout-minutes: 90
     concurrency:
       group: zapiski-android-${{ github.ref }}
-      cancel-in-progress: true
+      # Пуш в ветку отменяет предыдущий прогон, а вот начатую сборку тега — нет:
+      # её артефакт нужен job'у release.
+      cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
     outputs:
       version: ${{ steps.version.outputs.version }}
       signed: ${{ steps.keystore.outputs.signed }}
       apk: ${{ steps.collect.outputs.name }}
+      artifact: ${{ steps.collect.outputs.artifact }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       # ── Инструменты ───────────────────────────────────────────────────────
+
+      # Хостовая часть проверки (`cargo test`) собирает крейт `tauri` под
+      # linux, а он тянет webkit2gtk-4.1 через pkg-config. В образе раннера
+      # этих dev-пакетов нет, и без них шаг падает на этапе `build.rs` —
+      # с сообщением про pkg-config, по которому не догадаешься, что дело в apt.
+      # xmllint нужен самопроверке оверлея и проверке манифеста после патча.
+      - name: Системные библиотеки
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev \
+            libjavascriptcoregtk-4.1-dev \
+            libsoup-3.0-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
+            libxml2-utils \
+            pkg-config
+
       - name: Установить pnpm
         uses: pnpm/action-setup@v4
 
@@ -74,6 +118,11 @@ jobs:
         with:
           node-version: '22'
 
+      # JDK ровно 21, не «последний».
+      #   * AGP 8.11 и Gradle 8.14 (их ставит шаблон Tauri) требуют минимум 17;
+      #   * сгенерированный app/build.gradle.kts компилирует Kotlin и Java под
+      #     target 1.8, а javac перестал принимать `-target 8` начиная с JDK 22.
+      # То есть 17…21 — рабочий диапазон, 21 берём как верхнюю границу.
       - name: JDK 21
         uses: actions/setup-java@v4
         with:
@@ -83,49 +132,71 @@ jobs:
       - name: Android SDK
         uses: android-actions/setup-android@v3
 
-      # NDK ставим отдельно и с явной версией: `tauri android build` собирает
-      # Rust под Android именно им. Если зафиксированной версии в репозитории
-      # SDK не окажется (Google их периодически убирает), берём самую свежую —
-      # и пишем в лог, какую именно, чтобы сборку можно было воспроизвести.
+      # NDK: сначала смотрим, что уже распаковано в образе раннера (это
+      # экономит ~2 ГБ загрузки), и только потом идём в sdkmanager. Если
+      # зафиксированной версии нет нигде (Google их периодически убирает),
+      # берём самую свежую и пишем в лог, какую именно, — чтобы сборку можно
+      # было воспроизвести.
       - name: NDK
-        id: ndk
         run: |
           set -euo pipefail
-          preferred='ndk;27.1.12297006'
-          available="$(sdkmanager --list 2>/dev/null | awk -F'|' '/^[[:space:]]*ndk;/ {gsub(/[[:space:]]/,"",$1); print $1}' | sort -u -V)"
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          [ -n "${sdk}" ] || { echo 'ни ANDROID_HOME, ни ANDROID_SDK_ROOT не заданы' >&2; exit 1; }
 
-          if printf '%s\n' "${available}" | grep -qx "${preferred}"; then
-            package="${preferred}"
-          else
-            package="$(printf '%s\n' "${available}" | tail -1)"
-            echo "::warning::NDK ${preferred} недоступен, ставим ${package}"
+          preferred="${ZAPISKI_NDK_VERSION}"
+          home=''
+
+          if [ -d "${sdk}/ndk/${preferred}" ]; then
+            home="${sdk}/ndk/${preferred}"
+          elif [ -d "${sdk}/ndk" ]; then
+            newest="$(ls -1 "${sdk}/ndk" | sort -V | tail -1)"
+            if [ -n "${newest}" ]; then
+              home="${sdk}/ndk/${newest}"
+              echo "::warning::NDK ${preferred} в образе не найден, берём предустановленный ${newest}"
+            fi
           fi
-          if [ -z "${package}" ]; then
-            echo "sdkmanager не предлагает ни одного NDK" >&2
-            exit 1
+
+          if [ -z "${home}" ]; then
+            available="$(sdkmanager --list 2>/dev/null | awk -F'|' '/^[[:space:]]*ndk;/ {gsub(/[[:space:]]/,"",$1); print $1}' | sort -u -V)"
+            if printf '%s\n' "${available}" | grep -qx "ndk;${preferred}"; then
+              package="ndk;${preferred}"
+            else
+              package="$(printf '%s\n' "${available}" | tail -1)"
+              echo "::warning::NDK ${preferred} недоступен в sdkmanager, ставим ${package}"
+            fi
+            [ -n "${package}" ] || { echo 'sdkmanager не предлагает ни одного NDK' >&2; exit 1; }
+
+            # Без `yes |`: под `set -o pipefail` конвейер с `yes` падает по
+            # SIGPIPE. Лицензии уже приняты действием setup-android, а
+            # `</dev/null` гарантирует, что неожиданный запрос не подвесит job.
+            sdkmanager --install "${package}" >/dev/null </dev/null
+            home="${sdk}/ndk/${package#ndk;}"
           fi
 
-          # Без `yes |`: под `set -o pipefail` конвейер с `yes` падает по
-          # SIGPIPE. Лицензии уже приняты действием setup-android, а `</dev/null`
-          # гарантирует, что неожиданный запрос не подвесит сборку.
-          sdkmanager --install "${package}" >/dev/null </dev/null
-          version="${package#ndk;}"
-          home="${ANDROID_SDK_ROOT}/ndk/${version}"
-          [ -d "${home}" ] || { echo "NDK не распакован в ${home}" >&2; exit 1; }
+          # source.properties читает сам tauri-cli: без него он падает с
+          # «Failed to lookup version of installed NDK».
+          [ -f "${home}/source.properties" ] || { echo "NDK не распакован в ${home}" >&2; exit 1; }
+          echo "Взят NDK ${home}"
 
-          echo "Взят ${package} → ${home}"
-          # Tauri читает NDK_HOME, gradle-плагины — ANDROID_NDK_HOME.
-          echo "NDK_HOME=${home}" >> "$GITHUB_ENV"
-          echo "ANDROID_NDK_HOME=${home}" >> "$GITHUB_ENV"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # ANDROID_HOME нормализуем: setup-android заполняет обе переменные,
+          # но полагаться на это в каждом шаге не хочется.
+          {
+            echo "ANDROID_HOME=${sdk}"
+            echo "ANDROID_SDK_ROOT=${sdk}"
+            # Tauri читает NDK_HOME, gradle-плагины — ANDROID_NDK_HOME/ROOT.
+            echo "NDK_HOME=${home}"
+            echo "ANDROID_NDK_HOME=${home}"
+            echo "ANDROID_NDK_ROOT=${home}"
+          } >> "$GITHUB_ENV"
 
       - name: Rust с таргетами Android
         run: |
           set -euo pipefail
           rustup toolchain install stable --profile minimal
           rustup default stable
-          # Только ARM: 99% живых устройств. x86-таргеты нужны эмулятору, но
-          # утяжеляют APK, а бюджет — 30 МБ (ТЗ §6).
+          # Ровно те таргеты, которые собираются ниже (`--target aarch64
+          # --target armv7`). x86-таргеты нужны только эмулятору: они
+          # удваивают время сборки и вес APK, а бюджет — 30 МБ (ТЗ §6).
           rustup target add aarch64-linux-android armv7-linux-androideabi
           rustup show
 
@@ -136,7 +207,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             apps/mobile/src-tauri/target
-          key: android-cargo-${{ runner.os }}-${{ hashFiles('apps/mobile/src-tauri/Cargo.toml') }}
+          key: android-cargo-${{ runner.os }}-${{ hashFiles('apps/mobile/src-tauri/Cargo.lock', 'apps/mobile/src-tauri/Cargo.toml') }}
           restore-keys: android-cargo-${{ runner.os }}-
 
       - name: Кэш pnpm store
@@ -168,6 +239,9 @@ jobs:
       - name: Проверка типов оболочки
         run: pnpm --filter @zapiski/mobile typecheck
 
+      # Фронтенд собирается здесь, а не только внутри `tauri android build`:
+      # ошибка в вебе должна падать до того, как раннер потратит полчаса на
+      # Rust. `beforeBuildCommand` потом соберёт его ещё раз — это дёшево.
       - name: Сборка фронтенда
         run: pnpm --filter @zapiski/mobile build:vite
 
@@ -199,10 +273,182 @@ jobs:
       # gen/android генерируется здесь и в git не попадает (см. .gitignore и
       # комментарий в apply-android-overlay.mjs).
       - name: Сгенерировать проект Android
-        run: pnpm --filter @zapiski/mobile exec tauri android init --skip-targets-install
+        run: pnpm --filter @zapiski/mobile exec tauri android init --ci --skip-targets-install
+
+      # Оверлей копирует apps/mobile/android/app/src/main/res поверх
+      # сгенерированного res и затирает одноимённые файлы. Единственное
+      # пересечение — values/strings.xml. Сохраняем шаблонный файл ДО копирования,
+      # чтобы следующий шаг вернул то, что оверлей не знает (см. ниже).
+      - name: Сохранить ресурсы шаблона Tauri
+        run: |
+          set -euo pipefail
+          main='apps/mobile/src-tauri/gen/android/app/src/main'
+          cp "${main}/res/values/strings.xml" "${RUNNER_TEMP}/tauri-strings.xml"
+          echo '── strings.xml шаблона ──'
+          cat "${RUNNER_TEMP}/tauri-strings.xml"
+
+      # compileSdk задаёт шаблон Tauri (сейчас 36), а не мы — поэтому читаем его
+      # из сгенерированного gradle, а не зашиваем. Так при обновлении CLI
+      # платформа доставится сама. Если пакета нет — не падаем: AGP умеет
+      # докачивать SDK сам, лицензии приняты действием setup-android.
+      - name: Доустановить компоненты SDK
+        run: |
+          set -euo pipefail
+          gradle='apps/mobile/src-tauri/gen/android/app/build.gradle.kts'
+          # tail, а не head: под `set -o pipefail` рано закрытый head роняет
+          # конвейер по SIGPIPE — та же грабля, что и в шагах с find.
+          compile="$(sed -n 's/.*compileSdk[[:space:]]*=[[:space:]]*\([0-9][0-9]*\).*/\1/p' "${gradle}" | tail -1)"
+          [ -n "${compile}" ] || { echo "не удалось прочитать compileSdk из ${gradle}" >&2; exit 1; }
+          echo "compileSdk из шаблона Tauri: ${compile}"
+
+          for package in "platform-tools" "platforms;android-${compile}" "build-tools;${compile}.0.0"; do
+            if sdkmanager --install "${package}" >/dev/null </dev/null; then
+              echo "поставлен ${package}"
+            else
+              echo "::warning::не удалось поставить ${package} — AGP попробует скачать его сам во время сборки"
+            fi
+          done
 
       - name: Наложить оверлей оболочки
         run: pnpm --filter @zapiski/mobile android:overlay
+
+      # ───────────────────────────────────────────────────────────────────────
+      # ВРЕМЕННАЯ ЗАПЛАТА CI. Место ей — в apps/mobile/scripts/apply-android-
+      # overlay.mjs; она здесь только потому, что этот прогон — первая в жизни
+      # проекта встреча оверлея с настоящим генератором, а тот разошёлся с
+      # эталоном `scripts/fixtures/AndroidManifest.generated.xml` в двух местах.
+      # Оба расхождения ломают сборку намертво, оба проверены локально на
+      # проекте, сгенерированном tauri-cli 2.11.4:
+      #
+      #  1. res/values/strings.xml. Шаблон Tauri держит там `app_name` И
+      #     `main_activity_title`; оверлей копирует свой файл поверх, а в нём
+      #     только `app_name`. Манифест шаблона ссылается на
+      #     `@string/main_activity_title` → AAPT2 падает на «resource not found».
+      #
+      #  2. FileProvider. В эталоне его нет, а настоящий шаблон 2.11.4 объявляет
+      #     свой: `androidx.core.content.FileProvider` с authorities
+      #     `${applicationId}.fileprovider`. Оверлей добавляет ВТОРОЙ провайдер
+      #     с тем же android:name — манифест-мержер такое не пропускает:
+      #     «Element provider#androidx.core.content.FileProvider … duplicated
+      #     with element declared at …» (проверено запуском com.android.
+      #     manifmerger.Merger на пропатченном манифесте).
+      #     Здесь мы сводим их в один: authorities складываются через `;`
+      #     (FileProvider.getUriForFile резолвит любой из них), пути из
+      #     file_provider_paths.xml переезжают в file_paths.xml.
+      #
+      # Шаг идемпотентен и самоотключается: как только оверлей научится делать
+      # это сам, «нечего согласовывать» — и в лог ничего не попадёт.
+      # ───────────────────────────────────────────────────────────────────────
+      - name: Согласовать оверлей с шаблоном Tauri
+        run: |
+          set -euo pipefail
+          cat > "${RUNNER_TEMP}/reconcile.mjs" <<'RECONCILE'
+          import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+
+          const MAIN = process.argv[2];
+          const BACKUP = process.argv[3];
+          const manifestPath = join(MAIN, 'AndroidManifest.xml');
+          const stringsPath = join(MAIN, 'res', 'values', 'strings.xml');
+          const notes = [];
+          let manifest = readFileSync(manifestPath, 'utf8');
+
+          // 1. Строки шаблона, затёртые оверлеем.
+          if (existsSync(BACKUP) && existsSync(stringsPath)) {
+            const template = readFileSync(BACKUP, 'utf8');
+            const current = readFileSync(stringsPath, 'utf8');
+            const lost = [...template.matchAll(/<string\s+name="([^"]+)"[\s\S]*?<\/string>/g)]
+              .filter(([, name]) => !new RegExp(`<string\\s+name="${name}"`).test(current));
+            if (lost.length > 0) {
+              const block = lost.map(([xml]) => `    ${xml.trim()}`).join('\n');
+              writeFileSync(stringsPath, current.replace(/([ \t]*)<\/resources>/, `${block}\n$1</resources>`), 'utf8');
+              notes.push(`восстановлены строки шаблона: ${lost.map(([, name]) => name).join(', ')}`);
+            }
+          }
+
+          // 2. Дубли androidx.core.content.FileProvider.
+          const providers = [...manifest.matchAll(/[ \t]*<provider\b[\s\S]*?<\/provider>\n?/g)]
+            .filter(([xml]) => xml.includes('android:name="androidx.core.content.FileProvider"'));
+
+          if (providers.length > 1) {
+            const attr = (xml, name) => (xml.match(new RegExp(`${name}="([^"]*)"`)) ?? [])[1] ?? '';
+            const resource = (xml) => (xml.match(/android:resource="@xml\/([^"]*)"/) ?? [])[1] ?? '';
+
+            const authorities = [...new Set(
+              providers.flatMap(([xml]) => attr(xml, 'android:authorities').split(';')).filter(Boolean),
+            )];
+            const [keep] = providers[0];
+            const target = join(MAIN, 'res', 'xml', `${resource(keep)}.xml`);
+            let paths = readFileSync(target, 'utf8');
+
+            for (const [xml] of providers.slice(1)) {
+              const from = join(MAIN, 'res', 'xml', `${resource(xml)}.xml`);
+              if (from === target || !existsSync(from)) continue;
+              const entries = [...readFileSync(from, 'utf8').matchAll(/<(\w[\w-]*)\s+name="([^"]*)"[^>]*\/>/g)];
+              const missing = entries.filter(([, tag, name]) => !new RegExp(`<${tag}\\b[^>]*name="${name}"`).test(paths));
+              if (missing.length === 0) continue;
+              paths = paths.replace(
+                /([ \t]*)<\/paths>/,
+                `${missing.map(([entry]) => `    ${entry}`).join('\n')}\n$1</paths>`,
+              );
+              notes.push(`пути ${resource(xml)} перенесены в ${resource(keep)}`);
+            }
+            writeFileSync(target, paths, 'utf8');
+
+            manifest = manifest.replace(
+              keep,
+              keep.replace(/android:authorities="[^"]*"/, `android:authorities="${authorities.join(';')}"`),
+            );
+            for (const [xml] of providers.slice(1)) manifest = manifest.replace(xml, '');
+            writeFileSync(manifestPath, manifest, 'utf8');
+            notes.push(`FileProvider сведён в один, authorities: ${authorities.join(';')}`);
+          }
+
+          if (notes.length === 0) {
+            console.log('нечего согласовывать — оверлей и шаблон сошлись');
+          } else {
+            for (const note of notes) console.log(`::warning::заплата CI: ${note} (место этой правки — apply-android-overlay.mjs)`);
+          }
+          RECONCILE
+
+          main='apps/mobile/src-tauri/gen/android/app/src/main'
+          node "${RUNNER_TEMP}/reconcile.mjs" "${main}" "${RUNNER_TEMP}/tauri-strings.xml"
+
+          # Проверяем то, что реально уедет в Gradle, а не эталон.
+          xmllint --noout "${main}/AndroidManifest.xml"
+          xmllint --noout "${main}/res/values/strings.xml"
+          echo '── AndroidManifest.xml, который пойдёт в сборку ──'
+          cat "${main}/AndroidManifest.xml"
+
+          # Висячая ссылка на строку — самая дешёвая в диагностике ошибка,
+          # если поймать её здесь, и самая муторная, если ловить по логу AAPT2.
+          missing=''
+          for name in $(grep -o '@string/[A-Za-z0-9_]*' "${main}/AndroidManifest.xml" | sed 's|@string/||' | sort -u); do
+            grep -q "name=\"${name}\"" "${main}/res/values/strings.xml" || missing="${missing} ${name}"
+          done
+          [ -z "${missing}" ] || { echo "в res/values/strings.xml нет строк:${missing}" >&2; exit 1; }
+          echo 'Все @string/… из манифеста найдены в res/values/strings.xml'
+
+      # Release-сборка идёт с `isMinifyEnabled = true` (так в шаблоне Tauri), а
+      # Rust зовёт Kotlin по строковому имени класса — `env.call_static_method(
+      # "ru/cmpas/zapiski/NativeBridge", …)` в src-tauri/src/android.rs. R8
+      # такие вызовы не видит: он переименует класс и выкинет «неиспользуемые»
+      # методы, и релизный APK соберётся, установится и упадёт при первом же
+      # обращении к платформе. Правило кладём файлом: release-buildType в
+      # app/build.gradle.kts подхватывает `fileTree(".") { include("**/*.pro") }`.
+      - name: Правила R8 для нативного моста
+        run: |
+          set -euo pipefail
+          identifier="$(node -p "require('./apps/mobile/src-tauri/tauri.conf.json').identifier")"
+          rules='apps/mobile/src-tauri/gen/android/app/proguard-zapiski.pro'
+          cat > "${rules}" <<RULES
+          # Сгенерировано .github/workflows/build-android.yml.
+          # Мост Rust ↔ Kotlin держится на именах: их нельзя ни переименовывать,
+          # ни выкидывать как «неиспользуемые» — вызов приходит из JNI.
+          -keep class ${identifier}.** { *; }
+          -keepclasseswithmembernames class * { native <methods>; }
+          RULES
+          cat "${rules}"
 
       # ── Ключ подписи ──────────────────────────────────────────────────────
       - name: Подготовить keystore
@@ -217,8 +463,9 @@ jobs:
           if [ -z "${ANDROID_KEYSTORE_BASE64}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] \
              || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
             echo 'signed=false' >> "$GITHUB_OUTPUT"
-            echo "::notice::Секретов подписи нет (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) — собираем DEBUG-сборку."
-            echo "::notice::Debug-APK подписан отладочным ключом: он ставится на устройство, но НЕ является релизом и не встанет обновлением поверх релизной сборки."
+            echo "::warning::Секретов подписи нет (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) — собираем DEBUG-APK"
+            echo "::warning::Debug-APK подписан отладочным ключом AGP: он ставится на устройство, но релизом НЕ является и обновлением поверх релизной сборки не встанет"
+            echo "::warning::latest.json по этой сборке не публикуется — иначе клиенты пошли бы обновляться на пакет с чужой подписью"
             exit 0
           fi
 
@@ -233,6 +480,15 @@ jobs:
 
       # ── Сборка ────────────────────────────────────────────────────────────
       - name: tauri android build
+        env:
+          # Отладочный профиль cargo кладёт в .so полную отладочную информацию,
+          # а шаблон Tauri просит AGP её не срезать (`jniLibs.keepDebugSymbols`).
+          # Два таких .so дают APK в сотни мегабайт — при том, что квота
+          # артефактов аккаунта уже упиралась в потолок. Символы debug-сборке не
+          # нужны (отлаживают Rust не по APK), поэтому режем их через штатный
+          # оверрайд профиля. На release-профиль эти переменные не влияют.
+          CARGO_PROFILE_DEV_DEBUG: 'false'
+          CARGO_PROFILE_DEV_STRIP: 'symbols'
         run: |
           set -euo pipefail
           if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
@@ -242,6 +498,9 @@ jobs:
             pnpm --filter @zapiski/mobile exec tauri android build --apk --debug \
               --target aarch64 --target armv7
           fi
+
+          echo '── что собралось ──'
+          find apps/mobile/src-tauri/gen/android/app/build/outputs -name '*.apk' -type f -printf '%p\t%s байт\n'
 
       # ── Подпись ───────────────────────────────────────────────────────────
       # Подписываем сами, а не конфигом Gradle: сгенерированный build.gradle.kts
@@ -256,17 +515,21 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          mapfile -t versions < <(find "${ANDROID_SDK_ROOT}/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V)
-          tools="${versions[-1]:-}"
-          [ -n "${tools}" ] || { echo 'build-tools не установлены' >&2; exit 1; }
+          # Размер массива проверяем ДО обращения к элементу: под `set -u`
+          # `${arr[-1]:-}` на пустом массиве не отдаёт пустую строку, а роняет
+          # шаг с «bad array subscript», и заготовленное сообщение об ошибке
+          # уже не печатается.
+          mapfile -t versions < <(find "${ANDROID_HOME}/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V)
+          [ "${#versions[@]}" -gt 0 ] || { echo 'build-tools не установлены' >&2; exit 1; }
+          tools="${versions[-1]}"
           echo "build-tools: ${tools}"
 
-          outputs='apps/mobile/src-tauri/gen/android/app/build/outputs/apk'
+          # Флавор один (`universal`), профиль — release: путь предсказуем.
           # mapfile, а не `find | head`: под `set -o pipefail` закрытый head
           # роняет конвейер по SIGPIPE, и шаг падает без внятной причины.
-          mapfile -t found < <(find "${outputs}" -name '*.apk' ! -name '*-signed*' | sort)
-          unsigned="${found[0]:-}"
-          [ -n "${unsigned}" ] || { echo 'APK не найден после сборки' >&2; exit 1; }
+          mapfile -t found < <(find 'apps/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/release' -name '*.apk' -type f | sort)
+          [ "${#found[@]}" -gt 0 ] || { echo 'release-APK не найден после сборки' >&2; exit 1; }
+          unsigned="${found[0]}"
           echo "Подписываем ${unsigned}"
 
           "${tools}/zipalign" -p -f 4 "${unsigned}" "${RUNNER_TEMP}/aligned.apk"
@@ -292,32 +555,44 @@ jobs:
 
           if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
             name="zapiski-${version}.apk"
+            artifact="zapiski-android-${version}"
             cp "${RUNNER_TEMP}/signed.apk" "artifacts/${name}"
           else
+            # `-debug` и в имени файла, и в имени артефакта: тот, кто скачает
+            # его из вкладки Actions, обязан понимать, что это не релиз.
             name="zapiski-${version}-debug.apk"
-            outputs='apps/mobile/src-tauri/gen/android/app/build/outputs/apk'
-            mapfile -t found < <(find "${outputs}" -name '*.apk' | sort)
-            apk="${found[0]:-}"
-            [ -n "${apk}" ] || { echo 'APK не найден после сборки' >&2; exit 1; }
-            cp "${apk}" "artifacts/${name}"
+            artifact="zapiski-android-${version}-debug"
+            mapfile -t found < <(find 'apps/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/debug' -name '*.apk' -type f | sort)
+            [ "${#found[@]}" -gt 0 ] || { echo 'debug-APK не найден после сборки' >&2; exit 1; }
+            cp "${found[0]}" "artifacts/${name}"
           fi
 
           size="$(stat -c%s "artifacts/${name}")"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "Артефакт: ${name}, размер: $((size / 1024 / 1024)) МБ"
+          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+          echo "Артефакт: ${artifact} → ${name}, размер: $((size / 1024 / 1024)) МБ"
           # ТЗ §6: APK <30 МБ. Не роняем сборку — сообщаем, чтобы бюджет не
-          # переползли молча.
+          # переползли молча. Debug тяжелее release по определению, поэтому для
+          # него это заметка, а не претензия.
           if [ "${size}" -gt 31457280 ]; then
-            echo "::warning::APK больше 30 МБ (${size} байт) — бюджет ТЗ §6 превышен"
+            if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+              echo "::warning::APK больше 30 МБ (${size} байт) — бюджет ТЗ §6 превышен"
+            else
+              echo "::notice::debug-APK больше 30 МБ (${size} байт); бюджет ТЗ §6 меряется по release-сборке"
+            fi
           fi
 
       - name: Приложить APK
         uses: actions/upload-artifact@v4
         with:
-          name: zapiski-android-${{ steps.version.outputs.version }}
+          name: ${{ steps.collect.outputs.artifact }}
           path: artifacts/*.apk
           if-no-files-found: error
-          retention-days: 14
+          # 7, а не 90: квота артефактов аккаунта одна на все репозитории и
+          # недавно упиралась в потолок — главным образом из-за APK Дневника,
+          # лежавших по 90 дней. Нужен APK надолго — он приезжает в GitHub
+          # Release по тегу, а не из вкладки Actions.
+          retention-days: 7
 
       - name: Убрать ключ подписи
         if: always()
@@ -326,6 +601,10 @@ jobs:
   # ───────────────────────────────────────────────────────────────────────────
   # RELEASE — только на теге и только для подписанной сборки
   # ───────────────────────────────────────────────────────────────────────────
+  # Второе условие — не перестраховка. Без ключа job build даёт debug-APK;
+  # опубликовать его как релиз значит выложить latest.json, по которому клиенты
+  # пойдут ставить пакет с отладочной подписью. Android откажет в установке
+  # поверх релиза, а пользователь увидит бесконечное «доступно обновление».
   release:
     name: Релиз и выкладка
     needs: build
@@ -346,7 +625,7 @@ jobs:
       - name: Забрать APK
         uses: actions/download-artifact@v4
         with:
-          name: zapiski-android-${{ needs.build.outputs.version }}
+          name: ${{ needs.build.outputs.artifact }}
           path: artifacts
 
       - name: Опубликовать в GitHub Release

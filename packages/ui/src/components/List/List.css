@@ -142,14 +142,14 @@
   inset-inline-start: 0;
   inset-inline-end: 0;
   justify-content: flex-start;
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
 }
 .z-row__underlay--end {
   inset-inline-start: 0;
   inset-inline-end: 0;
   justify-content: flex-end;
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
 }
 

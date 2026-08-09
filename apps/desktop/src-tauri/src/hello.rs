@@ -46,18 +46,28 @@ fn file_stem(key_id: &str) -> String {
     key_id.bytes().map(|byte| format!("{byte:02x}")).collect()
 }
 
+// ПОЧЕМУ ЭТИ КОМАНДЫ СИНХРОННЫЕ, А НЕ async
+//
+// Объекты WinRT (`IBuffer`, указатели COM) не реализуют `Send`, а Tauri
+// требует `Send` от футуры асинхронной команды. Любой `.await` посреди работы
+// с ними даёт «future cannot be sent between threads safely»: значение живёт
+// поперёк точки ожидания. Поэтому вместо `.await` используется блокирующий
+// `.get()` из `windows-future` — COM-объекты не пересекают границу потока.
+//
+// Блокировка здесь безвредна: Windows Hello и так показывает модальное
+// системное окно, а синхронные команды Tauri исполняет вне главного потока.
 #[tauri::command]
-pub async fn hello_available() -> bool {
-    imp::available().await
+pub fn hello_available() -> bool {
+    imp::available()
 }
 
 #[tauri::command]
-pub async fn hello_enroll<R: Runtime>(
+pub fn hello_enroll<R: Runtime>(
     app: AppHandle<R>,
     key_id: String,
     secret: Vec<u8>,
 ) -> Result<(), String> {
-    let blob = imp::wrap(&key_id, &secret).await?;
+    let blob = imp::wrap(&key_id, &secret)?;
     let path = blob_path(&app, &key_id)?;
     std::fs::write(&path, blob).map_err(|error| format!("{}: {error}", path.display()))
 }
@@ -65,7 +75,7 @@ pub async fn hello_enroll<R: Runtime>(
 /// `Ok(None)` — пользователь отменил проверку либо ключа нет. По BEHAVIOR
 /// §5.2 это не ошибка: UI просто показывает поле пароля.
 #[tauri::command]
-pub async fn hello_unlock<R: Runtime>(
+pub fn hello_unlock<R: Runtime>(
     app: AppHandle<R>,
     key_id: String,
 ) -> Result<Option<Vec<u8>>, String> {
@@ -73,16 +83,16 @@ pub async fn hello_unlock<R: Runtime>(
     let Ok(blob) = std::fs::read(&path) else {
         return Ok(None);
     };
-    imp::unwrap(&key_id, &blob).await
+    imp::unwrap(&key_id, &blob)
 }
 
 #[tauri::command]
-pub async fn hello_remove<R: Runtime>(app: AppHandle<R>, key_id: String) -> Result<(), String> {
+pub fn hello_remove<R: Runtime>(app: AppHandle<R>, key_id: String) -> Result<(), String> {
     let path = blob_path(&app, &key_id)?;
     if path.exists() {
         std::fs::remove_file(&path).map_err(|error| format!("{}: {error}", path.display()))?;
     }
-    imp::forget(&key_id).await
+    imp::forget(&key_id)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,15 +114,15 @@ mod imp {
     const BLOB_VERSION: u8 = 1;
     const NONCE_LEN: usize = 12;
 
-    pub async fn available() -> bool {
+    pub fn available() -> bool {
         match KeyCredentialManager::IsSupportedAsync() {
-            Ok(operation) => operation.await.unwrap_or(false),
+            Ok(operation) => operation.get().unwrap_or(false),
             Err(_) => false,
         }
     }
 
-    pub async fn wrap(key_id: &str, secret: &[u8]) -> Result<Vec<u8>, String> {
-        let key = derive_key(key_id, true).await?.ok_or_else(|| {
+    pub fn wrap(key_id: &str, secret: &[u8]) -> Result<Vec<u8>, String> {
+        let key = derive_key(key_id, true)?.ok_or_else(|| {
             "Windows Hello не подтвердил личность".to_owned()
         })?;
 
@@ -132,12 +142,12 @@ mod imp {
         Ok(blob)
     }
 
-    pub async fn unwrap(key_id: &str, blob: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    pub fn unwrap(key_id: &str, blob: &[u8]) -> Result<Option<Vec<u8>>, String> {
         if blob.len() < 1 + NONCE_LEN || blob[0] != BLOB_VERSION {
             return Err("файл ключа Windows Hello повреждён".to_owned());
         }
 
-        let Some(key) = derive_key(key_id, false).await? else {
+        let Some(key) = derive_key(key_id, false)? else {
             // Отмена пользователем или отсутствующий ключ — не ошибка.
             return Ok(None);
         };
@@ -153,11 +163,11 @@ mod imp {
         }
     }
 
-    pub async fn forget(key_id: &str) -> Result<(), String> {
+    pub fn forget(key_id: &str) -> Result<(), String> {
         match KeyCredentialManager::DeleteAsync(&credential_name(key_id)) {
             // Ключа могло и не быть — это нормальный исход `remove`.
             Ok(action) => {
-                let _ = action.await;
+                let _ = action.get();
                 Ok(())
             }
             Err(_) => Ok(()),
@@ -169,18 +179,18 @@ mod imp {
     /// `create` — создавать ли учётные данные, если их ещё нет. При
     /// разблокировке создавать нельзя: новый ключ даст другую подпись, и
     /// старый секрет молча перестанет расшифровываться.
-    async fn derive_key(key_id: &str, create: bool) -> Result<Option<[u8; 32]>, String> {
+    fn derive_key(key_id: &str, create: bool) -> Result<Option<[u8; 32]>, String> {
         let name = credential_name(key_id);
 
         let retrieval = if create {
             KeyCredentialManager::RequestCreateAsync(&name, KeyCredentialCreationOption::ReplaceExisting)
                 .map_err(win_error)?
-                .await
+                .get()
                 .map_err(win_error)?
         } else {
             KeyCredentialManager::OpenAsync(&name)
                 .map_err(win_error)?
-                .await
+                .get()
                 .map_err(win_error)?
         };
 
@@ -194,7 +204,7 @@ mod imp {
         let signing = credential
             .RequestSignAsync(&challenge)
             .map_err(win_error)?
-            .await
+            .get()
             .map_err(win_error)?;
 
         if signing.Status().map_err(win_error)? != KeyCredentialStatus::Success {
@@ -255,19 +265,19 @@ mod imp {
 
 #[cfg(not(windows))]
 mod imp {
-    pub async fn available() -> bool {
+    pub fn available() -> bool {
         false
     }
 
-    pub async fn wrap(_key_id: &str, _secret: &[u8]) -> Result<Vec<u8>, String> {
+    pub fn wrap(_key_id: &str, _secret: &[u8]) -> Result<Vec<u8>, String> {
         Err("биометрия доступна только на Windows".to_owned())
     }
 
-    pub async fn unwrap(_key_id: &str, _blob: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    pub fn unwrap(_key_id: &str, _blob: &[u8]) -> Result<Option<Vec<u8>>, String> {
         Ok(None)
     }
 
-    pub async fn forget(_key_id: &str) -> Result<(), String> {
+    pub fn forget(_key_id: &str) -> Result<(), String> {
         Ok(())
     }
 }

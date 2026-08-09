@@ -20,8 +20,8 @@
   max-block-size: 90dvh;
   overflow-y: auto;
   padding: var(--sp-16) var(--sp-24) max(var(--sp-24), env(safe-area-inset-bottom));
-  border-start-start-radius: var(--r-xl);
-  border-start-end-radius: var(--r-xl);
+  border-start-start-radius: var(--r-sheet);
+  border-start-end-radius: var(--r-sheet);
   background-color: var(--bg);
   color: var(--text);
   box-shadow: var(--elev-sheet);

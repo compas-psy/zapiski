@@ -1,8 +1,50 @@
 /* ===========================================================================
-   Экраны КОМПАС.ЗАПИСКИ.
-   Ни одного цветового литерала — только var(--*) из @zapiski/ui (tokens.css).
-   Метрики — DESIGN_TOKENS.md §3 и SCREENS.md «Каркас».
+   Экраны ЗАПИСОК.
+   Ни одного цветового литерала — только var(--*) из @zapiski/ui (tokens.css),
+   которые сами являются алиасами переменных дизайн-системы СИМПАС.
+   Метрики — DESIGN_TOKENS.md §3 и SCREENS.md «Каркас»;
+   плотность и распределение акцентов — DS-ALIGNMENT.md §10.
    =========================================================================== */
+
+/* ── Заголовки экрана и заметки ─────────────────── DS-ALIGNMENT §10 ─────
+   «Без цвета, только вес и размер». Классы `za-h1`/`za-h2`/`za-caption`
+   экраны использовали и раньше, но объявлены нигде не были — заголовки
+   отрисовывались браузерным дефолтом <h1>. Здесь они получают шкалу
+   DESIGN_TOKENS §2 и обычный `--text`: никакого акцента в заголовке. */
+.za-h1 {
+  margin: 0;
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-h1);
+  letter-spacing: var(--tr-h1);
+  line-height: var(--lh-h1);
+  color: var(--text);
+}
+.za-h1--mobile {
+  font-size: var(--fs-h1-mobile);
+  line-height: var(--lh-h1-mobile);
+}
+@media (max-width: 599px) {
+  .za-h1 {
+    font-size: var(--fs-h1-mobile);
+    line-height: var(--lh-h1-mobile);
+  }
+}
+.za-h2 {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-h2);
+  letter-spacing: var(--tr-h2);
+  line-height: var(--lh-h2);
+  color: var(--text);
+}
+.za-caption {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
 
 .za-app {
   block-size: 100dvh;
@@ -97,7 +139,7 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: var(--r-full);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
   font-size: var(--fs-xs);
   border: var(--border-w) solid var(--line);
@@ -109,7 +151,7 @@
 }
 .za-chip--success {
   background-color: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
   border-color: transparent;
 }
 
@@ -152,13 +194,13 @@
 /* Свайп вправо — закрепить (акцент) */
 .za-row__underlay--start {
   justify-content: flex-start;
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   color: var(--on-accent);
 }
 /* Свайп влево — в архив (surface) */
 .za-row__underlay--end {
   justify-content: flex-end;
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
 }
 
@@ -182,7 +224,7 @@
   min-block-size: var(--row-h-compact);
 }
 .za-row--selected {
-  background-color: var(--surface);
+  background-color: var(--surface-alt);
 }
 .za-row--releasing {
   transition: transform var(--dur-base) var(--ease-out);
@@ -276,7 +318,7 @@
   padding-inline: var(--sp-16);
   border-radius: var(--r-full);
   border: var(--border-w) solid var(--line);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text-tertiary);
   box-shadow: var(--elev-search);
   font-size: var(--fs-control-sm);
@@ -315,14 +357,25 @@
   gap: var(--sp-8);
   padding: var(--sp-20) var(--sp-16) var(--sp-12);
 }
+/* Знак + имя. Терракота приходит внутри самого .svg знака и больше нигде
+   (DS-ALIGNMENT §9); внутри плитки надписей нет — имя стоит рядом. */
+.za-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  min-inline-size: 0;
+}
+.za-brand--hero {
+  gap: var(--sp-12);
+}
+
+/* Вордмарк — вес и трекинг, не цвет: акцентных пятен на экране не больше
+   двух, и оба отданы главному действию и текущему состоянию (§10). */
 .za-wordmark {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: var(--accent);
-}
-.za-wordmark--plus > span {
-  color: var(--accent);
+  color: var(--text);
 }
 .za-nav {
   display: flex;
@@ -352,7 +405,7 @@
   background-color: var(--surface-hover);
 }
 .za-nav__item--active {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
 }
 .za-nav__count {
   margin-inline-start: auto;
@@ -489,8 +542,8 @@
   inline-size: 100%;
   padding: var(--sp-8);
   border: var(--border-w) solid var(--line);
-  border-radius: var(--r-sm);
-  background-color: var(--surface);
+  border-radius: var(--r-md);
+  background-color: var(--surface-sunken);
   color: var(--text-secondary);
   font-family: var(--font-mono);
   font-size: var(--fs-mono-xs);
@@ -548,7 +601,7 @@
   padding: var(--sp-8) var(--sp-12);
   border: var(--border-w) solid var(--line);
   border-radius: var(--r-md);
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   color: var(--text);
   font-family: inherit;
   font-size: var(--fs-control-sm);
@@ -559,8 +612,8 @@
   inline-size: 100%;
   padding: var(--pad-card-block) var(--pad-card-inline);
   border: var(--border-w) solid var(--line);
-  border-radius: var(--r-xl);
-  background-color: var(--bg);
+  border-radius: var(--r-card);
+  background-color: var(--surface);
   text-align: start;
   font-family: inherit;
   color: inherit;
@@ -570,6 +623,7 @@
   border-width: var(--border-w-strong);
   border-color: var(--accent);
   background-color: var(--accent-soft);
+  box-shadow: var(--elev-card);
 }
 .za-card--dashed {
   border-style: dashed;
@@ -601,7 +655,7 @@
   background-color: var(--line);
 }
 .za-progress-steps__bar--active {
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
 }
 .za-bullet {
   display: flex;
@@ -615,8 +669,8 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-md);
-  background-color: var(--surface);
-  color: var(--accent);
+  background-color: var(--surface-sunken);
+  color: var(--text-secondary);
 }
 
 /* ── Вход (SCREENS §2) ───────────────────────────────────────────────────── */
@@ -657,12 +711,12 @@
   display: grid;
   place-items: center;
   border-radius: var(--r-full);
-  background-color: var(--surface);
-  color: var(--accent);
+  background-color: var(--surface-sunken);
+  color: var(--text-secondary);
 }
 .za-locked__title {
-  font-size: 21px;
-  font-weight: 700;
+  font-size: var(--fs-h1-mobile);
+  font-weight: var(--fw-h1);
   color: var(--text);
 }
 
@@ -684,10 +738,12 @@
   line-height: var(--lh-list-snippet);
   color: var(--text-secondary);
 }
+/* Подсветка совпадения — `--mark-bg` (амбер), текст остаётся обычным:
+   подсветка не акцентная (DS-ALIGNMENT §10). */
 .za-hit__mark {
   border-radius: var(--r-inline-mark);
   background-color: var(--mark-bg);
-  color: var(--accent-on-soft);
+  color: inherit;
 }
 
 /* ── Настройки (SCREENS §8) ──────────────────────────────────────────────── */
@@ -752,7 +808,7 @@
   block-size: 30px;
   border-radius: var(--r-full);
   border: var(--border-w-strong) solid transparent;
-  background-color: var(--accent);
+  background-color: var(--accent-fill);
   cursor: pointer;
   padding: 0;
 }
@@ -765,8 +821,8 @@
 }
 .za-preview {
   border: var(--border-w) solid var(--line);
-  border-radius: var(--r-lg);
-  background-color: var(--bg);
+  border-radius: var(--r-card);
+  background-color: var(--surface);
   padding: var(--sp-16);
 }
 
@@ -776,7 +832,7 @@
   inline-size: 100%;
   border-collapse: collapse;
   border: var(--border-w) solid var(--line);
-  border-radius: var(--r-xl);
+  border-radius: var(--r-card);
   overflow: hidden;
   font-size: var(--fs-sm);
 }
@@ -787,7 +843,7 @@
   border-block-end: var(--border-w) solid var(--line);
 }
 .za-table thead th {
-  background-color: var(--surface);
+  background-color: var(--surface-sunken);
   font-weight: var(--fw-control);
   color: var(--text);
 }
@@ -908,7 +964,7 @@
   background-color: var(--surface-hover);
 }
 .za-menu__item--danger {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* ── Отладочное меню (приёмочный критерий №10) ───────────────────────────── */

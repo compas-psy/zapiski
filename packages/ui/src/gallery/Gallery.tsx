@@ -66,18 +66,19 @@ import './Gallery.css';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'Системная' },
-  { value: 'paper', label: 'Бумага' },
+  { value: 'simpas', label: 'СИМПАС' },
   { value: 'graphite', label: 'Графит' },
   { value: 'ink', label: 'Чернила' },
 ];
 
+/* Шесть пресетов DS-ALIGNMENT §3. Терракоты в наборе нет. */
 const ACCENT_TITLES: Record<Accent, string> = {
-  garnet: 'Гранат',
   pine: 'Хвоя',
+  forest: 'Лес',
   gold: 'Золото',
-  blueberry: 'Черника',
-  heather: 'Вереск',
-  slate: 'Грифель',
+  dusk: 'Сумерки',
+  granite: 'Гранит',
+  clay: 'Глина',
 };
 
 const SURFACE_TOKENS = [
@@ -416,7 +417,7 @@ function TogglesSection(): ReactNode {
               checked={radio === 'pc'}
               onChange={() => setRadio('pc')}
             />
-            <Radio name="voice" label="В облаке КОМПАС" disabled />
+            <Radio name="voice" label="В облаке СИМПАС" disabled />
           </RadioGroup>
         </Panel>
         <Panel label="Сегментированный контрол">

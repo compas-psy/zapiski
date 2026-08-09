@@ -163,7 +163,7 @@ fn print_window<R: Runtime>(window: &tauri::WebviewWindow<R>, pdf: &Path) -> Res
                 let finish_tx = done_tx.clone();
                 let handler = PrintToPdfCompletedHandler::create(Box::new(
                     move |result, is_successful| {
-                        let outcome = if result.is_ok() && is_successful.as_bool() {
+                        let outcome = if result.is_ok() && is_successful {
                             Ok(())
                         } else {
                             Err(format!("движок печати вернул ошибку: {result:?}"))
