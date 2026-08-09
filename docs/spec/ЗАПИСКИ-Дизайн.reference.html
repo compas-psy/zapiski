@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/design-system-66188c07-9b47-4513-950f-4bff1348c44e/tokens/fonts.css">
+<link rel="stylesheet" href="_ds/design-system-66188c07-9b47-4513-950f-4bff1348c44e/tokens/colors.css">
+<script src="_ds/design-system-66188c07-9b47-4513-950f-4bff1348c44e/_ds_bundle.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&amp;family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#EDEAE2;font-family:'Golos Text',system-ui,sans-serif}
+a{color:#B5503C}a:hover{color:#93412F}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+.dv-tid{font:600 10px 'JetBrains Mono',monospace;padding:3px 7px;background:#38342E;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 'Golos Text',sans-serif;color:#38342E}
+.dv-g{font:700 11px/1 'Golos Text',sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8A8375;margin:34px 0 14px}
+.dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px 'JetBrains Mono',monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#38342E;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11.5px/1.3 'Golos Text',sans-serif;color:rgba(0,0,0,.55)}
+.dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.09);border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+.dv-opt:target .dv-oid{background:#B5503C;color:#fff}
+.dv-next{margin:26px 0 0;font:12px/1.5 'Golos Text',sans-serif;color:rgba(0,0,0,.5)}
+</style>
+</helmet>
+<section class="dv-turn" id="t4">
+<div class="dv-thd"><a class="dv-tid" href="#t4">4</a><span class="dv-tname">Полная библиотека компонентов (светлая + тёмная) и все недостающие экраны</span></div>
+
+<div class="dv-g">Компоненты · все состояния, обе темы</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4a"><div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>Бумага · светлая</div>
+<div class="dv-card" style="width:560px;background:#FBFAF7;padding:24px 26px;display:flex;flex-direction:column;gap:22px">
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">КНОПКИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <span style="font-size:14px;font-weight:600;color:#fff;background:#B5503C;border-radius:14px;padding:11px 22px">Основная</span>
+      <span style="font-size:14px;font-weight:600;color:#fff;background:#9C432F;border-radius:14px;padding:11px 22px">Наведение</span>
+      <span style="font-size:14px;font-weight:600;color:#fff;background:#8B3A28;border-radius:14px;padding:11px 22px;transform:scale(.97)">Нажатие</span>
+      <span style="font-size:14px;font-weight:600;color:#fff;background:#B5503C;border-radius:14px;padding:11px 22px;opacity:.45">Недоступна</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px">
+      <span style="font-size:14px;font-weight:600;color:#38342E;background:#F3F1EA;border-radius:14px;padding:11px 22px">Вторичная</span>
+      <span style="font-size:14px;font-weight:600;color:#38342E;background:#fff;border:1px solid #EAE6DB;border-radius:14px;padding:10px 21px">Контурная</span>
+      <span style="font-size:14px;font-weight:600;color:#B5503C;padding:11px 6px">Текстовая</span>
+      <span style="font-size:14px;font-weight:600;color:#A85045;background:#F6E5E2;border-radius:14px;padding:11px 22px">Удалить</span>
+      <span style="width:44px;height:44px;border-radius:14px;background:#F3F1EA;display:inline-flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555047" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+      <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#fff;background:#B5503C;border-radius:14px;padding:11px 20px"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.4);border-top-color:#fff"></span>Отправляем</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+      <span style="font-size:14px;font-weight:600;color:#fff;background:#B5503C;border-radius:14px;padding:11px 22px;box-shadow:0 0 0 3px rgba(181,80,60,.35)">Фокус · кольцо 3px</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">радиус 14 · высота 44 · вес 600</span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#EAE6DB"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">ПОЛЯ ВВОДА</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="border:1px solid #EAE6DB;background:#fff;border-radius:13px;padding:12px 15px;font-size:14px;color:#B6AFA2">Плейсхолдер</div>
+      <div style="border:1.5px solid #B5503C;background:#fff;border-radius:13px;padding:11.5px 14.5px;font-size:14px;color:#38342E;box-shadow:0 0 0 3px rgba(181,80,60,.18)">Заполнено<span style="display:inline-block;width:2px;height:16px;background:#B5503C;vertical-align:-3px;margin-left:1px"></span></div>
+      <div>
+        <div style="border:1.5px solid #A85045;background:#fff;border-radius:13px;padding:11.5px 14.5px;font-size:14px;color:#38342E">m@ya</div>
+        <div style="font-size:12px;color:#A85045;padding:6px 4px 0">Похоже, в адресе опечатка</div>
+      </div>
+      <div style="border:1px solid #EAE6DB;background:#F3F1EA;border-radius:13px;padding:12px 15px;font-size:14px;color:#B6AFA2;opacity:.7">Недоступно</div>
+      <div style="display:flex;align-items:center;gap:9px;background:#F3F1EA;border:1px solid #EAE6DB;border-radius:99px;padding:11px 16px;color:#8A8375"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg><span style="font-size:14px">Поиск</span></div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#EAE6DB"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">ЧИПЫ · ТЕГИ · БЕЙДЖИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center">
+      <span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:4px 11px">#дневник</span>
+      <span style="font-size:12px;color:#B5503C;background:#F6E7E2;border:1px solid rgba(181,80,60,.35);border-radius:99px;padding:3px 10px">выбран</span>
+      <span style="font-size:12px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:3px 10px">фильтр</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:3px 10px">папка: Личное<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+      <span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span>
+      <span style="font-size:11px;font-weight:600;color:#B08430;background:#F5EBD8;border-radius:99px;padding:3px 9px">подписка</span>
+      <span style="font-size:11px;font-weight:600;color:#A85045;background:#F6E5E2;border-radius:99px;padding:3px 9px">ошибка</span>
+      <span style="font-size:11px;font-weight:600;color:#4C6B94;background:#E4EAF2;border-radius:99px;padding:3px 9px">история</span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#EAE6DB"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">ПЕРЕКЛЮЧАТЕЛИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+      <span style="width:40px;height:24px;border-radius:99px;background:#B5503C;position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span>
+      <span style="width:40px;height:24px;border-radius:99px;background:#DFDACF;position:relative;display:inline-block"><span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span>
+      <span style="display:inline-flex;background:#F3F1EA;border-radius:10px;padding:3px">
+        <span style="font-size:13px;font-weight:600;color:#38342E;background:#fff;border-radius:8px;padding:6px 14px;box-shadow:0 1px 2px rgba(56,52,46,.08)">Текст</span>
+        <span style="font-size:13px;color:#8A8375;padding:6px 14px">Raw</span>
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:9px"><span style="width:18px;height:18px;border-radius:6px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C8C1B4;display:inline-block"></span><span style="width:18px;height:18px;border-radius:50%;border:5px solid #B5503C;display:inline-block"></span><span style="width:18px;height:18px;border-radius:50%;border:1.5px solid #C8C1B4;display:inline-block"></span></span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#EAE6DB"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">СТРОКИ СПИСКА</div>
+    <div style="border:1px solid #EAE6DB;border-radius:12px;overflow:hidden">
+      <div style="padding:11px 16px;border-bottom:1px solid #F0EDE4">
+        <div style="font-size:15px;font-weight:600;color:#38342E">Обычная строка</div>
+        <div style="font-size:13px;color:#8A8375;line-height:1.45">Сниппет в две строки, дальше многоточие…</div>
+      </div>
+      <div style="padding:11px 16px;border-bottom:1px solid #F0EDE4;background:#F6E7E2">
+        <div style="font-size:15px;font-weight:600;color:#38342E">Выбранная (desktop)</div>
+        <div style="font-size:13px;color:#93412F;line-height:1.45">Фон accent-soft, без рамки</div>
+      </div>
+      <div style="padding:11px 16px;border-bottom:1px solid #F0EDE4;background:#F7F5EF">
+        <div style="font-size:15px;font-weight:600;color:#38342E">Наведение</div>
+        <div style="font-size:13px;color:#8A8375;line-height:1.45">Фон surface-alt</div>
+      </div>
+      <div style="display:flex;align-items:center;background:#B5503C">
+        <span style="display:flex;align-items:center;gap:8px;padding:0 16px;color:#fff"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M7 4h10l-1.5 7 3.5 3H5l3.5-3L7 4z"></path></svg><span style="font-size:12.5px;font-weight:600">Закрепить</span></span>
+        <div style="flex:1;background:#FBFAF7;padding:11px 16px;border-radius:12px 0 0 12px">
+          <div style="font-size:15px;font-weight:600;color:#38342E">Свайп вправо</div>
+          <div style="font-size:13px;color:#8A8375;line-height:1.45">Подложка проявляется до порога 96&nbsp;px</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#EAE6DB"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:10px">ТОСТ · ПЛАШКА · СКЕЛЕТОН · ПРОГРЕСС</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px;background:#38342E;border-radius:14px;padding:12px 16px">
+        <span style="font-size:13.5px;color:#F3F1EA;flex:1">Заметка в корзине</span>
+        <span style="font-size:13.5px;font-weight:600;color:#E0A08E">Отменить</span>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;background:#F3F1EA;border-radius:12px;padding:11px 14px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+        <span style="font-size:12.5px;color:#555047;line-height:1.5">Пояснение без тревоги: что произошло и что можно сделать</span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center">
+        <div style="flex:1"><div style="height:12px;width:62%;border-radius:6px;background:#EDE9DE"></div><div style="height:9px;width:90%;border-radius:5px;background:#F3F0E7;margin-top:7px"></div></div>
+        <div style="flex:1;height:3px;border-radius:2px;background:#EFEBE1"><span style="display:block;width:46%;height:100%;background:#B5503C;border-radius:2px"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="4b"><div class="dv-olabel"><a class="dv-oid" href="#4b">4b</a>Графит · тёмная (те же компоненты, спроектированы, а не конвертированы)</div>
+<div class="dv-card" style="width:560px;background:#232120;border-color:#393630;padding:24px 26px;display:flex;flex-direction:column;gap:22px">
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">КНОПКИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+      <span style="font-size:14px;font-weight:600;color:#241511;background:#D0765B;border-radius:14px;padding:11px 22px">Основная</span>
+      <span style="font-size:14px;font-weight:600;color:#241511;background:#DE8A72;border-radius:14px;padding:11px 22px">Наведение</span>
+      <span style="font-size:14px;font-weight:600;color:#241511;background:#E39880;border-radius:14px;padding:11px 22px;transform:scale(.97)">Нажатие</span>
+      <span style="font-size:14px;font-weight:600;color:#241511;background:#D0765B;border-radius:14px;padding:11px 22px;opacity:.45">Недоступна</span>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:10px">
+      <span style="font-size:14px;font-weight:600;color:#E9E5DC;background:#2C2A28;border-radius:14px;padding:11px 22px">Вторичная</span>
+      <span style="font-size:14px;font-weight:600;color:#E9E5DC;background:transparent;border:1px solid #393630;border-radius:14px;padding:10px 21px">Контурная</span>
+      <span style="font-size:14px;font-weight:600;color:#D0765B;padding:11px 6px">Текстовая</span>
+      <span style="font-size:14px;font-weight:600;color:#D08476;background:rgba(208,132,118,.16);border-radius:14px;padding:11px 22px">Удалить</span>
+      <span style="width:44px;height:44px;border-radius:14px;background:#2C2A28;display:inline-flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9B948A" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+      <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#241511;background:#D0765B;border-radius:14px;padding:11px 20px"><span style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(36,21,17,.35);border-top-color:#241511"></span>Отправляем</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+      <span style="font-size:14px;font-weight:600;color:#241511;background:#D0765B;border-radius:14px;padding:11px 22px;box-shadow:0 0 0 3px rgba(208,118,91,.45)">Фокус · кольцо 3px</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6E675C">текст на акценте — тёмный, не белый</span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#393630"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">ПОЛЯ ВВОДА</div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="border:1px solid #393630;background:#2C2A28;border-radius:13px;padding:12px 15px;font-size:14px;color:#6E675C">Плейсхолдер</div>
+      <div style="border:1.5px solid #D0765B;background:#2C2A28;border-radius:13px;padding:11.5px 14.5px;font-size:14px;color:#E9E5DC;box-shadow:0 0 0 3px rgba(208,118,91,.22)">Заполнено<span style="display:inline-block;width:2px;height:16px;background:#D0765B;vertical-align:-3px;margin-left:1px"></span></div>
+      <div>
+        <div style="border:1.5px solid #D08476;background:#2C2A28;border-radius:13px;padding:11.5px 14.5px;font-size:14px;color:#E9E5DC">m@ya</div>
+        <div style="font-size:12px;color:#D08476;padding:6px 4px 0">Похоже, в адресе опечатка</div>
+      </div>
+      <div style="border:1px solid #393630;background:#262422;border-radius:13px;padding:12px 15px;font-size:14px;color:#55504A;opacity:.7">Недоступно</div>
+      <div style="display:flex;align-items:center;gap:9px;background:#2C2A28;border:1px solid #393630;border-radius:99px;padding:11px 16px;color:#9B948A"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg><span style="font-size:14px">Поиск</span></div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#393630"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">ЧИПЫ · ТЕГИ · БЕЙДЖИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center">
+      <span style="font-size:12px;color:#F0B9A4;background:rgba(208,118,91,.18);border-radius:99px;padding:4px 11px">#дневник</span>
+      <span style="font-size:12px;color:#F0B9A4;background:rgba(208,118,91,.18);border:1px solid rgba(208,118,91,.4);border-radius:99px;padding:3px 10px">выбран</span>
+      <span style="font-size:12px;color:#9B948A;border:1px solid #393630;border-radius:99px;padding:3px 10px">фильтр</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#9B948A;border:1px solid #393630;border-radius:99px;padding:3px 10px">папка: Личное<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6E675C" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+      <span style="font-size:11px;font-weight:600;color:#7FB894;background:rgba(127,184,148,.16);border-radius:99px;padding:3px 9px">бесплатно</span>
+      <span style="font-size:11px;font-weight:600;color:#D6B26A;background:rgba(214,178,106,.16);border-radius:99px;padding:3px 9px">подписка</span>
+      <span style="font-size:11px;font-weight:600;color:#D08476;background:rgba(208,132,118,.16);border-radius:99px;padding:3px 9px">ошибка</span>
+      <span style="font-size:11px;font-weight:600;color:#7C9DC9;background:rgba(124,157,201,.16);border-radius:99px;padding:3px 9px">история</span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#393630"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">ПЕРЕКЛЮЧАТЕЛИ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center">
+      <span style="width:40px;height:24px;border-radius:99px;background:#D0765B;position:relative;display:inline-block"><span style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#241511"></span></span>
+      <span style="width:40px;height:24px;border-radius:99px;background:#413D37;position:relative;display:inline-block"><span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#9B948A"></span></span>
+      <span style="display:inline-flex;background:#2C2A28;border-radius:10px;padding:3px">
+        <span style="font-size:13px;font-weight:600;color:#E9E5DC;background:#393630;border-radius:8px;padding:6px 14px">Текст</span>
+        <span style="font-size:13px;color:#9B948A;padding:6px 14px">Raw</span>
+      </span>
+      <span style="display:inline-flex;align-items:center;gap:9px"><span style="width:18px;height:18px;border-radius:6px;background:#D0765B;display:inline-flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#241511" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #55504A;display:inline-block"></span><span style="width:18px;height:18px;border-radius:50%;border:5px solid #D0765B;display:inline-block"></span><span style="width:18px;height:18px;border-radius:50%;border:1.5px solid #55504A;display:inline-block"></span></span>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#393630"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">СТРОКИ СПИСКА</div>
+    <div style="border:1px solid #393630;border-radius:12px;overflow:hidden">
+      <div style="padding:11px 16px;border-bottom:1px solid #2C2A28">
+        <div style="font-size:15px;font-weight:600;color:#E9E5DC">Обычная строка</div>
+        <div style="font-size:13px;color:#9B948A;line-height:1.45">Сниппет в две строки, дальше многоточие…</div>
+      </div>
+      <div style="padding:11px 16px;border-bottom:1px solid #2C2A28;background:rgba(208,118,91,.16)">
+        <div style="font-size:15px;font-weight:600;color:#E9E5DC">Выбранная (desktop)</div>
+        <div style="font-size:13px;color:#F0B9A4;line-height:1.45">Фон accent-soft, без рамки</div>
+      </div>
+      <div style="padding:11px 16px;border-bottom:1px solid #2C2A28;background:#2C2A28">
+        <div style="font-size:15px;font-weight:600;color:#E9E5DC">Наведение</div>
+        <div style="font-size:13px;color:#9B948A;line-height:1.45">Фон surface</div>
+      </div>
+      <div style="display:flex;align-items:center;background:#8A5340">
+        <span style="display:flex;align-items:center;gap:8px;padding:0 16px;color:#F7E7E0"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#F7E7E0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M7 4h10l-1.5 7 3.5 3H5l3.5-3L7 4z"></path></svg><span style="font-size:12.5px;font-weight:600">Закрепить</span></span>
+        <div style="flex:1;background:#232120;padding:11px 16px;border-radius:12px 0 0 12px">
+          <div style="font-size:15px;font-weight:600;color:#E9E5DC">Свайп вправо</div>
+          <div style="font-size:13px;color:#9B948A;line-height:1.45">Подложка проявляется до порога 96&nbsp;px</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="height:1px;background:#393630"></div>
+
+  <div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#6E675C;margin-bottom:10px">ТОСТ · ПЛАШКА · СКЕЛЕТОН · ПРОГРЕСС</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px;background:#3B3835;border-radius:14px;padding:12px 16px">
+        <span style="font-size:13.5px;color:#E9E5DC;flex:1">Заметка в корзине</span>
+        <span style="font-size:13.5px;font-weight:600;color:#F0B9A4">Отменить</span>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:10px;background:#2C2A28;border-radius:12px;padding:11px 14px">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9B948A" stroke-width="1.75" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+        <span style="font-size:12.5px;color:#9B948A;line-height:1.5">Пояснение без тревоги: что произошло и что можно сделать</span>
+      </div>
+      <div style="display:flex;gap:14px;align-items:center">
+        <div style="flex:1"><div style="height:12px;width:62%;border-radius:6px;background:#332F2C"></div><div style="height:9px;width:90%;border-radius:5px;background:#2C2A28;margin-top:7px"></div></div>
+        <div style="flex:1;height:3px;border-radius:2px;background:#393630"><span style="display:block;width:46%;height:100%;background:#D0765B;border-radius:2px"></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Голос · недостающие экраны и состояния</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4c"><div class="dv-olabel"><a class="dv-oid" href="#4c">4c</a>Сопряжение с домашним ПК · телефон видит компьютер в своей сети</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 28px">
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 0 20px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+  </div>
+  <div style="font-size:25px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.24">Ваш компьютер будет обрабатывать записи</div>
+  <div style="font-size:14.5px;color:#8A8375;line-height:1.55;margin:10px 0 24px">Откройте ЗАПИСКИ на компьютере: Настройки → Голос → «Принимать записи с телефона». Там появится код.</div>
+  <div style="display:flex;justify-content:center;margin-bottom:20px">
+    <div style="width:168px;height:168px;border-radius:18px;background:#fff;border:1px solid #EAE6DB;display:flex;align-items:center;justify-content:center">
+      <div style="display:grid;grid-template-columns:repeat(9,12px);grid-template-rows:repeat(9,12px);gap:2px">
+        <span style="background:#38342E;grid-column:1/4;grid-row:1/4;border-radius:3px"></span><span style="background:#38342E;grid-column:7/10;grid-row:1/4;border-radius:3px"></span><span style="background:#38342E;grid-column:1/4;grid-row:7/10;border-radius:3px"></span>
+        <span style="background:#38342E;grid-column:5;grid-row:2"></span><span style="background:#38342E;grid-column:5;grid-row:4"></span><span style="background:#38342E;grid-column:6;grid-row:5"></span><span style="background:#38342E;grid-column:5;grid-row:6"></span><span style="background:#38342E;grid-column:7;grid-row:6"></span><span style="background:#38342E;grid-column:9;grid-row:5"></span><span style="background:#38342E;grid-column:6;grid-row:8"></span><span style="background:#38342E;grid-column:8;grid-row:7"></span><span style="background:#38342E;grid-column:8;grid-row:9"></span><span style="background:#38342E;grid-column:5;grid-row:9"></span>
+      </div>
+    </div>
+  </div>
+  <div style="text-align:center;font-size:13px;color:#8A8375;margin-bottom:8px">Наведите камеру или введите код</div>
+  <div style="display:flex;justify-content:center;gap:8px;margin-bottom:22px">
+    <span style="width:38px;height:48px;border:1px solid #EAE6DB;background:#fff;border-radius:11px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:20px;color:#38342E">4</span>
+    <span style="width:38px;height:48px;border:1px solid #EAE6DB;background:#fff;border-radius:11px;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:20px;color:#38342E">7</span>
+    <span style="width:38px;height:48px;border:1.5px solid #B5503C;background:#fff;border-radius:11px;display:flex;align-items:center;justify-content:center"><span style="width:2px;height:20px;background:#B5503C"></span></span>
+    <span style="width:38px;height:48px;border:1px solid #EAE6DB;background:#fff;border-radius:11px"></span>
+    <span style="width:38px;height:48px;border:1px solid #EAE6DB;background:#fff;border-radius:11px"></span>
+    <span style="width:38px;height:48px;border:1px solid #EAE6DB;background:#fff;border-radius:11px"></span>
+  </div>
+  <div style="display:flex;align-items:flex-start;gap:9px">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+    <span style="font-size:12.5px;color:#8A8375;line-height:1.55">Связь только внутри вашей сети, через наши серверы ничего не проходит.</span>
+  </div>
+  <span style="flex:1"></span>
+  <div style="font-size:13px;color:#B5503C;text-align:center;padding-bottom:18px">Обрабатывать на телефоне</div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="4d"><div class="dv-olabel"><a class="dv-oid" href="#4d">4d</a>Состояния голоса · загрузка модели, ПК не в сети, звонок прервал запись, очередь</div>
+<div class="dv-card" style="width:400px;background:#FBFAF7;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+  <div style="border:1px solid #EAE6DB;border-radius:14px;padding:14px 16px;background:#fff">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="font-size:14px;font-weight:600;color:#38342E;flex:1">Скачиваем модель распознавания</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">184 / 320 МБ</span></div>
+    <div style="height:3px;border-radius:2px;background:#EFEBE1"><span style="display:block;width:57%;height:100%;background:#B5503C;border-radius:2px"></span></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:9px"><span style="font-size:12.5px;color:#8A8375;flex:1;line-height:1.5">Один раз. Дальше распознавание работает без интернета.</span><span style="font-size:12.5px;color:#B5503C">Отменить</span></div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:14px;padding:14px 16px;background:#fff">
+    <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px"><span style="width:7px;height:7px;border-radius:50%;background:#B6AFA2"></span><span style="font-size:14px;font-weight:600;color:#38342E">«Кабинет-ПК» не в сети</span></div>
+    <div style="font-size:12.5px;color:#8A8375;line-height:1.5;margin-bottom:10px">Запись сохранена целиком. Оформим, когда компьютер появится — или можно прямо сейчас на телефоне, это будет дольше.</div>
+    <div style="display:flex;gap:8px"><span style="font-size:12.5px;font-weight:600;color:#38342E;background:#F3F1EA;border-radius:11px;padding:8px 14px">Дождаться ПК</span><span style="font-size:12.5px;font-weight:600;color:#B5503C;padding:8px 6px">Обработать здесь</span></div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:14px;padding:14px 16px;background:#fff">
+    <div style="font-size:14px;font-weight:600;color:#38342E;margin-bottom:6px">Запись прервал звонок</div>
+    <div style="font-size:12.5px;color:#8A8375;line-height:1.5;margin-bottom:10px">Сохранили 6:41. Продолжить в ту же запись?</div>
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:12.5px;font-weight:600;color:#fff;background:#B5503C;border-radius:11px;padding:8px 16px">Продолжить</span><span style="font-size:12.5px;color:#8A8375">Оставить как есть · 47 с</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:11px;background:#F3F1EA;border-radius:12px;padding:11px 14px">
+    <span style="width:22px;height:22px;border-radius:50%;border:2px solid #EAE6DB;border-top-color:#B5503C;flex:none"></span>
+    <span style="font-size:12.5px;color:#555047;line-height:1.5;flex:1">В очереди 2 записи · оформим в фоне, приложение можно закрыть</span>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Быстрый ввод</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4e"><div class="dv-olabel"><a class="dv-oid" href="#4e">4e</a>Виджеты Android · три размера, чекбоксы кликабельны прямо в виджете</div>
+<div class="dv-card" style="width:400px;background:#EFEAE2;padding:26px;display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start">
+  <div style="width:96px;height:96px;border-radius:22px;background:#FBFAF7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(56,52,46,.10)">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+    <span style="font-size:11.5px;color:#8A8375">Записать</span>
+  </div>
+  <div style="width:96px;height:96px;border-radius:22px;background:#B5503C;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(181,80,60,.24)">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0M12 18v3"></path></svg>
+    <span style="font-size:11.5px;color:#F6DDD5">Наговорить</span>
+  </div>
+  <div style="width:208px;border-radius:22px;background:#FBFAF7;padding:14px 16px;box-shadow:0 4px 16px rgba(56,52,46,.10)">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;flex:1">ПОСЛЕДНИЕ</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div><div style="font-size:13px;font-weight:600;color:#38342E">Утренние страницы</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#B6AFA2">07:40</div></div>
+      <div><div style="font-size:13px;font-weight:600;color:#38342E">Супервизия · случай М.</div><div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#B6AFA2">вчера</div></div>
+      <div style="display:flex;align-items:center;gap:6px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="1.75" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg><span style="font-size:13px;color:#B6AFA2;font-style:italic">Зашифровано</span></div>
+    </div>
+  </div>
+  <div style="width:208px;border-radius:22px;background:#FBFAF7;padding:14px 16px;box-shadow:0 4px 16px rgba(56,52,46,.10)">
+    <div style="font-size:13.5px;font-weight:700;color:#38342E;margin-bottom:9px">Переезд кабинета</div>
+    <div style="display:flex;flex-direction:column;gap:7px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:15px;height:15px;border-radius:5px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:12.5px;color:#8A8375;text-decoration:line-through">Замерить свет</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:15px;height:15px;border-radius:5px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:12.5px;color:#38342E">Договор аренды</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:15px;height:15px;border-radius:5px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:12.5px;color:#38342E">Перевезти кресла</span></div>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;color:#B6AFA2;margin-top:9px">4 / 9</div>
+  </div>
+</div>
+</div>
+
+<div class="dv-opt" id="4f"><div class="dv-olabel"><a class="dv-oid" href="#4f">4f</a>Share-target · «в какую заметку» без открытия приложения</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;position:relative;background:#1E1B19;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="position:absolute;inset:0;background:rgba(30,26,22,.5)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#FBFAF7;border-radius:16px 16px 0 0;padding:10px 24px 24px">
+    <div style="width:36px;height:4px;border-radius:2px;background:#E3DDCF;margin:0 auto 18px"></div>
+    <div style="font-size:18px;font-weight:700;color:#38342E;margin-bottom:14px">Добавить в заметку</div>
+    <div style="background:#F3F1EA;border-radius:12px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:600;color:#38342E;line-height:1.4">Как удерживать паузу в терапевтической сессии</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8A8375;margin-top:4px">psyjournal.ru/pause-in-session</div>
+    </div>
+    <div style="border:1.5px solid #B5503C;background:#FDF6F3;border-radius:13px;padding:13px 15px;display:flex;align-items:center;gap:11px;margin-bottom:9px">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+      <span style="font-size:14.5px;font-weight:600;color:#38342E;flex:1">Новая заметка</span>
+      <span style="font-size:12.5px;color:#8A8375">Практика ▾</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #EAE6DB;border-radius:13px;padding:12px 15px;color:#B6AFA2;margin-bottom:9px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg>
+      <span style="font-size:14px">Найти существующую</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:16px">
+      <div style="padding:9px 15px;font-size:14px;color:#38342E;display:flex;align-items:center;gap:10px"><span style="flex:1">Вопросы к супервизору</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2">14 июл</span></div>
+      <div style="padding:9px 15px;font-size:14px;color:#38342E;display:flex;align-items:center;gap:10px"><span style="flex:1">Книга: «Схема-терапия»</span><span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2">5 авг</span></div>
+    </div>
+    <div style="background:#B5503C;border-radius:14px;padding:14px 0;font-size:15px;font-weight:600;color:#fff;text-align:center">Добавить</div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="4g"><div class="dv-olabel"><a class="dv-oid" href="#4g">4g</a>Палитра команд Ctrl+K · команды, заметки, папки, теги, настройки</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ fw }}" height="{{ fh }}" url="zapiski.cmpas.ru" hint-size="1080px,620px">
+<div style="height:100%;position:relative;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="display:flex;height:100%;opacity:.35">
+    <div style="width:224px;background:#F7F5EF;border-right:1px solid #EAE6DB"></div>
+    <div style="width:288px;border-right:1px solid #EAE6DB"></div>
+    <div style="flex:1;padding:36px 60px"><div style="font-size:28px;font-weight:700;color:#38342E">Конспект супервизии — случай М.</div></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(30,26,22,.28)"></div>
+  <div style="position:absolute;left:50%;top:78px;transform:translateX(-50%);width:560px;background:#FBFAF7;border-radius:16px;box-shadow:0 24px 60px rgba(30,26,22,.30);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:11px;padding:15px 20px;border-bottom:1px solid #EAE6DB">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg>
+      <span style="font-size:15.5px;color:#38342E">шифр</span><span style="display:inline-block;width:2px;height:18px;background:#B5503C"></span>
+      <span style="flex:1"></span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2">Esc</span>
+    </div>
+    <div style="padding:8px 0">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:8px 20px 4px">КОМАНДЫ</div>
+      <div style="display:flex;align-items:center;gap:12px;padding:9px 20px;background:#F6E7E2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Зашифровать эту заметку</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B08A7C">Ctrl ⇧ E</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:9px 20px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 014-4c1.9 0 3.4 1.2 3.9 3"></path></svg>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Снять шифрование</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;padding:9px 20px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Настройки → Безопасность</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">Ctrl ,</span>
+      </div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:12px 20px 4px">ЗАМЕТКИ</div>
+      <div style="display:flex;align-items:center;gap:12px;padding:9px 20px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linejoin="round"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"></path><path d="M14 3v6h6"></path></svg>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Как я настраивал <span style="background:#F6E7E2;border-radius:3px;padding:0 3px">шифр</span>ование заметок</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">Личное</span>
+      </div>
+      <div style="border-top:1px solid #EAE6DB;margin-top:8px;padding:9px 20px;display:flex;align-items:center;gap:16px;font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2">
+        <span>↑↓ выбрать</span><span>↵ открыть</span><span>/ папки</span><span># теги</span><span>&gt; настройки</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+</div>
+
+<div class="dv-g">История, внешний вид, публикация</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="4h"><div class="dv-olabel"><a class="dv-oid" href="#4h">4h</a>История версий · визуальный diff, восстановление отменяемо</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ sw }}" height="{{ sh }}" url="zapiski.cmpas.ru" hint-size="1080px,640px">
+<div style="height:100%;display:flex;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="width:260px;flex:none;background:#F7F5EF;border-right:1px solid #EAE6DB;display:flex;flex-direction:column">
+    <div style="padding:16px 20px 12px;border-bottom:1px solid #EAE6DB">
+      <div style="font-size:15px;font-weight:700;color:#38342E">История версий</div>
+      <div style="font-size:12px;color:#8A8375;margin-top:3px">Конспект супервизии — случай М.</div>
+    </div>
+    <div style="padding:8px 10px;display:flex;flex-direction:column;gap:2px">
+      <div style="padding:10px 12px;border-radius:10px;background:#F6E7E2">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:600;color:#38342E;flex:1">Сейчас</span></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B08A7C;margin-top:3px">14:32 · этот компьютер</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;color:#38342E;flex:1">Объединено автоматически</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 004 4h8"></path><path d="M15 10l3 3 3-3"></path></svg></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2;margin-top:3px">09:14 · телефон + ПК</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px">
+        <div style="font-size:13.5px;color:#38342E">Оригинал расшифровки</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2;margin-top:3px">08:47 · надиктовка 42:07</div>
+      </div>
+      <div style="padding:10px 12px;border-radius:10px">
+        <div style="font-size:13.5px;color:#38342E">Вчера, вечер</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2;margin-top:3px">21:08 · телефон</div>
+      </div>
+    </div>
+    <span style="flex:1"></span>
+    <div style="padding:12px 20px;border-top:1px solid #EAE6DB;font-size:12px;color:#B6AFA2;line-height:1.5">Локально хранятся 50 последних версий каждой заметки</div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 28px;border-bottom:1px solid #F0EDE4">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A8375">09:14 → сейчас</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#5C8A6E"><span style="width:8px;height:8px;border-radius:2px;background:#DCEBE0"></span>добавлено 34 слова</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#A85045"><span style="width:8px;height:8px;border-radius:2px;background:#F4DFDB"></span>удалено 9</span>
+      <span style="flex:1"></span>
+      <span style="font-size:12.5px;font-weight:600;color:#fff;background:#B5503C;border-radius:11px;padding:8px 16px">Восстановить эту версию</span>
+    </div>
+    <div style="flex:1;padding:26px 40px;overflow:hidden">
+      <div style="max-width:600px">
+        <div style="font-size:24px;font-weight:700;color:#38342E;letter-spacing:-.02em;margin-bottom:16px">Конспект супервизии — случай М.</div>
+        <div style="font-size:17px;font-weight:600;color:#38342E;margin-bottom:8px">Гипотеза</div>
+        <div style="font-size:15.5px;line-height:1.7;color:#38342E;margin-bottom:14px">Избегание держится на страхе потерять контроль, <span style="background:#F4DFDB;text-decoration:line-through;color:#A85045;border-radius:3px;padding:0 3px">возможно</span> <span style="background:#DCEBE0;border-radius:3px;padding:0 3px">а не на самой ситуации выступления</span>. Опорная формулировка клиентки — «тишина после вопроса».</div>
+        <div style="font-size:17px;font-weight:600;color:#38342E;margin-bottom:8px">К следующей сессии</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Вопрос из зала как малая экспозиция</span></div>
+          <div style="display:flex;align-items:center;gap:10px;background:#DCEBE0;border-radius:8px;padding:3px 8px;margin-left:-8px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #9BB8A4;flex:none"></span><span style="font-size:15px;color:#38342E">Дневник мыслей — неделя</span></div>
+        </div>
+        <div style="background:#DCEBE0;border-radius:10px;padding:10px 14px;font-size:15px;line-height:1.6;color:#38342E;border-left:2.5px solid #9BB8A4">Моя реакция на паузу дольше минуты — моя тема, не клиентки. В личную терапию.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="4i"><div class="dv-olabel"><a class="dv-oid" href="#4i">4i</a>Настройки · внешний вид с живым превью</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 24px 16px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:20px;font-weight:700;color:#38342E;letter-spacing:-.02em">Внешний вид</span>
+  </div>
+  <div style="margin:0 24px 18px;border:1px solid #EAE6DB;border-radius:14px;background:#fff;padding:16px 18px">
+    <div style="font-size:17px;font-weight:700;color:#38342E;letter-spacing:-.01em;margin-bottom:7px">Пример заметки</div>
+    <div style="font-size:15px;line-height:1.65;color:#38342E">Так будет выглядеть <span style="background:#F6E7E2;border-radius:3px;padding:0 3px">ваш текст</span> при этих настройках.</div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:9px"><span style="width:17px;height:17px;border-radius:6px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:14.5px;color:#8A8375;text-decoration:line-through">Отмеченный пункт</span></div>
+  </div>
+  <div style="padding:0 24px;overflow:hidden">
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:9px">ТЕМА</div>
+    <div style="display:flex;gap:8px;margin-bottom:18px">
+      <div style="flex:1;border:1px solid #EAE6DB;border-radius:12px;padding:10px 0;text-align:center"><span style="display:block;width:26px;height:26px;border-radius:8px;margin:0 auto 7px;background:linear-gradient(135deg,#FBFAF7 50%,#232120 50%);border:1px solid #E3DDCF"></span><span style="font-size:11.5px;color:#555047">Система</span></div>
+      <div style="flex:1;border:1.5px solid #B5503C;background:#FDF6F3;border-radius:12px;padding:9.5px 0;text-align:center"><span style="display:block;width:26px;height:26px;border-radius:8px;margin:0 auto 7px;background:#FBFAF7;border:1px solid #E3DDCF"></span><span style="font-size:11.5px;font-weight:600;color:#93412F">Бумага</span></div>
+      <div style="flex:1;border:1px solid #EAE6DB;border-radius:12px;padding:10px 0;text-align:center"><span style="display:block;width:26px;height:26px;border-radius:8px;margin:0 auto 7px;background:#232120"></span><span style="font-size:11.5px;color:#555047">Графит</span></div>
+      <div style="flex:1;border:1px solid #EAE6DB;border-radius:12px;padding:10px 0;text-align:center"><span style="display:block;width:26px;height:26px;border-radius:8px;margin:0 auto 7px;background:#000"></span><span style="font-size:11.5px;color:#555047">Чернила</span></div>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:9px">АКЦЕНТ</div>
+    <div style="display:flex;gap:14px;margin-bottom:18px">
+      <span style="width:30px;height:30px;border-radius:50%;background:#B5503C;box-shadow:0 0 0 2px #FBFAF7,0 0 0 4px #B5503C"></span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#2E6B4F"></span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#B08430"></span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#4C6B94"></span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#7C6390"></span>
+      <span style="width:30px;height:30px;border-radius:50%;background:#6B675F"></span>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:9px">ТЕКСТ</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+      <span style="font-size:12px;color:#8A8375">А</span>
+      <span style="flex:1;height:3px;border-radius:2px;background:#EFEBE1;position:relative"><span style="display:block;width:52%;height:100%;background:#B5503C;border-radius:2px"></span><span style="position:absolute;left:52%;top:50%;transform:translate(-50%,-50%);width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid #EAE6DB;box-shadow:0 1px 3px rgba(56,52,46,.14)"></span></span>
+      <span style="font-size:19px;color:#8A8375">А</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <span style="flex:1;text-align:center;font-size:13.5px;font-weight:600;color:#38342E;background:#fff;border:1px solid #EAE6DB;border-radius:10px;padding:9px 0;box-shadow:0 1px 2px rgba(56,52,46,.06)">Golos</span>
+      <span style="flex:1;text-align:center;font-family:'Source Serif 4',serif;font-size:14.5px;color:#8A8375;border:1px solid #EAE6DB;border-radius:10px;padding:9px 0">Serif</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid #F0EDE4">
+      <span style="font-size:14.5px;color:#38342E;flex:1">Компактный режим</span>
+      <span style="width:40px;height:24px;border-radius:99px;background:#DFDACF;position:relative;flex:none"><span style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="4j"><div class="dv-olabel"><a class="dv-oid" href="#4j">4j</a>Публичная страница заметки (P1) · шаблон «статьи», ненавязчивая подпись</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ pw }}" height="{{ pwh }}" url="zpsk.ru/n/tihoe-utro" hint-size="960px,640px">
+<div style="height:100%;background:#FBFAF7;font-family:'Golos Text',sans-serif;display:flex;flex-direction:column;overflow:hidden">
+  <div style="flex:1;overflow:hidden;padding:52px 0 0">
+    <div style="max-width:620px;margin:0 auto;padding:0 32px">
+      <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2;margin-bottom:14px">8 августа 2026 · 4 мин чтения</div>
+      <div style="font-family:'Source Serif 4',serif;font-size:40px;font-weight:600;color:#38342E;letter-spacing:-.02em;line-height:1.15">Тихое утро в кабинете</div>
+      <div style="font-family:'Source Serif 4',serif;font-size:19px;line-height:1.7;color:#8A8375;margin:18px 0 26px">О том, почему пауза в разговоре — это не провал, а инструмент.</div>
+      <div style="height:1px;background:#EAE6DB;margin-bottom:26px"></div>
+      <div style="font-family:'Source Serif 4',serif;font-size:18px;line-height:1.75;color:#38342E;margin-bottom:16px">До первой сессии — час. Кофе, окно, тишина. Перечитал вчерашние записи и понял: молчание в кабинете — не пустота. Это место, где клиент впервые слышит собственную мысль до конца.</div>
+      <div style="border-left:2.5px solid #DCC9BE;padding:4px 0 4px 18px;font-family:'Source Serif 4',serif;font-size:19px;line-height:1.65;color:#8A8375;font-style:italic;margin-bottom:16px">«Я боюсь не сцены, а тишины после вопроса».</div>
+      <div style="font-family:'Source Serif 4',serif;font-size:18px;line-height:1.75;color:#38342E">Сегодня выдержал паузу почти минуту. Клиент сам нашёл слово, которое я подбирал за него три сессии подряд.</div>
+    </div>
+  </div>
+  <div style="border-top:1px solid #EAE6DB;padding:16px 0;background:#F7F5EF">
+    <div style="max-width:620px;margin:0 auto;padding:0 32px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:12.5px;color:#B6AFA2;flex:1">Опубликовано из ЗАПИСОК · только чтение</span>
+      <span style="font-size:12.5px;font-weight:600;letter-spacing:.1em;color:#8A8375">ЗАПИСКИ</span>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="4k"><div class="dv-olabel"><a class="dv-oid" href="#4k">4k</a>Иконка приложения — <b>плейсхолдер</b>: знак должен прийти из бренда КОМПАС, рисовать новый нельзя</div>
+<div class="dv-card" style="width:400px;background:#FBFAF7;padding:24px 26px">
+  <div style="display:flex;gap:16px;align-items:flex-end;margin-bottom:18px">
+    <div style="width:76px;height:76px;border-radius:20px;background:#F3F1EA;border:1px dashed #D9D3C5;display:flex;align-items:center;justify-content:center;text-align:center;font-size:10.5px;color:#B6AFA2;line-height:1.4">знак<br>КОМПАС</div>
+    <div style="width:56px;height:56px;border-radius:15px;background:#F3F1EA;border:1px dashed #D9D3C5;display:flex;align-items:center;justify-content:center;font-size:9.5px;color:#B6AFA2">adaptive</div>
+    <div style="width:40px;height:40px;border-radius:11px;background:#F3F1EA;border:1px dashed #D9D3C5;display:flex;align-items:center;justify-content:center;font-size:9px;color:#B6AFA2">Win</div>
+    <div style="width:26px;height:26px;border-radius:7px;background:#F3F1EA;border:1px dashed #D9D3C5"></div>
+  </div>
+  <div style="font-size:13px;line-height:1.6;color:#555047">Иконку не изобретаем: берём фирменный знак семейства КОМПАС и адаптируем под ЗАПИСКИ. Требования к слоям: фон — сплошной, без градиента; знак вписан в безопасную зону 66% для Android adaptive; монохромная версия для строки состояния и favicon 32×32 читается без деталей.</div>
+  <div style="display:flex;align-items:flex-start;gap:9px;background:#F3F1EA;border-radius:12px;padding:11px 14px;margin-top:14px">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+    <span style="font-size:12.5px;color:#555047;line-height:1.5">Нужен исходник знака в векторе — пришлите, и подготовлю все размеры.</span>
+  </div>
+</div>
+</div>
+</div>
+
+<p class="dv-next">Дальше можно: «все экраны хода 1 в тёмной теме» · «живой прототип: онбординг → первая заметка» · «планшетный layout 900–1200»</p>
+</section>
+<section class="dv-turn" id="t3">
+<div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">ГОЛОС → MARKDOWN. Развитие продукта на открытых моделях Сбера (GigaAM, MIT) + локальный Qwen через Ollama</span></div>
+
+<div style="max-width:920px;background:#F6F4EE;border:1px solid rgba(0,0,0,.07);border-radius:12px;padding:20px 24px;font-size:13px;line-height:1.65;color:#555047">
+  <div style="font-weight:700;color:#38342E;margin-bottom:8px">Идея: «Наговорил — получил заметку». Два шага, одна кнопка</div>
+  <div style="display:flex;flex-direction:column;gap:5px">
+    <div>· <b>Расшифровка</b> — GigaAM (MIT, компактная версия работает на обычном процессоре). <b>Оформление</b> — Qwen в Ollama. Оба шага могут идти <b>без интернета</b>, значит транскрибация впервые становится честно бесплатной и приватной — ровно то, чего нет ни у Bear, ни у Obsidian.</div>
+    <div>· Три места обработки на выбор: <b>на устройстве</b> · <b>на моём компьютере</b> (телефон отдаёт запись домашнему ПК по локальной сети) · <b>облако КОМПАС</b> (для тех, кому лень настраивать). Первые два — бесплатны навсегда.</div>
+    <div>· <b>Фирменная связка голоса и markdown:</b> каждый абзац помнит своё место в записи. Удержание абзаца — и вы слышите, как это было сказано. Оригинал расшифровки хранится рядом и возвращается в один тап — модель ничего не «съедает».</div>
+    <div>· Тон прежний: ни одного «AI», ни искр, ни фиолетовых градиентов. Кнопка называется «Оформить», а не «Улучшить с помощью ИИ».</div>
+  </div>
+</div>
+
+<div class="dv-g">Мобильный флоу · надиктовка</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="3a"><div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a>Запись · тихий экран, живая расшифровка бледным</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;padding:12px 20px;color:#8A8375">
+    <span style="font-size:12px">Практика / Супервизии</span>
+    <span style="flex:1"></span>
+    <span style="display:flex;align-items:center;gap:7px;font-size:11.5px"><span style="width:6px;height:6px;border-radius:50%;background:#B5503C"></span>на устройстве</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 28px">
+    <div style="font-family:'JetBrains Mono',monospace;font-size:34px;color:#38342E;letter-spacing:-.02em">04:12</div>
+    <div style="display:flex;align-items:flex-end;gap:3px;height:52px;margin:22px 0 26px">
+      <span style="flex:1;height:18%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:34%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:52%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:28%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:66%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:44%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:78%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:56%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:88%;background:#D8A392;border-radius:2px"></span><span style="flex:1;height:62%;background:#CE8871;border-radius:2px"></span><span style="flex:1;height:100%;background:#B5503C;border-radius:2px"></span><span style="flex:1;height:74%;background:#CE8871;border-radius:2px"></span><span style="flex:1;height:40%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:24%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:14%;background:#E0D7CE;border-radius:2px"></span><span style="flex:1;height:10%;background:#EDE7DE;border-radius:2px"></span><span style="flex:1;height:8%;background:#EDE7DE;border-radius:2px"></span><span style="flex:1;height:8%;background:#EDE7DE;border-radius:2px"></span>
+    </div>
+    <div style="font-size:15px;line-height:1.6;color:#8A8375">…обсудили случай М. Гипотеза супервизора: избегание держится на страхе потерять контроль, а не на самой ситуации <span style="color:#C8C1B4">выступления перед</span></div>
+  </div>
+  <div style="padding:0 28px 26px;display:flex;flex-direction:column;align-items:center;gap:16px">
+    <div style="font-size:12.5px;color:#B6AFA2;text-align:center">Говорите свободно — оформим после</div>
+    <div style="display:flex;align-items:center;gap:28px">
+      <div style="width:48px;height:48px;border-radius:50%;background:#F3F1EA;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555047" stroke-width="2" stroke-linecap="round"><path d="M9 5v14M15 5v14"></path></svg></div>
+      <div style="width:68px;height:68px;border-radius:50%;background:#B5503C;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 26px rgba(181,80,60,.32)"><span style="width:22px;height:22px;border-radius:6px;background:#fff"></span></div>
+      <div style="width:48px;height:48px;border-radius:50%;background:#F3F1EA;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#555047" stroke-width="1.9" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"></path></svg></div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="3b"><div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a>Оформление · выбор стиля, честный статус двух шагов</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;position:relative;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="padding:16px 24px;opacity:.4">
+    <div style="font-size:14px;line-height:1.6;color:#38342E">так вот значит по случаю М обсудили с супервизором гипотеза что избегание держится на страхе потерять контроль а не на самой ситуации выступления…</div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(30,26,22,.32)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#FBFAF7;border-radius:16px 16px 0 0;padding:10px 24px 24px;box-shadow:0 -12px 40px rgba(30,26,22,.22)">
+    <div style="width:36px;height:4px;border-radius:2px;background:#E3DDCF;margin:0 auto 18px"></div>
+    <div style="font-size:18px;font-weight:700;color:#38342E;margin-bottom:16px">Оформить запись</div>
+    <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <span style="width:22px;height:22px;border-radius:50%;background:#E7F0E8;display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Расшифровано</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">4:12 · 612 слов</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:11px">
+        <span style="width:22px;height:22px;border-radius:50%;border:2px solid #EAE6DB;border-top-color:#B5503C;flex:none"></span>
+        <span style="font-size:14.5px;color:#38342E;flex:1">Оформляем в заметку</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">на вашем ПК</span>
+      </div>
+      <div style="height:3px;border-radius:2px;background:#EFEBE1;overflow:hidden;margin-left:33px"><span style="display:block;width:62%;height:100%;background:#B5503C;border-radius:2px"></span></div>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:9px">СТИЛЬ</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px">
+      <span style="font-size:13px;color:#B5503C;background:#F6E7E2;border:1px solid rgba(181,80,60,.35);border-radius:99px;padding:6px 14px">Конспект</span>
+      <span style="font-size:13px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:6px 14px">Заметка</span>
+      <span style="font-size:13px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:6px 14px">Задачи</span>
+      <span style="font-size:13px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:6px 14px">Дневник</span>
+      <span style="font-size:13px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:6px 14px">Как есть</span>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:9px;background:#F3F1EA;border-radius:12px;padding:11px 14px;margin-bottom:16px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" style="flex:none;margin-top:1px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+      <span style="font-size:12.5px;color:#555047;line-height:1.5">Запись и расшифровка не покидают вашу сеть. Оригинал сохраним — вернуть можно в один тап.</span>
+    </div>
+    <div style="background:#F3F1EA;border-radius:14px;padding:14px 0;font-size:15px;font-weight:600;color:#38342E;text-align:center">Отменить оформление</div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="3c"><div class="dv-olabel"><a class="dv-oid" href="#3c">3c</a>Результат · абзацы помнят время; удержание — «послушать, как было сказано»</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;position:relative">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Практика / Супервизии</span>
+    <span style="flex:1"></span>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="5" cy="12" r="1.2" fill="currentColor"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor"></circle><circle cx="19" cy="12" r="1.2" fill="currentColor"></circle></svg>
+  </div>
+  <div style="display:flex;align-items:center;gap:7px;padding:2px 24px 0">
+    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;white-space:nowrap;color:#555047;background:#F3F1EA;border-radius:99px;padding:5px 10px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>Конспект</span>
+    <span style="font-size:11.5px;white-space:nowrap;color:#555047;background:#F3F1EA;border-radius:99px;padding:5px 10px">Оригинал</span>
+    <span style="font-size:11.5px;white-space:nowrap;color:#555047;background:#F3F1EA;border-radius:99px;padding:5px 10px">Переоформить</span>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:14px 24px 0">
+    <div style="font-size:23px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Супервизия · случай М.</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#практика/супервизия</span></div>
+    <div style="font-size:18px;font-weight:600;color:#38342E;margin-bottom:7px">Гипотеза</div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#C8C1B4;padding-top:5px;flex:none">0:38</span>
+      <span style="font-size:15.5px;line-height:1.6;color:#38342E">Избегание держится на страхе потерять контроль, а не на самой ситуации выступления.</span>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;background:#F6E7E2;border-radius:10px;padding:8px 10px 8px 0">
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B5503C;padding:5px 0 0 10px;flex:none">1:24</span>
+      <span style="font-size:15.5px;line-height:1.6;color:#38342E">Проверять через поведенческий эксперимент, а не через разговор о страхе.</span>
+    </div>
+    <div style="font-size:18px;font-weight:600;color:#38342E;margin-bottom:7px">К следующей сессии</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Собрать вопрос из зала</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Дневник мыслей — неделя</span></div>
+    </div>
+  </div>
+  <div style="margin:0 16px 14px;background:#F7F5EF;border:1px solid #EAE6DB;border-radius:14px;padding:10px 14px;display:flex;align-items:center;gap:12px">
+    <span style="width:34px;height:34px;border-radius:50%;background:#B5503C;display:flex;align-items:center;justify-content:center;flex:none"><svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M8 5l11 7-11 7z"></path></svg></span>
+    <div style="flex:1">
+      <div style="height:3px;border-radius:2px;background:#E6E1D6"><span style="display:block;width:32%;height:100%;background:#B5503C;border-radius:2px"></span></div>
+      <div style="display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2;margin-top:6px"><span>1:24</span><span>4:12</span></div>
+    </div>
+    <span style="font-size:11.5px;color:#8A8375">×1.5</span>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="3d"><div class="dv-olabel"><a class="dv-oid" href="#3d">3d</a>Настройки · Голос — где обрабатывать, что хранить</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 24px">
+  <div style="display:flex;align-items:center;gap:12px;padding:14px 0 18px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:20px;font-weight:700;color:#38342E;letter-spacing:-.02em">Голос</span>
+  </div>
+  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:9px">ГДЕ ОБРАБАТЫВАТЬ</div>
+  <div style="border:1.5px solid #B5503C;background:#FDF6F3;border-radius:14px;padding:14px 16px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px;font-weight:600;color:#38342E;flex:1">На этом устройстве</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13px;color:#8A8375;line-height:1.5;margin-top:5px">Компактная модель, работает оффлайн. Медленнее на длинных записях.</div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:14px;padding:14px 16px;margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px;font-weight:600;color:#38342E;flex:1">На моём компьютере</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13px;color:#8A8375;line-height:1.5;margin-top:5px">Телефон отдаёт запись вашему ПК по локальной сети. Быстро и приватно.</div>
+    <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="width:6px;height:6px;border-radius:50%;background:#5FA97A"></span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A8375">ЗАПИСКИ на «Кабинет-ПК» · в сети</span></div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:14px;padding:14px 16px;margin-bottom:22px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15px;font-weight:600;color:#38342E;flex:1">Облако КОМПАС</span><span style="font-size:11px;font-weight:600;color:#B08430;background:#F5EBD8;border-radius:99px;padding:3px 9px">подписка</span></div>
+    <div style="font-size:13px;color:#8A8375;line-height:1.5;margin-top:5px">Если настраивать ничего не хочется. Запись удаляется сразу после обработки.</div>
+  </div>
+  <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;margin-bottom:4px">ЗАПИСИ</div>
+  <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #F0EDE4">
+    <span style="font-size:14.5px;color:#38342E;flex:1">Хранить аудио в заметке</span>
+    <span style="width:40px;height:24px;border-radius:99px;background:#B5503C;position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid #F0EDE4">
+    <span style="font-size:14.5px;color:#38342E;flex:1">Удалять аудио через</span>
+    <span style="font-size:14px;color:#8A8375">30 дней</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;padding:11px 0">
+    <span style="font-size:14.5px;color:#38342E;flex:1">Стиль по умолчанию</span>
+    <span style="font-size:14px;color:#8A8375">Заметка</span>
+  </div>
+  <div style="font-size:12.5px;color:#B6AFA2;line-height:1.55;margin-top:16px">Распознавание — GigaAM, открытая модель Сбера. Оформление — Qwen. Мы не отправляем ваши записи на наши серверы, если вы сами не выбрали облако.</div>
+</div>
+</x-import>
+</div>
+</div>
+
+<div class="dv-g">Десктоп · длинная запись (супервизия, лекция, интервью)</div>
+<div class="dv-opts">
+<div class="dv-opt" id="3e"><div class="dv-olabel"><a class="dv-oid" href="#3e">3e</a>Сверка · слева оригинал с таймкодами, справа заметка; синхронный скролл и подсветка источника</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ gw }}" height="{{ gh }}" url="zapiski.cmpas.ru" hint-size="1180px,720px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="display:flex;align-items:center;gap:14px;padding:12px 26px;border-bottom:1px solid #F0EDE4;color:#8A8375">
+    <span style="font-size:12px">Практика / Супервизии</span>
+    <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:#555047;background:#F3F1EA;border-radius:99px;padding:4px 11px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0"></path></svg>42:07 · оформлено на этом компьютере</span>
+    <span style="flex:1"></span>
+    <span style="font-size:12.5px;color:#B5503C">Принять и закрыть сверку</span>
+  </div>
+  <div style="flex:1;display:flex;overflow:hidden">
+    <div style="width:42%;border-right:1px solid #EAE6DB;background:#F7F5EF;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 22px;border-bottom:1px solid #EAE6DB">
+        <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;flex:1">ОРИГИНАЛ РАСШИФРОВКИ</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">6 214 слов</span>
+      </div>
+      <div style="flex:1;padding:16px 22px;overflow:hidden;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#C8C1B4;flex:none;padding-top:3px">00:12</span><span style="font-size:14px;line-height:1.6;color:#8A8375">ну давай начнём с того случая который я хотел разобрать это женщина сорок два года запрос про выступления</span></div>
+        <div style="display:flex;gap:12px;background:#F6E7E2;border-radius:10px;padding:8px 10px;margin:0 -10px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B5503C;flex:none;padding-top:3px">00:38</span><span style="font-size:14px;line-height:1.6;color:#38342E">и вот что важно мне кажется что избегание там держится вообще не на самой ситуации выступления а на страхе потерять контроль потому что она говорит про тишину после вопроса</span></div>
+        <div style="display:flex;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#C8C1B4;flex:none;padding-top:3px">01:24</span><span style="font-size:14px;line-height:1.6;color:#8A8375">супервизор предложил проверять это поведенческим экспериментом а не разговором про страх потому что разговор только усиливает</span></div>
+        <div style="display:flex;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#C8C1B4;flex:none;padding-top:3px">02:47</span><span style="font-size:14px;line-height:1.6;color:#8A8375">дальше обсудили домашнее задание дневник мыслей на неделю и вопрос из зала как малую экспозицию</span></div>
+        <div style="display:flex;gap:12px"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#C8C1B4;flex:none;padding-top:3px">04:05</span><span style="font-size:14px;line-height:1.6;color:#8A8375">и ещё отдельно про мою реакцию когда клиент молчит дольше минуты это моя тема а не её</span></div>
+      </div>
+      <div style="border-top:1px solid #EAE6DB;padding:10px 22px;display:flex;align-items:center;gap:12px">
+        <span style="width:28px;height:28px;border-radius:50%;background:#B5503C;display:flex;align-items:center;justify-content:center;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff"><path d="M8 5l11 7-11 7z"></path></svg></span>
+        <div style="flex:1;height:3px;border-radius:2px;background:#E6E1D6"><span style="display:block;width:14%;height:100%;background:#B5503C;border-radius:2px"></span></div>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">00:38 / 42:07</span>
+      </div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:8px;padding:12px 26px;border-bottom:1px solid #F0EDE4">
+        <span style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;flex:1">ЗАМЕТКА</span>
+        <span style="font-size:12px;color:#B5503C;background:#F6E7E2;border:1px solid rgba(181,80,60,.35);border-radius:99px;padding:4px 12px">Конспект</span>
+        <span style="font-size:12px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:4px 12px">Заметка</span>
+        <span style="font-size:12px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:4px 12px">Задачи</span>
+      </div>
+      <div style="flex:1;overflow:hidden;padding:26px 40px">
+        <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.22">Супервизия · случай М.</div>
+        <div style="display:flex;gap:6px;margin:12px 0 16px"><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 10px">#практика/супервизия</span><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 10px">#кпт</span></div>
+        <div style="font-size:18px;font-weight:600;color:#38342E;margin-bottom:8px">Гипотеза</div>
+        <div style="display:flex;gap:12px;margin-bottom:8px;background:#F6E7E2;border-radius:10px;padding:8px 12px;margin-left:-12px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B5503C;flex:none;padding-top:4px">0:38</span>
+          <span style="font-size:15.5px;line-height:1.65;color:#38342E">Избегание держится на страхе потерять контроль, а не на самой ситуации выступления. Опорная формулировка клиентки — <span style="background:#EFD8CF;border-radius:3px;padding:0 3px">«тишина после вопроса»</span>.</span>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#C8C1B4;flex:none;padding-top:4px">1:24</span>
+          <span style="font-size:15.5px;line-height:1.65;color:#38342E">Проверять поведенческим экспериментом, а не разговором о страхе — разговор усиливает.</span>
+        </div>
+        <div style="font-size:18px;font-weight:600;color:#38342E;margin-bottom:8px">К следующей сессии</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Вопрос из зала как малая экспозиция</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Дневник мыслей — неделя</span></div>
+        </div>
+        <div style="font-size:18px;font-weight:600;color:#38342E;margin-bottom:8px">Про себя</div>
+        <div style="border-left:2.5px solid #DCC9BE;padding:2px 0 2px 14px;font-size:15px;line-height:1.6;color:#8A8375;font-style:italic">Моя реакция на паузу дольше минуты — моя тема, не клиентки. В личную терапию.</div>
+      </div>
+      <div style="border-top:1px solid #F0EDE4;padding:9px 26px;display:flex;align-items:center;gap:14px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">
+        <span>6 214 слов → 214</span><span>·</span><span>оригинал сохранён в истории</span><span style="flex:1"></span><span>ничего не отправлено в сеть</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+</div>
+
+<p class="dv-next">Дальше можно: «экран настройки связки с домашним ПК (первый запуск)» · «состояния: модель качается, ПК не в сети, запись прервали звонком» · «виджет быстрой надиктовки на Android»</p>
+</section>
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Флоу на базе <a class="dv-oid" href="#1b">1b</a>: онбординг (3 шага) и шифрование. Вход — Яндекс ID или ссылка на почту: без паролей и без СМС</span></div>
+
+<div class="dv-g">Онбординг · от установки до первой заметки — без регистрации</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2a"><div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Шаг 1 · ценность</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 28px">
+  <div style="display:flex;gap:6px;padding:18px 0 0;justify-content:center">
+    <span style="width:22px;height:5px;border-radius:3px;background:#B5503C"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+    <div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#B5503C;margin-bottom:14px">ЗАПИСКИ</div>
+    <div style="font-size:32px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.18">Тихая комната для&nbsp;мыслей</div>
+    <div style="font-size:15px;color:#8A8375;line-height:1.6;margin:14px 0 30px">Дневники, конспекты, черновики — в спокойном Markdown-редакторе.</div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:13px">
+        <span style="width:38px;height:38px;border-radius:12px;background:#F3F1EA;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9l-6-6z"></path><path d="M14 3v6h6"></path></svg></span>
+        <span style="font-size:14.5px;color:#38342E;line-height:1.45">Каждая заметка — файл <span style="font-family:'JetBrains Mono',monospace;font-size:13px">.md</span> на вашем диске</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:13px">
+        <span style="width:38px;height:38px;border-radius:12px;background:#F3F1EA;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg></span>
+        <span style="font-size:14.5px;color:#38342E;line-height:1.45">Шифрование — бесплатно, ключ только у вас</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:13px">
+        <span style="width:38px;height:38px;border-radius:12px;background:#F3F1EA;display:flex;align-items:center;justify-content:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-2.6-6.3M21 3v6h-6"></path></svg></span>
+        <span style="font-size:14.5px;color:#38342E;line-height:1.45">Синк через своё хранилище — тоже бесплатно</span>
+      </div>
+    </div>
+  </div>
+  <div style="background:#B5503C;border-radius:14px;padding:15px 0;font-size:15px;font-weight:600;color:#fff;text-align:center">Начать</div>
+  <div style="font-size:13px;color:#8A8375;text-align:center;padding:14px 0 16px">У меня уже есть заметки — импорт из Bear, Obsidian, Notion</div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="2b"><div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Шаг 2 · хранение (= <a class="dv-oid" href="#1m">1m</a>)</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 24px">
+  <div style="display:flex;gap:6px;padding:18px 0 26px;justify-content:center">
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#B5503C"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+  </div>
+  <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Где будут жить ваши заметки?</div>
+  <div style="font-size:14.5px;color:#8A8375;line-height:1.55;margin:10px 0 22px">Каждая заметка — обычный файл <span style="font-family:'JetBrains Mono',monospace;font-size:13px">.md</span>. Он ваш, что бы ни случилось с приложением.</div>
+  <div style="border:1.5px solid #B5503C;background:#FDF6F3;border-radius:16px;padding:16px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">На этом устройстве</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">Полный оффлайн. Без регистрации и аккаунта.</div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:16px;padding:16px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">Своё облако</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">WebDAV или Яндекс.Диск — синхронизация через ваше хранилище.</div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:16px;padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">Облако КОМПАС</span><span style="font-size:11px;font-weight:600;color:#B08430;background:#F5EBD8;border-radius:99px;padding:3px 9px">подписка</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">E2E-шифрование, история версий, мгновенный синк. Понадобится аккаунт — <a href="#2d" style="color:#B5503C;text-decoration:none">вход без СМС</a>.</div>
+  </div>
+  <span style="flex:1"></span>
+  <div style="background:#B5503C;border-radius:14px;padding:15px 0;font-size:15px;font-weight:600;color:#fff;text-align:center">Продолжить</div>
+  <div style="font-size:12.5px;color:#B6AFA2;text-align:center;padding:12px 0 16px">Можно поменять в любой момент в настройках</div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="2c"><div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Шаг 3 · готово = курсор уже в первой заметке</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" keyboard="{{ T }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;justify-content:center;padding:10px 16px 0">
+    <div style="display:flex;align-items:center;gap:8px;background:#E7F0E8;border-radius:99px;padding:7px 16px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg>
+      <span style="font-size:12.5px;color:#3E6B50">Локальный режим включён — можно писать</span>
+    </div>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:18px 24px 0">
+    <div style="font-size:24px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Первая мысль<span style="display:inline-block;width:2px;height:24px;background:#B5503C;vertical-align:-4px;margin-left:2px"></span></div>
+    <div style="font-size:15px;color:#C8C1B4;line-height:1.65;margin-top:12px">Просто пишите. Первая строка станет заголовком, <span style="font-family:'JetBrains Mono',monospace;font-size:13.5px">#тег</span> — тегом, а сохранится всё само.</div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid #EAE6DB;background:#F7F5EF;color:#555047">
+    <span style="font-size:16px;font-weight:700;width:34px;text-align:center">H</span>
+    <span style="font-size:16px;font-weight:700;width:34px;text-align:center">B</span>
+    <span style="font-size:16px;font-style:italic;font-family:'Source Serif 4',serif;width:34px;text-align:center">I</span>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"></path><circle cx="4.5" cy="6" r="1" fill="currentColor"></circle><circle cx="4.5" cy="12" r="1" fill="currentColor"></circle><circle cx="4.5" cy="18" r="1" fill="currentColor"></circle></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="5"></rect><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M21 15l-5-5-9 9"></path></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0M12 18v3"></path></svg>
+    <span style="font-size:18px;letter-spacing:1px;width:34px;text-align:center;color:#8A8375">⋯</span>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="2d"><div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Вход (только для облака) · Яндекс ID или ссылка на почту — без СМС</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 28px">
+  <div style="display:flex;align-items:center;gap:10px;padding:14px 0;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+  </div>
+  <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Аккаунт нужен только для облака</div>
+  <div style="font-size:14.5px;color:#8A8375;line-height:1.55;margin:10px 0 26px">Локальные заметки работают без него. Аккаунт связывает устройства и открывает веб-доступ.</div>
+  <div style="display:flex;align-items:center;justify-content:center;gap:10px;background:#fff;border:1px solid #EAE6DB;border-radius:14px;padding:14px 0">
+    <img src="assets/yandex-logo.png" alt="Яндекс" style="width:20px;height:20px;border-radius:5px">
+    <span style="font-size:15px;font-weight:600;color:#38342E">Войти с Яндекс&nbsp;ID</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;margin:18px 0">
+    <span style="flex:1;height:1px;background:#EAE6DB"></span>
+    <span style="font-size:12px;color:#B6AFA2">или по почте</span>
+    <span style="flex:1;height:1px;background:#EAE6DB"></span>
+  </div>
+  <div style="border:1px solid #EAE6DB;background:#fff;border-radius:14px;padding:14px 16px;font-size:15px;color:#38342E;font-family:'JetBrains Mono',monospace">marina@ya.ru<span style="display:inline-block;width:2px;height:17px;background:#B5503C;vertical-align:-3px"></span></div>
+  <div style="background:#F3F1EA;border-radius:14px;padding:14px 0;font-size:15px;font-weight:600;color:#38342E;text-align:center;margin-top:12px">Получить ссылку для входа</div>
+  <div style="display:flex;align-items:flex-start;gap:9px;margin-top:18px">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:1px"><path d="M5 13l4 4L19 7"></path></svg>
+    <span style="font-size:12.5px;color:#8A8375;line-height:1.55">Без паролей и СМС: пришлём письмо со ссылкой — один тап, и вы в аккаунте.</span>
+  </div>
+  <span style="flex:1"></span>
+  <div style="font-size:12.5px;color:#B6AFA2;text-align:center;padding:0 0 16px;line-height:1.6">Продолжая, вы соглашаетесь с условиями.<br>Заметки мы не читаем — технически не можем.</div>
+</div>
+</x-import>
+</div>
+</div>
+
+<div class="dv-g">Шифрование · установка → разблокировка → «открыто»</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="2e"><div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>Установка пароля · честное предупреждение, биометрия сразу</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;position:relative;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="padding:14px 24px;opacity:.45">
+    <div style="font-size:22px;font-weight:700;color:#38342E">Личный дневник</div>
+    <div style="font-size:14px;color:#8A8375;line-height:1.6;margin-top:8px">Сегодня снилось море. Записываю, пока помню…</div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(30,26,22,.32)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#FBFAF7;border-radius:16px 16px 0 0;padding:10px 24px 22px;box-shadow:0 -12px 40px rgba(30,26,22,.22)">
+    <div style="width:36px;height:4px;border-radius:2px;background:#E3DDCF;margin:0 auto 16px"></div>
+    <div style="display:flex;align-items:center;gap:11px;margin-bottom:6px">
+      <span style="width:36px;height:36px;border-radius:11px;background:#F6E7E2;display:flex;align-items:center;justify-content:center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg></span>
+      <span style="font-size:18px;font-weight:700;color:#38342E">Зашифровать заметку</span>
+    </div>
+    <div style="font-size:13px;color:#8A8375;line-height:1.55;margin-bottom:16px">AES-256. Файл останется на диске, но прочитать его сможете только вы.</div>
+    <div style="border:1px solid #EAE6DB;background:#fff;border-radius:13px;padding:13px 16px;display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:14px;color:#B6AFA2;flex:1">Пароль</span>
+      <span style="display:flex;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span><span style="width:7px;height:7px;border-radius:50%;background:#38342E"></span></span>
+    </div>
+    <div style="border:1px solid #EAE6DB;background:#fff;border-radius:13px;padding:13px 16px;font-size:14px;color:#B6AFA2;margin-bottom:10px">Повторите пароль</div>
+    <div style="border:1px solid #EAE6DB;background:#fff;border-radius:13px;padding:13px 16px;font-size:14px;color:#B6AFA2;margin-bottom:14px">Подсказка — по желанию</div>
+    <div style="display:flex;align-items:center;gap:12px;padding:2px 2px 16px">
+      <span style="width:40px;height:24px;border-radius:99px;background:#B5503C;position:relative;flex:none"><span style="position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span>
+      <span style="font-size:14px;color:#38342E">Разблокировать отпечатком</span>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:9px;background:#F3F1EA;border-radius:12px;padding:11px 14px;margin-bottom:16px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+      <span style="font-size:12.5px;color:#555047;line-height:1.5">Пароль знаете только вы. Восстановить его мы не сможем — это и есть защита.</span>
+    </div>
+    <div style="background:#B5503C;border-radius:14px;padding:14px 0;font-size:15px;font-weight:600;color:#fff;text-align:center">Зашифровать</div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="2f"><div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a>Разблокировка биометрией · поверх «запертой» (<a class="dv-oid" href="#1l">1l</a> — вариант с паролем)</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" dark="{{ T }}" hint-size="390px,832px">
+<div style="height:100%;position:relative;background:#232120;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:60%;opacity:.4">
+    <div style="width:72px;height:72px;border-radius:50%;background:#2C2A28;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#D0765B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+    </div>
+    <div style="font-size:19px;font-weight:700;color:#E9E5DC">Личный дневник</div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(0,0,0,.35)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;background:#2C2A28;border-radius:16px 16px 0 0;padding:12px 24px 26px;text-align:center">
+    <div style="width:36px;height:4px;border-radius:2px;background:#413D37;margin:0 auto 18px"></div>
+    <div style="font-size:16px;font-weight:600;color:#E9E5DC">Разблокировать отпечатком</div>
+    <div style="font-size:12.5px;color:#9B948A;margin:6px 0 20px">Личный дневник · ключ хранится в защищённом модуле</div>
+    <div style="width:74px;height:74px;border-radius:50%;border:1.5px solid #4A453D;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#D0765B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12a5 5 0 0110 0c0 3-1 5-2.5 7M9.5 18c-1-1.6-1.5-3.4-1.5-6a4 4 0 018 0"></path><path d="M12 12v3"></path></svg>
+    </div>
+    <div style="font-size:13.5px;color:#D0765B">Ввести пароль</div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="2g"><div class="dv-olabel"><a class="dv-oid" href="#2g">2g</a>Открытая зашифрованная заметка · тихий автозамок</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное / Дневник</span>
+    <span style="flex:1"></span>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+  </div>
+  <div style="display:flex;justify-content:flex-start;padding:2px 24px 0">
+    <div style="display:flex;align-items:center;gap:8px;background:#F3F1EA;border-radius:99px;padding:6px 14px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 014-4c1.9 0 3.4 1.2 3.9 3"></path></svg>
+      <span style="font-size:12px;color:#555047">Расшифровано · закроется через 10&nbsp;мин</span>
+    </div>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:14px 24px 0">
+    <div style="font-size:24px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Личный дневник</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#дневник</span></div>
+    <div style="font-size:16px;line-height:1.65;color:#38342E">Сегодня снилось море. Тёплое, как в детстве у бабушки. Проснулся со странным чувством: будто год назад я бы этот сон даже не запомнил.</div>
+    <div style="font-size:16px;line-height:1.65;color:#38342E;margin-top:10px">Кажется, терапия работает и на терапевте<span style="display:inline-block;width:2px;height:19px;background:#B5503C;vertical-align:-4px;margin-left:1px"></span></div>
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2;padding:0 24px 14px">файл на диске: дневник.md.enc · всегда зашифрован</div>
+</div>
+</x-import>
+</div>
+</div>
+
+<p class="dv-next">Дальше можно: «все экраны из хода 1 — в тёмной теме „Графит“» · «живой прототип: онбординг → первая заметка за 60 секунд» · «экран письма со ссылкой для входа»</p>
+</section>
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">КОМПАС.ЗАПИСКИ — система тем и ядро экранов</span></div>
+
+<div style="max-width:880px;background:#F6F4EE;border:1px solid rgba(0,0,0,.07);border-radius:12px;padding:20px 24px;font-size:13px;line-height:1.65;color:#555047">
+  <div style="font-weight:700;color:#38342E;margin-bottom:8px">Допущения и решения</div>
+  <div style="display:flex;flex-direction:column;gap:5px">
+    <div>· Базовая тема <b>«Бумага»</b> — тёплая бумага и терракотовый акцент «Гранат»: дух Bear (тепло, воздух, красноватый акцент), но не копия — своя палитра, свои чекбоксы, свой гранат вместо алого.</div>
+    <div>· Все цвета — токены; тем три (<a class="dv-oid" href="#1a">1a</a>): Бумага / Графит / Чернила (OLED), плюс 6 акцентных пресетов, включая семейную «Хвою» КОМПАС.</div>
+    <div>· Шрифты: Golos Text (UI и заметки — отличная кириллица), Source Serif 4 («бумажный» режим), JetBrains Mono (код, даты, raw).</div>
+    <div>· Связь с КОМПАС.Дневником — деликатный deep-link-чип в заметке (<a class="dv-oid" href="#1r">1r</a>), не слияние продуктов. ЗАПИСКИ — самостоятельный B2C-продукт.</div>
+    <div>· Контент демо — смесь: профессиональные заметки (супервизия, конспекты) и личные (дневник, списки).</div>
+  </div>
+</div>
+
+<div class="dv-g">Система тем · токены</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1a"><div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Три темы + 6 акцентов · типографика · форма · motion</div>
+<div class="dv-card" style="width:920px;padding:26px 28px;background:#FDFCFA">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px">
+    <div>
+      <div style="border-radius:14px;border:1px solid #EAE6DB;background:#FBFAF7;padding:16px 18px 14px;margin-bottom:12px">
+        <div style="font-size:16px;font-weight:700;color:#38342E">Бумага</div>
+        <div style="font-size:12px;color:#8A8375;margin:2px 0 10px">светлая · базовая</div>
+        <div style="font-size:13px;line-height:1.6;color:#38342E">Тихая комната для <span style="background:#F6E7E2;border-radius:3px;padding:0 3px;color:#93412F">мыслей</span>.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span style="width:16px;height:16px;border-radius:5px;border:1.5px solid #B5503C;background:#B5503C;display:inline-flex;align-items:center;justify-content:center"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:12.5px;color:#8A8375;text-decoration:line-through">спокойно</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6B6559">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#FBFAF7;border:1px solid rgba(0,0,0,.1)"></span>#FBFAF7 · фон</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#F3F1EA;border:1px solid rgba(0,0,0,.08)"></span>#F3F1EA · поверхность</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#38342E"></span>#38342E · текст</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#8A8375"></span>#8A8375 · вторичный</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#EAE6DB"></span>#EAE6DB · линия</div>
+      </div>
+    </div>
+    <div>
+      <div style="border-radius:14px;background:#232120;padding:16px 18px 14px;margin-bottom:12px">
+        <div style="font-size:16px;font-weight:700;color:#E9E5DC">Графит</div>
+        <div style="font-size:12px;color:#9B948A;margin:2px 0 10px">тёмная · тёплый графит, не чёрный</div>
+        <div style="font-size:13px;line-height:1.6;color:#E9E5DC">Тихая комната для <span style="background:rgba(208,118,91,.18);border-radius:3px;padding:0 3px;color:#DE9074">мыслей</span>.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span style="width:16px;height:16px;border-radius:5px;border:1.5px solid #D0765B;display:inline-block"></span><span style="font-size:12.5px;color:#9B948A">не спеша</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6B6559">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#232120"></span>#232120 · фон</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#2C2A28"></span>#2C2A28 · поверхность</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#E9E5DC;border:1px solid rgba(0,0,0,.08)"></span>#E9E5DC · текст</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#9B948A"></span>#9B948A · вторичный</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#393630"></span>#393630 · линия</div>
+      </div>
+    </div>
+    <div>
+      <div style="border-radius:14px;background:#000;padding:16px 18px 14px;margin-bottom:12px">
+        <div style="font-size:16px;font-weight:700;color:#E9E5DC">Чернила</div>
+        <div style="font-size:12px;color:#8F887D;margin:2px 0 10px">OLED · истинный чёрный</div>
+        <div style="font-size:13px;line-height:1.6;color:#E9E5DC">Тихая комната для <span style="background:rgba(208,118,91,.2);border-radius:3px;padding:0 3px;color:#DE9074">мыслей</span>.</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px"><span style="width:16px;height:16px;border-radius:5px;border:1.5px solid #D0765B;display:inline-block"></span><span style="font-size:12.5px;color:#8F887D">ночью</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6B6559">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#000"></span>#000000 · фон</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#151412"></span>#151412 · поверхность</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#E9E5DC;border:1px solid rgba(0,0,0,.08)"></span>#E9E5DC · текст</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#8F887D"></span>#8F887D · вторичный</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:6px;background:#26231E"></span>#26231E · линия</div>
+      </div>
+    </div>
+  </div>
+  <div style="border-top:1px solid #EAE6DB;margin:22px 0 16px"></div>
+  <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8A8375;margin-bottom:10px">Акцент · 6 пресетов (пользовательская персонализация)</div>
+  <div style="display:flex;gap:14px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#B5503C;border:2px solid #fff;box-shadow:0 0 0 2px #B5503C"></span><span style="font-size:12px;color:#38342E">Гранат <span style="color:#8A8375">· базовый</span></span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#2E6B4F"></span><span style="font-size:12px;color:#38342E">Хвоя <span style="color:#8A8375">· семейный</span></span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#B08430"></span><span style="font-size:12px;color:#38342E">Золото</span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#4C6B94"></span><span style="font-size:12px;color:#38342E">Черника</span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#7C6390"></span><span style="font-size:12px;color:#38342E">Вереск</span></div>
+    <div style="display:flex;align-items:center;gap:8px"><span style="width:26px;height:26px;border-radius:50%;background:#6B675F"></span><span style="font-size:12px;color:#38342E">Грифель</span></div>
+  </div>
+  <div style="border-top:1px solid #EAE6DB;margin:18px 0 16px"></div>
+  <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:20px;font-size:12.5px;line-height:1.7;color:#555047">
+    <div><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8A8375;margin-bottom:6px">Типографика</div>
+      <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em">Заголовок 26/700</div>
+      <div style="font-size:19px;font-weight:600;color:#38342E">Подзаголовок 19/600</div>
+      <div style="font-size:16px;color:#38342E">Текст заметки 16 / 1.65</div>
+      <div style="font-size:13px;color:#8A8375">Вторичный 13 · подписи 11 caps</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#38342E">JetBrains Mono — код и даты</div>
+      <div style="font-family:'Source Serif 4',serif;font-size:16px;color:#38342E">Source Serif 4 — «бумажный» режим</div>
+    </div>
+    <div><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8A8375;margin-bottom:6px">Форма</div>
+      радиусы 10 / 12 / 14<br>линии 1px вместо теней<br>elevation — только модалки<br>иконки stroke 1.75</div>
+    <div><div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8A8375;margin-bottom:6px">Motion</div>
+      200–300 мс · ease-out<br>без пульсаций и бейджей<br>хэптика: чекбоксы, завершения<br>reduce-motion: всё статично</div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Базовая тема · три направления (одна заметка, разные токены)</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1b"><div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>«Бумага · Гранат» — ближе всего к Bear (рекомендация)</div>
+<div class="dv-card" style="width:396px;background:#FBFAF7;padding:0">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #EAE6DB;color:#8A8375">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное / Дневник</span>
+    <span style="flex:1"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#5FA97A"></span>
+  </div>
+  <div style="padding:20px 24px 18px">
+    <div style="font-size:23px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Тихое утро в кабинете</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#дневник</span><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#практика/мысли</span></div>
+    <div style="font-size:15.5px;line-height:1.65;color:#38342E">До первой сессии — час. Перечитал вчерашние записи и понял: <span style="background:#F6E7E2;border-radius:3px;padding:0 3px">пауза в разговоре</span> — это не провал, а <b>инструмент</b>.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:15px;color:#8A8375;text-decoration:line-through">Проветрить кабинет</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Дописать конспект супервизии</span></div>
+    </div>
+    <div style="border-left:2.5px solid #DCC9BE;padding:2px 0 2px 14px;font-size:15px;line-height:1.6;color:#8A8375;font-style:italic">Здесь можно быть собой.</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2;margin-top:16px">8 августа · 214 слов</div>
+  </div>
+</div>
+</div>
+<div class="dv-opt" id="1c"><div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>«Крем · Хвоя» — максимально семейная, дальше от Bear</div>
+<div class="dv-card" style="width:396px;background:#F7F8F4;padding:0">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E4E9E3;color:#5F6C64">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное / Дневник</span>
+    <span style="flex:1"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#CC9E50"></span>
+  </div>
+  <div style="padding:20px 24px 18px">
+    <div style="font-size:23px;font-weight:700;color:#142018;letter-spacing:-.02em;line-height:1.25">Тихое утро в кабинете</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#256247;background:#E2EDE6;border-radius:99px;padding:3px 9px">#дневник</span><span style="font-size:12px;color:#256247;background:#E2EDE6;border-radius:99px;padding:3px 9px">#практика/мысли</span></div>
+    <div style="font-size:15.5px;line-height:1.65;color:#142018">До первой сессии — час. Перечитал вчерашние записи и понял: <span style="background:#F0E7D3;border-radius:3px;padding:0 3px">пауза в разговоре</span> — это не провал, а <b>инструмент</b>.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;background:#256247;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:15px;color:#5F6C64;text-decoration:line-through">Проветрить кабинет</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #BBC7BD;flex:none"></span><span style="font-size:15px;color:#142018">Дописать конспект супервизии</span></div>
+    </div>
+    <div style="border-left:2.5px solid #C3D3C6;padding:2px 0 2px 14px;font-size:15px;line-height:1.6;color:#5F6C64;font-style:italic">Здесь можно быть собой.</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#9AA69C;margin-top:16px">8 августа · 214 слов</div>
+  </div>
+</div>
+</div>
+<div class="dv-opt" id="1d"><div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>«Мел · Черника» — нейтральнее и прохладнее</div>
+<div class="dv-card" style="width:396px;background:#FAFAFB;padding:0">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #E6E8EB;color:#82868D">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное / Дневник</span>
+    <span style="flex:1"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#6FA287"></span>
+  </div>
+  <div style="padding:20px 24px 18px">
+    <div style="font-size:23px;font-weight:700;color:#33363A;letter-spacing:-.02em;line-height:1.25">Тихое утро в кабинете</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#4C6B94;background:#E4EAF2;border-radius:99px;padding:3px 9px">#дневник</span><span style="font-size:12px;color:#4C6B94;background:#E4EAF2;border-radius:99px;padding:3px 9px">#практика/мысли</span></div>
+    <div style="font-size:15.5px;line-height:1.65;color:#33363A">До первой сессии — час. Перечитал вчерашние записи и понял: <span style="background:#E4EAF2;border-radius:3px;padding:0 3px">пауза в разговоре</span> — это не провал, а <b>инструмент</b>.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin:14px 0">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;background:#4C6B94;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:15px;color:#82868D;text-decoration:line-through">Проветрить кабинет</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C5C9CF;flex:none"></span><span style="font-size:15px;color:#33363A">Дописать конспект супервизии</span></div>
+    </div>
+    <div style="border-left:2.5px solid #C9D4E2;padding:2px 0 2px 14px;font-size:15px;line-height:1.6;color:#82868D;font-style:italic">Здесь можно быть собой.</div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#AEB2B8;margin-top:16px">8 августа · 214 слов</div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Типографика редактора · варианты</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1e"><div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Golos Text · 16/1.65 — по умолчанию</div>
+<div class="dv-card" style="width:360px;background:#FBFAF7;padding:22px 24px">
+  <div style="font-size:19px;font-weight:600;color:#38342E;margin-bottom:10px">О паузах в разговоре</div>
+  <div style="font-size:16px;line-height:1.65;color:#38342E;margin-bottom:12px">Молчание в кабинете — не пустота. Это место, где клиент впервые слышит собственную мысль до конца.</div>
+  <div style="font-size:16px;line-height:1.65;color:#38342E"><span style="color:#B5503C">·</span>&nbsp; выдерживать 5–7 секунд<br><span style="color:#B5503C">·</span>&nbsp; не заполнять вопросом</div>
+</div>
+</div>
+<div class="dv-opt" id="1f"><div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Source Serif 4 · 17/1.7 — «бумажный» режим</div>
+<div class="dv-card" style="width:360px;background:#FBFAF7;padding:22px 24px;font-family:'Source Serif 4',serif">
+  <div style="font-size:20px;font-weight:600;color:#38342E;margin-bottom:10px">О паузах в разговоре</div>
+  <div style="font-size:17px;line-height:1.7;color:#38342E;margin-bottom:12px">Молчание в кабинете — не пустота. Это место, где клиент впервые слышит собственную мысль до конца.</div>
+  <div style="font-size:17px;line-height:1.7;color:#38342E"><span style="color:#B5503C">·</span>&nbsp; выдерживать 5–7 секунд<br><span style="color:#B5503C">·</span>&nbsp; не заполнять вопросом</div>
+</div>
+</div>
+<div class="dv-opt" id="1g"><div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Компактная плотность · 14.5/1.5 — для power-users</div>
+<div class="dv-card" style="width:360px;background:#FBFAF7;padding:16px 20px">
+  <div style="font-size:17px;font-weight:600;color:#38342E;margin-bottom:7px">О паузах в разговоре</div>
+  <div style="font-size:14.5px;line-height:1.5;color:#38342E;margin-bottom:8px">Молчание в кабинете — не пустота. Это место, где клиент впервые слышит собственную мысль до конца.</div>
+  <div style="font-size:14.5px;line-height:1.5;color:#38342E"><span style="color:#B5503C">·</span>&nbsp; выдерживать 5–7 секунд<br><span style="color:#B5503C">·</span>&nbsp; не заполнять вопросом</div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Android · ключевые экраны (тема «Бумага» / «Графит»)</div>
+<div class="dv-opts">
+
+<div class="dv-opt" id="1h"><div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Список заметок · закреплённые · нижняя зона: поиск + новая</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;position:relative">
+  <div style="display:flex;align-items:center;gap:14px;padding:14px 20px 10px">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#38342E" stroke-width="1.75" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+    <span style="font-size:24px;font-weight:700;color:#38342E;letter-spacing:-.02em">Все заметки</span>
+    <span style="flex:1"></span>
+    <span style="width:6px;height:6px;border-radius:50%;background:#5FA97A"></span>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:0 4px 92px">
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:10px 16px 4px">ЗАКРЕПЛЁННЫЕ</div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #F0EDE4">
+      <div style="display:flex;align-items:center;gap:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M7 4h10l-1.5 7 3.5 3H5l3.5-3L7 4z"></path></svg><span style="font-size:15px;font-weight:600;color:#38342E">Правила практики</span></div>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">Отмена — за 24 часа. Перенос — не чаще раза в месяц…</div>
+    </div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px">
+      <div style="display:flex;align-items:center;gap:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M7 4h10l-1.5 7 3.5 3H5l3.5-3L7 4z"></path></svg><span style="font-size:15px;font-weight:600;color:#38342E">Идеи для вебинара</span></div>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">Тема: «Выгорание помогающих». Тезис — забота о себе…</div>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:14px 16px 4px">АВГУСТ</div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #F0EDE4">
+      <span style="font-size:15px;font-weight:600;color:#38342E">Утренние страницы — 8 августа</span>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">До первой сессии — час. Перечитал вчерашние записи…</div>
+      <div style="display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">сегодня, 07:40</div>
+    </div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #F0EDE4">
+      <span style="font-size:15px;font-weight:600;color:#38342E">Конспект супервизии — случай М.</span>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">Запрос: тревога перед публичными выступлениями…</div>
+      <div style="display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">вчера<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg></div>
+    </div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #F0EDE4">
+      <div style="display:flex;align-items:center;gap:7px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg><span style="font-size:15px;font-weight:600;color:#38342E">Личный дневник</span></div>
+      <div style="font-size:13px;color:#B6AFA2;line-height:1.45;font-style:italic">Зашифровано</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">вчера</div>
+    </div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px;border-bottom:1px solid #F0EDE4">
+      <span style="font-size:15px;font-weight:600;color:#38342E">Книга: «Схема-терапия» — конспект</span>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">Глава 3. Режимы: уязвимый ребёнок, отстранённый защитник…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">5 авг</div>
+    </div>
+    <div style="padding:11px 16px;display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:15px;font-weight:600;color:#38342E">Переезд кабинета — чек-лист</span>
+      <div style="font-size:13px;color:#8A8375;line-height:1.45">Замерить свет. Кресла — те же, зелёные. Договор аренды…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">2 авг · 4/9</div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:96px;background:linear-gradient(to top,#FBFAF7 58%,rgba(251,250,247,0))"></div>
+  <div style="position:absolute;left:16px;right:16px;bottom:14px;display:flex;align-items:center;gap:10px">
+    <div style="flex:1;display:flex;align-items:center;gap:9px;background:#F3F1EA;border:1px solid #EAE6DB;border-radius:99px;padding:13px 18px;color:#8A8375;box-shadow:0 6px 22px rgba(56,52,46,.10)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg>
+      <span style="font-size:14px">Поиск</span>
+    </div>
+    <div style="width:52px;height:52px;border-radius:18px;background:#B5503C;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(181,80,60,.35)">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1i"><div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>Редактор · live-preview, синтаксис у курсора, тулбар над клавиатурой</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" keyboard="{{ T }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;color:#8A8375">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное / Дневник</span>
+    <span style="flex:1"></span>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><circle cx="5" cy="12" r="1.2" fill="currentColor"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor"></circle><circle cx="19" cy="12" r="1.2" fill="currentColor"></circle></svg>
+  </div>
+  <div style="flex:1;overflow:hidden;padding:8px 24px 0">
+    <div style="font-size:24px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Утренние страницы — 8 августа</div>
+    <div style="display:flex;gap:6px;margin:10px 0 14px"><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#дневник</span><span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 9px">#утро</span></div>
+    <div style="font-size:16px;line-height:1.65;color:#38342E">До первой сессии — час. Кофе, окно, тишина.</div>
+    <div style="font-size:16px;line-height:1.65;color:#38342E;margin-top:10px">Перечитал вчерашние записи и понял: пауза — это не провал, а <span style="color:#C8C1B4">**</span><b>инструмент</b><span style="color:#C8C1B4">**</span><span style="display:inline-block;width:2px;height:19px;background:#B5503C;vertical-align:-4px;margin-left:1px"></span></div>
+    <div style="font-size:12px;color:#B6AFA2;margin-top:6px">синтаксис проявляется только у курсора</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:15.5px;color:#8A8375;text-decoration:line-through">Проветрить кабинет</span></div>
+      <div style="display:flex;align-items:center;gap:10px"><span style="width:18px;height:18px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15.5px;color:#38342E">Дописать конспект супервизии</span></div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;border-top:1px solid #EAE6DB;background:#F7F5EF;color:#555047">
+    <span style="font-size:16px;font-weight:700;width:34px;text-align:center">H</span>
+    <span style="font-size:16px;font-weight:700;width:34px;text-align:center">B</span>
+    <span style="font-size:16px;font-style:italic;font-family:'Source Serif 4',serif;width:34px;text-align:center">I</span>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"></path><circle cx="4.5" cy="6" r="1" fill="currentColor"></circle><circle cx="4.5" cy="12" r="1" fill="currentColor"></circle><circle cx="4.5" cy="18" r="1" fill="currentColor"></circle></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="5"></rect><path d="M8.5 12.5l2.5 2.5 4.5-5"></path></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"></rect><circle cx="8.5" cy="10" r="1.5"></circle><path d="M21 15l-5-5-9 9"></path></svg>
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 11a7 7 0 0014 0M12 18v3"></path></svg>
+    <span style="font-size:18px;letter-spacing:1px;width:34px;text-align:center;color:#8A8375">⋯</span>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1j"><div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Библиотека · выезжающая панель: папки, теги, деликатные счётчики</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;position:relative;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="position:absolute;inset:0;background:rgba(30,26,22,.32)"></div>
+  <div style="position:absolute;top:0;bottom:0;left:0;width:302px;background:#F7F5EF;border-right:1px solid #EAE6DB;border-radius:0 22px 22px 0;display:flex;flex-direction:column;padding:18px 0 14px;box-shadow:12px 0 40px rgba(30,26,22,.18)">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 20px 14px">
+      <span style="font-size:15px;font-weight:700;letter-spacing:.12em;color:#38342E">ЗАПИСКИ</span>
+      <span style="flex:1"></span>
+      <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:#8A8375"><span style="width:6px;height:6px;border-radius:50%;background:#5FA97A"></span>синк</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:10px 20px;background:#EFEBE1;border-radius:10px;margin:0 10px;color:#38342E">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      <span style="font-size:14.5px;font-weight:600;flex:1">Все заметки</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A8375">128</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:11px;padding:10px 20px;margin:0 10px;color:#555047">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5M7 4h10l-1.5 7 3.5 3H5l3.5-3L7 4z"></path></svg>
+      <span style="font-size:14.5px;flex:1">Закреплённые</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">4</span>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:16px 20px 6px">ПАПКИ</div>
+    <div style="display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:11px;padding:8px 20px;color:#555047"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path></svg><span style="font-size:14.5px;flex:1">Практика</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px 7px 48px;color:#555047"><span style="font-size:14px;flex:1">Супервизии</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">23</span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px 7px 48px;color:#555047"><span style="font-size:14px;flex:1">Вебинары</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">8</span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:8px 20px;color:#555047"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"></path></svg><span style="font-size:14.5px;flex:1">Личное</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px 7px 48px;color:#555047"><span style="font-size:14px;flex:1">Дневник</span><span style="display:flex;align-items:center;gap:6px"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#B6AFA2" stroke-width="1.75" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">62</span></span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px 7px 48px;color:#555047"><span style="font-size:14px;flex:1">Книги</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">17</span></div>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:16px 20px 6px">ТЕГИ</div>
+    <div style="display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px;color:#555047"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M20.6 13.4L11 3H4v7l9.6 10.4a2 2 0 002.8 0l4.2-4.2a2 2 0 000-2.8z"></path><circle cx="8" cy="8" r="1" fill="currentColor"></circle></svg><span style="font-size:14.5px;flex:1">практика</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">34</span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px 7px 48px;color:#555047"><span style="font-size:14px;flex:1">практика/супервизия</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">23</span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:7px 20px;color:#555047"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"><path d="M20.6 13.4L11 3H4v7l9.6 10.4a2 2 0 002.8 0l4.2-4.2a2 2 0 000-2.8z"></path><circle cx="8" cy="8" r="1" fill="currentColor"></circle></svg><span style="font-size:14.5px;flex:1">дневник</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">62</span></div>
+    </div>
+    <span style="flex:1"></span>
+    <div style="border-top:1px solid #EAE6DB;margin:10px 20px 0;padding-top:10px;display:flex;flex-direction:column;gap:2px">
+      <div style="display:flex;align-items:center;gap:11px;padding:6px 0;color:#8A8375"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"><path d="M4 8V6a2 2 0 012-2h12a2 2 0 012 2v2M4 8h16v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8zM10 12h4"></path></svg><span style="font-size:14px;flex:1">Архив</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">9</span></div>
+      <div style="display:flex;align-items:center;gap:11px;padding:6px 0;color:#8A8375"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13h10l1-13"></path></svg><span style="font-size:14px;flex:1">Корзина</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">3</span></div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1k"><div class="dv-olabel"><a class="dv-oid" href="#1k">1k</a>Поиск · тема «Графит»: мгновенные результаты, чипы-фильтры</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" dark="{{ T }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#232120;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px 4px">
+    <div style="flex:1;display:flex;align-items:center;gap:9px;background:#2C2A28;border:1px solid #393630;border-radius:99px;padding:11px 16px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9B948A" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg>
+      <span style="font-size:14.5px;color:#E9E5DC">границы</span><span style="display:inline-block;width:2px;height:16px;background:#D0765B"></span>
+    </div>
+    <span style="font-size:13.5px;color:#D0765B">Отмена</span>
+  </div>
+  <div style="display:flex;gap:7px;padding:12px 16px 6px;flex-wrap:wrap">
+    <span style="font-size:12px;color:#E9E5DC;background:rgba(208,118,91,.16);border:1px solid rgba(208,118,91,.4);border-radius:99px;padding:5px 12px">#практика</span>
+    <span style="font-size:12px;color:#9B948A;border:1px solid #393630;border-radius:99px;padding:5px 12px">папка: Личное</span>
+    <span style="font-size:12px;color:#9B948A;border:1px solid #393630;border-radius:99px;padding:5px 12px">за месяц</span>
+    <span style="font-size:12px;color:#9B948A;border:1px solid #393630;border-radius:99px;padding:5px 12px">has:вложение</span>
+  </div>
+  <div style="flex:1;overflow:hidden">
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#6E675C;padding:10px 16px 2px">РЕЗУЛЬТАТЫ · 3</div>
+    <div style="padding:11px 16px;border-bottom:1px solid #2C2A28">
+      <div style="font-size:15px;font-weight:600;color:#E9E5DC">Мысли о <span style="background:rgba(208,118,91,.28);border-radius:3px;padding:0 2px;color:#F0B9A4">границах</span> в переписке</div>
+      <div style="font-size:13px;color:#9B948A;line-height:1.45;margin-top:3px">…отвечать клиентам вечером — значит стирать <span style="background:rgba(208,118,91,.28);border-radius:3px;padding:0 2px;color:#F0B9A4">границы</span> собственного отдыха…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6E675C;margin-top:4px">30 июл · Практика</div>
+    </div>
+    <div style="padding:11px 16px;border-bottom:1px solid #2C2A28">
+      <div style="font-size:15px;font-weight:600;color:#E9E5DC">Конспект супервизии — случай М.</div>
+      <div style="font-size:13px;color:#9B948A;line-height:1.45;margin-top:3px">…запрос на <span style="background:rgba(208,118,91,.28);border-radius:3px;padding:0 2px;color:#F0B9A4">границы</span> в отношениях с руководителем…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6E675C;margin-top:4px">вчера · Практика / Супервизии</div>
+    </div>
+    <div style="padding:11px 16px">
+      <div style="font-size:15px;font-weight:600;color:#E9E5DC">Книга: «Схема-терапия» — конспект</div>
+      <div style="font-size:13px;color:#9B948A;line-height:1.45;margin-top:3px">…режимы и личные <span style="background:rgba(208,118,91,.28);border-radius:3px;padding:0 2px;color:#F0B9A4">границы</span>: глава 3, с. 84…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#6E675C;margin-top:4px">5 авг · Личное / Книги</div>
+    </div>
+    <div style="font-size:10.5px;font-weight:700;letter-spacing:.09em;color:#6E675C;padding:16px 16px 2px">НЕДАВНИЕ</div>
+    <div style="display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;color:#9B948A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span style="font-size:14px">супервизия кейс</span></div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;color:#9B948A"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span style="font-size:14px">чек-лист переезда</span></div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1l"><div class="dv-olabel"><a class="dv-oid" href="#1l">1l</a>Шифрование · «заперто» — спокойное состояние, без тревоги</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" dark="{{ T }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#232120;font-family:'Golos Text',sans-serif">
+  <div style="display:flex;align-items:center;gap:10px;padding:10px 16px;color:#9B948A">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span style="font-size:12px">Личное</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 40px;text-align:center">
+    <div style="width:88px;height:88px;border-radius:50%;background:#2C2A28;display:flex;align-items:center;justify-content:center;margin-bottom:22px">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#D0765B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2.5"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+    </div>
+    <div style="font-size:21px;font-weight:700;color:#E9E5DC;letter-spacing:-.01em">Личный дневник</div>
+    <div style="font-size:13.5px;color:#9B948A;margin:8px 0 26px;line-height:1.55">Заметка зашифрована на этом устройстве.<br>AES-256 · ключ только у вас</div>
+    <div style="display:flex;gap:12px;margin-bottom:26px">
+      <span style="width:12px;height:12px;border-radius:50%;background:#E9E5DC"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#E9E5DC"></span>
+      <span style="width:12px;height:12px;border-radius:50%;background:#E9E5DC"></span>
+      <span style="width:12px;height:12px;border-radius:50%;border:1.5px solid #55504A"></span>
+      <span style="width:12px;height:12px;border-radius:50%;border:1.5px solid #55504A"></span>
+      <span style="width:12px;height:12px;border-radius:50%;border:1.5px solid #55504A"></span>
+    </div>
+    <div style="width:100%;background:#D0765B;border-radius:14px;padding:14px 0;font-size:15px;font-weight:600;color:#241511;text-align:center">Разблокировать</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:16px;color:#9B948A">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 12a5 5 0 0110 0c0 3-1 5-2.5 7M9.5 18c-1-1.6-1.5-3.4-1.5-6a4 4 0 018 0"></path><path d="M12 12v3"></path></svg>
+      <span style="font-size:13.5px">Использовать отпечаток</span>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1m"><div class="dv-olabel"><a class="dv-oid" href="#1m">1m</a>Онбординг · шаг 2 из 3 — честный выбор хранения, без регистрации</div>
+<x-import component-from-global-scope="AndroidDevice" from="./android-frame.jsx" width="{{ phw }}" height="{{ phh }}" hint-size="390px,832px">
+<div style="height:100%;display:flex;flex-direction:column;background:#FBFAF7;font-family:'Golos Text',sans-serif;padding:0 24px">
+  <div style="display:flex;gap:6px;padding:18px 0 26px;justify-content:center">
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#B5503C"></span>
+    <span style="width:22px;height:5px;border-radius:3px;background:#E3DDCF"></span>
+  </div>
+  <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.25">Где будут жить ваши заметки?</div>
+  <div style="font-size:14.5px;color:#8A8375;line-height:1.55;margin:10px 0 22px">Каждая заметка — обычный файл <span style="font-family:'JetBrains Mono',monospace;font-size:13px">.md</span>. Он ваш, что бы ни случилось с приложением.</div>
+  <div style="border:1.5px solid #B5503C;background:#FDF6F3;border-radius:16px;padding:16px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">На этом устройстве</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">Полный оффлайн. Без регистрации и аккаунта.</div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:16px;padding:16px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">Своё облако</span><span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">бесплатно</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">WebDAV или Яндекс.Диск — синхронизация через ваше хранилище.</div>
+  </div>
+  <div style="border:1px solid #EAE6DB;border-radius:16px;padding:16px 18px">
+    <div style="display:flex;align-items:center;gap:10px"><span style="font-size:15.5px;font-weight:600;color:#38342E;flex:1">Облако КОМПАС</span><span style="font-size:11px;font-weight:600;color:#B08430;background:#F5EBD8;border-radius:99px;padding:3px 9px">подписка</span></div>
+    <div style="font-size:13.5px;color:#8A8375;line-height:1.5;margin-top:5px">E2E-шифрование, история версий, мгновенный синк. Мы не можем читать ваши заметки.</div>
+  </div>
+  <span style="flex:1"></span>
+  <div style="background:#B5503C;border-radius:14px;padding:15px 0;font-size:15px;font-weight:600;color:#fff;text-align:center">Продолжить</div>
+  <div style="font-size:12.5px;color:#B6AFA2;text-align:center;padding:12px 0 16px">Можно поменять в любой момент в настройках</div>
+</div>
+</x-import>
+</div>
+</div>
+
+<div class="dv-g">Состояния</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1n"><div class="dv-olabel"><a class="dv-oid" href="#1n">1n</a>Пустой список — тёплое, одна кнопка</div>
+<div class="dv-card" style="width:300px;background:#FBFAF7;padding:38px 28px;display:flex;flex-direction:column;align-items:center;text-align:center">
+  <div style="width:64px;height:64px;border-radius:50%;background:#F3F1EA;display:flex;align-items:center;justify-content:center;margin-bottom:16px">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#B5503C" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+  </div>
+  <div style="font-size:16px;font-weight:600;color:#38342E">Здесь пока тихо</div>
+  <div style="font-size:13px;color:#8A8375;line-height:1.5;margin:6px 0 16px">Первая мысль появится<br>за две секунды</div>
+  <div style="background:#B5503C;border-radius:12px;padding:10px 20px;font-size:13.5px;font-weight:600;color:#fff">Новая заметка</div>
+</div>
+</div>
+<div class="dv-opt" id="1o"><div class="dv-olabel"><a class="dv-oid" href="#1o">1o</a>Загрузка — скелетоны, без спиннеров</div>
+<div class="dv-card" style="width:300px;background:#FBFAF7;padding:20px 22px;display:flex;flex-direction:column;gap:18px">
+  <div><div style="height:13px;width:65%;border-radius:6px;background:#EDE9DE"></div><div style="height:10px;width:92%;border-radius:5px;background:#F3F0E7;margin-top:8px"></div><div style="height:10px;width:50%;border-radius:5px;background:#F3F0E7;margin-top:6px"></div></div>
+  <div><div style="height:13px;width:48%;border-radius:6px;background:#EDE9DE"></div><div style="height:10px;width:85%;border-radius:5px;background:#F3F0E7;margin-top:8px"></div><div style="height:10px;width:60%;border-radius:5px;background:#F3F0E7;margin-top:6px"></div></div>
+  <div><div style="height:13px;width:58%;border-radius:6px;background:#EDE9DE"></div><div style="height:10px;width:88%;border-radius:5px;background:#F3F0E7;margin-top:8px"></div></div>
+</div>
+</div>
+<div class="dv-opt" id="1p"><div class="dv-olabel"><a class="dv-oid" href="#1p">1p</a>Оффлайн — тихая метка, детали по тапу</div>
+<div class="dv-card" style="width:300px;background:#FBFAF7;padding:18px 22px">
+  <div style="display:flex;align-items:center;gap:8px;background:#F3F1EA;border-radius:99px;padding:7px 14px;width:fit-content">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 001.6-8.7A6 6 0 007.7 8.6 4.5 4.5 0 006 17.5"></path><path d="M4 4l16 16"></path></svg>
+    <span style="font-size:12.5px;color:#555047">Оффлайн · всё сохранено локально</span>
+  </div>
+  <div style="font-size:12.5px;color:#B6AFA2;line-height:1.55;margin-top:12px">Метка живёт в шапке списка. Никаких блокирующих баннеров: писать можно всегда, синк догонит.</div>
+</div>
+</div>
+<div class="dv-opt" id="1q"><div class="dv-olabel"><a class="dv-oid" href="#1q">1q</a>Конфликт версий — «уже объединили», история как страховка</div>
+<div class="dv-card" style="width:300px;background:#FBFAF7;padding:18px 22px">
+  <div style="display:flex;align-items:flex-start;gap:11px">
+    <div style="width:34px;height:34px;border-radius:10px;background:#E7F0E8;display:flex;align-items:center;justify-content:center;flex:none">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 004 4h8M18 3v4M18 21v-6"></path><path d="M15 10l3 3 3-3"></path></svg>
+    </div>
+    <div>
+      <div style="font-size:14px;font-weight:600;color:#38342E;line-height:1.35">Версии объединены автоматически</div>
+      <div style="font-size:12.5px;color:#8A8375;line-height:1.5;margin-top:4px">Заметка менялась на двух устройствах. Ничего не потерялось — обе версии в истории.</div>
+      <div style="font-size:12.5px;color:#B5503C;margin-top:8px">Показать историю</div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<div class="dv-g">Desktop / Web</div>
+<div class="dv-opts">
+<div class="dv-opt" id="1r"><div class="dv-olabel"><a class="dv-oid" href="#1r">1r</a>Три панели · заметка-витрина со всеми markdown-элементами · связка с Дневником · backlinks</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ dw }}" height="{{ dh }}" url="zapiski.cmpas.ru" hint-size="1380px,900px">
+<div style="height:100%;display:flex;background:#FBFAF7;font-family:'Golos Text',sans-serif;overflow:hidden">
+  <div style="width:224px;flex:none;background:#F7F5EF;border-right:1px solid #EAE6DB;display:flex;flex-direction:column;padding:16px 0">
+    <div style="font-size:13px;font-weight:700;letter-spacing:.12em;color:#38342E;padding:0 18px 14px">ЗАПИСКИ</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 18px;background:#EFEBE1;margin:0 8px;border-radius:9px;color:#38342E"><span style="font-size:13.5px;font-weight:600;flex:1">Все заметки</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8A8375">128</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 18px;margin:0 8px;color:#555047"><span style="font-size:13.5px;flex:1">Закреплённые</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">4</span></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:16px 18px 5px">ПАПКИ</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 18px;color:#555047"><span style="font-size:13.5px;flex:1">Практика</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 18px 5px 34px;background:#F6E7E2;margin:0 8px;border-radius:8px;color:#93412F"><span style="font-size:13px;font-weight:600;flex:1">Супервизии</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px">23</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 18px 5px 34px;color:#555047"><span style="font-size:13px;flex:1">Вебинары</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">8</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:6px 18px;color:#555047"><span style="font-size:13.5px;flex:1">Личное</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 18px 5px 34px;color:#555047"><span style="font-size:13px;flex:1">Дневник</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">62</span></div>
+    <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:#B6AFA2;padding:16px 18px 5px">ТЕГИ</div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 18px;color:#555047"><span style="font-size:13px;flex:1">#практика/супервизия</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">23</span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:5px 18px;color:#555047"><span style="font-size:13px;flex:1">#кпт</span><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">11</span></div>
+    <span style="flex:1"></span>
+    <div style="display:flex;align-items:center;gap:7px;padding:10px 18px 0;color:#8A8375;border-top:1px solid #EAE6DB;margin-top:10px"><span style="width:6px;height:6px;border-radius:50%;background:#5FA97A"></span><span style="font-size:11.5px">Синхронизировано · 14:32</span></div>
+  </div>
+  <div style="width:288px;flex:none;border-right:1px solid #EAE6DB;display:flex;flex-direction:column">
+    <div style="padding:14px 14px 10px;display:flex;gap:8px">
+      <div style="flex:1;display:flex;align-items:center;gap:8px;background:#F3F1EA;border-radius:9px;padding:8px 12px;color:#8A8375"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M16.5 16.5L21 21"></path></svg><span style="font-size:13px">Поиск… <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px">Ctrl K</span></span></div>
+      <div style="width:34px;height:34px;border-radius:9px;background:#B5503C;display:flex;align-items:center;justify-content:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+    </div>
+    <div style="padding:11px 16px;background:#F6E7E2;border-left:none;margin:0 8px;border-radius:10px">
+      <div style="font-size:14px;font-weight:600;color:#38342E">Конспект супервизии — случай М.</div>
+      <div style="font-size:12.5px;color:#93412F;line-height:1.45;margin-top:2px">Запрос: тревога перед публичными выступлениями…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B08A7C;margin-top:4px">вчера · 486 слов</div>
+    </div>
+    <div style="padding:11px 24px;border-bottom:1px solid #F0EDE4">
+      <div style="font-size:14px;font-weight:600;color:#38342E">Супервизия — случай Т.</div>
+      <div style="font-size:12.5px;color:#8A8375;line-height:1.45;margin-top:2px">Гипотеза: избегание как способ сохранить контроль…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2;margin-top:4px">28 июл</div>
+    </div>
+    <div style="padding:11px 24px;border-bottom:1px solid #F0EDE4">
+      <div style="font-size:14px;font-weight:600;color:#38342E">План супервизий на осень</div>
+      <div style="font-size:12.5px;color:#8A8375;line-height:1.45;margin-top:2px">Раз в две недели, четверг. Темы: работа с виной…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2;margin-top:4px">21 июл</div>
+    </div>
+    <div style="padding:11px 24px;border-bottom:1px solid #F0EDE4">
+      <div style="font-size:14px;font-weight:600;color:#38342E">Вопросы к супервизору</div>
+      <div style="font-size:12.5px;color:#8A8375;line-height:1.45;margin-top:2px">Как я реагирую, когда клиент молчит дольше минуты…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2;margin-top:4px">14 июл</div>
+    </div>
+    <div style="padding:11px 24px">
+      <div style="font-size:14px;font-weight:600;color:#38342E">Итоги месяца · июль</div>
+      <div style="font-size:12.5px;color:#8A8375;line-height:1.45;margin-top:2px">Меньше сессий, больше глубины. Записал три инсайта…</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#B6AFA2;margin-top:4px">1 авг</div>
+    </div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+    <div style="display:flex;align-items:center;gap:14px;padding:12px 26px;border-bottom:1px solid #F0EDE4;color:#8A8375">
+      <span style="font-size:12px">Практика / Супервизии</span>
+      <span style="flex:1"></span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:10.5px">raw</span>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V7a4 4 0 018 0v4"></path></svg>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8v.5"></path></svg>
+      <span style="font-size:18px;letter-spacing:1px">⋯</span>
+    </div>
+    <div style="flex:1;overflow:hidden;padding:36px 0">
+      <div style="max-width:640px;margin:0 auto;padding:0 32px">
+        <div style="font-size:30px;font-weight:700;color:#38342E;letter-spacing:-.02em;line-height:1.2">Конспект супервизии — случай М.</div>
+        <div style="display:flex;gap:6px;align-items:center;margin:12px 0 6px;flex-wrap:wrap">
+          <span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 10px">#практика/супервизия</span>
+          <span style="font-size:12px;color:#B5503C;background:#F6E7E2;border-radius:99px;padding:3px 10px">#кпт</span>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#555047;border:1px solid #EAE6DB;border-radius:99px;padding:3px 10px"><span style="width:6px;height:6px;border-radius:50%;background:#2E6B4F"></span>КОМПАС.Дневник → карточка клиента<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#8A8375" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17L17 7M9 7h8v8"></path></svg></span>
+        </div>
+        <div style="font-size:19px;font-weight:600;color:#38342E;margin:20px 0 8px">Запрос</div>
+        <div style="font-size:15.5px;line-height:1.65;color:#38342E">Тревога перед публичными выступлениями. Важно: <span style="background:#F6E7E2;border-radius:3px;padding:0 3px">клиент сам называет её «сценической»</span> — использовать его язык. Гипотезу обсудили в <span style="color:#B5503C;border-bottom:1px dashed #D9A395">[[Сессия от 12.08]]</span>.</div>
+        <div style="border-left:2.5px solid #DCC9BE;padding:2px 0 2px 14px;font-size:15.5px;line-height:1.6;color:#8A8375;font-style:italic;margin:14px 0">«Я боюсь не сцены, а тишины после вопроса» — точная формулировка, беречь её.</div>
+        <div style="font-size:19px;font-weight:600;color:#38342E;margin:18px 0 8px">Техники к следующей сессии</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;background:#B5503C;display:inline-flex;align-items:center;justify-content:center;flex:none"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"></path></svg></span><span style="font-size:15px;color:#8A8375;text-decoration:line-through">Дыхание 4–7–8 перед экспозицией</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Поведенческий эксперимент: вопрос из зала</span></div>
+          <div style="display:flex;align-items:center;gap:10px"><span style="width:17px;height:17px;border-radius:6px;border:1.5px solid #C8C1B4;flex:none"></span><span style="font-size:15px;color:#38342E">Дневник мыслей — неделя</span></div>
+        </div>
+        <div style="border:1px solid #EAE6DB;border-radius:12px;overflow:hidden;margin:18px 0;font-size:13.5px">
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1.3fr;background:#F3F1EA;color:#555047;font-weight:600"><span style="padding:8px 14px">Техника</span><span style="padding:8px 14px">Когда</span><span style="padding:8px 14px">Заметка</span></div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1.3fr;border-top:1px solid #EAE6DB;color:#38342E"><span style="padding:8px 14px">Экспозиция</span><span style="padding:8px 14px">сессия 5–6</span><span style="padding:8px 14px">начать с малой группы</span></div>
+          <div style="display:grid;grid-template-columns:1.2fr 1fr 1.3fr;border-top:1px solid #EAE6DB;color:#38342E"><span style="padding:8px 14px">Декатастрофизация</span><span style="padding:8px 14px">сейчас</span><span style="padding:8px 14px">хорошо откликается</span></div>
+        </div>
+        <div style="background:#F3F1EA;border-radius:12px;padding:14px 18px;font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.7;color:#555047;margin:0 0 18px"><span style="color:#8E7BA3">формат:</span> .md + attachments/<br><span style="color:#8E7BA3">принцип:</span> file over app <span style="color:#B6AFA2">// заметка переживёт приложение</span></div>
+        <div style="border-top:1px solid #EAE6DB;padding-top:14px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#B6AFA2;margin-bottom:8px">↩ ССЫЛАЮТСЯ НА ЭТУ ЗАМЕТКУ · 2</div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:13.5px;color:#B5503C">План супервизий на осень</span>
+            <span style="font-size:13.5px;color:#B5503C">Итоги месяца · июль</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;padding:8px 26px;border-top:1px solid #F0EDE4;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#B6AFA2">
+      <span>изменено только что</span><span>·</span><span>486 слов</span><span style="flex:1"></span><span>автосохранение — всегда</span>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1s"><div class="dv-olabel"><a class="dv-oid" href="#1s">1s</a>Режим фокуса · тема «Чернила» (OLED) — только текущий абзац</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ fw }}" height="{{ fh }}" url="zapiski.cmpas.ru" hint-size="1080px,620px">
+<div style="height:100%;background:#000;font-family:'Golos Text',sans-serif;display:flex;flex-direction:column;position:relative">
+  <div style="position:absolute;top:14px;right:22px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#4A453D">фокус · Esc — выйти</div>
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;max-width:560px;margin:0 auto;padding:0 32px;gap:22px">
+    <div style="font-size:17px;line-height:1.75;color:#E9E5DC;opacity:.28">Молчание в кабинете — не пустота. Это место, где клиент впервые слышит собственную мысль до конца.</div>
+    <div style="font-size:17px;line-height:1.75;color:#E9E5DC">Сегодня выдержал паузу почти минуту. Клиент сам нашёл слово, которое я подбирал за него три сессии подряд. Записываю, чтобы не забыть: моё нетерпение — не помощь<span style="display:inline-block;width:2px;height:20px;background:#D0765B;vertical-align:-4px;margin-left:1px"></span></div>
+    <div style="font-size:17px;line-height:1.75;color:#E9E5DC;opacity:.28">Вечером — конспект главы про режимы. Не больше сорока минут.</div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1t"><div class="dv-olabel"><a class="dv-oid" href="#1t">1t</a>Настройки · синхронизация — тихий статус, конфликты уже объединены</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ sw }}" height="{{ sh }}" url="zapiski.cmpas.ru/settings" hint-size="1080px,640px">
+<div style="height:100%;display:flex;background:#FBFAF7;font-family:'Golos Text',sans-serif">
+  <div style="width:212px;flex:none;background:#F7F5EF;border-right:1px solid #EAE6DB;padding:18px 8px;display:flex;flex-direction:column;gap:2px">
+    <div style="font-size:12px;font-weight:700;letter-spacing:.1em;color:#38342E;padding:0 12px 12px">НАСТРОЙКИ</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;color:#555047">Внешний вид</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;color:#555047">Редактор</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:#93412F;background:#F6E7E2">Синхронизация</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;color:#555047">Безопасность</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;color:#555047">Экспорт и импорт</div>
+    <div style="padding:8px 12px;border-radius:9px;font-size:13.5px;color:#555047">ЗАПИСКИ+</div>
+  </div>
+  <div style="flex:1;padding:30px 40px;overflow:hidden">
+    <div style="font-size:22px;font-weight:700;color:#38342E;letter-spacing:-.02em">Синхронизация</div>
+    <div style="display:flex;align-items:center;gap:9px;margin:14px 0 22px">
+      <span style="width:8px;height:8px;border-radius:50%;background:#5FA97A"></span>
+      <span style="font-size:14px;color:#38342E">Синхронизировано</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#B6AFA2">14:32 · 128 заметок · 96 МБ</span>
+    </div>
+    <div style="max-width:560px;display:flex;flex-direction:column;gap:12px">
+      <div style="border:1px solid #EAE6DB;border-radius:14px;padding:16px 18px;background:#fff">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:14.5px;font-weight:600;color:#38342E;flex:1">Яндекс.Диск</span>
+          <span style="font-size:11px;font-weight:600;color:#5C8A6E;background:#E7F0E8;border-radius:99px;padding:3px 9px">подключено</span>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8A8375;margin-top:6px">/Заметки/zapiski/ · бесплатно, ваше хранилище</div>
+      </div>
+      <div style="border:1px dashed #D9D3C5;border-radius:14px;padding:14px 18px;display:flex;align-items:center;gap:10px;color:#8A8375">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+        <span style="font-size:13.5px">Подключить WebDAV — любой сервер</span>
+      </div>
+      <div style="border:1px solid #EAE6DB;border-radius:14px;padding:16px 18px;background:#fff">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:14.5px;font-weight:600;color:#38342E;flex:1">Облако КОМПАС</span>
+          <span style="font-size:11px;font-weight:600;color:#B08430;background:#F5EBD8;border-radius:99px;padding:3px 9px">ЗАПИСКИ+</span>
+        </div>
+        <div style="font-size:13px;color:#8A8375;line-height:1.5;margin-top:6px">E2E-шифрование, история версий до года, мгновенный синк и веб-доступ.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:11px;padding:12px 18px;background:#F3F1EA;border-radius:12px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5C8A6E" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v6a4 4 0 004 4h8"></path><path d="M15 10l3 3 3-3"></path></svg>
+        <span style="font-size:13px;color:#555047;flex:1">Конфликтов за месяц: 1 — объединён автоматически, обе версии в истории</span>
+        <span style="font-size:12.5px;color:#B5503C">История</span>
+      </div>
+    </div>
+  </div>
+</div>
+</x-import>
+</div>
+
+<div class="dv-opt" id="1u"><div class="dv-olabel"><a class="dv-oid" href="#1u">1u</a>Paywall ЗАПИСКИ+ · честное сравнение, без таймеров</div>
+<x-import component-from-global-scope="ChromeWindow" from="./browser-window.jsx" width="{{ pw }}" height="{{ pwh }}" url="zapiski.cmpas.ru/plus" hint-size="960px,640px">
+<div style="height:100%;background:#FBFAF7;font-family:'Golos Text',sans-serif;display:flex;align-items:center;justify-content:center">
+  <div style="width:600px;padding:20px 0">
+    <div style="text-align:center">
+      <div style="font-size:26px;font-weight:700;color:#38342E;letter-spacing:-.02em">ЗАПИСКИ<span style="color:#B5503C">+</span></div>
+      <div style="font-size:14px;color:#8A8375;line-height:1.55;margin:8px 0 4px">Платите за облако и серверы. Всё остальное — бесплатно навсегда.</div>
+      <div style="font-size:15px;color:#38342E;margin:10px 0 18px"><b>199&nbsp;₽/мес</b> <span style="color:#8A8375">или 149&nbsp;₽ при оплате за год</span></div>
+    </div>
+    <div style="border:1px solid #EAE6DB;border-radius:16px;overflow:hidden;background:#fff;font-size:13.5px">
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;background:#F3F1EA;font-weight:600;color:#555047"><span style="padding:10px 18px"></span><span style="padding:10px 0;text-align:center">Бесплатно</span><span style="padding:10px 0;text-align:center;color:#93412F">ЗАПИСКИ+</span></div>
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;border-top:1px solid #F0EDE4;color:#38342E;align-items:center"><span style="padding:9px 18px">Редактор, шифрование, экспорт md·PDF·DOCX</span><span style="text-align:center;color:#5C8A6E">✓</span><span style="text-align:center;color:#5C8A6E">✓</span></div>
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;border-top:1px solid #F0EDE4;color:#38342E;align-items:center"><span style="padding:9px 18px">Локально · WebDAV · Яндекс.Диск</span><span style="text-align:center;color:#5C8A6E">✓</span><span style="text-align:center;color:#5C8A6E">✓</span></div>
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;border-top:1px solid #F0EDE4;color:#38342E;align-items:center"><span style="padding:9px 18px">Облако КОМПАС: E2E, версии, мгновенный синк</span><span style="text-align:center;color:#C8C1B4">—</span><span style="text-align:center;color:#5C8A6E">✓ 10 ГБ</span></div>
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;border-top:1px solid #F0EDE4;color:#38342E;align-items:center"><span style="padding:9px 18px">Публикация заметки по ссылке</span><span style="text-align:center;color:#C8C1B4">—</span><span style="text-align:center;color:#5C8A6E">✓</span></div>
+      <div style="display:grid;grid-template-columns:1fr 110px 110px;border-top:1px solid #F0EDE4;color:#38342E;align-items:center"><span style="padding:9px 18px">Транскрибация голосовых заметок</span><span style="text-align:center;color:#8A8375;font-size:12px">10 мин/мес</span><span style="text-align:center;color:#5C8A6E">✓</span></div>
+    </div>
+    <div style="display:flex;justify-content:center;margin:18px 0 10px"><span style="background:#B5503C;border-radius:13px;padding:12px 34px;font-size:14.5px;font-weight:600;color:#fff">Попробовать 14 дней</span></div>
+    <div style="font-size:12px;color:#B6AFA2;text-align:center;line-height:1.6">Отмена в один тап. Без таймеров и «скидок только сегодня».<br>С КОМПАС.Дневником — +100&nbsp;₽ к тарифу «Практика».</div>
+  </div>
+</div>
+</x-import>
+</div>
+</div>
+
+<p class="dv-next">Дальше можно: «утвердить <a class="dv-oid" href="#1b">1b</a> как базовую и показать все экраны в тёмной теме» · «собрать живой прототип редактора с переключателем тем» · «онбординг целиком, все 3 шага + флоу шифрования»</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return { T: true, phw: 390, phh: 832, dw: 1380, dh: 900, fw: 1080, fh: 620, sw: 1080, sh: 640, pw: 960, pwh: 640, gw: 1180, gh: 720 };
+  }
+}
+</script>
+</body>
+</html>

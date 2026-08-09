@@ -1,0 +1,44 @@
+node_modules/
+dist/
+build/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# rust / tauri
+target/
+apps/desktop/src-tauri/target/
+apps/mobile/src-tauri/target/
+apps/*/src-tauri/gen/
+
+# android
+*.apk
+*.aab
+.gradle/
+local.properties
+
+# editors / os
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# secrets — never commit
+*.pem
+*.jks
+!apps/mobile/keystore/zapiski-release.jks
+tauri-private.key
+*.p12
