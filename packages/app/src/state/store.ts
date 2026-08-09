@@ -23,7 +23,7 @@ import {
   parseQuery,
   passwordHint,
   stemOf,
-  unlockDelayMs,
+  UnlockGuard,
   type FolderNode,
   type Note,
   type NoteMeta,
@@ -32,18 +32,22 @@ import {
   type SyncStatus,
   type TrashEntry,
   type UndoableToast,
+  type UnlockGuardRecord,
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
 } from '@zapiski/core';
 import type {
   AppHost,
+  AuthCallback,
   DebugOverrides,
   Route,
   ScreenState,
   SettingsSection,
 } from '../contract.js';
 import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } from '../i18n/index.js';
+import { createKompasBackend } from './cloud.js';
+import { AuthError, SessionStore, type AuthErrorCode } from './session.js';
 
 /** Сортировка списка. Запоминается НА ПАПКУ, не глобально (BEHAVIOR §1.2). */
 export type SortMode = 'updated' | 'created' | 'title' | 'manual';
@@ -142,7 +146,12 @@ export interface AppState {
 
   /** Пути с открытым (расшифрованным) содержимым. */
   unlocked: Record<VaultPath, UnlockedNote>;
-  /** Неудачные попытки пароля — задержки BEHAVIOR §5.2. */
+  /**
+   * Неудачные попытки пароля — задержки BEHAVIOR §5.2.
+   *
+   * Зеркало счётчика из `UnlockGuard` для экранов. Сам счётчик живёт в
+   * настройках приложения и переживает перезапуск (SEC-024).
+   */
   failedAttempts: number;
   /** До какого момента ввод пароля отклоняется. Данные не удаляются никогда. */
   lockedUntil: number;
@@ -154,6 +163,15 @@ export interface AppState {
    * не блокирует ввод (BEHAVIOR §0, приёмочный критерий №5).
    */
   syncError: string | null;
+
+  /**
+   * Отказ входа — текст из реестра BEHAVIOR §11. Живёт на экране входа и
+   * ничего не блокирует: без аккаунта приложение работает полностью
+   * (ТЗ §5.5 — аккаунт нужен ТОЛЬКО для облака).
+   */
+  authError: string | null;
+  /** Идёт обмен токена после возврата по ссылке. */
+  authBusy: boolean;
 }
 
 export type Listener = () => void;
@@ -194,6 +212,8 @@ function initialState(locale: Locale): AppState {
     lockedUntil: 0,
     debug: { forceState: null, forceSyncBackend: null },
     syncError: null,
+    authError: null,
+    authBusy: false,
   };
 }
 
@@ -218,6 +238,14 @@ const PREF = {
   lastOpened: 'search.lastOpened',
   backend: 'sync.backend',
   autoLock: 'security.autoLockMinutes',
+  /**
+   * Счётчик неудачных попыток пароля и конец задержки (BEHAVIOR §5.2,
+   * SEC-024). Лежит рядом с остальными настройками — то есть ВНЕ vault'а:
+   * vault бывает на съёмном носителе или в чужой синкаемой папке, а задержка
+   * обязана действовать и тогда, когда его нет. Секрета в записи нет: три
+   * числа, по которым о содержимом заметок узнать нечего.
+   */
+  unlockGuard: 'security.unlockGuard',
   account: 'account',
   onboarded: 'onboarded',
 } as const;
@@ -238,6 +266,17 @@ export class AppController {
   private renameTimer: ReturnType<typeof setInterval> | null = null;
   /** Минут до автозамка; `null` — до выхода из приложения. */
   private autoLockMinutes: number | null = 10;
+  /**
+   * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
+   * пустой: настоящий приезжает из настроек и переживает перезапуск.
+   */
+  private guard = UnlockGuard.empty();
+  /** Сессия облака: устройство, токены и их обновление по истечении. */
+  readonly session: SessionStore;
+  /** Отписка от возвратов, которые доставляет оболочка. */
+  private authOff: (() => void) | null = null;
+  /** Куда вернуться после входа — к тому, ради чего входили (BEHAVIOR §11). */
+  private afterSignIn: Route | null = null;
 
   constructor(
     readonly host: AppHost,
@@ -246,6 +285,7 @@ export class AppController {
     locale: Locale = DEFAULT_LOCALE,
   ) {
     this.state = initialState(locale);
+    this.session = new SessionStore(host);
   }
 
   // ── Подписка ───────────────────────────────────────────────────────────────
@@ -289,7 +329,7 @@ export class AppController {
   // ── Запуск ─────────────────────────────────────────────────────────────────
 
   async boot(): Promise<void> {
-    const [sortByFolder, recentQueries, lastOpened, account, autoLock, onboarded] =
+    const [sortByFolder, recentQueries, lastOpened, account, autoLock, onboarded, unlockGuard] =
       await Promise.all([
         this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
         this.host.prefs.get<string[]>(PREF.recent, []),
@@ -297,9 +337,18 @@ export class AppController {
         this.host.prefs.get<AccountState | null>(PREF.account, null),
         this.host.prefs.get<number | null>(PREF.autoLock, 10),
         this.host.prefs.get<boolean>(PREF.onboarded, false),
+        this.host.prefs.get<unknown>(PREF.unlockGuard, null),
       ]);
     this.autoLockMinutes = autoLock;
+    /* Задержка после неверных попыток продолжает действовать после
+       перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
+    await this.restoreUnlockGuard(unlockGuard);
     this.patch({ sortByFolder, recentQueries, lastOpened, account });
+
+    /* Вход: сессия из настроек и подписка на возврат по ссылке. Делается до
+       открытия vault'а — ссылка может прийти в первую же секунду. */
+    await this.restoreSession();
+    this.listenAuthCallbacks();
 
     const storage = await this.host.restoreVault().catch(() => null);
     if (!storage || !onboarded) {
@@ -330,6 +379,8 @@ export class AppController {
     await this.refresh();
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
     await this.host.prefs.set(PREF.onboarded, true);
+    /* Vault открыт — облако можно поднимать: движку синка нужен именно он. */
+    await this.resumeCloud();
   }
 
   /** Хранилище в памяти — запуск без настоящей ФС (демо, тесты, отказ ФС). */
@@ -342,6 +393,141 @@ export class AppController {
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.authOff?.();
+    this.authOff = null;
+  }
+
+  // ── Вход в облако (ТЗ §5.5, SCREENS §2) ────────────────────────────────────
+  //
+  // Аккаунт нужен ТОЛЬКО для облака: всё, что ниже, может не сработать, и
+  // приложение продолжит работать локально. Ни одного SMS-пути здесь нет и
+  // быть не может (ARCHITECTURE §3, инвариант 6).
+
+  /** Сессия из настроек. Молча: нет аккаунта — нет и разговора о нём. */
+  private async restoreSession(): Promise<void> {
+    const session = await this.session.load().catch(() => null);
+    if (session === null) return;
+    this.patch({ account: { email: session.email, plan: this.state.account?.plan ?? 'free' } });
+  }
+
+  /**
+   * Возврат из браузера. Порт необязателен: оболочка, которой нечем принять
+   * ссылку, просто его не объявляет — и вход остаётся недоступен только там.
+   */
+  private listenAuthCallbacks(): void {
+    this.authOff?.();
+    this.authOff = this.host.onAuthCallback?.((callback) => {
+      void this.completeSignIn(callback);
+    }) ?? null;
+
+    void this.host
+      .takeInitialAuthCallback?.()
+      .then((callback) => {
+        if (callback !== null && callback !== undefined) return this.completeSignIn(callback);
+        return undefined;
+      })
+      .catch(() => undefined);
+  }
+
+  /** Экран входа: запомнить, ради чего входили, и показать его. */
+  beginSignIn(returnTo?: Route): void {
+    this.afterSignIn = returnTo ?? null;
+    this.patch({ authError: null });
+    this.navigate({ name: 'signin' });
+  }
+
+  /** Письмо со ссылкой (SCREENS §2). Ошибку показывает экран, не модалка. */
+  async sendMagicLink(email: string): Promise<boolean> {
+    this.patch({ authError: null });
+    try {
+      await this.session.requestMagicLink(email);
+      return true;
+    } catch (error) {
+      /* 429 — письмо уже ушло меньше минуты назад. Это не отказ: экран
+         показывает то же «письмо ушло» и держит кнопку 60 с (SCREENS §2). */
+      if (error instanceof AuthError && error.code === 'too_soon') return true;
+      this.patch({ authError: this.authMessage(error) });
+      return false;
+    }
+  }
+
+  /** Яндекс ID — основной путь входа. Открывается системным браузером. */
+  async startYandexSignIn(): Promise<void> {
+    this.patch({ authError: null });
+    try {
+      await this.host.openExternal(await this.session.yandexUrl());
+    } catch (error) {
+      this.patch({ authError: this.authMessage(error) });
+    }
+  }
+
+  /**
+   * Замкнуть вход тем, что принесла оболочка: обменять токен, сохранить
+   * сессию, подключить облако и вернуться туда, ради чего входили.
+   */
+  async completeSignIn(callback: AuthCallback): Promise<boolean> {
+    this.patch({ authBusy: true, authError: null });
+    try {
+      const session = await this.session.adopt(callback);
+      this.setAccount({ email: session.email, plan: this.state.account?.plan ?? 'free' });
+      this.patch({ authBusy: false });
+      await this.connectCloud();
+      const back = this.afterSignIn;
+      this.afterSignIn = null;
+      this.navigate(back ?? { name: 'settings', section: 'sync' }, { replace: true });
+      return true;
+    } catch (error) {
+      /* Ошибка входа не блокирует локальную работу: текст на экране входа. */
+      this.patch({ authBusy: false, authError: this.authMessage(error) });
+      if (this.state.route.name !== 'signin') this.navigate({ name: 'signin' });
+      return false;
+    }
+  }
+
+  /** Подключить облако СИМПАС как бэкенд синка. Без сессии — не подключать. */
+  async connectCloud(): Promise<boolean> {
+    if (this.session.current() === null) return false;
+    this.attachBackend(
+      createKompasBackend({
+        cloudBaseUrl: this.host.cloudBaseUrl,
+        session: this.session,
+        locale: this.state.locale,
+        ...(typeof WebSocket === 'function'
+          ? { websocket: (url: string) => new WebSocket(url) }
+          : {}),
+      }),
+    );
+    return true;
+  }
+
+  /** Молчаливое восстановление облака при старте: вошли — значит подключаем. */
+  private async resumeCloud(): Promise<void> {
+    if (this.session.current() === null) return;
+    const stored = await this.host.prefs.get<SyncBackend['id'] | null>(PREF.backend, null);
+    if (stored !== null && stored !== 'kompas') return;
+    await this.connectCloud();
+  }
+
+  /** Выход из аккаунта — одно из ТРЁХ мест с диалогом подтверждения. */
+  async signOutCloud(): Promise<void> {
+    await this.session.signOut().catch(() => undefined);
+    if (this.state.backendId === 'kompas') this.attachBackend(null);
+    this.setAccount(null);
+    this.patch({ authError: null });
+  }
+
+  clearAuthError(): void {
+    this.patch({ authError: null });
+  }
+
+  /** Код отказа → текст реестра BEHAVIOR §11. Своих формулировок здесь нет. */
+  private authMessage(error: unknown): string {
+    const code: AuthErrorCode = error instanceof AuthError ? error.code : 'server';
+    const errors = this.strings.errors;
+    if (code === 'link_dead') return errors.magicLinkExpired;
+    if (code === 'declined') return errors.yandexTokenExpired;
+    if (code === 'too_soon') return errors.tryLater;
+    return errors.syncFailed;
   }
 
   // ── Данные ─────────────────────────────────────────────────────────────────
@@ -642,9 +828,37 @@ export class AppController {
     return passwordHint(vault.storage, this.crypto, path);
   }
 
-  /** Задержка после неудачных попыток: 1–4 без задержки, 5-я — 30 с, 8-я — 5 мин. */
+  /**
+   * Задержка после неудачных попыток: 1–4 без задержки, 5-я — 30 с, 8-я — 5 мин.
+   *
+   * Считает `UnlockGuard`: он сверяет монотонные часы со стенными, поэтому
+   * перевод часов устройства задержку не сокращает (SEC-024).
+   */
   get unlockDelayLeftMs(): number {
-    return Math.max(0, this.state.lockedUntil - Date.now());
+    return this.guard.delayLeftMs();
+  }
+
+  /**
+   * Поднять счётчик попыток из настроек и сохранить приведённую запись.
+   *
+   * Сохранение обязательно: `restore` мог поправить запись (например, часы
+   * ушли назад и задержка взведена заново) — без записи эту поправку было бы
+   * достаточно перезапуска, чтобы отменить.
+   */
+  private async restoreUnlockGuard(stored: unknown): Promise<void> {
+    this.guard = UnlockGuard.restore(stored);
+    const record = this.guard.record;
+    this.patch({ failedAttempts: record.failedAttempts, lockedUntil: record.lockedUntil });
+    await this.saveUnlockGuard(record);
+  }
+
+  /**
+   * Записать счётчик в настройки. Ошибка записи не должна ронять разблокировку:
+   * задержка в этом случае деградирует до внутрисеансовой, но заметка
+   * открывается, а данные не трогаются никогда (BEHAVIOR §5.2).
+   */
+  private async saveUnlockGuard(record: UnlockGuardRecord): Promise<void> {
+    await this.host.prefs.set(PREF.unlockGuard, record).catch(() => undefined);
   }
 
   async encryptNote(
@@ -681,12 +895,16 @@ export class AppController {
     const key = await this.crypto.deriveMasterKey(password, parsed.salt);
     const body = await decryptNoteFile(vault.storage, this.crypto, path, key);
     if (body === null) {
-      const failedAttempts = this.state.failedAttempts + 1;
-      const delay = unlockDelayMs(failedAttempts);
-      this.patch({ failedAttempts, lockedUntil: delay > 0 ? Date.now() + delay : 0 });
+      /* Счётчик и конец задержки уезжают в настройки СРАЗУ: перезапуск между
+         попытками не должен их обнулять (SEC-024). */
+      const record = this.guard.registerFailure();
+      this.patch({ failedAttempts: record.failedAttempts, lockedUntil: record.lockedUntil });
+      await this.saveUnlockGuard(record);
       return null;
     }
+    const reset = this.guard.reset();
     this.patch({ failedAttempts: 0, lockedUntil: 0 });
+    await this.saveUnlockGuard(reset);
     this.putUnlocked(path, body, key);
     this.host.platform.haptics?.impact('light');
     return body;

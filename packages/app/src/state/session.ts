@@ -1,0 +1,366 @@
+/**
+ * Сессия облака СИМПАС: устройство, токены, их обновление и выход.
+ *
+ * Здесь нет ни одной платформенной детали — всё, что нужно, приходит через
+ * `AppHost` (contract.ts): `prefs` для хранения и `cloudBaseUrl` для запросов.
+ * Поэтому один и тот же код работает в вебе, на Windows и на Android.
+ *
+ * Правила, которые этот файл обязан держать:
+ *  • токен не попадает ни в журнал, ни в адресную строку — он живёт только
+ *    в `prefs` и в заголовке `Authorization`;
+ *  • access-токен короткий, refresh — длинный; обновление происходит само,
+ *    по истечении, и пользователь его не видит (ТЗ §5.5);
+ *  • ни одного SMS-пути: вход — только Яндекс ID и magic-link;
+ *  • отсутствие сессии не мешает работать локально — аккаунт нужен ТОЛЬКО
+ *    для облака.
+ */
+import type { AppHost, AuthCallback } from '../contract.js';
+
+/** Ключи в `PreferencesStore`. Значения — вне vault'а, как и прочие настройки. */
+export const AUTH_PREF = {
+  session: 'auth.session',
+  device: 'auth.deviceId',
+} as const;
+
+/**
+ * Машинные коды отказа. Текст для человека подставляет контроллер из реестра
+ * BEHAVIOR §11 — в этом файле пользовательских строк нет и быть не должно.
+ */
+export type AuthErrorCode =
+  /** Ссылка просрочена, использована или пришла с другого устройства. */
+  | 'link_dead'
+  /** Пользователь отказался в Яндекс ID либо OAuth не сложился. */
+  | 'declined'
+  /** Письмо уже уходило меньше 60 с назад (SCREENS §2). */
+  | 'too_soon'
+  /** Сети нет или сервер не ответил. */
+  | 'unreachable'
+  /** Сервер ответил, но не тем. */
+  | 'server';
+
+export class AuthError extends Error {
+  constructor(readonly code: AuthErrorCode) {
+    super(code);
+    this.name = 'AuthError';
+  }
+}
+
+/** Сессия, как она лежит в `prefs`. Ничего лишнего: только то, что нужно. */
+export interface CloudSession {
+  accessToken: string;
+  refreshToken: string;
+  /** Абсолютный момент истечения access-токена, мс эпохи. */
+  expiresAt: number;
+  userId: string;
+  email: string;
+  deviceId: string;
+}
+
+/** Ответ `server/src/routes/auth.ts` — форма проверена его тестами. */
+interface SessionResponse {
+  accessToken: string;
+  expiresIn: number;
+  refreshToken: string;
+  refreshExpiresAt: string;
+  user: { id: string; email: string; analyticsOptIn: boolean };
+  device: { id: string };
+}
+
+/** Тело ошибки сервера: код машинный, текст — из того же реестра §11. */
+interface ServerErrorBody {
+  error?: { code?: string; message?: string };
+}
+
+export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export interface SessionStoreOptions {
+  fetch?: FetchLike;
+  now?: () => number;
+  /** Платформа — сервер записывает её к устройству (`web`/`windows`/`android`). */
+  platform?: 'web' | 'windows' | 'android';
+}
+
+/**
+ * Обновляем не в последнюю секунду: запрос, начатый за 30 с до истечения,
+ * успеет дойти даже по плохой сети.
+ */
+const REFRESH_MARGIN_MS = 30_000;
+
+export class SessionStore {
+  private readonly fetchImpl: FetchLike;
+  private readonly now: () => number;
+  private readonly platform: 'web' | 'windows' | 'android';
+  private session: CloudSession | null = null;
+  private device: string | null = null;
+  /** Одно обновление на все параллельные запросы: иначе refresh-токен гонится. */
+  private refreshing: Promise<CloudSession | null> | null = null;
+
+  constructor(
+    private readonly host: AppHost,
+    options: SessionStoreOptions = {},
+  ) {
+    this.fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+    this.now = options.now ?? (() => Date.now());
+    this.platform = options.platform ?? host.platform.kind;
+  }
+
+  /** Уже известная сессия без обращения к диску и сети. */
+  current(): CloudSession | null {
+    return this.session;
+  }
+
+  /** Прочитать сессию из настроек. Вызывается один раз на старте. */
+  async load(): Promise<CloudSession | null> {
+    const stored = await this.host.prefs.get<CloudSession | null>(AUTH_PREF.session, null);
+    this.session = isSession(stored) ? stored : null;
+    if (this.session !== null) this.device = this.session.deviceId;
+    return this.session;
+  }
+
+  /**
+   * Идентификатор устройства: постоянный, случайный и ничего о человеке не
+   * говорящий. Формат согласован с сервером (`isValidDeviceKey`:
+   * `[A-Za-z0-9_.:-]{8,128}`).
+   */
+  async deviceId(): Promise<string> {
+    if (this.device !== null) return this.device;
+    const stored = await this.host.prefs.get<string | null>(AUTH_PREF.device, null);
+    if (typeof stored === 'string' && /^[A-Za-z0-9_.:-]{8,128}$/.test(stored)) {
+      this.device = stored;
+      return stored;
+    }
+    const fresh = `dev-${randomHex(16)}`;
+    await this.host.prefs.set(AUTH_PREF.device, fresh);
+    this.device = fresh;
+    return fresh;
+  }
+
+  // ── Вход ───────────────────────────────────────────────────────────────────
+
+  /**
+   * Письмо со ссылкой. `deviceId` обязателен: сервер привязывает токен к
+   * устройству инициации, и без него ссылка не обменяется ни на одном экране.
+   */
+  async requestMagicLink(email: string): Promise<void> {
+    const deviceId = await this.deviceId();
+    const response = await this.send(`${this.base}/auth/magic-link`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, deviceId, platform: this.platform }),
+    });
+    if (response.status === 429) throw new AuthError('too_soon');
+    if (!response.ok) throw new AuthError('server');
+  }
+
+  /** Адрес, который оболочка открывает во внешнем браузере для Яндекс ID. */
+  async yandexUrl(): Promise<string> {
+    const deviceId = await this.deviceId();
+    const query = new URLSearchParams({ device_id: deviceId, platform: this.platform });
+    return `${this.base}/auth/yandex?${query.toString()}`;
+  }
+
+  /**
+   * Замкнуть вход по тому, что принесла оболочка.
+   *
+   * `magicToken` обменивается здесь и только здесь: `device_id` знает
+   * приложение, а не браузер, поэтому пройти по ссылке из письма «само»
+   * не получится — и это защита, а не неудобство (ТЗ §5.5).
+   */
+  async adopt(callback: AuthCallback): Promise<CloudSession> {
+    if (callback.error !== undefined) throw new AuthError(codeOf(callback.error));
+
+    if (typeof callback.magicToken === 'string' && callback.magicToken.length > 0) {
+      return this.exchangeMagicToken(callback.magicToken);
+    }
+
+    if (typeof callback.accessToken === 'string' && callback.accessToken.length > 0) {
+      // Сервер уже обменял токен и вернул сессию во фрагменте. Кто именно
+      // вошёл — спрашиваем у `/auth/me`: складывать почту в адрес незачем.
+      const deviceId = await this.deviceId();
+      const lifetime = (callback.expiresIn ?? 0) * 1000;
+      const provisional: CloudSession = {
+        accessToken: callback.accessToken,
+        refreshToken: callback.refreshToken ?? '',
+        expiresAt: this.now() + (lifetime > 0 ? lifetime : REFRESH_MARGIN_MS),
+        userId: '',
+        email: '',
+        deviceId,
+      };
+      const identified = await this.identify(provisional);
+      return this.persist(identified);
+    }
+
+    throw new AuthError('server');
+  }
+
+  /** Обмен одноразового токена из письма на сессию. */
+  async exchangeMagicToken(token: string): Promise<CloudSession> {
+    const deviceId = await this.deviceId();
+    const query = new URLSearchParams({ token, device_id: deviceId, format: 'json' });
+    const response = await this.send(`${this.base}/auth/magic-link/callback?${query.toString()}`, {
+      headers: { 'x-device-id': deviceId },
+    });
+    if (response.status === 410 || response.status === 400) {
+      throw new AuthError(codeOf(await errorCode(response)));
+    }
+    if (!response.ok) throw new AuthError('server');
+    return this.persist(this.fromResponse(await json<SessionResponse>(response), deviceId));
+  }
+
+  // ── Жизнь сессии ───────────────────────────────────────────────────────────
+
+  /**
+   * Действующий access-токен. `null` — аккаунта нет либо сессия закончилась;
+   * это нормальное состояние, локальная работа от него не зависит.
+   */
+  async accessToken(): Promise<string | null> {
+    const session = this.session;
+    if (session === null) return null;
+    if (session.expiresAt - REFRESH_MARGIN_MS > this.now()) return session.accessToken;
+    const refreshed = await this.refresh();
+    return refreshed?.accessToken ?? null;
+  }
+
+  /** Принудительное обновление — после 401 от облака. */
+  async refresh(): Promise<CloudSession | null> {
+    if (this.refreshing !== null) return this.refreshing;
+    const session = this.session;
+    if (session === null || session.refreshToken === '') return null;
+
+    this.refreshing = (async () => {
+      try {
+        const response = await this.send(`${this.base}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ refreshToken: session.refreshToken }),
+        });
+        if (!response.ok) {
+          // Сессия отозвана или просрочена — забываем её молча. Заметки на
+          // месте, синк просто становится локальным.
+          if (response.status === 401 || response.status === 400) await this.clear();
+          return null;
+        }
+        return await this.persist(
+          this.fromResponse(await json<SessionResponse>(response), session.deviceId),
+        );
+      } catch {
+        // Сети нет — старый токен ещё может пригодиться, сессию не трогаем.
+        return null;
+      } finally {
+        this.refreshing = null;
+      }
+    })();
+
+    return this.refreshing;
+  }
+
+  /** Выход: сервер гасит refresh-токен, устройство забывает всё. */
+  async signOut(): Promise<void> {
+    const session = this.session;
+    await this.clear();
+    if (session === null || session.refreshToken === '') return;
+    await this.send(`${this.base}/auth/logout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    }).catch(() => undefined);
+  }
+
+  async clear(): Promise<void> {
+    this.session = null;
+    await this.host.prefs.set<CloudSession | null>(AUTH_PREF.session, null);
+  }
+
+  // ── Внутреннее ─────────────────────────────────────────────────────────────
+
+  /** База уже содержит `/api/v1` — это условие контракта `AppHost`. */
+  private get base(): string {
+    return this.host.cloudBaseUrl.replace(/\/+$/, '');
+  }
+
+  private async send(url: string, init: RequestInit = {}): Promise<Response> {
+    try {
+      return await this.fetchImpl(url, init);
+    } catch {
+      throw new AuthError('unreachable');
+    }
+  }
+
+  private fromResponse(body: SessionResponse, fallbackDevice: string): CloudSession {
+    return {
+      accessToken: body.accessToken,
+      refreshToken: body.refreshToken,
+      expiresAt: this.now() + Math.max(body.expiresIn, 0) * 1000,
+      userId: body.user?.id ?? '',
+      email: body.user?.email ?? '',
+      deviceId: body.device?.id ?? fallbackDevice,
+    };
+  }
+
+  /** Кто вошёл. Ошибка не фатальна: сессия рабочая и без почты в интерфейсе. */
+  private async identify(session: CloudSession): Promise<CloudSession> {
+    try {
+      const response = await this.fetchImpl(`${this.base}/auth/me`, {
+        headers: {
+          authorization: `Bearer ${session.accessToken}`,
+          'x-device-id': session.deviceId,
+        },
+      });
+      if (!response.ok) return session;
+      const body = await json<{ id?: string; email?: string; device?: { id?: string } }>(response);
+      return {
+        ...session,
+        userId: body.id ?? session.userId,
+        email: body.email ?? session.email,
+        deviceId: body.device?.id ?? session.deviceId,
+      };
+    } catch {
+      return session;
+    }
+  }
+
+  private async persist(session: CloudSession): Promise<CloudSession> {
+    this.session = session;
+    this.device = session.deviceId;
+    await this.host.prefs.set(AUTH_PREF.session, session);
+    return session;
+  }
+}
+
+/** Код отказа сервера → код, который понимает контроллер. */
+function codeOf(serverCode: string): AuthErrorCode {
+  if (serverCode.startsWith('magic_link')) return 'link_dead';
+  if (serverCode === 'session_expired') return 'link_dead';
+  if (serverCode.startsWith('oauth') || serverCode.startsWith('yandex')) return 'declined';
+  if (serverCode === 'too_many_attempts') return 'too_soon';
+  return 'server';
+}
+
+async function errorCode(response: Response): Promise<string> {
+  const body = await json<ServerErrorBody>(response).catch(() => ({}) as ServerErrorBody);
+  return body.error?.code ?? 'server';
+}
+
+async function json<T>(response: Response): Promise<T> {
+  return (await response.json()) as T;
+}
+
+function isSession(value: unknown): value is CloudSession {
+  if (value === null || typeof value !== 'object') return false;
+  const candidate = value as Partial<CloudSession>;
+  return typeof candidate.accessToken === 'string' && typeof candidate.deviceId === 'string';
+}
+
+/** Случайные байты платформенным генератором; `Math.random` — только запасной. */
+function randomHex(bytes: number): string {
+  const buffer = new Uint8Array(bytes);
+  const source = globalThis.crypto;
+  if (source !== undefined && typeof source.getRandomValues === 'function') {
+    source.getRandomValues(buffer);
+  } else {
+    for (let index = 0; index < buffer.length; index += 1) {
+      buffer[index] = Math.floor(Math.random() * 256);
+    }
+  }
+  return Array.from(buffer, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}

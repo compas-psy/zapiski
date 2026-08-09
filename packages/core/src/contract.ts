@@ -120,6 +120,45 @@ export interface UpdaterProvider {
   downloadAndInstall(onProgress?: (fraction: number) => void): Promise<void>;
 }
 
+/**
+ * Что умеет место, выбранное под vault.
+ *
+ * Появилось из-за Android: системный выбор папки отдаёт дерево `content://`
+ * (SAF), в котором переименование бывает не у всех провайдеров, а без
+ * переименования нет и атомарной записи ТЗ §4.3. Скрывать это от пользователя
+ * нельзя, поэтому свойство места едет вместе с самим местом.
+ */
+export interface VaultLocationInfo {
+  /** `app` — каталог приложения (умолчание), `user` — папка пользователя. */
+  kind: 'app' | 'user';
+  /** Запись атомарна: временный файл + rename (ТЗ §4.3). */
+  atomicWrite: boolean;
+  /** Человекочитаемое имя места — для настроек и онбординга. */
+  label: string;
+}
+
+export interface VaultLocation extends VaultLocationInfo {
+  storage: VaultStorage;
+}
+
+/**
+ * Выбор папки там, где он существует, но идёт с оговорками.
+ *
+ * Порт необязательный: на Windows и в вебе выбранная пользователем папка ничем
+ * не хуже умолчания, и разделять их незачем — там есть `pickVaultDirectory`.
+ * На Android разница настоящая, и решение о ней принимает пользователь
+ * (ТЗ §4.1 п. 1: LocalFolder — в том числе папка, которую синкает сторонний
+ * клиент), а не мы за него.
+ */
+export interface VaultFolderPicker {
+  /** Системный выбор папки. `null` — пользователь отменил выбор. */
+  chooseFolder(): Promise<VaultLocation | null>;
+  /** Вернуться к каталогу приложения — надёжный путь с атомарной записью. */
+  useAppFolder(): Promise<VaultLocation | null>;
+  /** Где заметки лежат сейчас. `null` — место ещё не выбрано. */
+  current(): Promise<VaultLocationInfo | null>;
+}
+
 export interface PlatformCapabilities {
   /** `web` | `windows` | `android` — только для телеметрии и мелких различий. */
   readonly kind: 'web' | 'windows' | 'android';
@@ -132,6 +171,13 @@ export interface PlatformCapabilities {
   secureFlag(on: boolean): void;
   /** Открыть системный диалог выбора папки vault'а. */
   pickVaultDirectory(): Promise<VaultStorage | null>;
+  /**
+   * Выбор папки с оговорками (Android/SAF). Поле необязательное: платформа,
+   * которой нечего оговаривать, его не реализует, и UI тогда не показывает
+   * ни выбора, ни предупреждения — скрытый элемент честнее выключенного
+   * (BEHAVIOR §5.1).
+   */
+  readonly vaultFolders?: VaultFolderPicker | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

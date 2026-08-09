@@ -55,4 +55,22 @@ export const en: Catalog = {
     offline: 'Offline',
     error: 'Could not sync',
   },
+  storage: {
+    title: 'Where notes are kept',
+    appFolder: 'App folder',
+    appFolderNote:
+      'Plain .md files on the device. Writing goes through a temporary file, so a power failure does not damage a note',
+    chooseFolder: 'Choose another folder',
+    useAppFolder: 'Go back to the app folder',
+    userFolder: 'Chosen folder',
+    nonAtomicTitle: 'What to know about the chosen folder',
+    nonAtomicBody:
+      'Android opens other folders through the system picker, and writing there happens directly, without a temporary file. If the power goes out exactly while a note is being written, that note may stay incomplete. Other notes are not affected',
+    nonAtomicWhy:
+      'In return other apps can see the folder: the Yandex.Disk client, for example, syncs it on its own, with no subscription and no cloud of ours',
+    atomicKept:
+      'This folder supports renaming, so writing goes through a temporary file — same as in the app folder',
+    chosen: (folder: string): string => `Notes are now in the “${folder}” folder`,
+    returned: 'Notes are back in the app folder',
+  },
 };

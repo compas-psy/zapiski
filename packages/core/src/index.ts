@@ -131,6 +131,14 @@ export {
   passwordHint,
   plainPathOf,
 } from './crypto/notes.js';
+/* Счётчик попыток переживает перезапуск (BEHAVIOR §5.2, SEC-024). */
+export {
+  EMPTY_UNLOCK_GUARD,
+  parseUnlockGuard,
+  UnlockGuard,
+  type UnlockGuardOptions,
+  type UnlockGuardRecord,
+} from './crypto/unlock-guard.js';
 
 // ── CRDT ───────────────────────────────────────────────────────────────────
 export { clientIdFor, diffText, mergeTexts, mergeUpdates, NoteDoc, type TextEdit } from './crdt/doc.js';
