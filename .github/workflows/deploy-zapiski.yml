@@ -174,22 +174,25 @@ jobs:
       - name: Проверить скрипт удалённого деплоя
         run: bash -n deploy/deploy-production-remote.sh
 
-      # Артефакт нужен job'у deploy: пересобирать там второй раз незачем.
-      - name: Сохранить собранную статику
-        if: steps.scripts.outputs.web_buildable == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: zapiski-web-dist
-          path: apps/web/dist
-          if-no-files-found: error
-          retention-days: 7
+      # Артефакт с собранной статикой здесь НЕ выгружается.
+      # Раньше выгружался, чтобы передать dist в job deploy, — и деплой
+      # падал на `Artifact storage quota has been hit`: сборка проходила,
+      # а выкладка срывалась из-за исчерпанной квоты хранилища аккаунта.
+      # Job deploy собирает статику сам: веб-сборка занимает секунды, и это
+      # дешевле, чем зависеть от общей на весь аккаунт квоты.
 
   # ───────────────────────────────────────────────────────────────────────────
   # DEPLOY
   # ───────────────────────────────────────────────────────────────────────────
   deploy:
     name: Выкладка на cmpas.ru
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Ветка по умолчанию берётся из репозитория, а не зашита как `main`:
+    # репозиторий был создан пустым, и веткой по умолчанию стала первая
+    # запушенная. Жёсткое `refs/heads/main` молча пропускало весь job.
+    # Ручной запуск разрешён — им пользуются для первой выкладки.
+    if: >-
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -202,15 +205,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Пока apps/web не существует, артефакта нет — это нормально,
-      # деплой API от этого не отменяется.
-      - name: Забрать собранную статику
+      # Статика собирается здесь, а не приезжает артефактом из preflight:
+      # квота на артефакты общая для всего аккаунта и уже упиралась в потолок,
+      # роняя выкладку при полностью зелёной сборке. Веб собирается за секунды.
+      # Провал сборки не отменяет деплой API — ниже стоит проверка на пустой
+      # dist, и в этом случае docroot просто не трогается.
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Кэш pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Собрать PWA
         id: dist
         continue-on-error: true
-        uses: actions/download-artifact@v4
-        with:
-          name: zapiski-web-dist
-          path: apps/web/dist
+        run: |
+          set -euo pipefail
+          [ -d apps/web ] || { echo '::notice::apps/web нет — статику не собираем'; exit 0; }
+          pnpm install --frozen-lockfile
+          pnpm --filter @zapiski/web build
 
       - name: Загрузить SSH-ключ
         run: |

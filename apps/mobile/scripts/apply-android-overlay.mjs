@@ -170,8 +170,13 @@ const APPLICATION_CHILDREN = `
 export function patchManifest(source) {
   let manifest = source;
 
-  // 1. Свой блок мог остаться от прошлого запуска — убираем целиком.
-  const previous = new RegExp(`\\s*${escapeRegExp(BEGIN)}[\\s\\S]*?${escapeRegExp(END)}`, 'g');
+  // 1. Свой блок мог остаться от прошлого запуска — убираем целиком вместе с
+  //    отступом и собственным переводом строки. Тогда повторный запуск даёт
+  //    ровно тот же файл (это проверяет самопроверка).
+  const previous = new RegExp(
+    `[ \\t]*${escapeRegExp(BEGIN)}[\\s\\S]*?${escapeRegExp(END)}[ \\t]*\\n?`,
+    'g',
+  );
   manifest = manifest.replace(previous, '');
 
   // 2. Разрешения — перед <application>, если их ещё нет.
@@ -182,7 +187,7 @@ export function patchManifest(source) {
     const block = missing
       .map((name) => `    <uses-permission android:name="${name}" />`)
       .join('\n');
-    manifest = insertBefore(manifest, /<application\b/, `${BEGIN}\n${block}\n    ${END}\n\n    `);
+    manifest = insertBefore(manifest, /<application\b/, `${BEGIN}\n${block}\n    ${END}\n    `);
   }
 
   // 3. Свой Application-класс: он знает текущую активность и контекст.
@@ -194,8 +199,11 @@ export function patchManifest(source) {
   manifest = setApplicationAttribute(manifest, 'android:allowBackup', 'false');
 
   // 5. Наши компоненты — перед </application>.
-  const children = `\n    ${BEGIN}\n${APPLICATION_CHILDREN}    ${END}\n`;
-  manifest = insertBefore(manifest, /<\/application>/, `${children}    `);
+  manifest = insertBefore(
+    manifest,
+    /<\/application>/,
+    `${BEGIN}\n${APPLICATION_CHILDREN}    ${END}\n    `,
+  );
 
   return manifest;
 }
@@ -204,9 +212,43 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * Границы XML-комментариев. Нужны, чтобы патч не полез внутрь комментария:
+ * в шаблоне (и уж точно в нашем эталоне) слово `<application` встречается в
+ * пояснительном тексте, а вставка туда рвёт документ.
+ */
+function commentRanges(text) {
+  const ranges = [];
+  let from = 0;
+  for (;;) {
+    const start = text.indexOf('<!--', from);
+    if (start === -1) break;
+    const end = text.indexOf('-->', start + 4);
+    const stop = end === -1 ? text.length : end + 3;
+    ranges.push([start, stop]);
+    from = stop;
+  }
+  return ranges;
+}
+
+/** Первое совпадение вне комментариев. */
+function findOutsideComments(text, pattern) {
+  const ranges = commentRanges(text);
+  const search = new RegExp(
+    pattern.source,
+    pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`,
+  );
+  let match;
+  while ((match = search.exec(text)) !== null) {
+    const inside = ranges.some(([from, to]) => match.index >= from && match.index < to);
+    if (!inside) return match;
+  }
+  return null;
+}
+
 function insertBefore(text, pattern, insertion) {
-  const match = text.match(pattern);
-  if (match === null || match.index === undefined) {
+  const match = findOutsideComments(text, pattern);
+  if (match === null) {
     throw new Error(`в манифесте не найден ${pattern}`);
   }
   return text.slice(0, match.index) + insertion + text.slice(match.index);
@@ -214,8 +256,8 @@ function insertBefore(text, pattern, insertion) {
 
 /** Прочитать открывающий тег <application …> целиком. */
 function applicationTag(manifest) {
-  const match = manifest.match(/<application\b[^>]*>/);
-  if (match === null || match.index === undefined) {
+  const match = findOutsideComments(manifest, /<application\b[^>]*>/);
+  if (match === null) {
     throw new Error('в манифесте нет <application>');
   }
   return { text: match[0], index: match.index };
