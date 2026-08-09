@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- English catalogue. Wording mirrors packages/app/src/i18n/en.ts. -->
+<resources>
+    <string name="app_name">KOMPAS.NOTES</string>
+
+    <string name="widget_quick_note">Write</string>
+    <string name="widget_quick_note_description">A new note in one tap</string>
+    <string name="widget_recent">Recent</string>
+    <string name="widget_recent_description">Recent notes</string>
+    <string name="widget_pinned">Pinned</string>
+    <string name="widget_pinned_description">Pinned note</string>
+    <string name="widget_empty">It is quiet here</string>
+    <string name="widget_encrypted">Encrypted</string>
+    <string name="widget_new_note">New note</string>
+
+    <string name="tile_quick_note">Write</string>
+
+    <string name="biometric_title">Unlock with a fingerprint</string>
+    <string name="biometric_subtitle">the key is kept in the secure module</string>
+    <string name="biometric_cancel">Enter the password</string>
+</resources>

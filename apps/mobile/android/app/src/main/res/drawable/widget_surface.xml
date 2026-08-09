@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Подложка виджета. Цвет — системный атрибут темы, а не литерал: виджет живёт
+  в процессе лаунчера, следует светлой и тёмной теме ОС и не знает про токены
+  приложения (BEHAVIOR §8, «виджеты уважают системную тему»).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="?android:attr/colorBackground" />
+    <corners android:radius="16dp" />
+</shape>

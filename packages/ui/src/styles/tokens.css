@@ -183,7 +183,7 @@
   --line:          #EAE6DB;  /* разделители, границы */
   --line-soft:     #F0EDE4;  /* строки списка */
   --text:          #38342E;  /* основной текст */
-  --text-secondary:#8A8375;  /* сниппеты, подписи */
+  --text-secondary:#726C60;  /* сниппеты, подписи; было #8A8375 — 3.60:1 */
   --text-tertiary: #B6AFA2;  /* даты, счётчики, плейсхолдеры */
   --text-disabled: #C8C1B4;  /* пустой чекбокс, неактивное */
   --scrim:         rgba(30, 26, 22, 0.32);
@@ -322,9 +322,9 @@
 
 /* gold */
 [data-accent='gold'] {
-  --accent:         #B08430;
+  --accent:         #8F6B26;  /* было #B08430 — 3.25:1 на --bg */
   --accent-soft:    #F5EBD8;
-  --accent-on-soft: #8E6A24;
+  --accent-on-soft: #886522;  /* было #8E6A24 — 4.19:1 на soft */
 }
 [data-theme='graphite'][data-accent='gold'],
 [data-theme='graphite'] [data-accent='gold'],

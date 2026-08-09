@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  «Записать» 1×1 (BEHAVIOR §8): иконка пера на подложке и подпись.
+  Цвета — системные атрибуты темы; акцент проставляется в рантайме из снимка.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quick_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_surface"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="8dp"
+    android:contentDescription="@string/widget_quick_note">
+
+    <ImageView
+        android:id="@+id/quick_icon"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:src="@drawable/ic_pen"
+        android:contentDescription="@string/widget_quick_note" />
+
+    <TextView
+        android:id="@+id/quick_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="@string/widget_quick_note"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="12sp" />
+</LinearLayout>

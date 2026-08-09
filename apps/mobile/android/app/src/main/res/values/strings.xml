@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Строки Android-оболочки: имя приложения, подписи виджетов, плитки и
+  системного диалога биометрии.
+
+  Правило ТЗ §6 — «все строки во внешних каталогах, ни одной зашитой в
+  компонент» — здесь соблюдается ресурсами Android: `values/` — русский,
+  `values-en/` — английский.
+
+  Тексты не выдуманы: они дословно повторяют каталог `packages/app/src/i18n`
+  и реестр BEHAVIOR §11/§12. Оболочка не сочиняет формулировок — иначе на
+  Android появились бы слова, которых нет ни в вебе, ни на Windows.
+-->
+<resources>
+    <string name="app_name">КОМПАС.ЗАПИСКИ</string>
+
+    <!-- Виджеты (BEHAVIOR §8) -->
+    <string name="widget_quick_note">Записать</string>
+    <string name="widget_quick_note_description">Новая заметка в одно касание</string>
+    <string name="widget_recent">Последние</string>
+    <string name="widget_recent_description">Последние заметки</string>
+    <string name="widget_pinned">Закреплённая</string>
+    <string name="widget_pinned_description">Закреплённая заметка</string>
+    <!-- Пустое состояние — дословно из BEHAVIOR §12 и каталога списка. -->
+    <string name="widget_empty">Здесь пока тихо</string>
+    <!-- Зашифрованная заметка в виджете — без содержимого (§8). -->
+    <string name="widget_encrypted">Зашифровано</string>
+    <string name="widget_new_note">Новая заметка</string>
+
+    <!-- Плитка Quick Settings (ТЗ §5.4) -->
+    <string name="tile_quick_note">Записать</string>
+
+    <!-- Системный диалог биометрии — строки из каталога crypto.* приложения -->
+    <string name="biometric_title">Разблокировать отпечатком</string>
+    <string name="biometric_subtitle">ключ хранится в защищённом модуле</string>
+    <string name="biometric_cancel">Ввести пароль</string>
+</resources>

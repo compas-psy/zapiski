@@ -38,18 +38,18 @@ type PairId = 'text/bg' | 'text/surface' | 'text-secondary/bg' | 'accent/bg' | '
  * Реестр известных отклонений (тема · акцент · пара → измеренный контраст).
  * Источник правды для packages/ui/CONTRAST.md.
  */
-const KNOWN_DEVIATIONS: Record<string, number> = {
-  /* --text-secondary #8A8375 на --bg #FBFAF7 — одна причина на все 6 акцентов */
-  'paper/garnet/text-secondary/bg': 3.6,
-  'paper/pine/text-secondary/bg': 3.6,
-  'paper/gold/text-secondary/bg': 3.6,
-  'paper/blueberry/text-secondary/bg': 3.6,
-  'paper/heather/text-secondary/bg': 3.6,
-  'paper/slate/text-secondary/bg': 3.6,
-  /* gold в светлой теме: #B08430 на #FBFAF7 и #8E6A24 на #F5EBD8 */
-  'paper/gold/accent/bg': 3.25,
-  'paper/gold/accent-on-soft/accent-soft': 4.19,
-};
+/**
+ * Реестр пуст: 2026-08-09 дизайнер принял решение по всем трём отклонениям
+ * (см. docs/design/CONTRAST-BRIEF.md), значения обновлены в tokens.css:
+ *   --text-secondary  #8A8375 → #726C60  (3.60 → 4.99 на --bg)
+ *   gold --accent     #B08430 → #8F6B26  (3.25 → 4.68 на --bg)
+ *   gold --accent-on-soft #8E6A24 → #886522  (4.19 → 4.52 на soft)
+ *
+ * Все 90 пар из списка DoD проходят AA. Реестр оставлен пустым намеренно:
+ * если завтра появится новое отклонение, тест назовёт его, а не молча
+ * пропустит.
+ */
+const KNOWN_DEVIATIONS: Record<string, number> = {};
 
 const rules: Rule[] = loadTokenRules();
 

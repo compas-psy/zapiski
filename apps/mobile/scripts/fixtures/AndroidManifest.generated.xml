@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ЭТАЛОН, А НЕ РАБОЧИЙ ФАЙЛ.
+
+  Так примерно выглядит `gen/android/app/src/main/AndroidManifest.xml`, который
+  создаёт `tauri android init`. Файл нужен ровно для одного: прогнать патч из
+  `apply-android-overlay.mjs` в тесте на машине, где Android SDK нет и
+  сгенерировать настоящий манифест нечем.
+
+  Если шаблон Tauri изменится, настоящий манифест будет другим — патч
+  рассчитан именно на это: он ищет `<application>` и `</application>`, а не
+  конкретные строки шаблона. Эталон при обновлении CLI стоит обновить, чтобы
+  тест продолжал проверять то, что реально собирается.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.zapiski"
+        android:usesCleartextTraffic="${usesCleartextTraffic}">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:name=".MainActivity"
+            android:label="@string/main_activity_title"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
