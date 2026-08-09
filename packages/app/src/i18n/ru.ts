@@ -63,7 +63,7 @@ export const ru = {
           badge: 'бесплатно',
         },
         kompas: {
-          title: 'Облако КОМПАС',
+          title: 'Облако СИМПАС',
           text: 'E2E-шифрование, история версий, мгновенный синк',
           badge: 'подписка',
         },
@@ -176,7 +176,7 @@ export const ru = {
       path: 'Путь к файлу',
       pathCopied: 'Путь скопирован',
     },
-    diaryLink: 'КОМПАС.Дневник',
+    diaryLink: 'ДНЕВНИК',
   },
 
   // ── Библиотека (SCREENS §5) ───────────────────────────────────────────────
@@ -307,18 +307,19 @@ export const ru = {
       theme: 'Тема',
       themes: {
         system: 'Система',
-        paper: 'Бумага',
+        simpas: 'СИМПАС',
         graphite: 'Графит',
         ink: 'Чернила',
       },
       accent: 'Акцент',
+      /* Шесть пресетов DS-ALIGNMENT §3; терракоты в наборе нет. */
       accents: {
-        garnet: 'Гранат',
         pine: 'Хвоя',
+        forest: 'Лес',
         gold: 'Золото',
-        blueberry: 'Черника',
-        heather: 'Вереск',
-        slate: 'Грифель',
+        dusk: 'Сумерки',
+        granite: 'Гранит',
+        clay: 'Глина',
       },
       fontSize: 'Размер текста',
       fontSizeSmall: 'А',
@@ -328,7 +329,7 @@ export const ru = {
       columnWidth: 'Ширина колонки',
       columnWidthValues: { 640: '640', 720: '720', full: 'Вся ширина' },
       typeface: 'Шрифт',
-      typefaceValues: { sans: 'Golos', serif: 'Serif' },
+      typefaceValues: { sans: 'Geist', serif: 'Serif' },
       compact: 'Компактный режим',
     },
     editor: {
@@ -351,7 +352,7 @@ export const ru = {
       webdavUser: 'Логин',
       webdavPassword: 'Пароль',
       yandex: 'Яндекс.Диск',
-      kompas: 'Облако КОМПАС',
+      kompas: 'Облако СИМПАС',
       kompasBadge: 'ЗАПИСКИ+',
       localFolder: 'Папка на устройстве',
       conflictsMonth: (count: number): string =>
@@ -414,7 +415,7 @@ export const ru = {
       crypto: 'Шифрование AES-256',
       export: 'Экспорт в md, PDF, HTML, DOCX',
       ownStorage: 'Локально · WebDAV · Яндекс.Диск',
-      cloud: 'Облако КОМПАС',
+      cloud: 'Облако СИМПАС',
       cloudPlus: '10 ГБ',
       publish: 'Публикация страницы',
       voice: 'Транскрибация',
@@ -424,7 +425,7 @@ export const ru = {
     no: 'нет',
     trial: 'Попробовать 14 дней',
     honest: 'Отмена в один тап. Без таймеров и «скидок только сегодня»',
-    bundle: 'Вместе с КОМПАС.Дневником — +100 ₽',
+    bundle: 'Вместе с ДНЕВНИКОМ — +100 ₽',
   },
 
   // ── Импорт (BEHAVIOR §9, мастер из 4 шагов) ───────────────────────────────
@@ -572,7 +573,7 @@ export const ru = {
       local: 'Папка на устройстве',
       webdav: 'WebDAV',
       yandex: 'Яндекс.Диск',
-      kompas: 'Облако КОМПАС',
+      kompas: 'Облако СИМПАС',
     },
     notApplicable: 'В этой ячейке матрицы состояния нет — по BEHAVIOR §12 это прочерк',
   },

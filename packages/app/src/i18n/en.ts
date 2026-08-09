@@ -55,7 +55,7 @@ export const en: AppCatalog = {
         },
         own: { title: 'Your own cloud', text: 'WebDAV or Yandex.Disk', badge: 'free' },
         kompas: {
-          title: 'KOMPAS cloud',
+          title: 'SIMPAS cloud',
           text: 'end-to-end encryption, version history, instant sync',
           badge: 'subscription',
         },
@@ -165,7 +165,7 @@ export const en: AppCatalog = {
       path: 'File path',
       pathCopied: 'Path copied',
     },
-    diaryLink: 'KOMPAS.Diary',
+    diaryLink: 'DNEVNIK',
   },
 
   library: {
@@ -269,15 +269,16 @@ export const en: AppCatalog = {
       previewBody:
         'Calm text without extra shine. Size, line height and column width — everything changes at once.',
       theme: 'Theme',
-      themes: { system: 'System', paper: 'Paper', graphite: 'Graphite', ink: 'Ink' },
+      themes: { system: 'System', simpas: 'SIMPAS', graphite: 'Graphite', ink: 'Ink' },
       accent: 'Accent',
+      /* Six presets, DS-ALIGNMENT §3; terracotta is not among them. */
       accents: {
-        garnet: 'Garnet',
         pine: 'Pine',
+        forest: 'Forest',
         gold: 'Gold',
-        blueberry: 'Blueberry',
-        heather: 'Heather',
-        slate: 'Slate',
+        dusk: 'Dusk',
+        granite: 'Granite',
+        clay: 'Clay',
       },
       fontSize: 'Text size',
       fontSizeSmall: 'A',
@@ -287,7 +288,7 @@ export const en: AppCatalog = {
       columnWidth: 'Column width',
       columnWidthValues: { 640: '640', 720: '720', full: 'Full width' },
       typeface: 'Typeface',
-      typefaceValues: { sans: 'Golos', serif: 'Serif' },
+      typefaceValues: { sans: 'Geist', serif: 'Serif' },
       compact: 'Compact mode',
     },
     editor: {
@@ -310,7 +311,7 @@ export const en: AppCatalog = {
       webdavUser: 'Login',
       webdavPassword: 'Password',
       yandex: 'Yandex.Disk',
-      kompas: 'KOMPAS cloud',
+      kompas: 'SIMPAS cloud',
       kompasBadge: 'ZAPISKI+',
       localFolder: 'Folder on this device',
       conflictsMonth: (count: number): string =>
@@ -371,7 +372,7 @@ export const en: AppCatalog = {
       crypto: 'AES-256 encryption',
       export: 'Export to md, PDF, HTML, DOCX',
       ownStorage: 'Local · WebDAV · Yandex.Disk',
-      cloud: 'KOMPAS cloud',
+      cloud: 'SIMPAS cloud',
       cloudPlus: '10 GB',
       publish: 'Published page',
       voice: 'Transcription',
@@ -381,7 +382,7 @@ export const en: AppCatalog = {
     no: 'no',
     trial: 'Try it for 14 days',
     honest: 'Cancel in one tap. No timers and no “today only” discounts',
-    bundle: 'Together with KOMPAS.Diary — +100 ₽',
+    bundle: 'Together with DNEVNIK — +100 ₽',
   },
 
   importer: {
@@ -521,7 +522,7 @@ export const en: AppCatalog = {
       local: 'Folder on this device',
       webdav: 'WebDAV',
       yandex: 'Yandex.Disk',
-      kompas: 'KOMPAS cloud',
+      kompas: 'SIMPAS cloud',
     },
     notApplicable: 'This matrix cell has no state — BEHAVIOR §12 marks it with a dash',
   },

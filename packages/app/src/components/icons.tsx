@@ -112,7 +112,7 @@ export const IconFingerprint = (p: AppIconProps): ReactNode => (
   </Glyph>
 );
 
-/** Стрелка «наружу» — deep link в КОМПАС.Дневник (SCREENS §4). */
+/** Стрелка «наружу» — deep link в ДНЕВНИК (SCREENS §4). */
 export const IconExternal = (p: AppIconProps): ReactNode => (
   <Glyph {...p}>
     <path d="M14 5h5v5M19 5l-8 8" />

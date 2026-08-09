@@ -1,5 +1,5 @@
 /**
- * Контракт приложения КОМПАС.ЗАПИСКИ.
+ * Контракт приложения ЗАПИСКИ.
  *
  * `packages/app` содержит ВСЕ экраны и ВСЁ поведение. Платформенные оболочки
  * (`apps/web`, `apps/desktop`, `apps/mobile`) обязаны быть тонкими: они только
@@ -31,7 +31,7 @@ export interface AppHost {
   /** Настройки приложения вне vault'а: тема, акцент, язык, выбранный backend. */
   readonly prefs: PreferencesStore;
 
-  /** Открыть ссылку во внешнем браузере (deep link в КОМПАС.Дневник и т.п.). */
+  /** Открыть ссылку во внешнем браузере (deep link в ДНЕВНИК и т.п.). */
   openExternal(url: string): Promise<void>;
 
   /**
@@ -56,14 +56,16 @@ export interface PreferencesStore {
 // Внешний вид (DESIGN_TOKENS §1, SCREENS §8 «Внешний вид», макет 4i)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ThemeChoice = 'system' | 'paper' | 'graphite' | 'ink';
+/** DS-ALIGNMENT §2: `paper` заменена на `simpas`, «альтернативной светлой» нет. */
+export type ThemeChoice = 'system' | 'simpas' | 'graphite' | 'ink';
+/** DS-ALIGNMENT §3: шесть пресетов, терракоты среди них нет. */
 export type AccentChoice =
-  | 'garnet'
   | 'pine'
+  | 'forest'
   | 'gold'
-  | 'blueberry'
-  | 'heather'
-  | 'slate';
+  | 'dusk'
+  | 'granite'
+  | 'clay';
 
 export interface Appearance {
   theme: ThemeChoice;
