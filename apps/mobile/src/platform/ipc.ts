@@ -20,6 +20,7 @@ export const COMMANDS = {
   biometricsUnlock: 'biometrics_unlock',
   biometricsRemove: 'biometrics_remove',
   pdfRender: 'pdf_render',
+  saveFile: 'save_file',
   updaterCheck: 'updater_check',
   updaterInstall: 'updater_download_install',
   shareTake: 'share_take',

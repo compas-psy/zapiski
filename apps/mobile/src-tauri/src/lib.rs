@@ -14,6 +14,7 @@
 
 mod android;
 mod biometrics;
+mod files;
 mod platform;
 mod print;
 mod updater;
@@ -40,6 +41,7 @@ pub fn run() {
             biometrics::biometrics_unlock,
             biometrics::biometrics_remove,
             print::pdf_render,
+            files::save_file,
             updater::updater_check,
             updater::updater_download_install,
             widgets::widgets_publish,

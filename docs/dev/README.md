@@ -3,21 +3,20 @@
 Точка входа для разработчика. Здесь — как поднять окружение, как устроено
 монорепо, куда что класть и по каким правилам мы работаем.
 
-> **Статус сборки 0.1.0** (сверено на коммите `f0226b0`). Готовы и покрыты
-> тестами четыре слоя: ядро (`packages/core`), редактор (`packages/editor`),
-> дизайн-система (`packages/ui`) и облачный бэкенд (`server`).
+> **Статус сборки 0.1.0** (сверено на коммите `c6ed823`). Готовы и покрыты
+> тестами шесть слоёв: ядро (`packages/core`), редактор (`packages/editor`),
+> дизайн-система (`packages/ui`), экраны (`packages/app`), веб-оболочка
+> (`apps/web`), оболочка Windows (`apps/desktop`) и облачный бэкенд (`server`).
+> `pnpm build`, `pnpm dev`, `pnpm -r typecheck` и `pnpm -r test` работают из
+> корня; веб собирается примерно за полторы секунды.
 >
-> **Слой экранов и оболочки — в активной разработке прямо сейчас**, состав
-> меняется от часа к часу. На момент сверки в `packages/app` есть состояние
-> приложения и девять экранов и панелей (список, заметка, поиск, библиотека,
-> архив, разблокировка, «Инфо», меню заметки, шифрование), но **нет
-> `src/index.ts`** — публичного API пакет пока не отдаёт. В `apps/` есть только
-> Rust-часть Tauri-оболочки для Windows (`apps/desktop/src-tauri`);
-> `apps/web` и `apps/mobile` не созданы, поэтому `pnpm dev` и `pnpm build` в
-> корне падают.
+> **Не готова оболочка Android** (`apps/mobile`): TypeScript-порты, Rust-команды
+> и Kotlin-сторона написаны, но у каталога нет `package.json` (значит, он вне
+> воркспейса) и не сгенерирован gradle-проект — собрать APK нечем. Разбор —
+> [modules/platforms.md](modules/platforms.md#android-что-осталось).
 >
-> Проверить состояние на сейчас: `ls packages/app/src/screens apps` и
-> `pnpm -r test`. Подробности — [getting-started.md](getting-started.md#известные-грабли).
+> Проверить состояние на сейчас: `pnpm -r test && pnpm -r typecheck`.
+> Известные ограничения — [getting-started.md](getting-started.md#известные-грабли).
 
 ## Документы
 
@@ -27,10 +26,31 @@
 | [modules/core.md](modules/core.md) | Ядро: vault, markdown, индекс, крипто, CRDT, синк, импорт/экспорт |
 | [modules/ui.md](modules/ui.md) | Токен-слой (3 темы × 6 акцентов) и библиотека компонентов |
 | [modules/editor.md](modules/editor.md) | Live-preview, IME, хоткеи, как добавить markdown-элемент |
+| [modules/app.md](modules/app.md) | Экраны, `AppHost`, `AppController`, раскладки, матрица состояний, палитра команд |
+| [modules/platforms.md](modules/platforms.md) | Три оболочки: что реализовано на каждой, какие порты `null` и почему |
 | [modules/server.md](modules/server.md) | API KompasCloud, схема БД, модель zero-knowledge |
 | [testing.md](testing.md) | Что покрыто тестами, «злой синк», перф-бюджеты |
 | [build-and-release.md](build-and-release.md) | Сборка веба/Windows/Android, workflow'ы, автообновление, секреты |
 | [contributing.md](contributing.md) | Соглашения: язык комментариев, приоритет ТЗ, ADR, запрет глубоких импортов |
+
+## Безопасность
+
+Каталог `security/` принадлежит инфобезу — **читается и цитируется, не
+редактируется** этой командой:
+
+* [`security/THREAT-MODEL.md`](security/THREAT-MODEL.md) — модель угроз:
+  активы, границы доверия, нарушители, что мы принимаем как остаточный риск;
+* [`security/AUDIT.md`](security/AUDIT.md) — журнал аудита: находки `SEC-***`
+  со статусами, разбор каждой и что проверить не удалось.
+
+Проверки инфобеза идут отдельным workflow `.github/workflows/security.yml` на
+каждый PR, включая PR из форка, — см.
+[build-and-release.md](build-and-release.md#security-yml--безопасность).
+
+Отдельно: [`../design/CONTRAST-BRIEF.md`](../design/CONTRAST-BRIEF.md) — бриф
+дизайнеру по контрасту токенов. Вопрос **закрыт** 2026-08-09, все 90 пар из DoD
+проходят 4.5:1; бриф оставлен как обоснование трёх изменённых значений
+(см. [modules/ui.md](modules/ui.md#контраст)).
 
 ## Документы, которыми владеет не эта команда
 
@@ -62,10 +82,10 @@ packages/core     логика: vault, markdown, индекс+FTS, крипто,
                   синк, импорт/экспорт, i18n. Платформо-независима
 packages/ui       токены тем и библиотека React-компонентов
 packages/editor   CodeMirror 6 live-preview + React-обёртка
-packages/app      ВСЕ экраны и всё поведение     ← в работе, без src/index.ts
-apps/web          оболочка PWA                   ← пока не создана
-apps/desktop      оболочка Tauri 2 (Windows)     ← только src-tauri (Rust)
-apps/mobile       оболочка Tauri 2 (Android)     ← пока не создана
+packages/app      ВСЕ экраны и всё поведение
+apps/web          оболочка PWA
+apps/desktop      оболочка Tauri 2 (Windows)
+apps/mobile       оболочка Tauri 2 (Android)     ← вне воркспейса: нет package.json
 server            KompasCloud API (Node 22 + Fastify + PostgreSQL)
 deploy            nginx, Docker Compose, скрипты развёртывания
 scripts           lint-tokens.mjs — «ни одного hex вне токенов»
@@ -74,7 +94,9 @@ docs              документация (этот каталог) и ТЗ
 
 Пакеты воркспейса объявлены в `pnpm-workspace.yaml`: `packages/*`, `apps/*`,
 `server`. Каталог попадает в воркспейс только когда у него есть
-`package.json`: у `packages/app` он уже есть, у `apps/desktop` — ещё нет.
+`package.json`, поэтому `pnpm -r` видит **семь** проектов из восьми: у
+`apps/mobile` его нет. Из-за этого Android-оболочка не типизируется и не
+собирается вместе со всеми — [modules/platforms.md](modules/platforms.md#android-что-осталось).
 
 ## Куда что класть
 

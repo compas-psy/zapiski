@@ -43,8 +43,8 @@ pnpm install
 pnpm test           # тесты всех пакетов (vitest)
 pnpm typecheck      # проверка типов всех пакетов
 pnpm lint:tokens    # падает при hex-цвете вне токен-файла
-pnpm build          # собрать пакеты и веб      ← сейчас падает, см. ниже
-pnpm dev            # веб в режиме разработки   ← сейчас падает, см. ниже
+pnpm build          # собрать пакеты и веб
+pnpm dev            # веб в режиме разработки, http://localhost:5173
 ```
 
 По пакетам:
@@ -55,12 +55,42 @@ pnpm --filter @zapiski/core build          # tsc → dist/
 pnpm --filter @zapiski/editor test
 pnpm --filter @zapiski/ui test
 pnpm --filter @zapiski/ui gallery          # витрина компонентов в браузере
+pnpm --filter @zapiski/app test
 pnpm --filter @zapiski/server test
 ```
 
 ### Что реально можно запустить и посмотреть глазами
 
-**Витрина компонентов** — единственная работающая визуальная поверхность:
+**Само приложение в браузере** — быстрее всего:
+
+```bash
+pnpm dev
+```
+
+Поднимется `apps/web`. Пакеты воркспейса резолвятся в исходники, поэтому
+пересборка `packages/*` не нужна: правка экрана видна сразу. Запросы `/api`
+проксируются на `http://127.0.0.1:8787` — если сервер не поднят, приложение всё
+равно работает: облако необязательно (инвариант local-first).
+
+Место хранения выбирается на втором шаге онбординга: в Chromium откроется
+системный диалог выбора папки (File System Access API), в остальных браузерах
+vault ляжет в OPFS. Подробности — [modules/platforms.md](modules/platforms.md#веб-appsweb).
+
+**Приложение на Windows** (нужен Windows и Rust-тулчейн):
+
+```bash
+pnpm --filter @zapiski/desktop tauri dev
+```
+
+Локально в этом окружении не проверяется — Windows-тулчейна нет, это
+зафиксировано в [`../ACCEPTANCE.md`](../ACCEPTANCE.md). Единственное место,
+где собирается `.msi`/`.exe`, — workflow `build-windows.yml`.
+
+**Android** пока запустить нечем: у `apps/mobile` нет `package.json` и не
+сгенерирован gradle-проект — см.
+[modules/platforms.md](modules/platforms.md#android-что-осталось).
+
+**Витрина компонентов** — быстрый способ увидеть токены и всю библиотеку:
 
 ```bash
 pnpm --filter @zapiski/ui gallery
@@ -69,6 +99,10 @@ pnpm --filter @zapiski/ui gallery
 Vite поднимет `packages/ui/gallery.html`, откроется страница со всеми
 компонентами библиотеки, переключателями трёх тем и шести акцентов. Это тот
 самый артефакт, по которому проверяется пункт B1 приёмочного листа.
+
+**Отладочное меню** — воспроизведение любой ячейки матрицы `BEHAVIOR.md` §12
+(пустое, загрузка, оффлайн, ошибка, заперто): в приложении «Настройки → Внешний
+вид → Отладочное меню». Приёмочный критерий №10.
 
 **Сервер KompasCloud** локально:
 

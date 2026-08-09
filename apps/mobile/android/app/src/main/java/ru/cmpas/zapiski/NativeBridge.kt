@@ -227,6 +227,13 @@ object NativeBridge {
         Updates.install(requireContext(), path)
     }
 
+    // ── Экспорт файла ───────────────────────────────────────────────────────
+
+    /** `null` — сохранили; строка — текст ошибки. */
+    @JvmStatic
+    fun saveToDownloads(name: String, mime: String, sourcePath: String): String? =
+        Downloads.save(requireContext(), name, mime, sourcePath)
+
     // ── Виджеты ─────────────────────────────────────────────────────────────
 
     @JvmStatic

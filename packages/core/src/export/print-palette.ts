@@ -15,7 +15,7 @@
 export const PRINT_PALETTE = {
   bg: '#FBFAF7',
   text: '#38342E',
-  textSecondary: '#8A8375',
+  textSecondary: '#726C60',
   textTertiary: '#B6AFA2',
   surface: '#F3F1EA',
   line: '#EAE6DB',

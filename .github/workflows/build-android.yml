@@ -1,0 +1,454 @@
+name: Сборка Android
+
+# Сборка КОМПАС.ЗАПИСОК под Android (Tauri 2 Mobile).
+#
+# Android SDK и NDK есть только здесь: на машине разработчика `tauri android
+# build` не выполняется в принципе, поэтому этот workflow — единственное место,
+# где APK вообще появляется. Всё, что можно проверить без SDK (валидность
+# tauri.conf.json, патч манифеста, компиляция Rust под хост, типы фронтенда),
+# проверяется до сборки — чтобы падение случилось на понятном шаге.
+#
+# ПОДПИСЬ — САМОЕ ВАЖНОЕ МЕСТО ФАЙЛА.
+#   Android ставит обновление поверх установленного приложения, только если
+#   подпись совпадает. Сменили keystore или алиас — пользователь обязан
+#   удалить приложение и поставить заново, потеряв локальные настройки; в
+#   Google Play смена ключа невозможна вовсе. Поэтому:
+#     * ключ приезжает ровно из секретов ANDROID_KEYSTORE_BASE64 / …,
+#     * после подписи в лог печатается отпечаток сертификата (`apksigner
+#       verify --print-certs`), и его можно сверить с предыдущим релизом,
+#     * ключ подписи в репозитории не хранится никогда (.gitignore, *.jks).
+#
+# Секретов подписи нет — собираем debug и честно пишем об этом в лог.
+# Падать нельзя: сборка на ветке должна работать и до того, как выпущен ключ.
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/build-android.yml'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # BUILD
+  # ───────────────────────────────────────────────────────────────────────────
+  build:
+    name: APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: zapiski-android-${{ github.ref }}
+      cancel-in-progress: true
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      signed: ${{ steps.keystore.outputs.signed }}
+      apk: ${{ steps.collect.outputs.name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Инструменты ───────────────────────────────────────────────────────
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      # NDK ставим отдельно и с явной версией: `tauri android build` собирает
+      # Rust под Android именно им. Если зафиксированной версии в репозитории
+      # SDK не окажется (Google их периодически убирает), берём самую свежую —
+      # и пишем в лог, какую именно, чтобы сборку можно было воспроизвести.
+      - name: NDK
+        id: ndk
+        run: |
+          set -euo pipefail
+          preferred='ndk;27.1.12297006'
+          available="$(sdkmanager --list 2>/dev/null | awk -F'|' '/^[[:space:]]*ndk;/ {gsub(/[[:space:]]/,"",$1); print $1}' | sort -u -V)"
+
+          if printf '%s\n' "${available}" | grep -qx "${preferred}"; then
+            package="${preferred}"
+          else
+            package="$(printf '%s\n' "${available}" | tail -1)"
+            echo "::warning::NDK ${preferred} недоступен, ставим ${package}"
+          fi
+          if [ -z "${package}" ]; then
+            echo "sdkmanager не предлагает ни одного NDK" >&2
+            exit 1
+          fi
+
+          # Без `yes |`: под `set -o pipefail` конвейер с `yes` падает по
+          # SIGPIPE. Лицензии уже приняты действием setup-android, а `</dev/null`
+          # гарантирует, что неожиданный запрос не подвесит сборку.
+          sdkmanager --install "${package}" >/dev/null </dev/null
+          version="${package#ndk;}"
+          home="${ANDROID_SDK_ROOT}/ndk/${version}"
+          [ -d "${home}" ] || { echo "NDK не распакован в ${home}" >&2; exit 1; }
+
+          echo "Взят ${package} → ${home}"
+          # Tauri читает NDK_HOME, gradle-плагины — ANDROID_NDK_HOME.
+          echo "NDK_HOME=${home}" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=${home}" >> "$GITHUB_ENV"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Rust с таргетами Android
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          # Только ARM: 99% живых устройств. x86-таргеты нужны эмулятору, но
+          # утяжеляют APK, а бюджет — 30 МБ (ТЗ §6).
+          rustup target add aarch64-linux-android armv7-linux-androideabi
+          rustup show
+
+      - name: Кэш cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/mobile/src-tauri/target
+          key: android-cargo-${{ runner.os }}-${{ hashFiles('apps/mobile/src-tauri/Cargo.toml') }}
+          restore-keys: android-cargo-${{ runner.os }}-
+
+      - name: Кэш pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      # ── Зависимости и пакеты ──────────────────────────────────────────────
+      # `--frozen-lockfile` — норма. Но лок-файл общий на весь монорепозиторий
+      # и обновляется тем, кто первым коммитит новый пакет; пока apps/mobile в
+      # него не попал, сборка Android не должна падать по чужой причине.
+      # Поэтому падение фиксируется в логе предупреждением, а не молчанием.
+      - name: Установка зависимостей
+        run: |
+          set -euo pipefail
+          pnpm config set store-dir ~/.pnpm-store
+          if pnpm install --frozen-lockfile; then
+            echo 'Зависимости поставлены по лок-файлу.'
+          else
+            echo "::warning::pnpm-lock.yaml не покрывает воркспейс — ставим без --frozen-lockfile; обновите лок-файл в репозитории"
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Сборка пакетов
+        run: pnpm -r --filter "./packages/**" build
+
+      - name: Проверка типов оболочки
+        run: pnpm --filter @zapiski/mobile typecheck
+
+      - name: Сборка фронтенда
+        run: pnpm --filter @zapiski/mobile build:vite
+
+      # ── Проверки, которые не требуют устройства ───────────────────────────
+      - name: Тесты Rust-части оболочки
+        working-directory: apps/mobile/src-tauri
+        run: cargo test
+
+      # Патч AndroidManifest прогоняется на эталоне до того, как понадобится
+      # настоящий: ошибка в патче иначе всплыла бы аварией сборки Gradle.
+      - name: Самопроверка Android-оверлея
+        run: pnpm --filter @zapiski/mobile android:overlay:selftest
+
+      - name: Версия из tauri.conf.json
+        id: version
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./apps/mobile/src-tauri/tauri.conf.json').version")"
+          tag="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_TYPE}" = 'tag' ] && [ "v${version}" != "${tag}" ]; then
+            echo "Тег ${tag} не совпадает с версией ${version} в tauri.conf.json." >&2
+            echo 'Версия в манифесте — источник истины для фида обновлений, разъезжаться им нельзя.' >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Версия сборки: ${version}"
+
+      # ── Android-проект ────────────────────────────────────────────────────
+      # gen/android генерируется здесь и в git не попадает (см. .gitignore и
+      # комментарий в apply-android-overlay.mjs).
+      - name: Сгенерировать проект Android
+        run: pnpm --filter @zapiski/mobile exec tauri android init --skip-targets-install
+
+      - name: Наложить оверлей оболочки
+        run: pnpm --filter @zapiski/mobile android:overlay
+
+      # ── Ключ подписи ──────────────────────────────────────────────────────
+      - name: Подготовить keystore
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] \
+             || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
+            echo 'signed=false' >> "$GITHUB_OUTPUT"
+            echo "::notice::Секретов подписи нет (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) — собираем DEBUG-сборку."
+            echo "::notice::Debug-APK подписан отладочным ключом: он ставится на устройство, но НЕ является релизом и не встанет обновлением поверх релизной сборки."
+            exit 0
+          fi
+
+          mkdir -p "${RUNNER_TEMP}/signing"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/signing/zapiski.jks"
+          # Проверяем ключ до сборки: полчаса компиляции ради «пароль не
+          # подошёл» в самом конце — плохая сделка.
+          keytool -list -keystore "${RUNNER_TEMP}/signing/zapiski.jks" \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" -alias "${ANDROID_KEY_ALIAS}" >/dev/null
+          echo 'signed=true' >> "$GITHUB_OUTPUT"
+          echo 'Ключ подписи на месте, алиас найден.'
+
+      # ── Сборка ────────────────────────────────────────────────────────────
+      - name: tauri android build
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+            pnpm --filter @zapiski/mobile exec tauri android build --apk \
+              --target aarch64 --target armv7
+          else
+            pnpm --filter @zapiski/mobile exec tauri android build --apk --debug \
+              --target aarch64 --target armv7
+          fi
+
+      # ── Подпись ───────────────────────────────────────────────────────────
+      # Подписываем сами, а не конфигом Gradle: сгенерированный build.gradle.kts
+      # — чужой файл, править его патчем ради подписи рискованнее, чем вызвать
+      # штатные zipalign и apksigner. Заодно получаем `verify --print-certs`,
+      # то есть доказательство стабильности подписи прямо в логе.
+      - name: Подписать APK
+        if: steps.keystore.outputs.signed == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          mapfile -t versions < <(find "${ANDROID_SDK_ROOT}/build-tools" -maxdepth 1 -mindepth 1 -type d | sort -V)
+          tools="${versions[-1]:-}"
+          [ -n "${tools}" ] || { echo 'build-tools не установлены' >&2; exit 1; }
+          echo "build-tools: ${tools}"
+
+          outputs='apps/mobile/src-tauri/gen/android/app/build/outputs/apk'
+          # mapfile, а не `find | head`: под `set -o pipefail` закрытый head
+          # роняет конвейер по SIGPIPE, и шаг падает без внятной причины.
+          mapfile -t found < <(find "${outputs}" -name '*.apk' ! -name '*-signed*' | sort)
+          unsigned="${found[0]:-}"
+          [ -n "${unsigned}" ] || { echo 'APK не найден после сборки' >&2; exit 1; }
+          echo "Подписываем ${unsigned}"
+
+          "${tools}/zipalign" -p -f 4 "${unsigned}" "${RUNNER_TEMP}/aligned.apk"
+          "${tools}/apksigner" sign \
+            --ks "${RUNNER_TEMP}/signing/zapiski.jks" \
+            --ks-pass "pass:${ANDROID_KEYSTORE_PASSWORD}" \
+            --ks-key-alias "${ANDROID_KEY_ALIAS}" \
+            --key-pass "pass:${ANDROID_KEY_PASSWORD}" \
+            --out "${RUNNER_TEMP}/signed.apk" \
+            "${RUNNER_TEMP}/aligned.apk"
+
+          echo '── Отпечаток сертификата подписи ──'
+          echo 'Он обязан совпадать с предыдущими релизами: иначе обновление'
+          echo '«на месте» не встанет и потребует удаления приложения.'
+          "${tools}/apksigner" verify --print-certs "${RUNNER_TEMP}/signed.apk"
+
+      - name: Собрать артефакт
+        id: collect
+        run: |
+          set -euo pipefail
+          version='${{ steps.version.outputs.version }}'
+          mkdir -p artifacts
+
+          if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+            name="zapiski-${version}.apk"
+            cp "${RUNNER_TEMP}/signed.apk" "artifacts/${name}"
+          else
+            name="zapiski-${version}-debug.apk"
+            outputs='apps/mobile/src-tauri/gen/android/app/build/outputs/apk'
+            mapfile -t found < <(find "${outputs}" -name '*.apk' | sort)
+            apk="${found[0]:-}"
+            [ -n "${apk}" ] || { echo 'APK не найден после сборки' >&2; exit 1; }
+            cp "${apk}" "artifacts/${name}"
+          fi
+
+          size="$(stat -c%s "artifacts/${name}")"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "Артефакт: ${name}, размер: $((size / 1024 / 1024)) МБ"
+          # ТЗ §6: APK <30 МБ. Не роняем сборку — сообщаем, чтобы бюджет не
+          # переползли молча.
+          if [ "${size}" -gt 31457280 ]; then
+            echo "::warning::APK больше 30 МБ (${size} байт) — бюджет ТЗ §6 превышен"
+          fi
+
+      - name: Приложить APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-android-${{ steps.version.outputs.version }}
+          path: artifacts/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Убрать ключ подписи
+        if: always()
+        run: rm -rf "${RUNNER_TEMP}/signing" "${RUNNER_TEMP}/signed.apk" "${RUNNER_TEMP}/aligned.apk"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RELEASE — только на теге и только для подписанной сборки
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Релиз и выкладка
+    needs: build
+    if: github.ref_type == 'tag' && needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    # Общая группа с деплоем сервера: выкладку в /var/www делает кто-то один.
+    concurrency:
+      group: zapiski-server
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Забрать APK
+        uses: actions/download-artifact@v4
+        with:
+          name: zapiski-android-${{ needs.build.outputs.version }}
+          path: artifacts
+
+      - name: Опубликовать в GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            gh release upload "${tag}" artifacts/*.apk --clobber
+          else
+            gh release create "${tag}" artifacts/*.apk \
+              --title "КОМПАС.ЗАПИСКИ ${{ needs.build.outputs.version }}" \
+              --generate-notes
+          fi
+
+      # ── Выкладка на сервер ────────────────────────────────────────────────
+      # Без неё автообновление не заработает: клиент ходит за манифестом на
+      # zapiski.cmpas.ru, а сам APK качает оттуда же.
+      - name: Загрузить SSH-ключ
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Собрать манифест обновления
+        run: |
+          set -euo pipefail
+          version='${{ needs.build.outputs.version }}'
+          apk='${{ needs.build.outputs.apk }}'
+
+          # Текущий манифест с сервера: в нём может лежать релиз Windows той же
+          # версии, и затирать его нельзя.
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'cat /var/www/zapiski.cmpas.ru/updates/latest.json 2>/dev/null || echo "{}"' > current.json
+
+          VERSION="${version}" APK="${apk}" NOTES="$(git tag -l --format='%(contents)' "${GITHUB_REF_NAME}")" \
+          node - <<'NODE' > latest.json
+          const fs = require('fs');
+
+          const version = process.env.VERSION;
+          const url = `https://zapiski.cmpas.ru/updates/${process.env.APK}`;
+
+          let current = {};
+          try {
+            current = JSON.parse(fs.readFileSync('current.json', 'utf8')) || {};
+          } catch {
+            current = {};
+          }
+
+          // Платформы прошлой версии переносим, только если версия та же:
+          // ссылка на .msi версии 0.2.0 в манифесте 0.3.0 отправила бы
+          // пользователей Windows качать старый установщик как новый.
+          const platforms = current.version === version && current.platforms
+            ? { ...current.platforms }
+            : {};
+          platforms['android-universal'] = { signature: '', url };
+
+          const manifest = {
+            version,
+            notes: (process.env.NOTES || '').trim(),
+            pub_date: new Date().toISOString(),
+            platforms,
+          };
+          process.stdout.write(JSON.stringify(manifest, null, 2) + '\n');
+          NODE
+
+          echo '── latest.json ──'
+          cat latest.json
+
+      - name: Выложить APK и фид
+        run: |
+          set -euo pipefail
+          apk='${{ needs.build.outputs.apk }}'
+          target="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
+
+          ssh -i ~/.ssh/deploy_key "${target}" 'mkdir -p /var/www/zapiski.cmpas.ru/updates'
+
+          # APK кладём под временным именем и переименовываем: клиент,
+          # скачавший половину файла, получил бы битый пакет.
+          scp -i ~/.ssh/deploy_key "artifacts/${apk}" \
+            "${target}:/var/www/zapiski.cmpas.ru/updates/${apk}.part"
+          scp -i ~/.ssh/deploy_key latest.json \
+            "${target}:/var/www/zapiski.cmpas.ru/updates/latest.json.part"
+
+          ssh -i ~/.ssh/deploy_key "${target}" "bash -s" <<REMOTE
+          set -Eeuo pipefail
+          cd /var/www/zapiski.cmpas.ru/updates
+          mv "${apk}.part" "${apk}"
+          # Манифест переезжает последним: до этого момента клиенты видят
+          # старую версию, а не ссылку на ещё не доехавший файл.
+          mv latest.json.part latest.json
+          chmod 644 "${apk}" latest.json
+          ls -la
+          REMOTE
+
+          echo "::notice::APK и latest.json выложены в /var/www/zapiski.cmpas.ru/updates/"
+          echo "::notice::Фид API отдаёт этот манифест, только если UPDATES_MANIFEST_PATH указывает на /var/www/zapiski.cmpas.ru/updates/latest.json (переменная стека API, см. deploy/)."
+
+      - name: Убрать SSH-ключ
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

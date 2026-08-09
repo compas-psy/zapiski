@@ -344,6 +344,38 @@ mod api {
         })
     }
 
+    /// Положить готовый файл туда, где пользователь его найдёт. Java
+    /// возвращает `null` при успехе и текст ошибки иначе.
+    pub fn save_to_downloads(name: &str, mime: &str, source: &str) -> Result<(), String> {
+        let failure = with_env(|env| {
+            let name = env.new_string(name)?;
+            let mime = env.new_string(mime)?;
+            let source = env.new_string(source)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    "saveToDownloads",
+                    "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                    &[
+                        JValue::Object(&name),
+                        JValue::Object(&mime),
+                        JValue::Object(&source),
+                    ],
+                )?
+                .l()?;
+            if value.is_null() {
+                return Ok(None);
+            }
+            let text: String = env.get_string(&JString::from(value))?.into();
+            Ok(Some(text))
+        })?;
+
+        match failure {
+            None => Ok(()),
+            Some(message) => Err(message),
+        }
+    }
+
     // ── Функции, которые зовёт Java ─────────────────────────────────────────
 
     /// Первый вызов из `MainActivity.onCreate`: запоминаем виртуальную машину.
@@ -493,10 +525,13 @@ mod api {
     pub fn refresh_widgets() -> Result<(), String> {
         only_android("виджеты")
     }
+    pub fn save_to_downloads(_name: &str, _mime: &str, _source: &str) -> Result<(), String> {
+        only_android("сохранение файла")
+    }
 }
 
 pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
-    render_pdf, set_secure,
+    render_pdf, save_to_downloads, set_secure,
 };

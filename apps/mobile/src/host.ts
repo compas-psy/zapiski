@@ -6,6 +6,8 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 
 import { createPlatform } from './platform/capabilities';
+import { saveFile } from './platform/files';
+import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
 import { currentVaultRoot, defaultVaultRoot, openVault } from './platform/vault';
 
@@ -22,6 +24,12 @@ export function createHost(): AppHost {
     platform: createPlatform(),
     prefs: createPreferences(),
     cloudBaseUrl: CLOUD_BASE_URL,
+
+    // Печать есть: её делает системный конвейер Android (platform/pdf.ts),
+    // поэтому пункт «PDF» в экспорте виден, а не скрыт.
+    pdf: createPdfRenderer(),
+
+    saveFile,
 
     /**
      * На Android vault ровно один и лежит в каталоге приложения, поэтому

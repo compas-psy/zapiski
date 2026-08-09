@@ -231,7 +231,7 @@ fn resolve_in_root(root: &Path, relative: &str) -> Result<PathBuf, String> {
 
 /// Заголовки HTTP допускают только ASCII, а пути в vault'е кириллические,
 /// поэтому фронтенд шлёт путь percent-encoded.
-fn percent_decode(value: &str) -> Result<String, String> {
+pub(crate) fn percent_decode(value: &str) -> Result<String, String> {
     let bytes = value.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
     let mut index = 0;
