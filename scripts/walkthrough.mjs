@@ -25,9 +25,13 @@
  * возвращает 0: он не должен ронять CI там, где его нельзя выполнить. Но
  * молчать о пропуске тоже нельзя, поэтому пропуск печатается явно.
  */
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-const URL_BASE = process.env.ZAPISKI_URL ?? 'http://127.0.0.1:4173/';
+const PORT = process.env.ZAPISKI_PORT ?? '4173';
+const URL_BASE = process.env.ZAPISKI_URL ?? `http://127.0.0.1:${PORT}/`;
+const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
 const CHROME =
   process.env.ZAPISKI_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 
@@ -43,6 +47,33 @@ try {
   ({ chromium } = await import('playwright-core'));
 } catch {
   skip('нет playwright-core (npm i -D playwright-core)');
+}
+
+/**
+ * Статика поднимается сама, если по адресу никто не отвечает.
+ *
+ * Иначе прогон падает по забытому серверу, а не по продукту, — и это худший
+ * вид ложной тревоги: он приучает не верить сторожу.
+ */
+let server = null;
+async function alive() {
+  try {
+    await fetch(URL_BASE, { signal: AbortSignal.timeout(1500) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+if (!(await alive())) {
+  if (!existsSync(DIST)) skip(`нет собранной статики ${DIST} (pnpm --filter "@zapiski/web..." build)`);
+  server = spawn('npx', ['--yes', 'serve', '-s', DIST, '-l', String(PORT)], { stdio: 'ignore' });
+  for (let attempt = 0; attempt < 40 && !(await alive()); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (!(await alive())) {
+    server.kill();
+    skip('не удалось поднять статику');
+  }
 }
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
@@ -92,6 +123,7 @@ check(editorReady, 'после онбординга не открылся ред
 if (!editorReady) {
   console.log(problems.map((p) => `  · ${p}`).join('\n'));
   await browser.close();
+  server?.kill();
   process.exit(1);
 }
 
@@ -130,7 +162,41 @@ const titles = await page.$$eval('.za-row__title', (nodes) => nodes.map((n) => n
 check(titles.length === 1, `в списке ${titles.length} заметок вместо одной`, titles.join(' · '));
 check(titles[0] === 'Привет!', 'заголовок в списке не тот', String(titles[0]));
 
+// ── Папки: создать первую и увидеть её в дереве ────────────────────────────
+//
+// Пользователь сформулировал это одной строкой: «Папки нельзя создать».
+// Возможность была в ядре, а из интерфейса недостижима — меню папки
+// открывается долгим нажатием НА ПАПКУ, которых ещё нет. Проверяем именно
+// достижимость, а не метод контроллера.
+const openLibrary = page.getByRole('button', { name: /Библиотека|Library/ }).first();
+if ((await openLibrary.count()) > 0) await openLibrary.click().catch(() => undefined);
+await page.waitForTimeout(300);
+
+const newFolder = page.getByRole('button', { name: /Новая папка|New folder/ }).first();
+const canCreateFolder = (await newFolder.count()) > 0;
+check(canCreateFolder, 'кнопки «Новая папка» нет — первую папку создать нечем');
+if (canCreateFolder) {
+  await newFolder.click();
+  await page.waitForTimeout(300);
+  /* Именно по подписи поля: у содержимого редактора тоже роль `textbox`,
+     и `.first()` попадал в него — папка создавалась с именем по умолчанию. */
+  await page.getByLabel(/Название папки|Folder name/).fill('Практика');
+  // Подтверждение диалога — последняя кнопка с этим именем: первая осталась
+  // в самой библиотеке и открывает диалог заново.
+  await page.getByRole('button', { name: /^Новая папка$|^New folder$/ }).last().click();
+  await page.waitForTimeout(800);
+  const folders = await page.$$eval('.z-tree__label', (nodes) => nodes.map((n) => n.textContent));
+  check(
+    folders.some((name) => name?.includes('Практика')),
+    'созданная папка не появилась в дереве',
+    folders.join(' · ') || 'дерево пусто',
+  );
+}
+// Создание папки уводит В НЕЁ — так и задумано, иначе непонятно, случилось ли
+// что-то. Дальше проверять список заметок бессмысленно: он теперь пуст по делу.
+
 await browser.close();
+server?.kill();
 
 for (const error of errors) problems.push(error);
 if (problems.length > 0) {

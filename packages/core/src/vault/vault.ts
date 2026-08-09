@@ -306,17 +306,38 @@ export class Vault {
   }
 
   /**
-   * Удаление папки. Заметки внутри уезжают в корзину поштучно — ТЗ обещает,
-   * что ни одно действие не теряет текст безвозвратно, и папка не исключение.
-   * Возвращает пути, отправленные в корзину, чтобы экран сказал сколько.
+   * Удаление папки — двумя способами, и выбор делает человек.
+   *
+   * BEHAVIOR предлагает ровно два исхода: «только папку, заметки в
+   * родительскую» и «папку с заметками, в корзину». Это не подтверждение
+   * одного действия, а выбор между двумя, поэтому и не диалог подтверждения.
+   *
+   * Ни в одном из исходов текст не пропадает: в первом заметки переезжают
+   * наверх, во втором уезжают в корзину, откуда их можно достать 30 дней.
+   * Возвращает затронутые заметки, чтобы экран сказал сколько, а не молчал.
    */
-  async deleteFolder(path: VaultPath): Promise<VaultPath[]> {
+  async deleteFolder(
+    path: VaultPath,
+    mode: 'notes-to-trash' | 'notes-to-parent' = 'notes-to-trash',
+  ): Promise<VaultPath[]> {
     const folder = normalizePath(path);
+    /* Снимок до начала: индекс меняется под нами на каждом шаге. */
     const inside = this.index
       .all()
       .map((note) => note.path)
       .filter((item) => item.startsWith(`${folder}/`));
-    for (const note of inside) await this.trash(note);
+
+    if (mode === 'notes-to-parent') {
+      const parent = dirName(folder);
+      for (const note of inside) await this.move(note, parent);
+    } else {
+      for (const note of inside) await this.trash(note);
+    }
+
+    /* Вложенные каталоги убираем снизу вверх, иначе удаление непустого
+       каталога отвергается частью хранилищ. */
+    const nested = (await this.listDirsRecursive(folder)).sort((a, b) => b.length - a.length);
+    for (const dir of nested) await this.storage.remove(dir).catch(() => undefined);
     await this.storage.remove(folder).catch(() => undefined);
     this.emit([folder]);
     return inside;

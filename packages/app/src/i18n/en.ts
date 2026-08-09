@@ -184,6 +184,11 @@ export const en: AppCatalog = {
       `Delete folder “${name}” and ${count} ${pl(count, 'note', 'notes')}?`,
     deleteFolderOnly: 'Folder only (notes move to the parent)',
     deleteFolderWithNotes: 'Folder with notes (to trash)',
+    folderTrashed: (count: number): string =>
+      `Folder deleted · ${count} note${count === 1 ? '' : 's'} moved to trash`,
+    newFolder: 'New folder',
+    folderNamePrompt: 'Folder name',
+    folderNameDefault: 'New folder',
     renamedTags: (count: number): string => `Renamed in ${count} ${pl(count, 'note', 'notes')}`,
   },
 

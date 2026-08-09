@@ -734,6 +734,67 @@ export class AppController {
     this.navigate({ name: 'list', tag });
   }
 
+  // ── Папки (BEHAVIOR, дерево папок) ─────────────────────────────────────────
+  //
+  // До этого места добраться было нельзя: в меню стояло «Новая подпапка»,
+  // которое звало `createNote`, и «Переименовать» с пустым обработчиком
+  // `() => undefined`. То есть требование ТЗ существовало на экране в виде
+  // надписи и не существовало в виде поведения. Это тот самый класс дефектов,
+  // ради которого написан сторож `entry-points.test.ts`.
+
+  /** Создать папку и сразу перейти в неё: иначе непонятно, случилось ли что-то. */
+  async createFolder(parent: string, name: string): Promise<string | null> {
+    const vault = this.vault;
+    if (!vault) return null;
+    const created = await vault.createFolder(parent, name);
+    await this.refresh();
+    this.openFolder(created);
+    return created;
+  }
+
+  /**
+   * Переименовать папку. Все заметки внутри переезжают, `[[ссылки]]` на них
+   * переписываются — за это отвечает ядро; здесь только состояние экрана.
+   */
+  async renameFolder(path: string, name: string): Promise<string | null> {
+    const vault = this.vault;
+    if (!vault) return null;
+    const result = await vault.renameFolder(path, name);
+    /* Открытая заметка могла лежать внутри — путь у неё сменился. */
+    if (this.state.route.name === 'note' && this.state.route.id.startsWith(`${path}/`)) {
+      this.noteMoved(this.state.route.id, this.state.route.id.replace(path, result.to));
+    }
+    if (this.state.folder === path) this.patch({ folder: result.to });
+    await this.refresh();
+    if (result.updatedLinks > 0) {
+      this.toast({ message: this.strings.errors.linksUpdated(result.updatedLinks) });
+    }
+    return result.to;
+  }
+
+  /**
+   * Удалить папку. Заметки внутри уезжают в корзину — ТЗ обещает, что ни одно
+   * действие не теряет текст безвозвратно, и папка не исключение. Поэтому же
+   * тост говорит, сколько заметок отправилось в корзину, а не молчит.
+   */
+  async deleteFolder(
+    path: string,
+    mode: 'notes-to-trash' | 'notes-to-parent' = 'notes-to-trash',
+  ): Promise<number> {
+    const vault = this.vault;
+    if (!vault) return 0;
+    const trashed = await vault.deleteFolder(path, mode);
+    if (this.state.folder === path) this.openFolder(null);
+    if (this.state.route.name === 'note' && this.state.route.id.startsWith(`${path}/`)) {
+      this.navigate({ name: 'list' }, { replace: true });
+    }
+    await this.refresh();
+    if (trashed.length > 0 && mode === 'notes-to-trash') {
+      this.toast({ message: this.strings.library.folderTrashed(trashed.length) });
+    }
+    return trashed.length;
+  }
+
   openSettings(section: SettingsSection = 'appearance'): void {
     this.navigate({ name: 'settings', section });
   }

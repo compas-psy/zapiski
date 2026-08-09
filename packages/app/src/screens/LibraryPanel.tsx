@@ -20,6 +20,7 @@ import { IconArchive } from '../components/icons.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { EmptyBlock, Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
+import { FolderDeleteSheet, FolderNameDialog } from '../components/FolderDialogs.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
 
 export function LibraryPanel(): ReactNode {
@@ -28,6 +29,12 @@ export function LibraryPanel(): ReactNode {
   const strings = useStrings();
   const [folderMenu, setFolderMenu] = useState<string | null>(null);
   const [tagMenu, setTagMenu] = useState<string | null>(null);
+  /** Куда создаём папку: путь родителя. `null` — диалог закрыт. */
+  const [creatingIn, setCreatingIn] = useState<string | null>(null);
+  /** Какую папку переименовываем. `null` — диалог закрыт. */
+  const [renaming, setRenaming] = useState<string | null>(null);
+  /** Какую папку удаляем. `null` — лист закрыт. */
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const screenState = app.screenState('library', state.folders.length === 0);
 
@@ -81,13 +88,27 @@ export function LibraryPanel(): ReactNode {
         <EmptyBlock
           title={strings.empty.library}
           icon={<IconFolder size={24} />}
-          action={<Button onClick={() => void app.createNote()}>{strings.list.newNote}</Button>}
+          action={
+            <>
+              <Button onClick={() => void app.createNote()}>{strings.list.newNote}</Button>
+              {/* Без этой кнопки первую папку создать было НЕЧЕМ: меню папки
+                  открывается долгим нажатием на папку, а папок ещё нет. */}
+              <Button variant="secondary" onClick={() => setCreatingIn('')}>
+                {strings.library.newFolder}
+              </Button>
+            </>
+          }
         />
       ) : (
         <>
           {folderNodes.length > 0 ? (
             <>
-              <Section>{strings.library.folders}</Section>
+              <div className="za-row-between">
+                <Section>{strings.library.folders}</Section>
+                <Button variant="text" onClick={() => setCreatingIn('')}>
+                  {strings.library.newFolder}
+                </Button>
+              </div>
               <Tree
                 nodes={folderNodes}
                 label={strings.library.folders}
@@ -141,10 +162,45 @@ export function LibraryPanel(): ReactNode {
         onClose={() => setFolderMenu(null)}
         title={folderMenu ?? ''}
         items={[
-          { id: 'new', label: strings.library.newSubfolder, onSelect: () => void app.createNote(folderMenu ?? undefined) },
-          { id: 'rename', label: strings.library.rename, onSelect: () => undefined },
+          {
+            id: 'new',
+            label: strings.library.newSubfolder,
+            onSelect: () => setCreatingIn(folderMenu ?? ''),
+          },
+          { id: 'rename', label: strings.library.rename, onSelect: () => setRenaming(folderMenu) },
+          { id: 'delete', label: strings.library.deleteFolder, onSelect: () => setDeleting(folderMenu) },
         ]}
       />
+      <FolderNameDialog
+        open={creatingIn !== null}
+        initial={strings.library.folderNameDefault}
+        title={creatingIn ? strings.library.newSubfolder : strings.library.newFolder}
+        confirmLabel={strings.library.newFolder}
+        onConfirm={(name) => void app.createFolder(creatingIn ?? '', name)}
+        onClose={() => setCreatingIn(null)}
+      />
+
+      <FolderNameDialog
+        open={renaming !== null}
+        initial={renaming ? (renaming.split('/').pop() ?? '') : ''}
+        title={strings.library.rename}
+        confirmLabel={strings.library.rename}
+        onConfirm={(name) => void app.renameFolder(renaming ?? '', name)}
+        onClose={() => setRenaming(null)}
+      />
+
+      <FolderDeleteSheet
+        open={deleting !== null}
+        name={deleting ? (deleting.split('/').pop() ?? '') : ''}
+        count={
+          deleting
+            ? state.notes.filter((note) => note.path.startsWith(`${deleting}/`)).length
+            : 0
+        }
+        onDelete={(mode) => void app.deleteFolder(deleting ?? '', mode)}
+        onClose={() => setDeleting(null)}
+      />
+
       <ContextMenu
         open={tagMenu !== null}
         onClose={() => setTagMenu(null)}

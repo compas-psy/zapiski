@@ -196,6 +196,13 @@ export const ru = {
       `Удалить папку «${name}» и ${count} ${plural(count, 'заметку', 'заметки', 'заметок')}?`,
     deleteFolderOnly: 'Только папку (заметки — в родительскую)',
     deleteFolderWithNotes: 'Папку с заметками (в корзину)',
+    /** Итог удаления: заметки не пропали, они в корзине. */
+    folderTrashed: (count: number): string =>
+      `Папка удалена · ${count} ${plural(count, 'заметка', 'заметки', 'заметок')} в корзине`,
+    /** Создание папки — на уровне корня, а не «подпапка». */
+    newFolder: 'Новая папка',
+    folderNamePrompt: 'Название папки',
+    folderNameDefault: 'Новая папка',
     renamedTags: (count: number): string =>
       `Переименовано в ${count} ${plural(count, 'заметке', 'заметках', 'заметках')}`,
   },
