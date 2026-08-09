@@ -41,5 +41,10 @@ declare module 'fastify' {
   }
   interface FastifyRequest {
     auth?: AuthContext;
+    /**
+     * Сырые байты JSON-тела. Нужны только вебхуку ЮKassa: подпись считается по
+     * тому, что пришло, а не по повторной сериализации разобранного объекта.
+     */
+    rawBody?: Buffer;
   }
 }

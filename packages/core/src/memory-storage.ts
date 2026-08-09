@@ -34,8 +34,10 @@ export class MemoryVaultStorage implements VaultStorage {
    * Нужна для проверки транзакционности переименования (BEHAVIOR §2.2).
    */
   failWriteAt: VaultPath | null = null;
-  /** Инъекция сбоя на N-й записи (1 — на первой). */
+  /** Инъекция сбоя: все записи начиная с N-й падают — эмуляция «диск умер». */
   failWriteAfter: number | null = null;
+  /** Инъекция ОДНОГО сбоя на N-й записи — эмуляция единичного отказа I/O. */
+  failWriteOnce: number | null = null;
 
   constructor(options: MemoryVaultStorageOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -60,6 +62,13 @@ export class MemoryVaultStorage implements VaultStorage {
     const normalized = normalizePath(path);
     if (this.failWriteAt !== null && normalizePath(this.failWriteAt) === normalized) {
       throw new Error(`MemoryVaultStorage: инъекция сбоя записи ${normalized}`);
+    }
+    if (this.failWriteOnce !== null) {
+      this.failWriteOnce -= 1;
+      if (this.failWriteOnce < 0) {
+        this.failWriteOnce = null;
+        throw new Error('MemoryVaultStorage: инъекция единичного сбоя записи');
+      }
     }
     if (this.failWriteAfter !== null) {
       this.failWriteAfter -= 1;

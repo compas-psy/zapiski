@@ -249,7 +249,9 @@ export function parseNote(text: string): ParsedNote {
     hasImage: images.length > 0,
     hasFile: files.length > 0,
     hasTodo: hasTodo(body),
-    hasLink: links.length > 0 || wikiLinks.length > 0,
+    // `has:link` — про ссылки, а не про встроенные картинки: у изображения
+    // свой оператор `has:image`.
+    hasLink: links.some((link) => !link.image && !isImageUrl(link.url)) || wikiLinks.length > 0,
     wordCount: countWords(plain),
     frontmatter,
     body,

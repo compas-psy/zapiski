@@ -66,6 +66,7 @@ function splitOnce(value: string, separator: string): [string, string | undefine
 }
 
 export interface SerializedRequest {
+  [key: string]: unknown;
   method: string;
   url: string;
   remoteAddressHash?: string;
@@ -81,7 +82,9 @@ export const serializers = {
     if (request.ip) out.remoteAddressHash = shortHash(request.ip);
     return out;
   },
-  res(reply: FastifyReply): { statusCode: number } {
+  // Тип параметра намеренно минимален: pino отдаёт сюда обёртку над reply,
+  // а не сам FastifyReply, и точный тип у неё меняется от версии к версии.
+  res(reply: { statusCode: number }): { [key: string]: unknown; statusCode: number } {
     return { statusCode: reply.statusCode };
   },
 };

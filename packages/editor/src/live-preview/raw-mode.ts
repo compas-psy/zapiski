@@ -34,7 +34,7 @@ export const toggleRawMode: Command = (view) => {
 
 /** В raw-режиме текст показывается моноширинным — как в любом текстовом редакторе. */
 const rawAttributes = EditorView.contentAttributes.compute([rawModeField], (state) =>
-  state.field(rawModeField, false) ? { class: 'cm-z-raw' } : {},
+  state.field(rawModeField, false) ? { class: 'cm-z-raw' } : ({} as Record<string, string>),
 );
 
 export const rawMode: Extension = [rawModeField, rawAttributes];

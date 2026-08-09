@@ -1,0 +1,137 @@
+/* Роли типографики из DESIGN_TOKENS.md §2 в виде классов —
+   чтобы экраны не пересобирали размеры вручную. */
+
+.z-h1 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-h1);
+  font-weight: var(--fw-h1);
+  letter-spacing: var(--tr-h1);
+  line-height: var(--lh-h1);
+  color: var(--text);
+}
+@media (max-width: 599px) {
+  .z-h1 {
+    font-size: var(--fs-h1-mobile);
+    line-height: var(--lh-h1-mobile);
+  }
+}
+.z-h1--mobile {
+  font-size: var(--fs-h1-mobile);
+  line-height: var(--lh-h1-mobile);
+}
+
+.z-h2 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-h2);
+  letter-spacing: var(--tr-h2);
+  line-height: var(--lh-h2);
+  color: var(--text);
+}
+
+/* Текст заметки: множители пользователя уже внутри --editor-* */
+.z-body {
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  font-weight: 400;
+  line-height: var(--editor-line-height);
+  color: var(--text);
+}
+/* Колонка редактора: 640 / 720 / вся ширина + паддинг 32 (desktop) */
+.z-editor-column {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: var(--editor-measure);
+  margin-inline: auto;
+  padding: var(--pad-screen);
+}
+@media (min-width: 900px) {
+  .z-editor-column {
+    padding: var(--editor-pad-block) var(--editor-pad-inline);
+  }
+}
+
+.z-secondary {
+  color: var(--text-secondary);
+}
+.z-tertiary {
+  color: var(--text-tertiary);
+}
+
+.z-snippet {
+  font-size: var(--fs-list-snippet);
+  line-height: var(--lh-list-snippet);
+  color: var(--text-secondary);
+}
+
+.z-caption {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.z-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  line-height: 1.45;
+  color: var(--text-tertiary);
+}
+
+/* Ссылки: акцент + пунктирное подчёркивание 1px dashed */
+.z-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* ==подсветка== в тексте заметки */
+.z-mark {
+  background-color: var(--mark-bg);
+  border-radius: var(--r-inline-mark);
+  padding: 0 2px;
+  color: inherit;
+}
+
+/* Блок кода: фон --surface, моно 12.5/1.7, пастельная подсветка */
+.z-code-block {
+  overflow-x: auto;
+  margin: 0;
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--r-md);
+  background-color: var(--code-bg);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm-plus);
+  line-height: var(--lh-code);
+  color: var(--text);
+}
+.z-tok-keyword {
+  color: var(--code-keyword);
+}
+.z-tok-string {
+  color: var(--code-string);
+}
+.z-tok-number {
+  color: var(--code-number);
+}
+.z-tok-comment {
+  color: var(--code-comment);
+}
+.z-tok-function {
+  color: var(--code-function);
+}
+
+/* Цитата: левая линия 2.5 px, курсив secondary */
+.z-quote {
+  margin: 0;
+  padding-inline-start: var(--sp-16);
+  border-inline-start: 2.5px solid var(--line);
+  font-style: italic;
+  color: var(--text-secondary);
+}

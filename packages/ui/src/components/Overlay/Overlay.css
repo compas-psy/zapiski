@@ -1,0 +1,219 @@
+/* Оверлеи — COMPONENTS.md §6. Все закрываются по Esc и возвращают фокус. */
+
+.z-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-scrim);
+  background-color: var(--scrim);
+  border: 0;
+  padding: 0;
+  animation: z-fade var(--dur-base) var(--ease-out);
+}
+
+/* ── Bottom sheet (mobile) ──────────────────────────────────────────────── */
+.z-sheet {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: 0;
+  z-index: var(--z-overlay);
+  box-sizing: border-box;
+  max-block-size: 90dvh;
+  overflow-y: auto;
+  padding: var(--sp-16) var(--sp-24) max(var(--sp-24), env(safe-area-inset-bottom));
+  border-start-start-radius: var(--r-xl);
+  border-start-end-radius: var(--r-xl);
+  background-color: var(--bg);
+  color: var(--text);
+  box-shadow: var(--elev-sheet);
+  animation: z-slide-up var(--dur-sheet) var(--ease-out);
+  touch-action: pan-y;
+}
+.z-sheet:focus {
+  outline: none;
+}
+.z-sheet__handle {
+  inline-size: var(--sheet-handle-w);
+  block-size: var(--sheet-handle-h);
+  margin: 0 auto var(--sp-16);
+  border-radius: var(--r-full);
+  background-color: var(--line);
+}
+.z-sheet__title {
+  margin: 0 0 var(--sp-8);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-h2);
+  letter-spacing: var(--tr-h2);
+  line-height: var(--lh-h2);
+}
+.z-sheet--dragging {
+  animation: none;
+  transition: none;
+}
+
+/* ── Модалка (desktop) ──────────────────────────────────────────────────── */
+.z-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-overlay);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--modal-top) var(--sp-16) var(--sp-16);
+  overflow-y: auto;
+  pointer-events: none;
+}
+.z-modal {
+  pointer-events: auto;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: var(--modal-w-max);
+  padding: var(--sp-24);
+  border-radius: var(--r-xl);
+  background-color: var(--bg);
+  color: var(--text);
+  box-shadow: var(--elev-modal);
+  animation: z-rise var(--dur-base) var(--ease-out);
+}
+.z-modal:focus {
+  outline: none;
+}
+@media (min-width: 600px) {
+  .z-modal {
+    inline-size: var(--modal-w-min);
+  }
+  .z-modal--wide {
+    inline-size: var(--modal-w-max);
+  }
+}
+.z-modal__head {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-block-end: var(--sp-12);
+}
+.z-modal__title {
+  margin: 0;
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-h2);
+  letter-spacing: var(--tr-h2);
+  line-height: var(--lh-h2);
+}
+.z-overlay__footer {
+  display: flex;
+  gap: var(--sp-8);
+  justify-content: flex-end;
+  margin-block-start: var(--sp-24);
+}
+
+/* ── Drawer: 302 (mobile) / 224 (desktop), радиус 0 22 22 0 ─────────────── */
+.z-drawer {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  z-index: var(--z-drawer);
+  box-sizing: border-box;
+  inline-size: var(--drawer-w-mobile);
+  max-inline-size: 88vw;
+  overflow-y: auto;
+  padding: var(--sp-16);
+  border-start-end-radius: var(--r-drawer);
+  border-end-end-radius: var(--r-drawer);
+  background-color: var(--surface-alt);
+  color: var(--text);
+  box-shadow: var(--elev-drawer);
+  animation: z-slide-in-left var(--dur-sheet) var(--ease-out);
+}
+.z-drawer:focus {
+  outline: none;
+}
+.z-drawer--end {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-start-start-radius: var(--r-drawer);
+  border-end-start-radius: var(--r-drawer);
+  animation-name: z-slide-in-right;
+}
+@media (min-width: 900px) {
+  .z-drawer {
+    inline-size: var(--drawer-w-desktop);
+  }
+}
+
+/* ── Тост: инверсный фон, один одновременно ─────────────────────────────── */
+.z-toast-layer {
+  position: fixed;
+  inset-inline: 0;
+  inset-block-end: var(--sp-16);
+  z-index: var(--z-toast);
+  display: flex;
+  justify-content: center;
+  padding-inline: var(--sp-16);
+  pointer-events: none;
+}
+.z-toast {
+  pointer-events: auto;
+  display: flex;
+  gap: var(--sp-16);
+  align-items: center;
+  box-sizing: border-box;
+  max-inline-size: calc(100vw - var(--sp-32));
+  padding: var(--sp-12) var(--sp-16);
+  border-radius: var(--r-lg);
+  background-color: var(--toast-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  box-shadow: var(--elev-modal);
+  animation: z-rise var(--dur-base) var(--ease-out);
+}
+.z-toast__action {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--toast-action);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+.z-toast__action:focus {
+  outline: none;
+}
+.z-toast__action:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+  border-radius: var(--r-xs);
+}
+
+/* ── Тултип (desktop): задержка появления 500 мс ────────────────────────── */
+.z-tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+.z-tooltip {
+  position: absolute;
+  inset-block-end: calc(100% + var(--sp-8));
+  inset-inline-start: 50%;
+  z-index: var(--z-tooltip);
+  box-sizing: border-box;
+  max-inline-size: 260px;
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: 8px;
+  background-color: var(--toast-bg);
+  color: var(--toast-fg);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: z-fade var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.z-tooltip--below {
+  inset-block-end: auto;
+  inset-block-start: calc(100% + var(--sp-8));
+}

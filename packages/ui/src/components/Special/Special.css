@@ -1,0 +1,314 @@
+/* Специальные компоненты продукта — COMPONENTS.md §8. */
+
+/* ── Тулбар редактора: 44, элементы 34×34, space-between, иконки 19 ─────── */
+.z-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--toolbar-h);
+  padding-inline: var(--sp-8);
+  border-block-start: var(--border-w) solid var(--line);
+  background-color: var(--surface-alt);
+}
+.z-toolbar__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--toolbar-item);
+  block-size: var(--toolbar-item);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+/* Зона нажатия дотянута до 44 при визуальных 34 */
+.z-toolbar__item::before {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap-min) - var(--toolbar-item)) / -2);
+}
+.z-toolbar__item:hover:not(:disabled) {
+  background-color: var(--surface);
+  color: var(--text);
+}
+.z-toolbar__item:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+.z-toolbar__item:focus {
+  outline: none;
+}
+.z-toolbar__item:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-toolbar__item--active {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.z-toolbar__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ── Мини-плеер ─────────────────────────────────────────────────────────── */
+.z-player {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: center;
+  box-sizing: border-box;
+  padding: var(--sp-12);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-lg);
+  background-color: var(--surface-alt);
+}
+.z-player__button {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 34px;
+  block-size: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background-color: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.z-player__button::before {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap-min) - 34px) / -2);
+}
+.z-player__button:hover {
+  background-color: var(--accent-hover);
+}
+.z-player__button:active {
+  transform: scale(var(--press-scale));
+}
+.z-player__button:focus {
+  outline: none;
+}
+.z-player__button:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-player__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-inline-size: 0;
+}
+.z-player__times {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+.z-player__speed {
+  flex: none;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+.z-player__speed:hover {
+  background-color: var(--surface);
+  color: var(--text);
+}
+.z-player__speed:focus {
+  outline: none;
+}
+.z-player__speed:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+
+/* ── Строка с таймкодом ─────────────────────────────────────────────────── */
+.z-timecode {
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+  inline-size: 100%;
+  margin: 0;
+  padding: var(--sp-8) var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.z-timecode__time {
+  flex: none;
+  inline-size: 4.5ch;
+  padding-block-start: 0.28em;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+.z-timecode:hover {
+  background-color: var(--surface-alt);
+}
+.z-timecode:focus {
+  outline: none;
+}
+.z-timecode:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-timecode--active {
+  background-color: var(--accent-soft);
+}
+.z-timecode--active .z-timecode__time {
+  color: var(--accent);
+}
+
+/* ── Вейвформа записи: столбцы 3, gap 3, радиус 2, 8%–100% ─────────────── */
+.z-waveform {
+  display: flex;
+  gap: 3px;
+  align-items: flex-end;
+  block-size: 44px;
+}
+.z-waveform__bar {
+  inline-size: 3px;
+  min-block-size: 8%;
+  border-radius: 2px;
+  background-color: var(--line);
+  transition: block-size var(--dur-base) var(--ease-out);
+}
+
+/* ── Diff ───────────────────────────────────────────────────────────────── */
+.z-diff {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--r-block-mark);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+  line-height: 1.7;
+}
+.z-diff__line {
+  padding: 2px var(--sp-12);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+.z-diff__line--add {
+  background-color: var(--success-soft);
+}
+.z-diff__line--remove {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+.z-diff-inline {
+  border-radius: var(--r-inline-mark);
+  padding: 0 2px;
+}
+.z-diff-inline--add {
+  background-color: var(--success-soft);
+}
+.z-diff-inline--remove {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+  text-decoration: line-through;
+}
+
+/* ── Дерево папок/тегов: отступ 14 на уровень, шеврон 13 ────────────────── */
+.z-tree {
+  display: flex;
+  flex-direction: column;
+}
+.z-tree__group {
+  display: flex;
+  flex-direction: column;
+}
+.z-tree__item {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+  inline-size: 100%;
+  min-block-size: 34px;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-8);
+  padding-inline-start: calc(var(--sp-8) + var(--z-tree-level, 0) * var(--tree-indent));
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-control-sm);
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.z-tree__item:hover {
+  background-color: var(--surface);
+}
+.z-tree__item:focus {
+  outline: none;
+}
+.z-tree__item:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-tree__item--selected {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.z-tree__chevron {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  color: var(--text-tertiary);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.z-tree__chevron--open {
+  transform: rotate(90deg);
+}
+.z-tree__icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-tertiary);
+}
+.z-tree__label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Счётчики — моно 11, без бейджей-кружков (SCREENS.md §5) */
+.z-tree__count {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}

@@ -171,8 +171,10 @@
   --z-tooltip: 80;
 }
 
-/* ── 2. Темы (surface) — DESIGN_TOKENS.md §1, дословно ─────────────────── */
-:root[data-theme='paper'],
+/* ── 2. Темы (surface) — DESIGN_TOKENS.md §1, дословно ───────────────────
+   Как и акценты, тема переопределяется на любом поддереве: это нужно для
+   плиток выбора темы и живого превью в разделе «Внешний вид» (SCREENS §8). */
+[data-theme='paper'],
 :root:not([data-theme]) {
   color-scheme: light;
   --bg:            #FBFAF7;  /* фон приложения */
@@ -194,7 +196,7 @@
   --elev-segment: 0 1px 2px rgba(56, 52, 46, 0.10);
 }
 
-:root[data-theme='graphite'] {
+[data-theme='graphite'] {
   color-scheme: dark;
   --bg:            #232120;
   --surface:       #2C2A28;
@@ -214,7 +216,7 @@
   --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.30);
 }
 
-:root[data-theme='ink'] {          /* OLED: истинный чёрный */
+[data-theme='ink'] {          /* OLED: истинный чёрный */
   color-scheme: dark;
   --bg:            #000000;
   --surface:       #151412;
@@ -235,7 +237,7 @@
 }
 
 /* ── 3. Функциональные цвета — «ошибки не кричат» ─────────────────────── */
-:root[data-theme='paper'],
+[data-theme='paper'],
 :root:not([data-theme]) {
   --success:      #5C8A6E;
   --success-soft: #E7F0E8;
@@ -255,8 +257,8 @@
   --code-bg:       var(--surface);
 }
 
-:root[data-theme='graphite'],
-:root[data-theme='ink'] {
+[data-theme='graphite'],
+[data-theme='ink'] {
   --success:      #7FB894;
   --success-soft: rgba(127, 184, 148, 0.16);
   --warning:      #D6B26A;
@@ -278,17 +280,24 @@
 /* ── 4. Акценты — DESIGN_TOKENS.md §1, таблица 1:1 ────────────────────────
    Тройка: --accent (заливка/интерактив) · --accent-soft (фон чипа/подсветки)
    · --accent-on-soft (текст на soft). Значения различаются для светлых и
-   тёмных тем, поэтому на каждый акцент два правила: светлое и тёмное.       */
+   тёмных тем, поэтому на каждый акцент два правила: светлое и тёмное.
+
+   Селекторы намеренно не привязаны к :root — акцент можно переопределить на
+   любом поддереве (кружки выбора акцента, живое превью заметки в настройках,
+   виджеты). Для корня работают компаунд-селекторы, для вложенных узлов —
+   те же правила через потомка.                                              */
 
 /* garnet — по умолчанию */
-:root[data-accent='garnet'],
+[data-accent='garnet'],
 :root:not([data-accent]) {
   --accent:         #B5503C;
   --accent-soft:    #F6E7E2;
   --accent-on-soft: #93412F;
 }
-:root[data-theme='graphite'][data-accent='garnet'],
-:root[data-theme='ink'][data-accent='garnet'],
+[data-theme='graphite'][data-accent='garnet'],
+[data-theme='graphite'] [data-accent='garnet'],
+[data-theme='ink'][data-accent='garnet'],
+[data-theme='ink'] [data-accent='garnet'],
 :root[data-theme='graphite']:not([data-accent]),
 :root[data-theme='ink']:not([data-accent]) {
   --accent:         #D0765B;
@@ -297,73 +306,86 @@
 }
 
 /* pine — семейный КОМПАС */
-:root[data-accent='pine'] {
+[data-accent='pine'] {
   --accent:         #2E6B4F;
   --accent-soft:    #E2EDE6;
   --accent-on-soft: #256247;
 }
-:root[data-theme='graphite'][data-accent='pine'],
-:root[data-theme='ink'][data-accent='pine'] {
+[data-theme='graphite'][data-accent='pine'],
+[data-theme='graphite'] [data-accent='pine'],
+[data-theme='ink'][data-accent='pine'],
+[data-theme='ink'] [data-accent='pine'] {
   --accent:         #5FA97A;
   --accent-soft:    rgba(95, 169, 122, 0.18);
   --accent-on-soft: #A8D9BB;
 }
 
 /* gold */
-:root[data-accent='gold'] {
+[data-accent='gold'] {
   --accent:         #B08430;
   --accent-soft:    #F5EBD8;
   --accent-on-soft: #8E6A24;
 }
-:root[data-theme='graphite'][data-accent='gold'],
-:root[data-theme='ink'][data-accent='gold'] {
+[data-theme='graphite'][data-accent='gold'],
+[data-theme='graphite'] [data-accent='gold'],
+[data-theme='ink'][data-accent='gold'],
+[data-theme='ink'] [data-accent='gold'] {
   --accent:         #CC9E50;
   --accent-soft:    rgba(204, 158, 80, 0.18);
   --accent-on-soft: #E8C88A;
 }
 
 /* blueberry */
-:root[data-accent='blueberry'] {
+[data-accent='blueberry'] {
   --accent:         #4C6B94;
   --accent-soft:    #E4EAF2;
   --accent-on-soft: #3D577A;
 }
-:root[data-theme='graphite'][data-accent='blueberry'],
-:root[data-theme='ink'][data-accent='blueberry'] {
+[data-theme='graphite'][data-accent='blueberry'],
+[data-theme='graphite'] [data-accent='blueberry'],
+[data-theme='ink'][data-accent='blueberry'],
+[data-theme='ink'] [data-accent='blueberry'] {
   --accent:         #7C9DC9;
   --accent-soft:    rgba(124, 157, 201, 0.18);
   --accent-on-soft: #B4CBE6;
 }
 
 /* heather */
-:root[data-accent='heather'] {
+[data-accent='heather'] {
   --accent:         #7C6390;
   --accent-soft:    #EFE9F3;
   --accent-on-soft: #654E78;
 }
-:root[data-theme='graphite'][data-accent='heather'],
-:root[data-theme='ink'][data-accent='heather'] {
+[data-theme='graphite'][data-accent='heather'],
+[data-theme='graphite'] [data-accent='heather'],
+[data-theme='ink'][data-accent='heather'],
+[data-theme='ink'] [data-accent='heather'] {
   --accent:         #A88BBD;
   --accent-soft:    rgba(168, 139, 189, 0.18);
   --accent-on-soft: #D2BFE0;
 }
 
 /* slate */
-:root[data-accent='slate'] {
+[data-accent='slate'] {
   --accent:         #6B675F;
   --accent-soft:    #EDEBE6;
   --accent-on-soft: #54514A;
 }
-:root[data-theme='graphite'][data-accent='slate'],
-:root[data-theme='ink'][data-accent='slate'] {
+[data-theme='graphite'][data-accent='slate'],
+[data-theme='graphite'] [data-accent='slate'],
+[data-theme='ink'][data-accent='slate'],
+[data-theme='ink'] [data-accent='slate'] {
   --accent:         #9B948A;
   --accent-soft:    rgba(155, 148, 138, 0.18);
   --accent-on-soft: #CBC5BB;
 }
 
 /* ── 5. Производные от акцента ────────────────────────────────────────────
-   Ни одного нового hex: всё через color-mix() от --accent.                  */
-:root {
+   Ни одного нового hex: всё через color-mix() от токенов. Объявлены и на
+   :root, и на [data-accent], чтобы вложенное превью пересчитывало свои
+   кольца фокуса и hover от собственного акцента.                            */
+:root,
+[data-accent] {
   /* hover заливок — «на один шаг темнее» (COMPONENTS.md §1) */
   --accent-hover: color-mix(in srgb, var(--accent) 86%, #000000);
   --accent-border: color-mix(in srgb, var(--accent) 38%, transparent); /* рамка активного фильтра 35–40% */
@@ -379,14 +401,17 @@
 /* В тёмных темах «на шаг темнее» читается хуже, чем «на шаг светлее».
    Там же --surface и --surface-alt совпадают, поэтому hover пришлось бы
    не заметить: берём производное от --text на 6%. */
-:root[data-theme='graphite'],
-:root[data-theme='ink'] {
+[data-theme='graphite'],
+[data-theme='ink'],
+[data-theme='graphite'] [data-accent],
+[data-theme='ink'] [data-accent] {
   --accent-hover: color-mix(in srgb, var(--accent) 88%, #FFFFFF);
   --toast-action: color-mix(in srgb, var(--accent) 78%, #000000);
   --surface-hover: color-mix(in srgb, var(--surface-alt) 94%, var(--text));
 }
 /* Единственный hover, заданный спецификацией явно: #B5503C → #9C432F. */
-:root[data-theme='paper'][data-accent='garnet'],
+[data-theme='paper'][data-accent='garnet'],
+[data-theme='paper'] [data-accent='garnet'],
 :root:not([data-theme]):not([data-accent]),
 :root:not([data-theme])[data-accent='garnet'],
 :root[data-theme='paper']:not([data-accent]) {

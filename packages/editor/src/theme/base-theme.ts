@@ -54,6 +54,8 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     '--z-col': '640px',
     '--z-face': fontFamily.sans,
     '--z-block-gap': '0.6em',
+    '--z-pad-y': '36px',
+    '--z-pad-x': '32px',
     backgroundColor: 'var(--bg)',
     color: 'var(--text)',
     fontFamily: 'var(--z-face)',
@@ -70,9 +72,11 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   '.cm-content': {
     maxWidth: 'var(--z-col)',
     marginInline: 'auto',
-    padding: '36px 32px 40vh 32px',
+    padding: 'var(--z-pad-y) var(--z-pad-x) 40vh var(--z-pad-x)',
     caretColor: 'var(--accent)',
   },
+  // Raw-режим (Ctrl+E): сырой markdown моноширинным, без единой декорации.
+  '.cm-content.cm-z-raw': { fontFamily: fontFamily.mono, fontSize: '0.9em' },
   '.cm-line': {
     padding: '0',
     // Абзацный ритм задаётся отступом, а не пустыми строками.

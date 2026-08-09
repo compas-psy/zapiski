@@ -116,8 +116,9 @@ export async function commitRename(
       journal.committed = i + 1;
     }
   } catch (error) {
-    await rollback(storage, journal);
-    await cleanup(storage, stage);
+    // Откат не смог доиграть (диск умер целиком) — журнал и staging остаются,
+    // транзакцию закроет `recoverRename` при следующем открытии vault'а.
+    if (await rollback(storage, journal)) await cleanup(storage, stage);
     throw error;
   }
 
@@ -126,18 +127,35 @@ export async function commitRename(
   return { from, to, renamed: from !== to, updatedLinks: plan.length };
 }
 
-async function rollback(storage: VaultStorage, journal: RenameJournal): Promise<void> {
-  for (let i = journal.committed - 1; i >= 0; i -= 1) {
+/**
+ * Откат. Восстанавливаются ВСЕ шаги, а не только применённые: запись файла
+ * его же прежним содержимым идемпотентна, зато откат перестаёт зависеть от
+ * счётчика в памяти — а значит работает и после падения процесса.
+ * Возвращает false, если откат сам не доиграл: тогда журнал остаётся на диске.
+ */
+async function rollback(storage: VaultStorage, journal: RenameJournal): Promise<boolean> {
+  let ok = true;
+  for (let i = journal.steps.length - 1; i >= 0; i -= 1) {
     const step = journal.steps[i] as JournalStep;
-    const previous = await readText(storage, step.prev);
-    if (previous !== null) await writeTextAtomic(storage, step.path, previous);
+    try {
+      const previous = await readText(storage, step.prev);
+      if (previous !== null) await writeTextAtomic(storage, step.path, previous);
+    } catch {
+      ok = false;
+    }
   }
   if (journal.fileRenamed && journal.from !== journal.to) {
-    await storage.rename(journal.to, journal.from).catch(() => undefined);
+    try {
+      // Откат мог уже отработать в упавшем процессе — тогда файл на месте.
+      if ((await storage.stat(journal.to)) !== null) await storage.rename(journal.to, journal.from);
+      journal.fileRenamed = false;
+    } catch {
+      ok = false;
+    }
   }
   journal.committed = 0;
-  journal.fileRenamed = false;
-  await storage.remove(RENAME_JOURNAL).catch(() => undefined);
+  if (ok) await storage.remove(RENAME_JOURNAL).catch(() => undefined);
+  return ok;
 }
 
 async function cleanup(storage: VaultStorage, stage: VaultPath): Promise<void> {
@@ -152,8 +170,7 @@ async function cleanup(storage: VaultStorage, stage: VaultPath): Promise<void> {
 export async function recoverRename(storage: VaultStorage): Promise<RenameResult | null> {
   const journal = await readJson<RenameJournal>(storage, RENAME_JOURNAL);
   if (!journal || !Array.isArray(journal.steps)) return null;
-  await rollback(storage, journal);
-  await cleanup(storage, `${META_DIR}/tmp/rename-${journal.id}`);
+  if (await rollback(storage, journal)) await cleanup(storage, `${META_DIR}/tmp/rename-${journal.id}`);
   return { from: journal.from, to: journal.to, renamed: false, updatedLinks: 0 };
 }
 

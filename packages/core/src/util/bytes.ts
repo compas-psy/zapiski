@@ -66,14 +66,16 @@ export function fnv1a(input: string | Uint8Array): number {
 
 /** Короткий хеш содержимого для имени вложения: `2026-08-08_1a2b3c.png`. */
 export function shortHash(data: Uint8Array): string {
-  const a = fnv1a(data);
-  // Второй проход по перевёрнутым байтам, чтобы получить 6 значимых hex-знаков.
-  let b = 0x811c9dc5;
+  const forward = fnv1a(data);
+  // Второй проход по перевёрнутым байтам: без него палиндромные данные
+  // («2 2», «1») давали бы один и тот же хеш.
+  let backward = 0x811c9dc5;
   for (let i = data.length - 1; i >= 0; i -= 1) {
-    b ^= data[i] as number;
-    b = Math.imul(b, 0x01000193) >>> 0;
+    backward ^= data[i] as number;
+    backward = Math.imul(backward, 0x01000193) >>> 0;
   }
-  return (a ^ b).toString(16).padStart(8, '0').slice(0, 6);
+  const mixed = (forward ^ Math.imul(backward ^ data.length, 0x85ebca6b)) >>> 0;
+  return mixed.toString(16).padStart(8, '0').slice(0, 6);
 }
 
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';

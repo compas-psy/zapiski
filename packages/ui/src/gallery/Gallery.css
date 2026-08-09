@@ -1,0 +1,144 @@
+/* Витрина — артефакт приёмки. Собственных цветов не вводит: только токены. */
+
+.z-gallery {
+  min-block-size: 100dvh;
+  padding-block-end: var(--sp-40);
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+.z-gallery__bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-16) var(--sp-24);
+  align-items: flex-end;
+  padding: var(--sp-16) var(--sp-24);
+  border-block-end: var(--border-w) solid var(--line);
+  background-color: var(--surface-alt);
+}
+.z-gallery__control {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+.z-gallery__control-label {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* Кружки акцента 30 px (SCREENS.md §10b, `4i`) */
+.z-gallery__accents {
+  display: flex;
+  gap: var(--sp-8);
+}
+.z-gallery__accent {
+  position: relative;
+  inline-size: 30px;
+  block-size: 30px;
+  margin: 0;
+  padding: 0;
+  border: var(--border-w-strong) solid transparent;
+  border-radius: var(--r-full);
+  background-color: var(--accent);
+  background-clip: content-box;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.z-gallery__accent::before {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap-min) - 30px) / -2);
+}
+.z-gallery__accent:active {
+  transform: scale(var(--press-scale));
+}
+.z-gallery__accent:focus {
+  outline: none;
+}
+.z-gallery__accent:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-gallery__accent--active {
+  border-color: var(--text);
+  padding: 2px;
+}
+
+.z-gallery__section {
+  padding: var(--sp-32) var(--sp-24) 0;
+}
+.z-gallery__section-title {
+  margin: 0 0 var(--sp-16);
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-h2);
+  letter-spacing: var(--tr-h2);
+  color: var(--text);
+}
+.z-gallery__note {
+  margin: calc(var(--sp-16) * -1) 0 var(--sp-16);
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+.z-gallery__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-16);
+  align-items: flex-start;
+}
+.z-gallery__stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-12);
+  min-inline-size: 260px;
+}
+.z-gallery__panel {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: 420px;
+  padding: var(--sp-16);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-lg);
+  background-color: var(--surface-alt);
+}
+.z-gallery__label {
+  font-size: var(--fs-sm);
+  color: var(--text-tertiary);
+}
+.z-gallery__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-12);
+  align-items: center;
+}
+.z-gallery__list {
+  max-inline-size: 420px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+.z-gallery__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+}
+.z-gallery__swatch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  inline-size: 108px;
+  font-size: var(--fs-xs);
+  color: var(--text-tertiary);
+}
+.z-gallery__swatch-box {
+  block-size: 40px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-sm);
+}

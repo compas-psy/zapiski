@@ -1,0 +1,6 @@
+/* Полный стилевой слой @zapiski/ui.
+   Порядок важен: токены → шрифты → база → типографика. */
+@import './tokens.css';
+@import './fonts.css';
+@import './base.css';
+@import './typography.css';
