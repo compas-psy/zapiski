@@ -40,13 +40,13 @@ const CATALOGS: Record<Locale, PlatformStrings> = {
   ru: {
     tray: {
       quickNote: 'Быстрая заметка',
-      open: 'Открыть КОМПАС.ЗАПИСКИ',
+      open: 'Открыть ЗАПИСКИ',
       autostart: 'Запускать при входе в систему',
       quit: 'Выйти',
-      tooltip: 'КОМПАС.ЗАПИСКИ',
+      tooltip: 'ЗАПИСКИ',
     },
     update: {
-      title: 'КОМПАС.ЗАПИСКИ',
+      title: 'ЗАПИСКИ',
       question: (version) => `Вышла версия ${version}. Обновить сейчас?`,
       install: 'Обновить',
       later: 'Позже',

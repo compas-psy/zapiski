@@ -6,11 +6,18 @@
  * ссылаться на рантайм-переменные темы, поэтому цвета в нём обязаны быть
  * литеральными. Но литералы, написанные руками, разъезжаются с токенами — так
  * и случилось: подсветка `==текст==` в экспорте была золотистой `#F3E7B8`,
- * хотя DESIGN_TOKENS §2 требует `--accent-soft`.
+ * хотя спецификация требует `--accent-soft`.
  *
- * Поэтому палитра не пишется, а выводится из `packages/ui/src/styles/tokens.css`
- * — из темы «Бумага» и акцента «Гранат» (BEHAVIOR §9: экспорт всегда в светлой
- * «Бумаге»; гранат — акцент по умолчанию, SCREENS «Базовая тема макетов»).
+ * Поэтому палитра не пишется, а выводится из токенов — из светлой темы
+ * `simpas` и акцента по умолчанию `pine` («Хвоя»): BEHAVIOR §9 требует
+ * экспортировать всегда в светлой теме, DS-ALIGNMENT §2–§3 задают, какая она.
+ *
+ * ВАЖНО про два файла. С переходом на дизайн-систему СИМПАС
+ * `packages/ui/src/styles/tokens.css` стал слоем АЛИАСОВ: `--bg: var(--background)`,
+ * `--accent: var(--primary)` и так далее. Литералы живут в снимке системы
+ * (`packages/ui/src/styles/simpas/vendor/tokens/colors.css`). Поэтому генератор
+ * читает оба файла и разворачивает цепочки `var(--…)` до литерала — иначе он
+ * увидит `var(--background)` и решит, что палитра «не литеральная».
  *
  * Запуск: node scripts/gen-print-palette.mjs
  * Проверка синхронности: node scripts/gen-print-palette.mjs --check
@@ -21,8 +28,16 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TOKENS = resolve(ROOT, 'packages/ui/src/styles/tokens.css');
+const STYLES = resolve(ROOT, 'packages/ui/src/styles');
+const TOKENS = resolve(STYLES, 'tokens.css');
+/** Снимок дизайн-системы: здесь живут литералы, на которые ссылаются алиасы. */
+const SYSTEM = resolve(STYLES, 'simpas/vendor/tokens/colors.css');
+const SERVICES = resolve(STYLES, 'simpas/services.css');
 const TARGET = resolve(ROOT, 'packages/core/src/export/print-palette.ts');
+
+/** Тема и акцент, в которых печатает экспорт (BEHAVIOR §9, DS-ALIGNMENT §2–§3). */
+const PRINT_THEME = 'simpas';
+const PRINT_ACCENT = 'pine';
 
 /** Какие токены нужны печати и под какими именами они лягут в TS. */
 const WANTED = {
@@ -38,7 +53,7 @@ const WANTED = {
 
 /**
  * Достаёт объявления из блока, чей селектор содержит все указанные подстроки.
- * Разбор намеренно примитивный: tokens.css — плоский файл объявлений, а
+ * Разбор намеренно примитивный: файлы токенов — плоские наборы объявлений, а
  * тащить в сборку полноценный парсер CSS ради восьми значений ни к чему.
  */
 function block(css, needles, forbidden = []) {
@@ -46,8 +61,8 @@ function block(css, needles, forbidden = []) {
   const re = /([^{}]+)\{([^}]*)\}/g;
   let m;
   while ((m = re.exec(css)) !== null) {
-    // В tokens.css селекторы записаны одинарными кавычками; сравниваем
-    // без учёта вида кавычек, чтобы генератор не ломался от смены стиля.
+    // Селекторы записаны одинарными кавычками; сравниваем без учёта вида
+    // кавычек, чтобы генератор не ломался от смены стиля.
     const selector = m[1].replace(/["']/g, '');
     if (!needles.every((n) => selector.includes(n))) continue;
     if (forbidden.some((n) => selector.includes(n))) continue;
@@ -62,25 +77,43 @@ function block(css, needles, forbidden = []) {
   return out;
 }
 
-// Комментарии убираем до разбора: объявления в tokens.css снабжены поясняющими
-// `/* ... */`, а они стоят ПОСЛЕ точки с запятой и иначе приклеиваются к
-// следующему объявлению, из-за чего оно молча теряется.
-const css = readFileSync(TOKENS, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+// Комментарии убираем до разбора: объявления снабжены поясняющими `/* ... */`,
+// а они стоят ПОСЛЕ точки с запятой и иначе приклеиваются к следующему
+// объявлению, из-за чего оно молча теряется.
+const strip = (path) => readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-// Тема даёт поверхности и текст, акцент — интерактивные цвета.
-const paper = block(css, ['[data-theme=paper]']);
+const systemCss = strip(SYSTEM) + '\n' + strip(SERVICES);
+const tokensCss = strip(TOKENS);
 
-// Светлый гранат объявлен безусловным блоком `[data-accent='garnet']`, а тёмный
-// вариант — уточнённым через graphite/ink. Поэтому тёмные селекторы явно
-// исключаем: иначе они перезаписали бы светлые значения полупрозрачными rgba,
+/** Литералы и семантические алиасы самой системы — все в одном `:root`. */
+const system = block(systemCss, [':root']);
+/** Тема даёт поверхности и текст, акцент — интерактивные цвета. */
+const theme = block(tokensCss, [`[data-theme=${PRINT_THEME}]`]);
+// Светлый акцент объявлен безусловным блоком `[data-accent='pine']`, а тёмный
+// вариант — уточнённым через graphite/ink. Тёмные селекторы явно исключаем:
+// иначе они перезаписали бы светлые значения полупрозрачными rgba,
 // непригодными для печати.
-const garnet = block(css, ['[data-accent=garnet]'], ['graphite', 'ink']);
+const accent = block(tokensCss, [`[data-accent=${PRINT_ACCENT}]`], ['graphite', 'ink']);
+
+const scope = { ...system, ...theme, ...accent };
+
+/** Разворачивает цепочку `var(--a)` → `var(--b)` → `#rrggbb`. */
+function literal(token, depth = 0) {
+  if (depth > 12) {
+    console.error(`gen-print-palette: циклическая ссылка в ${token}`);
+    process.exit(1);
+  }
+  const raw = scope[token];
+  if (raw === undefined) return undefined;
+  const link = /^var\((--[\w-]+)\)$/.exec(raw.trim());
+  return link ? literal(link[1], depth + 1) : raw.trim();
+}
 
 const resolved = {};
 for (const [key, token] of Object.entries(WANTED)) {
-  const value = paper[token] ?? garnet[token];
+  const value = literal(token);
   if (!value) {
-    console.error(`gen-print-palette: в tokens.css не найден ${token}`);
+    console.error(`gen-print-palette: не найден ${token} (тема ${PRINT_THEME}, акцент ${PRINT_ACCENT})`);
     process.exit(1);
   }
   if (!/^#[0-9A-Fa-f]{6}$/.test(value)) {
@@ -96,7 +129,8 @@ for (const [key, token] of Object.entries(WANTED)) {
 
 const body = `/**
  * СГЕНЕРИРОВАННЫЙ ФАЙЛ — не редактировать руками.
- * Источник: packages/ui/src/styles/tokens.css (тема «Бумага», акцент «Гранат»).
+ * Источник: packages/ui/src/styles/tokens.css + снимок дизайн-системы СИМПАС
+ * (styles/simpas/vendor/tokens/colors.css), тема «СИМПАС», акцент «Хвоя».
  * Обновить: node scripts/gen-print-palette.mjs
  *
  * Палитра для экспорта в HTML/PDF/DOCX. Экспортный документ покидает
@@ -104,7 +138,7 @@ const body = `/**
  * литеральные. Чтобы они не разъезжались с дизайн-системой, файл выводится из
  * токенов, а тест export-palette.test.ts падает, если его забыли пересобрать.
  *
- * BEHAVIOR §9: экспорт всегда в светлой теме «Бумага», колонка 640,
+ * BEHAVIOR §9: экспорт всегда в светлой теме, колонка 640,
  * без интерфейсных элементов.
  */
 
@@ -122,8 +156,8 @@ ${Object.entries(resolved)
  */
 export const PRINT_FONTS = {
   serif: '"Source Serif 4", Georgia, "Iowan Old Style", serif',
-  sans: '"Golos Text", "Segoe UI", system-ui, sans-serif',
-  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace',
+  sans: 'Geist, "Segoe UI", system-ui, sans-serif',
+  mono: '"Geist Mono", ui-monospace, SFMono-Regular, monospace',
 } as const;
 `;
 
@@ -131,7 +165,7 @@ if (process.argv.includes('--check')) {
   const current = readFileSync(TARGET, 'utf8');
   if (current !== body) {
     console.error(
-      'gen-print-palette: print-palette.ts разошёлся с tokens.css.\n' +
+      'gen-print-palette: print-palette.ts разошёлся с токенами.\n' +
         'Выполните: node scripts/gen-print-palette.mjs',
     );
     process.exit(1);

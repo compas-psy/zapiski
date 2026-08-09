@@ -23,8 +23,16 @@
  */
 import type { ReactNode } from 'react';
 import { cx } from '../../internal/cx';
-import zapiskiMark from '../../assets/services/zapiski.svg';
 import './ServiceMark.css';
+
+/**
+ * Адрес файла знака. `new URL(…, import.meta.url)` вместо `import … from '*.svg'`
+ * намеренно: это стандартный ESM, который Vite статически переписывает в адрес
+ * эмитированного ассета, и он не требует ambient-объявления модуля `*.svg` —
+ * иначе такое объявление пришлось бы дублировать в КАЖДОМ пакете-потребителе
+ * (packages/app, apps/web, apps/desktop, apps/mobile).
+ */
+const ZAPISKI_MARK = new URL('../../assets/services/zapiski.svg', import.meta.url).href;
 
 /** Ниже этого размера крона знака перестаёт читаться (handoff §6). */
 export const MIN_READABLE_SIZE = 28;
@@ -32,7 +40,7 @@ export const MIN_READABLE_SIZE = 28;
 /** Пока сервис у нас один. Список расширяется вместе с `services.css`. */
 export type ServiceId = 'zapiski';
 
-const MARKS: Record<ServiceId, string> = { zapiski: zapiskiMark };
+const MARKS: Record<ServiceId, string> = { zapiski: ZAPISKI_MARK };
 
 export interface ServiceMarkProps {
   service?: ServiceId;

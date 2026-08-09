@@ -120,9 +120,11 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   '.cm-z-strong': { fontWeight: '700' },
   '.cm-z-em': { fontStyle: 'italic' },
   '.cm-z-strike': { textDecoration: 'line-through', textDecorationColor: 'var(--text-tertiary)' },
+  // DS-ALIGNMENT §10: подсветка НЕ акцентная — иначе она спорит с главным
+  // действием за одно из двух разрешённых акцентных пятен на экране.
   '.cm-z-highlight': {
-    backgroundColor: 'var(--accent-soft)',
-    color: 'var(--accent-on-soft)',
+    backgroundColor: 'var(--mark-bg)',
+    color: 'var(--text)',
     borderRadius: '4px',
     // padding не задаём: он сдвинул бы соседний текст.
   },
@@ -165,7 +167,8 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   },
 
   // Маркеры списков — акцентного цвета, деликатные (DESIGN_TOKENS §2).
-  '.cm-z-list-mark': { color: 'var(--accent)', opacity: '0.75' },
+  // DS-ALIGNMENT §10: маркеры списков и таймкоды — --text-tertiary, не акцент.
+  '.cm-z-list-mark': { color: 'var(--text-tertiary)' },
 
   // ───────────────────────────────────────────────────────────────────────────
   // Таблицы GFM (SCREENS §4: шапка --surface, строки через --line, радиус 12)
@@ -216,10 +219,12 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   // Висячая ссылка: тот же акцент, пунктир в половину непрозрачности
   // (BEHAVIOR §2.5).
   '.cm-z-wiki-dangling': { opacity: '0.5' },
+  // DS-ALIGNMENT §10: чип тега ТЕРЯЕТ заливку — текст акцентом на прозрачном.
+  // Заливка --accent-soft остаётся только у активного фильтра, а он живёт
+  // в экранах, не в редакторе.
   '.cm-z-tag': {
-    color: 'var(--accent-on-soft, var(--accent))',
-    backgroundColor: 'var(--accent-soft)',
-    borderRadius: '99px',
+    color: 'var(--accent)',
+    backgroundColor: 'transparent',
     cursor: 'pointer',
   },
   '.cm-z-footnote': {

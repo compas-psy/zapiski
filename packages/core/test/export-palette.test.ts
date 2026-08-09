@@ -40,22 +40,35 @@ describe('палитра экспорта', () => {
     }
   });
 
-  it('берёт значения светлой темы «Бумага», а не тёмной', () => {
+  it('берёт значения светлой темы СИМПАС, а не тёмной', () => {
     // Регрессия: безусловный блок акцента легко перекрыть тёмным вариантом,
     // и тогда в печать уедет полупрозрачная rgba, непригодная для бумаги.
-    expect(PRINT_PALETTE.bg).toBe('#FBFAF7');
-    expect(PRINT_PALETTE.text).toBe('#38342E');
-    expect(PRINT_PALETTE.accentSoft).toBe('#F6E7E2');
+    expect(PRINT_PALETTE.bg).toBe('#F7F8F4');
+    expect(PRINT_PALETTE.text).toBe('#142018');
+    expect(PRINT_PALETTE.accentSoft).toBe('#E7F0EA');
   });
 
-  it('подсветка ==текст== в экспорте равна --accent-soft (DESIGN_TOKENS §2)', () => {
-    const css = readFileSync(
-      resolve(ROOT, 'packages/ui/src/styles/tokens.css'),
-      'utf8',
-    );
-    // Светлый гранат объявлен безусловным блоком [data-accent='garnet'].
-    const light = css.slice(css.indexOf("[data-accent='garnet']"));
-    const soft = /--accent-soft:\s*(#[0-9A-Fa-f]{6})/.exec(light);
-    expect(soft?.[1]?.toUpperCase()).toBe(PRINT_PALETTE.accentSoft);
+  it('подсветка ==текст== в экспорте равна --accent-soft акцента по умолчанию', () => {
+    // После перехода на дизайн-систему значение живёт в ДВУХ файлах: наш
+    // tokens.css объявляет алиас (`--accent-soft: var(--sage-…)`), а литерал
+    // лежит в снимке системы. Поэтому тест разворачивает ссылку, а не ищет
+    // hex там, где его больше нет.
+    const strip = (path: string) =>
+      readFileSync(resolve(ROOT, path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+
+    const tokens = strip('packages/ui/src/styles/tokens.css');
+    const system = strip('packages/ui/src/styles/simpas/vendor/tokens/colors.css');
+
+    // Светлая «Хвоя» — безусловный блок [data-accent='pine'].
+    const pine = tokens.slice(tokens.indexOf("[data-accent='pine']"));
+    const declared = /--accent-soft:\s*([^;]+);/.exec(pine)?.[1]?.trim();
+    expect(declared, 'в tokens.css не найден --accent-soft для «Хвои»').toBeTruthy();
+
+    const link = /^var\((--[\w-]+)\)$/.exec(declared!);
+    const literal = link
+      ? new RegExp(`${link[1]}:\\s*(#[0-9A-Fa-f]{6})`).exec(system)?.[1]
+      : declared;
+
+    expect(literal?.toUpperCase()).toBe(PRINT_PALETTE.accentSoft);
   });
 });

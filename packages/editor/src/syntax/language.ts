@@ -59,7 +59,7 @@ export interface MarkdownLanguageOptions {
 }
 
 /**
- * Markdown-язык КОМПАС.ЗАПИСКИ: GFM (таблицы, чекбоксы, зачёркивание,
+ * Markdown-язык ЗАПИСКИ: GFM (таблицы, чекбоксы, зачёркивание,
  * автоссылки) плюс `==подсветка==`, `[[wiki]]`, `#тег`, `[^сноска]`.
  */
 export function zapiskiMarkdown(options: MarkdownLanguageOptions = {}): Extension {

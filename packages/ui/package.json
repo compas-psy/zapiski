@@ -16,7 +16,8 @@
     "src"
   ],
   "sideEffects": [
-    "*.css"
+    "**/*.css",
+    "./src/index.ts"
   ],
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",

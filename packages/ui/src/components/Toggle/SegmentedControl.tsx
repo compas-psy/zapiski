@@ -1,3 +1,12 @@
+/**
+ * Сегментированный контрол.
+ *
+ * РЕАЛИЗАЦИЯ ДО ПОЯВЛЕНИЯ ПАКЕТА СИМПАС. `SegmentedControl` — компонент
+ * дизайн-системы (DS-ALIGNMENT §8); пока `@simpas/design-system` недоступен,
+ * здесь живёт наша версия с тем же API и видом. Карта соответствия и план
+ * замены — packages/ui/DS-MAPPING.md. Значения не выдумываются: всё построено
+ * на токенах системы через алиасы из styles/tokens.css.
+ */
 import { useRef, type ReactNode } from 'react';
 import { cx } from '../../internal/cx';
 import './Toggle.css';

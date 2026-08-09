@@ -215,8 +215,8 @@ describe('ThemeProvider', () => {
         <button type="button" onClick={() => setTheme('ink')}>
           Чернила
         </button>
-        <button type="button" onClick={() => setAccent('pine')}>
-          Хвоя
+        <button type="button" onClick={() => setAccent('forest')}>
+          Лес
         </button>
         <button type="button" onClick={() => setEditor({ fontSize: 20, compact: true })}>
           Крупно
@@ -225,15 +225,16 @@ describe('ThemeProvider', () => {
     );
   }
 
-  it('по умолчанию следует за системой: светлая ОС → paper', () => {
+  it('по умолчанию следует за системой: светлая ОС → simpas', () => {
     render(
       <ThemeProvider>
         <Harness />
       </ThemeProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('paper');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('paper');
-    expect(document.documentElement.getAttribute('data-accent')).toBe('garnet');
+    expect(screen.getByTestId('theme')).toHaveTextContent('simpas');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('simpas');
+    /* «Хвоя» — основное действие дизайн-системы (DS-ALIGNMENT §3). */
+    expect(document.documentElement.getAttribute('data-accent')).toBe('pine');
   });
 
   it('тёмная ОС → graphite; ink выбирается только вручную', () => {
@@ -254,8 +255,8 @@ describe('ThemeProvider', () => {
         <Harness />
       </ThemeProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Хвоя' }));
-    expect(document.documentElement.getAttribute('data-accent')).toBe('pine');
+    fireEvent.click(screen.getByRole('button', { name: 'Лес' }));
+    expect(document.documentElement.getAttribute('data-accent')).toBe('forest');
 
     fireEvent.click(screen.getByRole('button', { name: 'Крупно' }));
     const root = document.documentElement;

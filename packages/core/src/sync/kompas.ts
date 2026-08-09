@@ -1,5 +1,5 @@
 /**
- * `KompasCloudBackend` — облако КОМПАС по протоколу ADR-0003, эндпоинты
+ * `KompasCloudBackend` — облако СИМПАС по протоколу ADR-0003, эндпоинты
  * `/api/v1/vault/*`. Типы запросов и ответов — из `sync/protocol.ts`, того же
  * файла, который импортирует сервер.
  *
@@ -41,7 +41,7 @@ export interface WebSocketLike {
 
 export class KompasCloudBackend implements SyncBackend {
   readonly id = 'kompas' as const;
-  readonly title = 'Облако КОМПАС';
+  readonly title = 'Облако СИМПАС';
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly deviceId: string;

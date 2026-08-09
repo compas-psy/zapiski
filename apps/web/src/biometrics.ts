@@ -46,7 +46,7 @@ export function createWebAuthnBiometrics(): BiometricProvider | null {
       const created = (await navigator.credentials.create({
         publicKey: {
           challenge: randomBytes(32),
-          rp: { name: 'КОМПАС.ЗАПИСКИ', id: location.hostname },
+          rp: { name: 'ЗАПИСКИ', id: location.hostname },
           user: { id: new TextEncoder().encode(keyId), name: keyId, displayName: keyId },
           pubKeyCredParams: [
             { type: 'public-key', alg: -7 },

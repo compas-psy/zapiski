@@ -48,7 +48,7 @@ export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities
      * Share-target на Windows нет. Системный «Поделиться» умеет отдавать
      * данные только приложениям, установленным как MSIX-пакет с манифестом
      * `windows.shareTarget`; установщики NSIS/MSI, которыми собирается
-     * КОМПАС.ЗАПИСКИ, в этот механизм не попадают. ТЗ §5.4 и не требует его
+     * ЗАПИСКИ, в этот механизм не попадают. ТЗ §5.4 и не требует его
      * на Windows — там share-target записан за Android.
      */
     shareTarget: null,

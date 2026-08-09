@@ -30,13 +30,15 @@ describe('Витрина', () => {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument();
     }
 
-    /* Переключатели тем и всех шести акцентов на месте. */
+    /* Переключатели тем и всех шести акцентов на месте (DS-ALIGNMENT §3). */
     expect(screen.getByRole('radiogroup', { name: 'Тема' })).toBeInTheDocument();
-    for (const accent of ['Гранат', 'Хвоя', 'Золото', 'Черника', 'Вереск', 'Грифель']) {
+    for (const accent of ['Хвоя', 'Лес', 'Золото', 'Сумерки', 'Гранит', 'Глина']) {
       expect(screen.getByRole('button', { name: accent })).toBeInTheDocument();
     }
+    /* Терракота из набора исключена: это цвет идентичности, не интерфейса. */
+    expect(screen.queryByRole('button', { name: 'Гранат' })).toBeNull();
 
-    expect(document.documentElement.getAttribute('data-theme')).toBe('paper');
-    expect(document.documentElement.getAttribute('data-accent')).toBe('garnet');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('simpas');
+    expect(document.documentElement.getAttribute('data-accent')).toBe('pine');
   });
 });

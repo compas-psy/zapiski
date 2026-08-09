@@ -4,9 +4,6 @@ declare module '*.css' {
   export default content;
 }
 
-/* Импорт .svg отдаёт URL ассета (Vite). Знак сервиса подключается именно так —
-   файл дизайн-системы обязан попадать в сборку неизменным (DS-ALIGNMENT §9). */
-declare module '*.svg' {
-  const url: string;
-  export default url;
-}
+/* Объявления `*.svg` здесь намеренно нет: знак сервиса подключается через
+   `new URL('…', import.meta.url)` (см. components/ServiceMark), чтобы не
+   заставлять каждый пакет-потребитель повторять ambient-объявление. */
