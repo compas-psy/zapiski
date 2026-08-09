@@ -184,18 +184,60 @@ export function canPickDirectory(): boolean {
 }
 
 /**
- * Системный диалог выбора папки. Отказ пользователя — не ошибка: вернём `null`,
- * и приложение останется в OPFS (local-first, писать можно сразу).
+ * Системный диалог выбора папки.
+ *
+ * Два исхода различаются, и это важно. **Отмена человеком** — не ошибка:
+ * возвращаем `null`, приложение остаётся в OPFS и пишет сразу (local-first).
+ * **Отказ платформы** — ошибка, и о ней нужно сказать словами: раньше оба
+ * случая сливались в один `null`, поэтому на Samsung Internet выбор папки
+ * молча возвращал человека на тот же экран, и сказать было нечего.
+ *
+ * Перед тем как отдать папку приложению, она проверяется на запись. Разрешение
+ * на выбор и разрешение на запись — разные вещи: диалог может закончиться
+ * успешно, а первая же попытка создать файл упасть. Узнать об этом на месте
+ * дешевле, чем посреди первой заметки.
  */
 export async function pickVaultDirectory(): Promise<VaultStorage | null> {
   const picker = (window as PickerWindow).showDirectoryPicker;
   if (typeof picker !== 'function') return openOpfsVault();
+
+  let handle: FileSystemDirectoryHandle;
   try {
-    const handle = await picker({ mode: 'readwrite' });
-    await rememberHandle(handle);
-    return new DirectoryVaultStorage(handle, handle.name);
-  } catch {
-    return null;
+    handle = await picker({ mode: 'readwrite' });
+  } catch (error) {
+    // `AbortError` — человек закрыл диалог. Это его право, а не сбой.
+    if (error instanceof DOMException && error.name === 'AbortError') return null;
+    throw error;
+  }
+
+  await assertWritable(handle);
+  // Запоминаем только то, что доказало работоспособность: битую ручку незачем
+  // тащить в следующий запуск, она снова упадёт при восстановлении.
+  await rememberHandle(handle).catch(() => undefined);
+  return new DirectoryVaultStorage(handle, handle.name);
+}
+
+/** Имя пробного файла. Точка в начале — чтобы не мозолил глаза, если останется. */
+const PROBE = '.zapiski-write-test';
+
+/**
+ * Проверка «в эту папку правда можно писать».
+ *
+ * Пробуем ровно то, что делает vault на первой же секунде: создать файл,
+ * записать байт, прочитать обратно и убрать за собой. Провайдеры Android
+ * (а на телефоне выбор папки идёт через них) умеют отдать каталог, в который
+ * записать нельзя, и это выясняется только попыткой.
+ */
+async function assertWritable(handle: FileSystemDirectoryHandle): Promise<void> {
+  const file = await handle.getFileHandle(PROBE, { create: true });
+  try {
+    const writable = await (file as FileSystemFileHandle).createWritable();
+    await writable.write(new Uint8Array([1]));
+    await writable.close();
+    const read = await file.getFile();
+    if (read.size !== 1) throw new DOMException('папка приняла запись не полностью', 'DataError');
+  } finally {
+    await handle.removeEntry(PROBE).catch(() => undefined);
   }
 }
 

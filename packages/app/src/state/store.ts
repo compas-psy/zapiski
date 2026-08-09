@@ -386,7 +386,17 @@ export class AppController {
        откуда мы уже ушли. */
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.lockTimer) clearInterval(this.lockTimer);
-    const vault = await Vault.open(storage, { locale: this.state.locale });
+    /* Отказ открыть хранилище обязан снять флаг «загружаюсь». Без этого
+       состояние врёт о себе: vault не открыт, а приложение считает, что оно
+       всё ещё в процессе, — и вызывающий не может ни показать ошибку, ни
+       предложить другое место. */
+    let vault: Vault;
+    try {
+      vault = await Vault.open(storage, { locale: this.state.locale });
+    } catch (error) {
+      this.patch({ booting: false });
+      throw error;
+    }
     this.vault = vault;
     this.versions = new VersionHistory(storage);
     vault.onChange(() => {

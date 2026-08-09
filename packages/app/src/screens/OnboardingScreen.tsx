@@ -108,11 +108,36 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
   async function proceed(): Promise<void> {
     setBusy(true);
     try {
-      /* Выбор папки — платформенный порт. Отказ пользователя не тупик:
-         остаётся хранилище в памяти, писать можно сразу (local-first). */
-      const storage = await app.host.platform.pickVaultDirectory().catch(() => null);
-      if (storage) await app.openVault(storage);
-      else await app.openMemoryVault();
+      /* Выбор папки — платформенный порт. Различаем два исхода, и это не
+         формальность: раньше они сливались в один, и на Samsung Internet
+         получалось так — тап по «Дальше», системный выбор папки,
+         «Использовать эту папку», и снова тот же вопрос, без единого слова.
+
+         `null` — человек закрыл диалог. Это его право: молча уходим в память,
+         писать можно сразу (local-first).
+         Исключение — платформа отказала. Тогда говорим текстом реестра §11 и
+         всё равно пускаем внутрь: ошибка не должна блокировать ввод (C5). */
+      let storage = null;
+      let refused = false;
+      try {
+        storage = await app.host.platform.pickVaultDirectory();
+      } catch {
+        refused = true;
+      }
+
+      if (storage) {
+        try {
+          await app.openVault(storage);
+        } catch {
+          refused = true;
+          storage = null;
+        }
+      }
+
+      if (!storage) {
+        if (refused) app.toast({ message: strings.errors.folderUnavailable });
+        await app.openMemoryVault();
+      }
 
       if (choice === 'kompas') {
         /* Вошли — и сразу к заметкам: экран входа не самоцель, а шаг к тому,

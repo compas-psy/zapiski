@@ -554,9 +554,19 @@ function StorageSection(): ReactNode {
       <Button
         variant="secondary"
         onClick={() => {
-          void app.host.platform.pickVaultDirectory().then((storage) => {
-            if (storage) void app.openVault(storage);
-          });
+          /* Та же немота, что была в онбординге: папку выбрали, открыть не
+             вышло — и человек не узнавал об этом ничего. Заметки при этом
+             остаются там, где лежали: сменить папку не удалось, но старая
+             никуда не делась. */
+          void (async () => {
+            const storage = await app.host.platform.pickVaultDirectory().catch(() => null);
+            if (!storage) return;
+            try {
+              await app.openVault(storage);
+            } catch {
+              app.toast({ message: strings.errors.folderUnavailable });
+            }
+          })();
         }}
       >
         {copy.changeFolder}
