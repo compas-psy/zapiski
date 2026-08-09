@@ -1,0 +1,382 @@
+name: Безопасность
+
+# Проверки инфобеза, отделённые от деплоя намеренно: они обязаны идти на
+# каждый PR, включая PR из форка, где секретов нет и деплой не запускается.
+#
+# Внешних экшенов, кроме checkout/setup, здесь нет: сканер секретов написан
+# своими силами. Причина простая — этот workflow сторожит цепочку поставки,
+# и тянуть в него стороннее действие с правом читать дифф значило бы
+# расширять ту самую поверхность, которую он проверяет.
+#
+# Разбор находок и статусы — docs/dev/security/AUDIT.md.
+# Модель угроз — docs/dev/security/THREAT-MODEL.md.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # Уязвимости в зависимостях появляются без наших коммитов.
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1. Секреты
+  # ───────────────────────────────────────────────────────────────────────────
+  secrets:
+    name: Секреты в коде
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Для PR нужен предок, чтобы посмотреть именно дифф.
+          fetch-depth: 0
+
+      - name: Найти секреты
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/scan-secrets.mjs <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync, statSync } from 'node:fs';
+
+          /**
+           * Сканер секретов. На PR смотрит только добавленные строки диффа —
+           * иначе один старый ложняк красит все последующие сборки. На push
+           * и по расписанию проходит всё дерево.
+           */
+
+          const SKIP_PATH = [
+            /(^|\/)node_modules\//,
+            /(^|\/)dist\//,
+            /(^|\/)\.git\//,
+            /(^|\/)pnpm-lock\.yaml$/,
+            /(^|\/)package-lock\.json$/,
+            /\.(woff2?|png|jpe?g|gif|webp|avif|ico|pdf|zip)$/i,
+            // Образцы окружения: значения в них пустые по построению,
+            // а имена переменных — часть документации.
+            /\.env\.example$/,
+            // Наши же правила и разборы дефектов цитируют опасные строки.
+            /^docs\/dev\/security\//,
+            /^\.github\/workflows\/security\.yml$/,
+          ];
+
+          const RULES = [
+            { id: 'private-key', re: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/ },
+            { id: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/ },
+            { id: 'github-token', re: /\b(gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{40,})\b/ },
+            { id: 'slack-token', re: /\bxox[abposr]-[A-Za-z0-9-]{10,}\b/ },
+            { id: 'google-api-key', re: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+            { id: 'jwt', re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/ },
+            { id: 'yookassa-key', re: /\blive_[A-Za-z0-9_-]{30,}\b/ },
+            {
+              // Присваивание секрета длинным литералом: AUTH_SECRET=..., password: '...'
+              id: 'assigned-secret',
+              re: /\b(auth[_-]?secret|client[_-]?secret|api[_-]?key|secret[_-]?key|webhook[_-]?secret|password|passwd|token)\b\s*[:=]\s*['"`][^'"`\n]{16,}['"`]/i,
+            },
+            {
+              id: 'assigned-secret-env',
+              re: /^\s*[A-Z0-9_]*(SECRET|PASSWORD|TOKEN|API_KEY)[A-Z0-9_]*\s*=\s*\S{16,}/,
+            },
+          ];
+
+          /**
+           * Строки, которые заведомо не несут боевого секрета. Держим список
+           * коротким и явным: чем он длиннее, тем меньше пользы от сканера.
+           */
+          const ALLOW = [
+            // Заглушки в тестах и стендах.
+            /(^|\/)(test|tests|__tests__)\//,
+          ];
+          const ALLOW_LINE = [
+            /process\.env/,
+            /\$\{\{\s*secrets\./,
+            /\bTEST_[A-Z_]*SECRET\b/,
+            // Заведомо непригодные значения.
+            /(placeholder|example|changeme|заглушка|не.?секрет|dummy|fake)/i,
+          ];
+
+          const skip = (p) => SKIP_PATH.some((re) => re.test(p)) || ALLOW.some((re) => re.test(p));
+
+          const sh = (args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+
+          const base = process.env.BASE_SHA ?? '';
+          const findings = [];
+
+          const inspect = (file, line, text) => {
+            if (ALLOW_LINE.some((re) => re.test(text))) return;
+            for (const rule of RULES) {
+              if (rule.re.test(text)) {
+                findings.push({ file, line, rule: rule.id, text: text.trim().slice(0, 120) });
+                return;
+              }
+            }
+          };
+
+          if (base) {
+            // PR: только добавленные строки.
+            const diff = sh(['diff', '--unified=0', `${base}...HEAD`]);
+            let file = '';
+            let lineNo = 0;
+            for (const raw of diff.split('\n')) {
+              if (raw.startsWith('+++ b/')) { file = raw.slice(6); lineNo = 0; continue; }
+              const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+              if (hunk) { lineNo = Number(hunk[1]); continue; }
+              if (!raw.startsWith('+') || raw.startsWith('+++')) continue;
+              const text = raw.slice(1);
+              if (!skip(file)) inspect(file, lineNo, text);
+              lineNo += 1;
+            }
+          } else {
+            for (const file of sh(['ls-files']).split('\n').filter(Boolean)) {
+              if (skip(file)) continue;
+              let info;
+              try { info = statSync(file); } catch { continue; }
+              if (!info.isFile() || info.size > 2 * 1024 * 1024) continue;
+              const text = readFileSync(file, 'utf8');
+              if (text.includes('\u0000')) continue;
+              text.split('\n').forEach((line, i) => inspect(file, i + 1, line));
+            }
+          }
+
+          if (findings.length > 0) {
+            for (const f of findings) {
+              console.log(`::error file=${f.file},line=${f.line}::[${f.rule}] похоже на секрет: ${f.text}`);
+            }
+            console.error(`\nНайдено потенциальных секретов: ${findings.length}.`);
+            console.error('Секрет в git считается скомпрометированным: отзовите его и перевыпустите,');
+            console.error('удаления коммита недостаточно. Значения живут только в GitHub Secrets и в deploy/.env на сервере.');
+            process.exit(1);
+          }
+          console.log('Секретов в проверенных строках не найдено.');
+          NODE
+          node /tmp/scan-secrets.mjs
+
+      - name: Проверить, что файлы окружения не закоммичены
+        run: |
+          set -euo pipefail
+          # deploy/.env живёт только на сервере (ADR-0003, deploy/SETUP.md).
+          tracked=$(git ls-files | grep -E '(^|/)\.env$|(^|/)\.env\.(local|production)$|\.(pem|jks|p12|key)$' || true)
+          if [ -n "${tracked}" ]; then
+            echo "::error::в репозитории лежат файлы с секретами:"
+            echo "${tracked}"
+            exit 1
+          fi
+          echo 'Файлов с секретами в индексе нет.'
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2. Запреты кодовой базы
+  # ───────────────────────────────────────────────────────────────────────────
+  forbidden:
+    name: Запрещённые пути и настройки
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ARCHITECTURE §3.6 и ТЗ §5.5: ни одного SMS-зависимого пути.
+      #
+      # ACCEPTANCE A6 предлагает `grep -ri "sms\|смс"`, но буквальный grep
+      # ловит и комментарии, которые как раз ФИКСИРУЮТ запрет («SMS не
+      # используется нигде»). Поэтому проверяем исполняемый код: строки, не
+      # являющиеся комментарием. Упоминания в комментариях выводим отдельно
+      # как справку — они допустимы и полезны.
+      - name: Ни одного SMS-зависимого пути
+        run: |
+          set -euo pipefail
+          cat > /tmp/no-sms.mjs <<'NODE'
+          import { execFileSync } from 'node:child_process';
+          import { readFileSync } from 'node:fs';
+
+          const files = execFileSync('git', ['ls-files', 'packages', 'apps', 'server', 'scripts'], {
+            encoding: 'utf8',
+          })
+            .split('\n')
+            .filter((f) => /\.(ts|tsx|js|mjs|cjs|sql)$/.test(f))
+            .filter((f) => !f.includes('node_modules') && !f.includes('/dist/'));
+
+          const WORD = /\bsms\b|смс/i;
+          const offenders = [];
+          const mentions = [];
+
+          for (const file of files) {
+            let block = false;
+            readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+              const trimmed = line.trim();
+              const wasBlock = block;
+              if (trimmed.startsWith('/*')) block = true;
+              if (block && trimmed.includes('*/')) block = false;
+              const isComment =
+                wasBlock ||
+                block ||
+                trimmed.startsWith('//') ||
+                trimmed.startsWith('*') ||
+                trimmed.startsWith('--');
+              if (!WORD.test(line)) return;
+              (isComment ? mentions : offenders).push(`${file}:${i + 1}: ${trimmed.slice(0, 140)}`);
+            });
+          }
+
+          if (mentions.length > 0) {
+            console.log('Упоминания SMS в комментариях (это норма — они фиксируют запрет):');
+            for (const m of mentions) console.log('  ' + m);
+            console.log('');
+          }
+          if (offenders.length > 0) {
+            for (const o of offenders) console.log(`::error::SMS-зависимый путь: ${o}`);
+            console.error('ТЗ §5.5 и ARCHITECTURE §3.6 запрещают любой SMS-зависимый путь.');
+            process.exit(1);
+          }
+          console.log('SMS-зависимых путей в исполняемом коде нет.');
+          NODE
+          node /tmp/no-sms.mjs
+
+      # Инварианты изоляции и периметра, которые дешевле сторожить текстом,
+      # чем ловить на бою (ADR-0003, docs/dev/security/AUDIT.md SEC-002).
+      - name: Инварианты развёртывания
+        run: |
+          set -euo pipefail
+          fail=0
+
+          # SEC-002: TRUST_PROXY=true заставляет сервер верить самому левому
+          # элементу X-Forwarded-For, то есть значению от клиента.
+          if grep -nE '^\s*TRUST_PROXY:\s*"?true"?\s*$' deploy/docker-compose.yml; then
+            echo '::error file=deploy/docker-compose.yml::TRUST_PROXY=true — адрес клиента подделывается заголовком. Ставьте число переходов (1).'
+            fail=1
+          fi
+
+          # ADR-0003 §4: порт базы на хост не пробрасывается.
+          if awk '/^  postgres:/{p=1} p&&/^\s*ports:/{print FILENAME": "NR": "$0; found=1} /^  [a-z]/&&!/^  postgres:/{p=0} END{exit !found}' deploy/docker-compose.yml; then
+            echo '::error file=deploy/docker-compose.yml::у postgres появился проброс порта — ADR-0003 §4 это запрещает'
+            fail=1
+          fi
+
+          # Контейнер API обязан работать не от root.
+          if ! grep -qE '^\s*USER\s+zapiski' deploy/api.Dockerfile; then
+            echo '::error file=deploy/api.Dockerfile::образ API должен переключаться на непривилегированного пользователя'
+            fail=1
+          fi
+
+          # CORS с credentials и списком origin — несовместимы с `*`.
+          if grep -nE "origin:\s*'\*'|origin:\s*\"\\*\"" server/src/app.ts; then
+            echo '::error file=server/src/app.ts::CORS origin `*`'
+            fail=1
+          fi
+
+          exit "${fail}"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. Зависимости
+  # ───────────────────────────────────────────────────────────────────────────
+  audit:
+    name: Уязвимости в зависимостях
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Валит сборку на high/critical. moderate и low выводятся как заметки:
+      # красный статус, который нельзя погасить, перестают читать через неделю.
+      - name: pnpm audit (воркспейс)
+        run: |
+          set -euo pipefail
+          pnpm audit --audit-level moderate || true
+          echo '--- порог: high ---'
+          pnpm audit --audit-level high
+
+      # Отдельно и обязательно: образ API собирается `npm ci` по
+      # server/package-lock.json (deploy/api.Dockerfile), то есть в прод едет
+      # именно этот граф зависимостей, а не воркспейсный.
+      - name: npm audit (граф, который реально едет в прод)
+        working-directory: server
+        run: |
+          set -euo pipefail
+          npm audit --audit-level=moderate || true
+          echo '--- порог: high ---'
+          npm audit --audit-level=high
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4. Security-тесты
+  # ───────────────────────────────────────────────────────────────────────────
+  tests:
+    name: Тесты безопасности
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Настоящий Postgres: на нём держатся `FOR UPDATE` (одноразовость
+    # magic-токена под гонкой) и частичные индексы. Эмулятор проверил бы
+    # не то.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: zapiski
+          POSTGRES_PASSWORD: zapiski
+          POSTGRES_DB: zapiski_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zapiski -d zapiski_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://zapiski:zapiski@127.0.0.1:5432/zapiski_test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Установка зависимостей
+        run: |
+          set -euo pipefail
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Периметр сервера (path traversal, IDOR, гонка токена, XSS)
+        working-directory: server
+        run: pnpm exec vitest run test/security.perimeter.test.ts
+
+      - name: Крипто и zero-knowledge ядра
+        working-directory: packages/core
+        run: pnpm exec vitest run test/security.zero-knowledge.test.ts
+
+      # Эти два набора команда бэкенда держит сама, но они — часть контура
+      # безопасности, поэтому запускаются и здесь.
+      - name: Схема без открытого текста и приватность журнала
+        working-directory: server
+        run: pnpm exec vitest run test/schema.zero-knowledge.test.ts test/privacy.logging.test.ts test/billing.webhook.test.ts

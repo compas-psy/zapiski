@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "КОМПАС.ЗАПИСКИ",
+  "mainBinaryName": "zapiski-desktop",
+  "version": "0.1.0",
+  "identifier": "ru.cmpas.zapiski",
+  "build": {
+    "beforeDevCommand": "pnpm run dev:vite",
+    "devUrl": "http://localhost:5183",
+    "beforeBuildCommand": "pnpm run build:vite",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "КОМПАС.ЗАПИСКИ",
+        "width": 1280,
+        "height": 832,
+        "minWidth": 640,
+        "minHeight": 480,
+        "center": true,
+        "resizable": true,
+        "dragDropEnabled": true,
+        "visible": false,
+        "backgroundColor": "#FBFAF7"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob:; font-src 'self' data:; media-src 'self' asset: http://asset.localhost blob: data:; connect-src 'self' ipc: http://ipc.localhost https: wss: data: blob:; object-src 'none'; frame-src 'none'; base-uri 'self'; form-action 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    },
+    "withGlobalTauri": false
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "КОМПАС",
+    "copyright": "КОМПАС",
+    "category": "Productivity",
+    "shortDescription": "Заметки в Markdown",
+    "longDescription": "КОМПАС.ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
+    "fileAssociations": [
+      {
+        "ext": ["md", "markdown"],
+        "name": "Markdown",
+        "description": "Заметка Markdown",
+        "mimeType": "text/markdown",
+        "role": "Editor"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Russian", "English"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": ["ru-RU"]
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://zapiski.cmpas.ru/api/v1/updates/windows/{{current_version}}"
+      ],
+      "pubkey": "ЗАМЕНИТЬ-НА-НАСТОЯЩИЙ-ПУБЛИЧНЫЙ-КЛЮЧ",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

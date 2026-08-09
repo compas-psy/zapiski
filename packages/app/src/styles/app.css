@@ -1,0 +1,939 @@
+/* ===========================================================================
+   Экраны КОМПАС.ЗАПИСКИ.
+   Ни одного цветового литерала — только var(--*) из @zapiski/ui (tokens.css).
+   Метрики — DESIGN_TOKENS.md §3 и SCREENS.md «Каркас».
+   =========================================================================== */
+
+.za-app {
+  block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* ── Каркас: три панели (SCREENS «Каркас») ───────────────────────────────── */
+
+.za-frame {
+  flex: 1;
+  min-block-size: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+/* 900–1200: две панели, библиотека — оверлей по кнопке */
+.za-frame--dual {
+  grid-template-columns: 288px minmax(0, 1fr);
+}
+/* ≥1200: библиотека 224 | список 288 | редактор */
+.za-frame--triple {
+  grid-template-columns: 224px 288px minmax(0, 1fr);
+}
+.za-frame--compact {
+  grid-template-columns: minmax(0, 1fr);
+}
+/* 600–900 в landscape — список и редактор рядом */
+@media (min-width: 600px) and (max-width: 899px) and (orientation: landscape) {
+  .za-frame--compact {
+    grid-template-columns: 288px minmax(0, 1fr);
+  }
+}
+/* Режим фокуса: только редактор (SCREENS §4) */
+.za-frame--focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.za-pane {
+  min-inline-size: 0;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.za-pane--library {
+  background-color: var(--surface-alt);
+  border-inline-end: var(--border-w) solid var(--line);
+}
+.za-pane--list {
+  border-inline-end: var(--border-w) solid var(--line);
+}
+
+/* ── Шапка экрана ────────────────────────────────────────────────────────── */
+
+.za-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-12) var(--sp-16);
+  min-block-size: 56px;
+  background-color: var(--bg);
+}
+.za-header__title {
+  flex: 1;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.za-header__crumb {
+  flex: 1;
+  min-inline-size: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.za-header__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+/* Чип-пилюля статуса в шапке — «Оффлайн · всё сохранено локально» */
+.za-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--r-full);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  border: var(--border-w) solid var(--line);
+}
+.za-chip--accent {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+  border-color: transparent;
+}
+.za-chip--success {
+  background-color: var(--success-soft);
+  color: var(--success);
+  border-color: transparent;
+}
+
+/* ── Прокручиваемое тело ─────────────────────────────────────────────────── */
+
+.za-scroll {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+/* Нижний паддинг 92, чтобы последняя строка не подлезла под поиск и FAB */
+.za-scroll--bottom-bar {
+  padding-block-end: 92px;
+}
+
+/* ── Строка списка заметок ───────────────────────────────────────────────── */
+
+.za-row-shell {
+  position: relative;
+  overflow: hidden;
+  border-block-end: var(--border-w) solid var(--line-soft);
+}
+.za-row-shell--collapsing {
+  block-size: 0;
+  transition: block-size var(--dur-base) var(--ease-out);
+}
+.za-row__underlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding-inline: var(--sp-20);
+  font-size: var(--fs-control-sm);
+  font-weight: var(--fw-control);
+  pointer-events: none;
+}
+/* Свайп вправо — закрепить (акцент) */
+.za-row__underlay--start {
+  justify-content: flex-start;
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+/* Свайп влево — в архив (surface) */
+.za-row__underlay--end {
+  justify-content: flex-end;
+  background-color: var(--surface);
+  color: var(--text-secondary);
+}
+
+.za-row {
+  position: relative;
+  display: flex;
+  gap: var(--sp-12);
+  inline-size: 100%;
+  box-sizing: border-box;
+  min-block-size: var(--row-h);
+  padding: var(--pad-row-block) var(--pad-row-inline);
+  background-color: var(--bg);
+  border: 0;
+  text-align: start;
+  cursor: pointer;
+  font-family: inherit;
+  color: inherit;
+  touch-action: pan-y;
+}
+.za-row--compact {
+  min-block-size: var(--row-h-compact);
+}
+.za-row--selected {
+  background-color: var(--surface);
+}
+.za-row--releasing {
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.za-row__body {
+  flex: 1;
+  min-inline-size: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.za-row__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-inline-size: 0;
+}
+.za-row__title {
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-list-title);
+  font-weight: var(--fw-list-title);
+  line-height: var(--lh-list-title);
+  color: var(--text);
+}
+.za-row__marks {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+}
+.za-row__snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--fs-list-snippet);
+  line-height: var(--lh-list-snippet);
+  color: var(--text-secondary);
+}
+/* Зашифрованная заметка: спокойный курсив вместо сниппета (SCREENS §3) */
+.za-row__snippet--muted {
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+.za-row__meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+
+.za-section {
+  padding: var(--sp-16) var(--pad-row-inline) 6px;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* ── Нижняя зона mobile: пилюля поиска + FAB, градиент-фейд 96 ───────────── */
+
+.za-bottom {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  padding: 0 var(--sp-16) var(--sp-16);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  z-index: var(--z-sticky);
+}
+.za-bottom__fade {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: 0;
+  block-size: 96px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+.za-bottom__search {
+  position: relative;
+  flex: 1;
+  min-inline-size: 0;
+  block-size: 44px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding-inline: var(--sp-16);
+  border-radius: var(--r-full);
+  border: var(--border-w) solid var(--line);
+  background-color: var(--surface);
+  color: var(--text-tertiary);
+  box-shadow: var(--elev-search);
+  font-size: var(--fs-control-sm);
+  cursor: pointer;
+}
+.za-bottom__host {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Проявление поля поиска при pull-to-search до порога 64 px (BEHAVIOR §1.4) */
+.za-pull {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+}
+
+/* ── Библиотека (SCREENS §5) ─────────────────────────────────────────────── */
+
+.za-library {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  background-color: var(--surface-alt);
+  overflow-y: auto;
+}
+.za-library__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-8);
+  padding: var(--sp-20) var(--sp-16) var(--sp-12);
+}
+.za-wordmark {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--accent);
+}
+.za-wordmark--plus > span {
+  color: var(--accent);
+}
+.za-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 var(--sp-8);
+}
+.za-nav__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  inline-size: 100%;
+  box-sizing: border-box;
+  min-block-size: var(--tap-min);
+  padding: var(--sp-8) var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background-color: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control-sm);
+  font-weight: var(--fw-control);
+  text-align: start;
+  cursor: pointer;
+}
+.za-nav__item:hover {
+  background-color: var(--surface-hover);
+}
+.za-nav__item--active {
+  background-color: var(--surface);
+}
+.za-nav__count {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-sm);
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+.za-library__footer {
+  margin-block-start: auto;
+  padding: var(--sp-12) var(--sp-8) var(--sp-16);
+  border-block-start: var(--border-w) solid var(--line);
+}
+
+/* ── Редактор (SCREENS §4) ───────────────────────────────────────────────── */
+
+.za-editor {
+  flex: 1;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.za-editor__surface {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+.za-editor__column {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: var(--editor-measure);
+  margin-inline: auto;
+  padding: var(--sp-16) var(--pad-screen);
+}
+@media (min-width: 900px) {
+  .za-editor__column {
+    padding: var(--editor-pad-block) var(--editor-pad-inline);
+  }
+}
+.za-editor__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-block-end: var(--sp-12);
+}
+.za-editor__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px var(--pad-screen);
+  border-block-start: var(--border-w) solid var(--line-soft);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+.za-editor__hint {
+  position: absolute;
+  inset-block-start: var(--sp-16);
+  inset-inline-end: var(--sp-20);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-disabled);
+}
+.za-editor__host {
+  position: relative;
+  flex: 1;
+  min-block-size: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Backlinks: панель просто отсутствует, если ссылок нет (BEHAVIOR §2.10) */
+.za-backlinks {
+  margin-block-start: var(--sp-32);
+  padding-block-start: var(--sp-16);
+  border-block-start: var(--border-w) solid var(--line);
+}
+.za-backlinks__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  color: var(--text-tertiary);
+  text-align: start;
+}
+.za-backlinks__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-block-start: var(--sp-8);
+}
+.za-backlinks__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  text-align: start;
+}
+
+/* Панель «Инфо» — 280 на desktop (BEHAVIOR §2.9) */
+.za-info {
+  inline-size: 280px;
+  flex: 0 0 280px;
+  border-inline-start: var(--border-w) solid var(--line);
+  background-color: var(--surface-alt);
+  overflow-y: auto;
+  padding: var(--sp-16);
+}
+.za-info__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-12);
+  padding-block: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+.za-info__value {
+  color: var(--text);
+  text-align: end;
+}
+.za-info__path {
+  inline-size: 100%;
+  padding: var(--sp-8);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  text-align: start;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+/* ── Общие блоки экранов ─────────────────────────────────────────────────── */
+
+.za-screen {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+.za-page {
+  box-sizing: border-box;
+  inline-size: 100%;
+  max-inline-size: 600px;
+  margin-inline: auto;
+  padding: var(--sp-24) var(--pad-screen) var(--sp-40);
+}
+.za-page--wide {
+  max-inline-size: 760px;
+}
+.za-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+}
+.za-stack--tight {
+  gap: var(--sp-8);
+}
+.za-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-12);
+}
+.za-muted {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+}
+.za-tertiary-mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+
+.za-card {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: var(--pad-card-block) var(--pad-card-inline);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-xl);
+  background-color: var(--bg);
+  text-align: start;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.za-card--selected {
+  border-width: var(--border-w-strong);
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+}
+.za-card--dashed {
+  border-style: dashed;
+}
+.za-card--static {
+  cursor: default;
+}
+.za-card__title {
+  font-size: var(--fs-control);
+  font-weight: var(--fw-control);
+  color: var(--text);
+}
+.za-card__text {
+  padding-block-start: 4px;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
+/* ── Онбординг (SCREENS §1) ──────────────────────────────────────────────── */
+
+.za-progress-steps {
+  display: flex;
+  gap: 5px;
+}
+.za-progress-steps__bar {
+  inline-size: 22px;
+  block-size: 5px;
+  border-radius: var(--r-full);
+  background-color: var(--line);
+}
+.za-progress-steps__bar--active {
+  background-color: var(--accent);
+}
+.za-bullet {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: flex-start;
+}
+.za-bullet__tile {
+  flex: 0 0 auto;
+  inline-size: 38px;
+  block-size: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-md);
+  background-color: var(--surface);
+  color: var(--accent);
+}
+
+/* ── Вход (SCREENS §2) ───────────────────────────────────────────────────── */
+
+.za-divider-text {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  color: var(--text-tertiary);
+  font-size: var(--fs-xs);
+}
+.za-divider-text::before,
+.za-divider-text::after {
+  content: '';
+  flex: 1;
+  block-size: var(--border-w);
+  background-color: var(--line);
+}
+.za-yandex-logo {
+  inline-size: 20px;
+  block-size: 20px;
+  object-fit: contain;
+}
+
+/* ── Экран «заперто» (SCREENS §7) — тон спокойный, без красного ──────────── */
+
+.za-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-16);
+  padding: var(--sp-40) var(--pad-screen);
+  text-align: center;
+}
+.za-locked__circle {
+  inline-size: 88px;
+  block-size: 88px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-full);
+  background-color: var(--surface);
+  color: var(--accent);
+}
+.za-locked__title {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Поиск (SCREENS §6) ──────────────────────────────────────────────────── */
+
+.za-search__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-12) var(--sp-16);
+}
+.za-search__filters {
+  display: flex;
+  gap: 6px;
+  padding: 0 var(--sp-16) var(--sp-12);
+}
+.za-hit__fragment {
+  font-size: var(--fs-list-snippet);
+  line-height: var(--lh-list-snippet);
+  color: var(--text-secondary);
+}
+.za-hit__mark {
+  border-radius: var(--r-inline-mark);
+  background-color: var(--mark-bg);
+  color: var(--accent-on-soft);
+}
+
+/* ── Настройки (SCREENS §8) ──────────────────────────────────────────────── */
+
+.za-settings {
+  flex: 1;
+  min-block-size: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+@media (min-width: 900px) {
+  .za-settings {
+    grid-template-columns: 212px minmax(0, 1fr);
+  }
+}
+.za-settings__nav {
+  display: flex;
+  gap: 2px;
+  padding: var(--sp-12);
+  overflow-x: auto;
+}
+@media (min-width: 900px) {
+  .za-settings__nav {
+    flex-direction: column;
+    overflow-y: auto;
+    border-inline-end: var(--border-w) solid var(--line);
+  }
+}
+.za-settings__nav-item {
+  flex: 0 0 auto;
+  padding: var(--sp-8) var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control-sm);
+  font-weight: var(--fw-control);
+  text-align: start;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.za-settings__nav-item--active {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.za-field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  padding-block: var(--sp-8);
+}
+.za-swatches {
+  display: flex;
+  gap: var(--sp-12);
+  flex-wrap: wrap;
+}
+.za-swatch {
+  inline-size: 30px;
+  block-size: 30px;
+  border-radius: var(--r-full);
+  border: var(--border-w-strong) solid transparent;
+  background-color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+}
+.za-swatch--active {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+}
+.za-slider {
+  inline-size: 100%;
+  accent-color: var(--accent);
+}
+.za-preview {
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-lg);
+  background-color: var(--bg);
+  padding: var(--sp-16);
+}
+
+/* ── Paywall (SCREENS §9) ────────────────────────────────────────────────── */
+
+.za-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  font-size: var(--fs-sm);
+}
+.za-table th,
+.za-table td {
+  padding: var(--sp-12);
+  text-align: start;
+  border-block-end: var(--border-w) solid var(--line);
+}
+.za-table thead th {
+  background-color: var(--surface);
+  font-weight: var(--fw-control);
+  color: var(--text);
+}
+.za-table td + td,
+.za-table th + th {
+  text-align: center;
+}
+
+/* ── История версий (SCREENS §10b `4h`) ──────────────────────────────────── */
+
+.za-versions {
+  flex: 1;
+  min-block-size: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+}
+@media (min-width: 900px) {
+  .za-versions {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+}
+.za-versions__list {
+  overflow-y: auto;
+  border-inline-end: var(--border-w) solid var(--line);
+}
+.za-versions__item {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12) var(--sp-16);
+  border: 0;
+  background: none;
+  text-align: start;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+}
+.za-versions__item--active {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+
+/* ── Палитра команд (SCREENS §10b `4g`) ──────────────────────────────────── */
+
+.za-palette__input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12) 0;
+  border: 0;
+  border-block-end: var(--border-w) solid var(--line);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 15.5px;
+  outline: none;
+}
+.za-palette__list {
+  max-block-size: 46vh;
+  overflow-y: auto;
+  padding-block: var(--sp-8);
+}
+.za-palette__item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-12);
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-8) var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.za-palette__item--active {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.za-palette__hotkey {
+  margin-inline-start: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+.za-palette__footer {
+  padding-block-start: var(--sp-8);
+  border-block-start: var(--border-w) solid var(--line);
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  color: var(--text-tertiary);
+}
+
+/* ── Контекстное меню long-press (BEHAVIOR §1.1) ─────────────────────────── */
+
+.za-menu {
+  display: flex;
+  flex-direction: column;
+}
+.za-menu__item {
+  inline-size: 100%;
+  box-sizing: border-box;
+  min-block-size: var(--tap-min);
+  padding: var(--sp-12);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control-sm);
+  font-weight: var(--fw-control);
+  text-align: start;
+  cursor: pointer;
+}
+.za-menu__item:hover {
+  background-color: var(--surface-hover);
+}
+.za-menu__item--danger {
+  color: var(--danger);
+}
+
+/* ── Отладочное меню (приёмочный критерий №10) ───────────────────────────── */
+
+.za-debug-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 6px;
+}
+.za-debug-cell {
+  padding: var(--sp-8);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-sm);
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-xs);
+  cursor: pointer;
+}
+.za-debug-cell--active {
+  border-color: var(--accent);
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.za-debug-cell:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+.za-debug-fab {
+  position: fixed;
+  inset-block-end: var(--sp-16);
+  inset-inline-start: var(--sp-16);
+  z-index: var(--z-sticky);
+  opacity: 0.5;
+}
+
+/* ── Скелетоны и пустые состояния занимают ту же площадь ─────────────────── */
+
+.za-state {
+  padding: var(--sp-16);
+}
