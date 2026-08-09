@@ -618,6 +618,20 @@
   font-family: inherit;
   color: inherit;
   cursor: pointer;
+  /* Только transform: цвета карточки меняет выбор, и им переход не нужен —
+     иначе он подрался бы с кроссфейдом темы (base.css). */
+  transition: transform var(--dur-press) var(--ease-out);
+}
+/* Нажатие карточки — тем же приёмом, что у кнопок (`--press-scale`).
+   До этого своего состояния у карточек не было вовсе, и на Android их
+   единственной обратной связью оставалась бирюзовая заливка от WebView —
+   цвет, которого нет ни в одном токене. Системную подсветку мы погасили
+   (base.css), поэтому обратную связь обязаны дать сами. */
+.za-card:active {
+  transform: scale(var(--press-scale));
+}
+.za-card--static:active {
+  transform: none;
 }
 .za-card--selected {
   border-width: var(--border-w-strong);
