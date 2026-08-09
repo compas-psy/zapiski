@@ -231,11 +231,33 @@ const PROBE = '.zapiski-write-test';
 async function assertWritable(handle: FileSystemDirectoryHandle): Promise<void> {
   const file = await handle.getFileHandle(PROBE, { create: true });
   try {
+    /* Самая дешёвая проверка — имя самой ручки. Провайдер, срезавший точку,
+       выдаёт себя сразу, не дожидаясь обхода каталога. */
+    if (file.name !== PROBE) {
+      throw new DOMException('папка переименовывает файлы при создании', 'InvalidModificationError');
+    }
     const writable = await (file as FileSystemFileHandle).createWritable();
     await writable.write(new Uint8Array([1]));
     await writable.close();
     const read = await file.getFile();
     if (read.size !== 1) throw new DOMException('папка приняла запись не полностью', 'DataError');
+
+    /* Имя должно вернуться из каталога ТЕМ ЖЕ, каким его создавали.
+       Провайдеры Android имеют право переименовать документ при создании —
+       чаще всего срезают ведущую точку или дописывают расширение по типу.
+       Для заметок это было бы обидно, а для служебного каталога `.zapiski`
+       смертельно: vault потом не находит собственный индекс и журнал CRDT.
+       Проверяем на пробном файле — он тоже начинается с точки. */
+    let found = false;
+    for await (const [name] of iterate(handle)) {
+      if (name === PROBE) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      throw new DOMException('папка переименовывает файлы при создании', 'InvalidModificationError');
+    }
   } finally {
     await handle.removeEntry(PROBE).catch(() => undefined);
   }
