@@ -21,6 +21,14 @@
     "verbatimModuleSyntax": false,
     "skipLibCheck": true,
 
+    /**
+     * Импорты пишутся с расширением `.ts` — тогда исходники запускаются как есть
+     * через `node --experimental-strip-types` (dev, миграции), а `tsc`
+     * переписывает расширение на `.js` при сборке образа.
+     */
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
     "noEmit": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts", "vitest.config.ts"],

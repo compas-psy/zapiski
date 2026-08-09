@@ -85,19 +85,19 @@ export interface CrdtUpdateEnvelope {
   createdAt: number;
 }
 
-export type LiveEventKind = 'changed' | 'removed';
-
 /**
- * Событие мгновенного синка. ТЗ §6: только имена путей, никакого содержимого.
+ * Событие мгновенного синка.
+ *
+ * ТЗ §6: наружу уходят только имена путей, etag и идентификаторы —
+ * никакого содержимого. `origin` — устройство-источник, чтобы клиент не
+ * реагировал на собственную же запись.
  */
-export interface LiveEvent {
-  type: LiveEventKind;
-  path: VaultPath;
-  etag?: string;
-  mtime?: number;
-  /** Устройство-источник, чтобы клиент не реагировал на собственную запись. */
-  origin?: string;
-}
+export type LiveEvent =
+  | { type: 'changed'; path: VaultPath; etag: string; mtime: number; origin?: string }
+  | { type: 'removed'; path: VaultPath; origin?: string }
+  | { type: 'crdt'; noteId: NoteId; seq: number; origin?: string };
+
+export type LiveEventKind = LiveEvent['type'];
 
 export type SubscriptionPlan = 'free' | 'trial' | 'monthly' | 'yearly';
 export type SubscriptionStatus = 'none' | 'trial' | 'active' | 'grace' | 'expired';

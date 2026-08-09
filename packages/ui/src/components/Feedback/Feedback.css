@@ -1,0 +1,210 @@
+/* Обратная связь — COMPONENTS.md §7. */
+
+/* ── Спиннер: кольцо 14–22, толщина 2 ─────────────────────────────────────
+   Только там, где объём неизвестен. При reduce-motion вращение выключается
+   правилом из base.css (animation-iteration-count: 1) и остаётся статичное
+   кольцо — никакой пульсации.                                               */
+.z-spinner {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+}
+.z-spinner__svg {
+  animation: z-spin 800ms linear infinite;
+}
+.z-spinner__track {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  opacity: 0.25;
+  vector-effect: non-scaling-stroke;
+}
+.z-spinner__head {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 18 44;
+  vector-effect: non-scaling-stroke;
+}
+@keyframes z-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── Прогресс: линия 3, радиус 2 ─────────────────────────────────────────── */
+.z-progress {
+  position: relative;
+  block-size: 3px;
+  inline-size: 100%;
+  overflow: hidden;
+  border-radius: 2px;
+  background-color: var(--line);
+}
+.z-progress__fill {
+  display: block;
+  block-size: 100%;
+  border-radius: 2px;
+  background-color: var(--accent);
+  transition: inline-size var(--dur-base) var(--ease-out);
+}
+.z-progress--indeterminate .z-progress__fill {
+  inline-size: 34%;
+  animation: z-progress-slide 1200ms var(--ease-out) infinite;
+}
+@keyframes z-progress-slide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(330%);
+  }
+}
+
+/* ── Скелетон ─────────────────────────────────────────────────────────────
+   Заголовок — на шаг темнее фона, строки — светлее. Блик мягко сдвигается
+   1.4 с; при reduce-motion анимация выключена (см. base.css).               */
+.z-skeleton {
+  --z-skeleton-base: var(--line-soft);
+  display: block;
+  border-radius: 5px;
+  background-color: var(--z-skeleton-base);
+  background-image: linear-gradient(
+    90deg,
+    var(--z-skeleton-base) 0%,
+    color-mix(in srgb, var(--z-skeleton-base) 45%, var(--bg)) 50%,
+    var(--z-skeleton-base) 100%
+  );
+  background-size: 200% 100%;
+  animation: z-shimmer var(--dur-shimmer) linear infinite;
+}
+.z-skeleton--title {
+  --z-skeleton-base: var(--line);
+  block-size: 13px;
+  border-radius: 6px;
+  inline-size: 62%;
+}
+.z-skeleton--line {
+  block-size: 10px;
+  inline-size: 100%;
+}
+.z-skeleton--block {
+  block-size: 100%;
+  border-radius: var(--r-md);
+}
+.z-skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  padding: var(--pad-row-block) var(--pad-row-inline);
+  border-block-end: var(--border-w) solid var(--line-soft);
+}
+
+/* ── Плашка-пояснение ────────────────────────────────────────────────────── */
+.z-note {
+  display: flex;
+  gap: var(--sp-12);
+  align-items: flex-start;
+  box-sizing: border-box;
+  padding: var(--sp-12);
+  border-radius: var(--r-md);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm-plus);
+  line-height: 1.5;
+}
+.z-note__icon {
+  display: inline-flex;
+  flex: none;
+  margin-block-start: 1px;
+  color: var(--text-tertiary);
+}
+.z-note--success {
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+.z-note--success .z-note__icon,
+.z-note--warning .z-note__icon,
+.z-note--danger .z-note__icon,
+.z-note--info .z-note__icon,
+.z-note--accent .z-note__icon {
+  color: currentColor;
+}
+.z-note--warning {
+  background-color: var(--warning-soft);
+  color: var(--warning);
+}
+.z-note--danger {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+.z-note--info {
+  background-color: var(--info-soft);
+  color: var(--info);
+}
+.z-note--accent {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+.z-note__body {
+  min-inline-size: 0;
+}
+
+/* ── Пустое состояние: круг 64, ровно одна кнопка ───────────────────────── */
+.z-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-12);
+  padding: var(--sp-40) var(--sp-24);
+  text-align: center;
+}
+.z-empty__circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 64px;
+  block-size: 64px;
+  border-radius: var(--r-full);
+  background-color: var(--surface);
+  color: var(--accent);
+}
+.z-empty__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+.z-empty__description {
+  margin: 0;
+  max-inline-size: 34ch;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+.z-empty__action {
+  margin-block-start: var(--sp-4);
+}
+
+/* ── Точка статуса синка: 6 px, без пульсации ───────────────────────────── */
+.z-sync-dot {
+  display: inline-block;
+  flex: none;
+  inline-size: 6px;
+  block-size: 6px;
+  border-radius: var(--r-full);
+  background-color: var(--text-tertiary);
+}
+.z-sync-dot--synced {
+  background-color: var(--success);
+}
+.z-sync-dot--syncing {
+  background-color: var(--warning);
+}
+.z-sync-dot--error {
+  background-color: var(--danger);
+}

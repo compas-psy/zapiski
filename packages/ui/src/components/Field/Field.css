@@ -1,0 +1,207 @@
+/* Поля ввода — COMPONENTS.md §2.
+   Радиус 13, паддинг 12×15, размер 14, фон --field-bg, рамка 1 px --line. */
+
+.z-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+  min-inline-size: 0;
+}
+.z-field__label {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+}
+.z-field__control {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  min-block-size: var(--tap-min);
+  padding: var(--pad-field-block) var(--pad-field-inline);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-field);
+  background-color: var(--field-bg);
+  color: var(--text);
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out);
+}
+/* Фокус: рамка 1.5 акцента (inset-тень, чтобы layout не дёргался)
+   + кольцо 3 px акцента 20%. */
+.z-field__control:focus-within {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 0.5px var(--accent),
+    0 0 0 var(--focus-ring-w) var(--field-ring);
+}
+.z-field__input {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.4;
+  outline: none;
+}
+.z-field__input::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+.z-field--mono .z-field__input {
+  font-family: var(--font-mono);
+}
+.z-field__affix {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+
+/* Ошибка — рамка 1.5 danger + подпись 12 danger, отступ 6.
+   Показывается ПОСЛЕ blur, не во время набора (логика — в TextField.tsx). */
+.z-field--invalid .z-field__control {
+  border-color: var(--danger);
+  box-shadow: inset 0 0 0 0.5px var(--danger);
+}
+.z-field--invalid .z-field__control:focus-within {
+  box-shadow:
+    inset 0 0 0 0.5px var(--danger),
+    0 0 0 var(--focus-ring-w) color-mix(in srgb, var(--danger) 20%, transparent);
+}
+.z-field__message {
+  margin-block-start: -2px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--danger);
+}
+.z-field__hint {
+  margin-block-start: -2px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* Disabled: фон --surface, текст --text-tertiary, opacity .7 */
+.z-field--disabled .z-field__control {
+  background-color: var(--surface);
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.z-field--disabled .z-field__input {
+  cursor: not-allowed;
+}
+
+/* ── Поиск: радиус full, фон --surface, лупа 15 слева, отступ 9 ─────────── */
+.z-search .z-field__control {
+  border-radius: var(--r-full);
+  background-color: var(--surface);
+  padding-inline: var(--sp-16);
+}
+.z-search__clear {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+.z-search__clear:hover {
+  color: var(--text);
+}
+.z-search__clear:focus {
+  outline: none;
+}
+.z-search__clear:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+
+/* ── Ячейки кода/пароля: 38×48, радиус 11 ───────────────────────────────── */
+.z-code {
+  position: relative;
+  display: inline-flex;
+  gap: var(--sp-8);
+}
+.z-code__input {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  font-size: var(--fs-body);
+  caret-color: transparent;
+  cursor: pointer;
+}
+.z-code__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: 38px;
+  block-size: 48px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-cell);
+  background-color: var(--field-bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  line-height: 1;
+  transition:
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.z-code__cell--active {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 0 0 0.5px var(--accent),
+    0 0 0 var(--focus-ring-w) var(--field-ring);
+}
+.z-code__caret {
+  inline-size: 2px;
+  block-size: 20px;
+  border-radius: 1px;
+  background-color: var(--accent);
+  animation: z-caret 1000ms steps(2, start) infinite;
+}
+@keyframes z-caret {
+  to {
+    opacity: 0;
+  }
+}
+.z-code--invalid .z-code__cell {
+  border-color: var(--danger);
+}
+
+/* Точки ввода пароля заметки (SCREENS.md §7): 12 px */
+.z-pin {
+  display: inline-flex;
+  gap: var(--sp-12);
+}
+.z-pin__dot {
+  inline-size: 12px;
+  block-size: 12px;
+  border: var(--border-w-strong) solid var(--line);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.z-pin__dot--filled {
+  border-color: var(--text);
+  background-color: var(--text);
+}

@@ -1,0 +1,205 @@
+/* Кнопки — COMPONENTS.md §1.
+   Радиус 14, высота 44 (компактная 36), паддинг 11×22, вес 600, размер 14–15. */
+
+.z-btn {
+  --z-btn-h: var(--control-h);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--z-btn-h);
+  margin: 0;
+  padding: var(--pad-btn-block) var(--pad-btn-inline);
+  border: var(--border-w) solid transparent;
+  border-radius: var(--r-lg);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-control);
+  font-weight: var(--fw-control);
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.z-btn:focus {
+  outline: none;
+}
+/* Кольцо 3px акцента 40% — только при навигации с клавиатуры */
+.z-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+
+.z-btn:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+
+.z-btn:disabled,
+.z-btn[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.z-btn--full {
+  display: flex;
+  width: 100%;
+}
+
+/* Компактная 36: физическая высота меньше, но зона нажатия остаётся ≥44 */
+.z-btn--compact {
+  --z-btn-h: var(--control-h-compact);
+  padding-block: calc(var(--pad-btn-block) - 0.25rem);
+  padding-inline: var(--sp-16);
+  font-size: var(--fs-control-sm);
+}
+.z-btn--compact::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block: calc((var(--tap-min) - var(--control-h-compact)) / -2);
+}
+
+/* ── Варианты ────────────────────────────────────────────────────────────── */
+.z-btn--primary {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+/* «Никогда не уменьшать непрозрачность для основной кнопки» — только цвет */
+.z-btn--primary:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+
+.z-btn--secondary {
+  background-color: var(--surface);
+  color: var(--text);
+}
+.z-btn--secondary:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+}
+
+.z-btn--outline {
+  background-color: transparent;
+  border-color: var(--line);
+  color: var(--text);
+}
+.z-btn--outline:hover:not(:disabled) {
+  background-color: var(--surface);
+}
+
+.z-btn--text {
+  background-color: transparent;
+  color: var(--accent);
+  padding-inline: var(--sp-12);
+}
+.z-btn--text:hover:not(:disabled) {
+  background-color: var(--accent-soft);
+}
+
+.z-btn--destructive {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+.z-btn--destructive:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--danger-soft) 88%, var(--danger));
+}
+
+/* ── Иконочная 44×44, радиус 14 ─────────────────────────────────────────── */
+.z-icon-btn {
+  --z-btn-h: var(--control-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: var(--z-btn-h);
+  block-size: var(--z-btn-h);
+  padding: 0;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--r-lg);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.z-icon-btn:hover:not(:disabled) {
+  background-color: var(--surface-hover);
+  color: var(--text);
+}
+.z-icon-btn:focus {
+  outline: none;
+}
+.z-icon-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-icon-btn:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+.z-icon-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.z-icon-btn--ghost {
+  background-color: transparent;
+}
+.z-icon-btn--accent {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+.z-icon-btn--accent:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+  color: var(--on-accent);
+}
+/* Компактная иконочная: сама 34–36, зона нажатия по-прежнему 44 */
+.z-icon-btn--compact {
+  --z-btn-h: var(--control-h-compact);
+  position: relative;
+  border-radius: var(--r-md);
+}
+.z-icon-btn--compact::before {
+  content: '';
+  position: absolute;
+  inset: calc((var(--tap-min) - var(--control-h-compact)) / -2);
+}
+
+/* ── Загрузка: ширина не прыгает ──────────────────────────────────────────
+   Обе подписи лежат в одной ячейке грида, поэтому ширина кнопки равна
+   максимальной из двух состояний и не меняется при переключении.            */
+.z-btn__stack {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+.z-btn__face {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-8);
+  white-space: nowrap;
+}
+.z-btn__face--hidden {
+  visibility: hidden;
+}
+.z-btn__icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}

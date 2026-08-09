@@ -1,0 +1,168 @@
+/* Строки списка — COMPONENTS.md §5. Разделитель 1 px --line-soft, НЕ карточки. */
+
+.z-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.z-row-wrap {
+  position: relative;
+  overflow: hidden;
+  border-block-end: var(--border-w) solid var(--line-soft);
+  background-color: var(--bg);
+}
+
+.z-row {
+  position: relative;
+  display: flex;
+  gap: var(--sp-12);
+  align-items: center;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--row-h);
+  margin: 0;
+  padding: var(--pad-row-block) var(--pad-row-inline);
+  border: 0;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+.z-row--compact {
+  --row-h: var(--row-h-compact);
+}
+.z-row--static {
+  cursor: default;
+}
+.z-row:hover {
+  background-color: var(--surface-alt);
+}
+.z-row:focus {
+  outline: none;
+}
+.z-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+/* Выбранная (desktop): фон --accent-soft, вторичный текст --accent-on-soft, без рамки */
+.z-row--selected,
+.z-row--selected:hover {
+  background-color: var(--accent-soft);
+}
+.z-row--selected .z-row__snippet,
+.z-row--selected .z-row__meta {
+  color: var(--accent-on-soft);
+}
+/* Пока строка «уезжает» под свайпом — радиус 12 слева */
+.z-row--swiping {
+  border-start-start-radius: var(--r-swipe);
+  border-end-start-radius: var(--r-swipe);
+  transition: none;
+}
+
+.z-row__leading,
+.z-row__trailing {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--text-tertiary);
+}
+.z-row__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 3px;
+  min-inline-size: 0;
+}
+.z-row__head {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+  min-inline-size: 0;
+}
+.z-row__title {
+  overflow: hidden;
+  font-size: var(--fs-list-title);
+  font-weight: var(--fw-list-title);
+  line-height: var(--lh-list-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+/* Пиктограммы 13 px в строке заголовка */
+.z-row__marks {
+  display: inline-flex;
+  flex: none;
+  gap: var(--sp-4);
+  align-items: center;
+  color: var(--text-tertiary);
+}
+.z-row__snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  font-size: var(--fs-list-snippet);
+  line-height: var(--lh-list-snippet);
+  color: var(--text-secondary);
+}
+/* Зашифрованная заметка: курсив tertiary вместо сниппета, без «тревожного замка» */
+.z-row__snippet--muted {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+.z-row__meta {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-xs);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* ── Подложка свайпа ─────────────────────────────────────────────────────── */
+.z-row__underlay {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+  padding-inline: var(--pad-row-inline);
+  font-size: var(--fs-sm-plus);
+  font-weight: 600;
+}
+.z-row__underlay--start {
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  justify-content: flex-start;
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+.z-row__underlay--end {
+  inset-inline-start: 0;
+  inset-inline-end: 0;
+  justify-content: flex-end;
+  background-color: var(--surface);
+  color: var(--text-secondary);
+}
+
+/* ── Секционная подпись CAPS 10.5/700/.09em ─────────────────────────────── */
+.z-section-label {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: center;
+  padding: var(--sp-16) var(--pad-row-inline) var(--sp-8);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-caption);
+  letter-spacing: var(--tr-caption);
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}

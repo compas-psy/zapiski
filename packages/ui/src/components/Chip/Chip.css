@@ -1,0 +1,185 @@
+/* Чипы, теги, бейджи — COMPONENTS.md §3.
+   Никогда не переносятся внутри себя; ряд чипов — горизонтальный скролл. */
+
+.z-chip-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--sp-8);
+  align-items: center;
+  min-inline-size: 0;
+}
+.z-chip-row > * {
+  flex: none;
+}
+
+.z-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  padding: var(--sp-4) 11px;
+  border: var(--border-w) solid transparent;
+  border-radius: var(--r-full);
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.z-tag--outline {
+  background-color: transparent;
+  border-color: var(--line);
+  color: var(--text-secondary);
+}
+.z-tag--surface {
+  background-color: var(--surface);
+  color: var(--text-secondary);
+}
+
+/* ── Фильтр ──────────────────────────────────────────────────────────────
+   Неактивный: 1 px --line + текст secondary. Активный: --accent-soft +
+   рамка акцента 38%. Зона нажатия дотянута до 44 через ::before.            */
+.z-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  min-block-size: 32px;
+  margin: 0;
+  padding: var(--sp-4) 11px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.z-filter::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block: calc((var(--tap-min) - 32px) / -2);
+}
+.z-filter:hover:not(:disabled) {
+  background-color: var(--surface);
+  color: var(--text);
+}
+.z-filter:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+.z-filter:focus {
+  outline: none;
+}
+.z-filter:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-filter:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.z-filter--active {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent-on-soft);
+}
+.z-filter--active:hover:not(:disabled) {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}
+
+/* Вариант со сбросом: контейнер не кнопка (вложенные кнопки запрещены),
+   внутри две настоящие кнопки — сам фильтр и крестик. */
+.z-filter--with-reset {
+  padding-inline-end: var(--sp-4);
+  cursor: default;
+}
+.z-filter--with-reset:focus-within {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-filter__main {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.z-filter__main:focus {
+  outline: none;
+}
+
+/* Крестик сброса: глиф 10, зона нажатия 24×24 (COMPONENTS.md §3) */
+.z-filter__reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 24px;
+  block-size: 24px;
+  margin-inline-end: -7px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.z-filter__reset:focus {
+  outline: none;
+}
+.z-filter__reset:focus-visible {
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* ── Бейдж статуса: soft-фон + насыщенный текст, 11 px, вес 600 ─────────── */
+.z-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  box-sizing: border-box;
+  padding: 2px var(--sp-8);
+  border-radius: var(--r-full);
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.z-badge--success {
+  background-color: var(--success-soft);
+  color: var(--success);
+}
+.z-badge--warning {
+  background-color: var(--warning-soft);
+  color: var(--warning);
+}
+.z-badge--danger {
+  background-color: var(--danger-soft);
+  color: var(--danger);
+}
+.z-badge--info {
+  background-color: var(--info-soft);
+  color: var(--info);
+}
+.z-badge--accent {
+  background-color: var(--accent-soft);
+  color: var(--accent-on-soft);
+}

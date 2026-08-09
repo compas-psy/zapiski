@@ -1,0 +1,422 @@
+/* ===========================================================================
+   КОМПАС.ЗАПИСКИ — токены
+   Единственный файл во всём репозитории, где разрешены hex/rgb-литералы
+   (ARCHITECTURE.md §3.4, DESIGN_TOKENS.md §4, проверяется scripts/lint-tokens.mjs).
+
+   Все значения — ДОСЛОВНО из docs/spec/DESIGN_TOKENS.md.
+   Производные значения получены через color-mix() от токенов, а не выдуманы
+   новыми hex-литералами; каждое такое место помечено «производное».
+
+   Измерения темизации:
+     data-theme  = paper | graphite | ink      (surface)
+     data-accent = garnet | pine | gold | blueberry | heather | slate
+     data-density  = comfortable | compact     (компактный режим)
+     data-typeface = sans | serif              (sans ↔ serif в редакторе)
+   `system` разрешается в paper/graphite на стороне ThemeProvider — в CSS
+   попадает всегда конкретная тема (см. src/theme/initScript.ts).
+   =========================================================================== */
+
+/* ── 1. Не зависящее от темы ──────────────────────────────────────────────
+   Размеры шрифтов — в rem (масштаб шрифта ОС до 200% не ломает layout, ТЗ §6).
+   В комментарии — исходное значение из спецификации в px при корне 16px.     */
+:root {
+  /* Семейства. Шрифты self-hosted (src/styles/fonts.css), без CDN в рантайме. */
+  --font-sans: 'Golos Text', 'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  --font-serif: 'Source Serif 4', 'Noto Serif', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Roboto Mono', 'Noto Sans Mono', ui-monospace, monospace;
+
+  /* Типографика — DESIGN_TOKENS.md §2 */
+  --fs-h1: 1.875rem;          /* 30 */
+  --lh-h1: 1.2;
+  --fw-h1: 700;
+  --tr-h1: -0.02em;
+
+  --fs-h1-mobile: 1.5rem;     /* 24 */
+  --lh-h1-mobile: 1.25;
+
+  --fs-h2: 1.1875rem;         /* 19 */
+  --lh-h2: 1.35;
+  --fw-h2: 600;
+  --tr-h2: -0.01em;
+
+  --fs-body: 1rem;            /* 16 — текст заметки, default */
+  --lh-body: 1.65;
+
+  --fs-body-serif: 1.0625rem; /* 17 — serif-режим */
+  --lh-body-serif: 1.7;
+
+  --fs-body-compact: 0.90625rem; /* 14.5 — компактный режим */
+  --lh-body-compact: 1.5;
+
+  --fs-list-title: 0.9375rem; /* 15 — заголовок строки списка */
+  --lh-list-title: 1.35;
+  --fw-list-title: 600;
+
+  --fs-list-snippet: 0.8125rem; /* 13 — сниппет, 2 строки + ellipsis */
+  --lh-list-snippet: 1.45;
+
+  --fs-control: 0.9375rem;    /* 15   — кнопки, пункты меню */
+  --fs-control-sm: 0.90625rem;/* 14.5 — кнопки в плотных панелях */
+  --fw-control: 600;
+
+  --fs-caption: 0.65625rem;   /* 10.5 CAPS — секционные подписи */
+  --fw-caption: 700;
+  --tr-caption: 0.09em;
+
+  --fs-xs: 0.6875rem;         /* 11   — бейдж статуса */
+  --fs-sm: 0.75rem;           /* 12   — тег, тултип, подпись ошибки */
+  --fs-sm-plus: 0.78125rem;   /* 12.5 — плашка-пояснение, подпись свайпа */
+  --fs-md: 0.8125rem;         /* 13   — пояснения, сниппеты */
+  --fs-lg: 1rem;              /* 16   — заголовок пустого состояния */
+
+  --fs-mono-xs: 0.65625rem;   /* 10.5 — метастрока, статус-строка */
+  --fs-mono-sm: 0.75rem;      /* 12   — тайминги плеера */
+  --fs-mono: 0.8125rem;       /* 13   — код, raw */
+  --lh-code: 1.7;
+
+  /* Пользовательские настройки редактора — МНОЖИТЕЛИ над базовыми токенами
+     (DESIGN_TOKENS.md §2). ThemeProvider переопределяет их инлайном на :root. */
+  --editor-font-scale: 1;     /* 14→.875 · 15→.9375 · 16→1 · 18→1.125 · 20→1.25 */
+  --editor-line-scale: 1;     /* 1.45→.87879 · 1.65→1 · 1.85→1.12121 */
+  --editor-measure: 40rem;    /* 640 · 720 · none */
+  --editor-font-family: var(--font-sans);
+  --editor-font-size: calc(var(--fs-body) * var(--editor-font-scale));
+  --editor-line-height: calc(var(--lh-body) * var(--editor-line-scale));
+  --editor-pad-block: 2.25rem; /* 36 */
+  --editor-pad-inline: 2rem;   /* 32 */
+
+  /* Spacing — база 4, шкала 4/8/12/16/20/24/32/40 (DESIGN_TOKENS.md §3) */
+  --sp-4: 0.25rem;
+  --sp-8: 0.5rem;
+  --sp-12: 0.75rem;
+  --sp-16: 1rem;
+  --sp-20: 1.25rem;
+  --sp-24: 1.5rem;
+  --sp-32: 2rem;
+  --sp-40: 2.5rem;
+
+  /* Внутренние отступы из спецификации */
+  --pad-row-block: 0.6875rem;   /* 11 — строка списка 11×16 */
+  --pad-row-inline: 1rem;       /* 16 */
+  --pad-card-block: 1rem;       /* 16 — карточка 16×18 */
+  --pad-card-inline: 1.125rem;  /* 18 */
+  --pad-screen: 1.5rem;         /* 24 — экран mobile */
+  --pad-btn-block: 0.6875rem;   /* 11 — кнопка 11×22 */
+  --pad-btn-inline: 1.375rem;   /* 22 */
+  --pad-field-block: 0.75rem;   /* 12 — поле 12×15 */
+  --pad-field-inline: 0.9375rem;/* 15 */
+
+  /* Радиусы */
+  --r-xs: 6px;      /* чекбокс */
+  --r-sm: 10px;     /* чипы-поля, мелкие кнопки, сегмент-контейнер */
+  --r-md: 12px;     /* плитки, плашки */
+  --r-field: 13px;  /* поля ввода */
+  --r-lg: 14px;     /* кнопки, карточки-опции */
+  --r-xl: 16px;     /* модалки, bottom sheet (только верхние углы) */
+  --r-full: 99px;   /* чипы, теги, аватары, поисковая «пилюля» */
+  --r-cell: 11px;   /* ячейки кода/пароля */
+  --r-drawer: 22px; /* drawer 0 22 22 0 */
+  --r-inline-mark: 3px; /* инлайн-подсветка diff */
+  --r-block-mark: 8px;  /* блочная подсветка diff */
+  --r-fab: 18px;
+  --r-swipe: 12px;  /* строка «уезжает» с радиусом 12 слева */
+
+  /* Метрики интерактивных элементов. Touch-target ≥44 всегда. */
+  --tap-min: 44px;
+  --control-h: 44px;
+  --control-h-compact: 36px;
+  --row-h: 74px;
+  --row-h-compact: 58px;
+  --toolbar-h: 44px;
+  --toolbar-item: 34px;
+  --fab-size: 52px;
+  --drawer-w-mobile: 302px;
+  --drawer-w-desktop: 224px;
+  --modal-w-min: 480px;
+  --modal-w-max: 560px;
+  --modal-top: 78px;
+  --sheet-handle-w: 36px;
+  --sheet-handle-h: 4px;
+  --tree-indent: 14px;
+  --swipe-threshold: 96px;
+  --border-w: 1px;
+  --border-w-strong: 1.5px;
+  --focus-ring-w: 3px;
+
+  /* Иконки: единый набор, stroke 1.75, viewBox 24, currentColor */
+  --icon-stroke: 1.75;
+  --icon-inline: 13px;
+  --icon-list: 15px;
+  --icon-toolbar: 19px;
+  --icon-header: 20px;
+  --icon-empty: 26px;
+
+  /* Motion — 200–300 мс, ease-out. Никаких пульсаций/bounce/параллакса. */
+  --dur-press: 120ms;
+  --dur-check: 160ms;
+  --dur-base: 200ms;
+  --dur-sheet: 250ms;
+  --dur-slow: 300ms;
+  --dur-shimmer: 1400ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-rise: 8px;   /* появление: fade + сдвиг снизу 8 */
+  --press-scale: 0.97;
+
+  /* Слои */
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-scrim: 50;
+  --z-overlay: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+}
+
+/* ── 2. Темы (surface) — DESIGN_TOKENS.md §1, дословно ─────────────────── */
+:root[data-theme='paper'],
+:root:not([data-theme]) {
+  color-scheme: light;
+  --bg:            #FBFAF7;  /* фон приложения */
+  --surface:       #F3F1EA;  /* панели, поля, чипы */
+  --surface-alt:   #F7F5EF;  /* сайдбар, тулбар */
+  --line:          #EAE6DB;  /* разделители, границы */
+  --line-soft:     #F0EDE4;  /* строки списка */
+  --text:          #38342E;  /* основной текст */
+  --text-secondary:#8A8375;  /* сниппеты, подписи */
+  --text-tertiary: #B6AFA2;  /* даты, счётчики, плейсхолдеры */
+  --text-disabled: #C8C1B4;  /* пустой чекбокс, неактивное */
+  --scrim:         rgba(30, 26, 22, 0.32);
+
+  /* Поверхности, различающиеся между светлыми и тёмными темами */
+  --field-bg:          #FFFFFF; /* поля ввода: белый в светлых темах */
+  --segment-active-bg: #FFFFFF; /* активный сегмент: белый в светлых темах */
+  --on-accent:         #FFFFFF; /* текст на заливке акцентом */
+  --elev-search: 0 6px 22px rgba(56, 52, 46, 0.10);
+  --elev-segment: 0 1px 2px rgba(56, 52, 46, 0.10);
+}
+
+:root[data-theme='graphite'] {
+  color-scheme: dark;
+  --bg:            #232120;
+  --surface:       #2C2A28;
+  --surface-alt:   #2C2A28;
+  --line:          #393630;
+  --line-soft:     #2C2A28;
+  --text:          #E9E5DC;
+  --text-secondary:#9B948A;
+  --text-tertiary: #6E675C;
+  --text-disabled: #55504A;
+  --scrim:         rgba(0, 0, 0, 0.35);
+
+  --field-bg:          var(--surface);
+  --segment-active-bg: var(--line);
+  --on-accent:         #241511; /* тёмный на светлом акценте */
+  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.30);
+  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
+:root[data-theme='ink'] {          /* OLED: истинный чёрный */
+  color-scheme: dark;
+  --bg:            #000000;
+  --surface:       #151412;
+  --surface-alt:   #0D0C0B;
+  --line:          #26231E;
+  --line-soft:     #1A1917;
+  --text:          #E9E5DC;
+  --text-secondary:#8F887D;
+  --text-tertiary: #635D54;
+  --text-disabled: #4A453D;
+  --scrim:         rgba(0, 0, 0, 0.5);
+
+  --field-bg:          var(--surface);
+  --segment-active-bg: var(--line);
+  --on-accent:         #241511;
+  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.45);
+  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* ── 3. Функциональные цвета — «ошибки не кричат» ─────────────────────── */
+:root[data-theme='paper'],
+:root:not([data-theme]) {
+  --success:      #5C8A6E;
+  --success-soft: #E7F0E8;
+  --warning:      #B08430;
+  --warning-soft: #F5EBD8;
+  --danger:       #A85045;
+  --danger-soft:  #F6E5E2;
+  --info:         #4C6B94;
+  --info-soft:    #E4EAF2;
+
+  /* Подсветка кода — пастельная, светлый набор */
+  --code-keyword:  #8E7BA3;
+  --code-string:   #5C8A6E;
+  --code-number:   #B08430;
+  --code-comment:  var(--text-tertiary);
+  --code-function: #4C6B94;
+  --code-bg:       var(--surface);
+}
+
+:root[data-theme='graphite'],
+:root[data-theme='ink'] {
+  --success:      #7FB894;
+  --success-soft: rgba(127, 184, 148, 0.16);
+  --warning:      #D6B26A;
+  --warning-soft: rgba(214, 178, 106, 0.16);
+  --danger:       #D08476;
+  --danger-soft:  rgba(208, 132, 118, 0.16);
+  --info:         #7C9DC9;
+  --info-soft:    rgba(124, 157, 201, 0.16);
+
+  /* Подсветка кода — пастельная, тёмный набор */
+  --code-keyword:  #B7A2CC;
+  --code-string:   #7FB894;
+  --code-number:   #D6B26A;
+  --code-comment:  var(--text-tertiary);
+  --code-function: #7C9DC9;
+  --code-bg:       var(--surface);
+}
+
+/* ── 4. Акценты — DESIGN_TOKENS.md §1, таблица 1:1 ────────────────────────
+   Тройка: --accent (заливка/интерактив) · --accent-soft (фон чипа/подсветки)
+   · --accent-on-soft (текст на soft). Значения различаются для светлых и
+   тёмных тем, поэтому на каждый акцент два правила: светлое и тёмное.       */
+
+/* garnet — по умолчанию */
+:root[data-accent='garnet'],
+:root:not([data-accent]) {
+  --accent:         #B5503C;
+  --accent-soft:    #F6E7E2;
+  --accent-on-soft: #93412F;
+}
+:root[data-theme='graphite'][data-accent='garnet'],
+:root[data-theme='ink'][data-accent='garnet'],
+:root[data-theme='graphite']:not([data-accent]),
+:root[data-theme='ink']:not([data-accent]) {
+  --accent:         #D0765B;
+  --accent-soft:    rgba(208, 118, 91, 0.18);
+  --accent-on-soft: #F0B9A4;
+}
+
+/* pine — семейный КОМПАС */
+:root[data-accent='pine'] {
+  --accent:         #2E6B4F;
+  --accent-soft:    #E2EDE6;
+  --accent-on-soft: #256247;
+}
+:root[data-theme='graphite'][data-accent='pine'],
+:root[data-theme='ink'][data-accent='pine'] {
+  --accent:         #5FA97A;
+  --accent-soft:    rgba(95, 169, 122, 0.18);
+  --accent-on-soft: #A8D9BB;
+}
+
+/* gold */
+:root[data-accent='gold'] {
+  --accent:         #B08430;
+  --accent-soft:    #F5EBD8;
+  --accent-on-soft: #8E6A24;
+}
+:root[data-theme='graphite'][data-accent='gold'],
+:root[data-theme='ink'][data-accent='gold'] {
+  --accent:         #CC9E50;
+  --accent-soft:    rgba(204, 158, 80, 0.18);
+  --accent-on-soft: #E8C88A;
+}
+
+/* blueberry */
+:root[data-accent='blueberry'] {
+  --accent:         #4C6B94;
+  --accent-soft:    #E4EAF2;
+  --accent-on-soft: #3D577A;
+}
+:root[data-theme='graphite'][data-accent='blueberry'],
+:root[data-theme='ink'][data-accent='blueberry'] {
+  --accent:         #7C9DC9;
+  --accent-soft:    rgba(124, 157, 201, 0.18);
+  --accent-on-soft: #B4CBE6;
+}
+
+/* heather */
+:root[data-accent='heather'] {
+  --accent:         #7C6390;
+  --accent-soft:    #EFE9F3;
+  --accent-on-soft: #654E78;
+}
+:root[data-theme='graphite'][data-accent='heather'],
+:root[data-theme='ink'][data-accent='heather'] {
+  --accent:         #A88BBD;
+  --accent-soft:    rgba(168, 139, 189, 0.18);
+  --accent-on-soft: #D2BFE0;
+}
+
+/* slate */
+:root[data-accent='slate'] {
+  --accent:         #6B675F;
+  --accent-soft:    #EDEBE6;
+  --accent-on-soft: #54514A;
+}
+:root[data-theme='graphite'][data-accent='slate'],
+:root[data-theme='ink'][data-accent='slate'] {
+  --accent:         #9B948A;
+  --accent-soft:    rgba(155, 148, 138, 0.18);
+  --accent-on-soft: #CBC5BB;
+}
+
+/* ── 5. Производные от акцента ────────────────────────────────────────────
+   Ни одного нового hex: всё через color-mix() от --accent.                  */
+:root {
+  /* hover заливок — «на один шаг темнее» (COMPONENTS.md §1) */
+  --accent-hover: color-mix(in srgb, var(--accent) 86%, #000000);
+  --accent-border: color-mix(in srgb, var(--accent) 38%, transparent); /* рамка активного фильтра 35–40% */
+  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);    /* кольцо фокуса 35–45% */
+  --field-ring: color-mix(in srgb, var(--accent) 20%, transparent);    /* кольцо поля 18–22% */
+  --fab-shadow-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  --surface-hover: var(--surface-alt);  /* hover нефоновых кнопок: --surface → --surface-alt */
+  --mark-bg: var(--accent-soft);        /* ==подсветка== в тексте заметки */
+  --toast-bg: var(--text);              /* тост инверсный */
+  --toast-fg: var(--surface);
+  --toast-action: color-mix(in srgb, var(--accent) 72%, #FFFFFF); /* «акцентом посветлее» */
+}
+/* В тёмных темах «на шаг темнее» читается хуже, чем «на шаг светлее».
+   Там же --surface и --surface-alt совпадают, поэтому hover пришлось бы
+   не заметить: берём производное от --text на 6%. */
+:root[data-theme='graphite'],
+:root[data-theme='ink'] {
+  --accent-hover: color-mix(in srgb, var(--accent) 88%, #FFFFFF);
+  --toast-action: color-mix(in srgb, var(--accent) 78%, #000000);
+  --surface-hover: color-mix(in srgb, var(--surface-alt) 94%, var(--text));
+}
+/* Единственный hover, заданный спецификацией явно: #B5503C → #9C432F. */
+:root[data-theme='paper'][data-accent='garnet'],
+:root:not([data-theme]):not([data-accent]),
+:root:not([data-theme])[data-accent='garnet'],
+:root[data-theme='paper']:not([data-accent]) {
+  --accent-hover: #9C432F;
+}
+
+/* ── 6. Тени и elevation ──────────────────────────────────────────────────
+   Тонкие разделители 1px --line ВМЕСТО карточек с тенью.
+   Elevation — только для модальных слоёв.                                   */
+:root {
+  --elev-sheet: 0 -12px 40px var(--scrim);
+  --elev-modal: 0 24px 60px var(--scrim);
+  --elev-drawer: 12px 0 40px var(--scrim);
+  --elev-fab: 0 8px 24px var(--fab-shadow-color);
+}
+
+/* ── 7. Плотность и гарнитура редактора (множители, не отдельные наборы) ── */
+:root[data-density='compact'] {
+  --row-h: var(--row-h-compact);
+  --control-h: var(--control-h-compact);
+  --editor-font-size: calc(var(--fs-body-compact) * var(--editor-font-scale));
+  --editor-line-height: calc(var(--lh-body-compact) * var(--editor-line-scale));
+}
+
+:root[data-typeface='serif'] {
+  --editor-font-family: var(--font-serif);
+  --editor-font-size: calc(var(--fs-body-serif) * var(--editor-font-scale));
+  --editor-line-height: calc(var(--lh-body-serif) * var(--editor-line-scale));
+}
+:root[data-typeface='serif'][data-density='compact'] {
+  --editor-font-size: calc(var(--fs-body-compact) * var(--editor-font-scale));
+  --editor-line-height: calc(var(--lh-body-compact) * var(--editor-line-scale));
+}

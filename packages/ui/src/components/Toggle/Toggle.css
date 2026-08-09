@@ -1,0 +1,228 @@
+/* Переключатели — COMPONENTS.md §4. */
+
+/* ── Тумблер 40×24, бегунок 18 ──────────────────────────────────────────── */
+.z-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-12);
+  min-block-size: var(--tap-min);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.z-switch--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.z-switch__track {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  inline-size: 40px;
+  block-size: 24px;
+  border-radius: var(--r-full);
+  /* «выключен — --line потемнее»: производное от токена, без новых литералов */
+  background-color: color-mix(in srgb, var(--line) 78%, var(--text-tertiary));
+  transition: background-color var(--dur-base) var(--ease-out);
+}
+.z-switch__thumb {
+  position: absolute;
+  inset-block-start: 3px;
+  inset-inline-start: 3px;
+  inline-size: 18px;
+  block-size: 18px;
+  border-radius: var(--r-full);
+  background-color: var(--field-bg);
+  box-shadow: var(--elev-segment);
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.z-switch__input:checked + .z-switch__track {
+  background-color: var(--accent);
+}
+.z-switch__input:checked + .z-switch__track .z-switch__thumb {
+  transform: translateX(16px);
+}
+.z-switch__input:focus-visible + .z-switch__track {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-switch__label {
+  font-size: var(--fs-control-sm);
+  line-height: 1.4;
+  color: var(--text);
+}
+
+/* ── Чекбокс 18×18, радиус 6 ────────────────────────────────────────────── */
+.z-check {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  min-block-size: var(--tap-min);
+  padding-block: var(--sp-12);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.z-check--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.z-check__box {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: 18px;
+  block-size: 18px;
+  margin-block-start: 1px;
+  border: var(--border-w-strong) solid var(--text-disabled);
+  border-radius: var(--r-xs);
+  background-color: transparent;
+  /* заливка 200 мс */
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.z-check__mark {
+  inline-size: 12px;
+  block-size: 12px;
+  color: var(--on-accent);
+}
+.z-check__mark path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 18;
+  stroke-dashoffset: 18;
+  /* галочка stroke-dashoffset 160 мс */
+  transition: stroke-dashoffset var(--dur-check) var(--ease-out);
+}
+.z-check__input:checked + .z-check__box {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+.z-check__input:checked + .z-check__box .z-check__mark path {
+  stroke-dashoffset: 0;
+}
+.z-check__input:focus-visible + .z-check__box {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-check__label {
+  font-size: var(--fs-control-sm);
+  line-height: 1.45;
+  color: var(--text);
+}
+/* Отмеченный пункт списка задач: текст уходит в secondary + line-through */
+.z-check--strike .z-check__input:checked ~ .z-check__label {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+/* ── Радио 18×18 ────────────────────────────────────────────────────────── */
+.z-radio {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--sp-12);
+  min-block-size: var(--tap-min);
+  padding-block: var(--sp-12);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.z-radio--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.z-radio__dot {
+  display: inline-block;
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 18px;
+  block-size: 18px;
+  margin-block-start: 1px;
+  border: var(--border-w-strong) solid var(--text-disabled);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  transition:
+    box-shadow var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+/* выбранный — кольцо 5 px акцента */
+.z-radio__input:checked + .z-radio__dot {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 5px var(--accent);
+}
+.z-radio__input:focus-visible + .z-radio__dot {
+  box-shadow:
+    inset 0 0 0 5px var(--accent),
+    0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-radio__label {
+  font-size: var(--fs-control-sm);
+  line-height: 1.45;
+  color: var(--text);
+}
+.z-radio-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Сегментированный контрол ───────────────────────────────────────────── */
+.z-segmented {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  box-sizing: border-box;
+  padding: 3px;
+  border-radius: var(--r-sm);
+  background-color: var(--surface);
+  min-block-size: 38px;
+}
+.z-segmented__indicator {
+  position: absolute;
+  inset-block: 3px;
+  inset-inline-start: 3px;
+  border-radius: 8px;
+  background-color: var(--segment-active-bg);
+  box-shadow: var(--elev-segment);
+  transition: transform var(--dur-base) var(--ease-out);
+  pointer-events: none;
+}
+.z-segmented__option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  min-block-size: 32px;
+  margin: 0;
+  padding: var(--sp-4) var(--sp-12);
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-control-sm);
+  font-weight: var(--fw-control);
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--dur-base) var(--ease-out);
+}
+.z-segmented__option:focus {
+  outline: none;
+}
+.z-segmented__option:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-segmented__option--active {
+  color: var(--text);
+}
+.z-segmented__option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
