@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 #
 # Поднимает API-стек КОМПАС.ЗАПИСКИ. Исполняется НА СЕРВЕРЕ cmpas.ru,
-# запускается из .github/workflows/deploy-zapiski.yml после `git reset --hard`.
+# запускается из .github/workflows/deploy-zapiski.yml после того, как каталоги
+# deploy/ и server/ доставлены в /var/www/zapiski rsync'ом с раннера.
+# Каталог /var/www/zapiski НЕ является git-репозиторием — на сервере нет ни
+# доступа к GitHub, ни .git; полагаться на git здесь нельзя.
 #
 # Что этот скрипт НЕ делает:
 #   * не собирает PWA — фронт собирается на раннере GitHub Actions и приезжает
@@ -47,6 +50,25 @@ guard_not_cmpas() {
 
 # Обёртка: каждая compose-команда явно привязана к нашему проекту и файлу.
 dc() { docker compose --project-name "${PROJECT}" --file "${COMPOSE_FILE}" "$@"; }
+
+# Отдельная проверка окружения: без неё первая же непонятная ошибка выглядела бы
+# как падение сборки образа, хотя причина — отсутствующий compose v2 или
+# недоступный докер-демон.
+check_prereqs() {
+  command -v docker >/dev/null 2>&1 || fail 'на сервере нет docker.'
+  docker info >/dev/null 2>&1 || fail 'докер-демон недоступен (нет прав у пользователя или демон не запущен).'
+  docker compose version >/dev/null 2>&1 \
+    || fail 'нет docker compose v2 (плагин compose). Скрипт рассчитан на `docker compose`, а не `docker-compose`.'
+
+  # Каталог обновлений монтируется в контейнер API только на чтение
+  # (deploy/docker-compose.yml). Если его нет, docker создал бы его сам от
+  # root, и nginx потом не смог бы отдавать оттуда файлы. Создаём явно.
+  local updates_dir='/var/www/zapiski.cmpas.ru/updates'
+  [ -d "${updates_dir}" ] || {
+    mkdir -p "${updates_dir}"
+    log "создан ${updates_dir} (точка монтирования UPDATES_MANIFEST_PATH)."
+  }
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. deploy/.env — единственное место с секретами на сервере
@@ -182,7 +204,16 @@ wait_for_api_health() {
   done
 }
 
+# Диагностика печатается ровно один раз за запуск: явные ветки ошибок зовут её
+# сами, а на всё непредусмотренное её позовёт обработчик ERR ниже. Без флага
+# лог падения дублировался бы.
+DIAG_DUMPED=0
+
 dump_diagnostics() {
+  if [ "${DIAG_DUMPED}" -eq 1 ]; then
+    return 0
+  fi
+  DIAG_DUMPED=1
   log '──────── диагностика стека zapiski ────────'
   dc ps 2>&1 || true
   log '──────── docker logs zapiski-api ────────'
@@ -192,12 +223,83 @@ dump_diagnostics() {
   log '───────────────────────────────────────────'
 }
 
+# Раньше диагностика снималась только в заранее предусмотренных ветках
+# (база не поднялась, контейнер не стартовал, healthcheck не сошёлся). Самый
+# частый в жизни случай — падение `docker compose up --build` на сборке образа —
+# под них не попадал: `set -e` обрывал скрипт молча, и в логе CI оставалась
+# голая строка про ненулевой код возврата. Теперь ЛЮБОЙ незапланированный сбой
+# оставляет после себя ps и логи обоих контейнеров.
+on_unexpected_error() {
+  local code=$? line="${1:-?}"
+  log "НЕОЖИДАННЫЙ сбой: команда на строке ${line} завершилась с кодом ${code}."
+  dump_diagnostics
+  log 'Стек zapiski оставлен как есть для разбора; КОМПАС.Дневник не затронут.'
+  exit "${code}"
+}
+trap 'on_unexpected_error "${LINENO}"' ERR
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Собственно деплой
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Миграции идут через `exec` в уже поднятый контейнер. У api стоит
+# restart: always, поэтому сразу после `up` он может оказаться в состоянии
+# restarting — тогда `exec` возвращает «container is restarting», и это не
+# ошибка миграции, а гонка. Поэтому несколько попыток, а не одна.
+run_migrations() {
+  local retries=5 out
+  while true; do
+    if out="$(dc exec -T api npm run --if-present migrate 2>&1)"; then
+      printf '%s\n' "${out}"
+      return 0
+    fi
+    retries=$((retries - 1))
+    if [ "${retries}" -le 0 ]; then
+      printf '%s\n' "${out}"
+      return 1
+    fi
+    log 'миграции: контейнер ещё не готов принимать exec, повтор через 3с...'
+    sleep 3
+  done
+}
+
+# Финальная проверка «снаружи», через настоящий vhost и настоящий TLS.
+# Здоровый контейнер ещё не означает работающий сайт: healthcheck бьётся в
+# 127.0.0.1:3100 ВНУТРИ контейнера и ничего не знает ни про nginx, ни про
+# сертификат, ни про то, доехала ли статика в docroot. Проверяем обе половины
+# ровно так, как их увидит браузер.
+PUBLIC_URL='https://zapiski.cmpas.ru'
+
+verify_public() {
+  local retries=10 code
+  log "Проверяем ${PUBLIC_URL}/api/v1/health через nginx..."
+  while true; do
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+      "${PUBLIC_URL}/api/v1/health" 2>/dev/null || echo '000')"
+    case "${code}" in
+      2*) log "API снаружи отвечает ${code}."; break ;;
+    esac
+    retries=$((retries - 1))
+    if [ "${retries}" -le 0 ]; then
+      log "API снаружи не отвечает: последний код ${code}."
+      return 1
+    fi
+    sleep 3
+  done
+
+  # Статика. Пустой docroot или сломанный SPA-фолбэк дают 403/404 — деплой
+  # веба при этом считался бы успешным, хотя сайт не открывается.
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    "${PUBLIC_URL}/" 2>/dev/null || echo '000')"
+  case "${code}" in
+    2*) log "Статика PWA отдаётся (${code})." ;;
+    *)  log "Статика PWA НЕ отдаётся: код ${code}."; return 1 ;;
+  esac
+}
+
 main() {
   guard_not_cmpas
+  check_prereqs
   log "Каталог: ${REPO_ROOT}"
 
   prepare_env
@@ -216,9 +318,10 @@ main() {
   wait_for_api_running || { dump_diagnostics; fail 'Контейнер zapiski-api не запустился.'; }
 
   log 'Миграции БД...'
-  # --if-present: пока в server/package.json нет скрипта migrate, шаг просто
-  # ничего не делает. Настоящая ошибка миграции роняет деплой как положено.
-  if ! dc exec -T api npm run --if-present migrate; then
+  # --if-present: если в server/package.json вдруг не окажется скрипта migrate,
+  # шаг просто ничего не делает. Настоящая ошибка миграции роняет деплой
+  # как положено.
+  if ! run_migrations; then
     dump_diagnostics
     fail 'Миграции БД не прошли.'
   fi
@@ -226,6 +329,11 @@ main() {
   if ! wait_for_api_health; then
     dump_diagnostics
     fail 'API ЗАПИСОК не стал здоровым. Стек оставлен как есть для разбора; КОМПАС.Дневник не затронут.'
+  fi
+
+  if ! verify_public; then
+    dump_diagnostics
+    fail "Стек поднялся, но снаружи ${PUBLIC_URL} не обслуживается. Смотрите vhost и docroot; сам API при этом здоров."
   fi
 
   log 'Готово. Состояние стека:'

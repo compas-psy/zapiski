@@ -18,6 +18,16 @@ name: Деплой zapiski.cmpas.ru
 #
 # Перед первым запуском обязателен provision-zapiski.yml — см. deploy/SETUP.md.
 
+# ВНИМАНИЕ про ветки. Веткой по умолчанию в этом репозитории пока является
+# не `main`, а рабочая ветка (репозиторий создан пустым, и default_branch стала
+# первая запушенная). Фильтры `branches` ниже намеренно оставлены на `main` —
+# они начнут работать, когда ветка приедет в `main`. До тех пор выкладка
+# запускается вручную через workflow_dispatch: job `deploy` пускает к серверу
+# только ref, равный github.event.repository.default_branch, поэтому ручной
+# запуск с рабочей ветки проходит, а с любой посторонней — нет.
+# Автовыкладку на каждый push в рабочую ветку сознательно НЕ включаем: на этом
+# же сервере крутится чужой боевой КОМПАС.Дневник, и выкатывать туда каждый
+# промежуточный коммит соседних агентов — плохая идея (ADR-0003).
 on:
   push:
     branches: ["main"]
@@ -232,7 +242,11 @@ jobs:
           set -euo pipefail
           [ -d apps/web ] || { echo '::notice::apps/web нет — статику не собираем'; exit 0; }
           pnpm install --frozen-lockfile
-          pnpm --filter @zapiski/web build
+          # `@zapiski/web...` (с многоточием) — собрать пакет ВМЕСТЕ с его
+          # зависимостями по графу воркспейса и в правильном порядке, ровно как
+          # в preflight. Без многоточия сборка веба зависела бы от того, что
+          # packages/* уже собраны, а в чистом чекауте это не так.
+          pnpm --filter "@zapiski/web..." build
 
       - name: Загрузить SSH-ключ
         run: |
@@ -339,8 +353,19 @@ jobs:
 
           # ADR-0003 §3: работаем только в своём каталоге.
           cd /var/www/zapiski
-          git fetch --prune origin main
-          git reset --hard origin/main
+
+          # Здесь раньше стояли `git fetch` и `git reset --hard origin/main` —
+          # наследство схемы «клонируем репозиторий на сервер». Код приезжает
+          # rsync'ом шагом выше, каталог репозиторием НЕ является, поэтому
+          # git-команды падали с «not a git repository» и роняли весь шаг.
+          # Заодно `origin/main` снова зашивал ветку `main`, которой в этом
+          # репозитории нет. Вместо них — проверка, что rsync реально доехал.
+          for required in deploy/docker-compose.yml deploy/deploy-production-remote.sh server/package.json; do
+            [ -f "${required}" ] || {
+              echo "нет ${required} в /var/www/zapiski — шаг доставки кода не отработал" >&2
+              exit 1
+            }
+          done
 
           set +e
           bash deploy/deploy-production-remote.sh 2>&1 | tee /tmp/zapiski-deploy.log
@@ -364,7 +389,12 @@ jobs:
           name: zapiski-deploy-${{ github.sha }}
           path: deploy-diagnostics/**
           if-no-files-found: ignore
-          retention-days: 14
+          # Квота артефактов общая на весь аккаунт и уже упиралась в потолок
+          # (из-за этого деплой падал при зелёной сборке). Здесь выгружается
+          # только текстовый лог и только при провале, но срок держим коротким:
+          # разбор падения происходит по горячим следам, хранить его две недели
+          # незачем.
+          retention-days: 7
 
       - name: Убрать SSH-ключ
         if: always()
