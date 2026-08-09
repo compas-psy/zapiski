@@ -18,8 +18,11 @@ class ZapiskiApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Здесь звать нативный мост нельзя: библиотеку загружает активность
-        // Tauri, и до её создания символов ещё нет.
+        // Контекст нужен виджетам и плитке: они живут в этом же процессе, но
+        // активности могут не увидеть вовсе.
+        NativeBridge.rememberContext(this)
+        // А вот звать нативный мост здесь нельзя: библиотеку загружает
+        // активность Tauri, и до её создания символов ещё нет.
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityCreated(activity: Activity, state: Bundle?) {
                 NativeBridge.attach(activity)

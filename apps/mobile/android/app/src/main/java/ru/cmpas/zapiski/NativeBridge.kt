@@ -44,6 +44,16 @@ object NativeBridge {
 
     // ── Жизненный цикл ──────────────────────────────────────────────────────
 
+    /**
+     * Запомнить контекст приложения. Зовётся из `Application.onCreate` —
+     * то есть и в том процессе, где активности не будет никогда (виджет,
+     * плитка, приём «Поделиться»). Нативных вызовов здесь нет и быть не
+     * может: библиотеку загружает активность Tauri, до неё символов ещё нет.
+     */
+    fun rememberContext(context: Context) {
+        if (appContext == null) appContext = context.applicationContext
+    }
+
     fun attach(current: Activity) {
         appContext = current.applicationContext
         activity = WeakReference(current)
@@ -122,6 +132,15 @@ object NativeBridge {
         current.runOnUiThread {
             if (!current.window.decorView.performHapticFeedback(constant)) vibrate(strength)
         }
+    }
+
+    /**
+     * Лёгкий импульс из процесса без активности — виджет, приёмник тапа.
+     * `performHapticFeedback` там недоступен: он требует View.
+     */
+    fun tick(context: Context) {
+        rememberContext(context)
+        vibrate(0)
     }
 
     private fun vibrate(strength: Int) {

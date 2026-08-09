@@ -99,9 +99,20 @@ services:
       # Зашифрованные блобы (ТЗ §2.1.5 — zero-knowledge, сервер не понимает
       # содержимого) лежат в своём томе, а не на хостовой ФС.
       BLOB_ROOT: /data/blobs
+      # Путь внутри контейнера — см. монтирование ниже. Без него фид
+      # обновлений вечно отвечал бы 204, и ни Windows, ни Android
+      # не увидели бы новую версию.
+      UPDATES_MANIFEST_PATH: /data/updates/latest.json
 
     volumes:
       - zapiski_blobs:/data/blobs
+
+      # Манифест автообновлений. Файлы (latest.json, .msi, .apk) кладут туда
+      # workflow'ы сборки Windows и Android, а раздаёт их nginx напрямую.
+      # API читает манифест, чтобы отвечать 204, когда обновление не нужно,
+      # поэтому каталог примонтирован СЮДА — и только на чтение: писать в
+      # docroot из контейнера незачем.
+      - /var/www/zapiski.cmpas.ru/updates:/data/updates:ro
 
     # Альтернатива 172.17.0.1: положить в deploy/.env
     # EMAIL_SERVER_HOST=host.docker.internal — резолв уже настроен здесь.
