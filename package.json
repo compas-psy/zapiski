@@ -18,6 +18,7 @@
     "lint:tokens": "node scripts/lint-tokens.mjs"
   },
   "devDependencies": {
+    "playwright-core": "1.49.0",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
   }

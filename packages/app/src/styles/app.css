@@ -648,12 +648,19 @@
 .za-card--static {
   cursor: default;
 }
+/* `display: block` обязателен, а не косметика. Оба класса вешаются на <span>.
+   В карточках заголовок лежит внутри flex-строки и потому вёл себя как блок, а
+   в списке обещаний первого экрана — нет: строчные элементы текли друг за
+   другом, и получалось «Заметки — обычные файлыЛюбой редактор их откроет».
+   Видно это только на живом экране; вёрстку из тестов не разглядишь. */
 .za-card__title {
+  display: block;
   font-size: var(--fs-control);
   font-weight: var(--fw-control);
   color: var(--text);
 }
 .za-card__text {
+  display: block;
   padding-block-start: 4px;
   font-size: var(--fs-sm);
   color: var(--text-secondary);

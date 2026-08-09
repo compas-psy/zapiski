@@ -6,7 +6,7 @@
  * ниже, — каркас из SCREENS «Каркас»: четыре раскладки по брейкпоинтам
  * 600 / 900 / 1200, маршрутизация, оверлеи и карта хоткеев BEHAVIOR §7.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SharedPayload, VaultPath } from '@zapiski/core';
 /* `@zapiski/ui` подключает токены и стили компонентов сам (side effect). */
 import { Drawer, ThemeProvider, ToastProvider } from '@zapiski/ui';
@@ -14,6 +14,7 @@ import './styles/app.css';
 import type { AppHost, Layout } from './contract.js';
 import type { Locale } from './i18n/index.js';
 import { AppProvider, useApp, useAppState, useLayout, useStrings } from './state/context.js';
+import type { AppController } from './state/store.js';
 import { flushActiveEditor } from './state/active-editor.js';
 import { IconBug } from './components/icons.js';
 import { CommandPalette } from './screens/CommandPalette.js';
@@ -169,6 +170,22 @@ function AppShell(): ReactNode {
     return () => document.removeEventListener('visibilitychange', onHidden);
   }, []);
 
+  const notePath = state.route.name === 'note' ? state.route.id : sideBySide ? lastNote : null;
+  /**
+   * Ключ — «какая заметка», а не «какой у неё сейчас путь».
+   *
+   * Путь меняется у ТОЙ ЖЕ заметки при переименовании по заголовку
+   * (BEHAVIOR §2.2). С `key={notePath}` React считал это другим экраном и
+   * пересоздавал его целиком: редактор размонтировался, фокус уходил в
+   * `body`, и всё, что человек печатал дальше, пропадало молча. Ровно на это
+   * пришла жалоба «просто набираешь текст…».
+   *
+   * Поэтому ключ живёт до тех пор, пока заметка та же, и меняется только при
+   * переходе к другой. Проверено прогоном в браузере: без этого фокус после
+   * переименования — `BODY`, с этим — остаётся в редакторе.
+   */
+  const noteKey = useNoteKey(app, notePath);
+
   const overlays = (
     <>
       <CommandPalette />
@@ -249,10 +266,9 @@ function AppShell(): ReactNode {
     }
   })();
 
-  const notePath = state.route.name === 'note' ? state.route.id : sideBySide ? lastNote : null;
   const notePane =
     notePath !== null ? (
-      <NoteScreen key={notePath} path={notePath} />
+      <NoteScreen key={noteKey} path={notePath} />
     ) : (
       /* Пустое состояние редактора — плейсхолдер-подсказка (BEHAVIOR §12). */
       <div className="za-editor">
@@ -303,4 +319,22 @@ function AppShell(): ReactNode {
       {overlays}
     </div>
   );
+}
+
+/**
+ * Устойчивый ключ экрана заметки.
+ *
+ * Возвращает одно и то же значение, пока открыта та же заметка, — даже если
+ * её путь сменился переименованием. Меняется только при переходе к другой
+ * заметке: тогда экран и должен пересоздаться, чтобы не унаследовать чужое
+ * состояние.
+ */
+function useNoteKey(app: AppController, path: VaultPath | null): string {
+  const key = useRef(0);
+  const previous = useRef<VaultPath | null>(null);
+  if (path !== previous.current) {
+    if (!app.movedFrom(previous.current, path ?? '')) key.current += 1;
+    previous.current = path;
+  }
+  return `note-${key.current}`;
 }

@@ -58,6 +58,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const strings = useStrings();
   const layout = useLayout();
   const editorRef = useRef<EditorHandle>(null);
+  /* Предыдущий путь — чтобы отличить «открыли другую заметку» от
+     «эта же заметка переехала». Разница принципиальна: во втором случае
+     перечитывать с диска нельзя, см. эффект ниже. */
+  const previousPath = useRef<VaultPath | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const [body, setBody] = useState('');
   const [loading, setLoading] = useState(true);
@@ -71,6 +75,23 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
 
   useEffect(() => {
     let cancelled = false;
+
+    /* Переименование по заголовку меняет путь у ТОЙ ЖЕ заметки. Перечитывать
+       её с диска в этот момент нельзя: в редакторе лежит текст свежее
+       дискового — между сохранением и переименованием человек продолжает
+       печатать. Перечитывание затирало набранное и уводило курсор; со стороны
+       это и есть «текст смещается». Обновляем только карточку заметки. */
+    const previous = previousPath.current;
+    previousPath.current = path;
+    if (app.movedFrom(previous, path)) {
+      void app.readNote(path).then((loaded) => {
+        if (!cancelled) setNote(loaded);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setLoading(true);
     void app.readNote(path).then((loaded) => {
       if (cancelled) return;
