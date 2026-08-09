@@ -1,0 +1,38 @@
+{
+  "name": "@zapiski/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "КОМПАС.ЗАПИСКИ для Windows: тонкая оболочка Tauri 2 — точка входа и платформенные порты, ни одного экрана",
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "dev:vite": "vite",
+    "build": "vite build",
+    "build:vite": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.2",
+    "@tauri-apps/plugin-fs": "^2.5.1",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-store": "^2.4.4",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "@zapiski/app": "workspace:*",
+    "@zapiski/core": "workspace:*",
+    "@zapiski/ui": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.1"
+  }
+}

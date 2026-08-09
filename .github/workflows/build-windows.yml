@@ -1,0 +1,343 @@
+name: Сборка Windows
+
+# Установщик КОМПАС.ЗАПИСОК для Windows (Tauri 2).
+#
+# Windows-тулчейна в разработке нет (зафиксировано в docs/ACCEPTANCE.md),
+# поэтому единственное место, где вообще собирается .msi/.exe, — этот
+# workflow на раннере windows-latest.
+#
+# Что делает:
+#   build   — pnpm install, сборка packages/*, сборка фронтенда, `tauri build`
+#             с подписью обновлений, генерация latest.json, проверка бюджета
+#             размера (ТЗ §6: installer < 25 МБ);
+#   release — только на теге: GitHub Release + выкладка latest.json и
+#             установщика в /var/www/zapiski.cmpas.ru/updates/ по ssh.
+#
+# ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ КОМПАС.Дневник И ВЕБ ЗАПИСОК:
+#   * job `release` пишет ровно в /var/www/zapiski.cmpas.ru/updates/ и ничего
+#     не удаляет: scp кладёт файлы, `rsync --delete` здесь не используется;
+#   * nginx не трогается вообще — конфиг ставится провижном;
+#   * общая группа concurrency `zapiski-server` с deploy/provision: сервер в
+#     каждый момент времени трогает кто-то один.
+#
+# СЕКРЕТЫ:
+#   TAURI_SIGNING_PRIVATE_KEY          — приватный ключ подписи обновлений.
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD — пароль к нему.
+#   SERVER_HOST / SERVER_USER / SSH_PRIVATE_KEY — те же, что у деплоя.
+# Приватного ключа в репозитории нет и быть не может: им подписывается
+# установщик, который клиент проверяет публичным ключом из tauri.conf.json.
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-windows.yml'
+    tags:
+      - 'v*'
+  pull_request:
+    branches: ["main"]
+    paths:
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - '.github/workflows/build-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # BUILD
+  # ───────────────────────────────────────────────────────────────────────────
+  build:
+    name: Установщик Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    concurrency:
+      group: zapiski-windows-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        # Один шелл на весь workflow: те же скрипты, что в остальных файлах.
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Кэш pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Установить Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Сборка Tauri с нуля — это ~15 минут компиляции зависимостей.
+      # Кэш держит её в пределах пары минут на последующих запусках.
+      - name: Кэш cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          key: zapiski-desktop
+
+      - name: Установка зависимостей
+        run: |
+          set -euo pipefail
+          pnpm config set store-dir ~/.pnpm-store
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            echo "::notice::pnpm-lock.yaml ещё нет — ставим без --frozen-lockfile"
+            pnpm install --no-frozen-lockfile
+          fi
+
+      # packages/* собираются первыми: @zapiski/core и @zapiski/editor
+      # публикуют dist, из которого их импортирует оболочка.
+      - name: Сборка пакетов
+        run: pnpm -r --filter "./packages/**" build
+
+      # Vite типы не проверяет — он их стирает. Отдельный шаг, чтобы ошибка
+      # типов валила сборку здесь, а не превращалась в падение в рантайме.
+      - name: Проверка типов оболочки
+        run: pnpm --filter @zapiski/desktop typecheck
+
+      # Тот же `vite build`, который потом вызовет `tauri build` через
+      # beforeBuildCommand. Отдельным шагом — чтобы ошибка фронтенда была
+      # видна сразу, а не искалась в километровом логе cargo.
+      - name: Сборка фронтенда
+        run: pnpm --filter @zapiski/desktop build
+
+      # Без ключа `createUpdaterArtifacts: true` уронит сборку невнятной
+      # ошибкой в середине бандлинга. Проверяем заранее и говорим прямо.
+      - name: Проверить наличие ключа подписи
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY}" ]; then
+            echo '::error::Секрет TAURI_SIGNING_PRIVATE_KEY не задан. Ключ генерируется командой `pnpm --filter @zapiski/desktop tauri signer generate`; публичная половина кладётся в apps/desktop/src-tauri/tauri.conf.json, приватная — только в секреты репозитория.'
+            exit 1
+          fi
+          echo 'Ключ подписи на месте.'
+
+      - name: Сборка установщика
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm --filter @zapiski/desktop tauri build --target x86_64-pc-windows-msvc
+
+      # latest.json Tauri сам не делает (его делает tauri-action, который тут
+      # не используется). Формат — ровно тот, который читает
+      # server/src/routes/updates.ts и понимает клиентский плагин.
+      - name: Собрать latest.json
+        id: manifest
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          node --input-type=module - <<'NODE'
+          import { createHash } from 'node:crypto';
+          import fs from 'node:fs';
+          import path from 'node:path';
+
+          const bundle = 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle';
+          const config = JSON.parse(
+            fs.readFileSync('apps/desktop/src-tauri/tauri.conf.json', 'utf8'),
+          );
+
+          /* Обновление ставится NSIS-установщиком: именно к нему относится
+             `installMode: passive` в конфиге апдейтера. .msi собирается тоже —
+             он нужен для развёртывания политиками домена. */
+          const nsisDir = path.join(bundle, 'nsis');
+          const files = fs.existsSync(nsisDir) ? fs.readdirSync(nsisDir) : [];
+          const installer = files.find((name) => name.endsWith('-setup.exe'));
+          if (!installer) {
+            console.log(`::error::В ${nsisDir} нет установщика NSIS`);
+            process.exit(1);
+          }
+          const signaturePath = path.join(nsisDir, `${installer}.sig`);
+          if (!fs.existsSync(signaturePath)) {
+            console.log('::error::Установщик не подписан: нет файла .sig');
+            process.exit(1);
+          }
+
+          const manifest = {
+            version: config.version,
+            notes: `КОМПАС.ЗАПИСКИ ${config.version}`,
+            pub_date: new Date().toISOString(),
+            platforms: {
+              'windows-x86_64': {
+                signature: fs.readFileSync(signaturePath, 'utf8').trim(),
+                url: `https://zapiski.cmpas.ru/updates/${installer}`,
+              },
+            },
+          };
+
+          /* Всё, что уедет и в артефакт, и на сервер, — в одном каталоге. */
+          fs.mkdirSync('release', { recursive: true });
+          fs.copyFileSync(path.join(nsisDir, installer), path.join('release', installer));
+          fs.copyFileSync(signaturePath, path.join('release', `${installer}.sig`));
+
+          const msiDir = path.join(bundle, 'msi');
+          for (const name of fs.existsSync(msiDir) ? fs.readdirSync(msiDir) : []) {
+            fs.copyFileSync(path.join(msiDir, name), path.join('release', name));
+          }
+
+          fs.writeFileSync('release/latest.json', `${JSON.stringify(manifest, null, 2)}\n`);
+
+          const bytes = fs.statSync(path.join('release', installer)).size;
+          const sha = createHash('sha256')
+            .update(fs.readFileSync(path.join('release', installer)))
+            .digest('hex');
+
+          const out = [
+            `version=${config.version}`,
+            `installer=${installer}`,
+            `bytes=${bytes}`,
+          ].join('\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `${out}\n`);
+          console.log(`Установщик: ${installer}`);
+          console.log(`Размер: ${(bytes / 1024 / 1024).toFixed(2)} МБ`);
+          console.log(`SHA-256: ${sha}`);
+          NODE
+
+      # ТЗ §6: Windows installer < 25 МБ. Бюджет проверяется автотестом, а не
+      # надеждой: превышение видно здесь, а не на приёмке.
+      - name: Проверить бюджет размера
+        env:
+          BYTES: ${{ steps.manifest.outputs.bytes }}
+        run: |
+          set -euo pipefail
+          limit=$((25 * 1024 * 1024))
+          if [ "${BYTES}" -gt "${limit}" ]; then
+            echo "::error::Установщик ${BYTES} Б — больше бюджета ТЗ §6 (25 МБ). Смотрите, что распухло: бандл фронтенда (apps/desktop/dist) или ресурсы."
+            exit 1
+          fi
+          echo "Размер в бюджете: ${BYTES} Б из ${limit} Б."
+
+      # Тег обязан совпадать с версией в tauri.conf.json, иначе апдейтер
+      # предложит пользователям версию, которой нет в манифесте.
+      - name: Сверить тег с версией
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ steps.manifest.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "${tag}" != "${VERSION}" ]; then
+            echo "::error::Тег ${GITHUB_REF_NAME} не совпадает с version=${VERSION} в apps/desktop/src-tauri/tauri.conf.json"
+            exit 1
+          fi
+          echo "Тег и версия совпадают: ${VERSION}."
+
+      - name: Сохранить артефакты
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-windows-${{ steps.manifest.outputs.version }}
+          path: release/**
+          if-no-files-found: error
+          retention-days: 14
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # RELEASE — только на теге
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Релиз и выкладка обновления
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    # Общая группа с deploy-zapiski.yml и provision-zapiski.yml: сервер
+    # трогает кто-то один. Начатую выкладку не обрываем.
+    concurrency:
+      group: zapiski-server
+      cancel-in-progress: false
+    steps:
+      - name: Забрать артефакты сборки
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zapiski-windows-*
+          path: release
+          merge-multiple: true
+
+      - name: Показать, что выкладываем
+        run: |
+          set -euo pipefail
+          ls -l release
+          echo '--- latest.json ---'
+          cat release/latest.json
+
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Идемпотентно: перезапуск workflow на том же теге не должен падать.
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" release/* --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" release/* \
+              --title "КОМПАС.ЗАПИСКИ ${GITHUB_REF_NAME}" \
+              --notes "Установщик для Windows. Обновление с предыдущих версий приедет само."
+          fi
+
+      - name: Загрузить SSH-ключ
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      # Каталог создаёт провижн; здесь только убеждаемся, что он есть, —
+      # иначе scp молча создаст файл с именем каталога.
+      - name: Выложить обновление на сервер
+        run: |
+          set -euo pipefail
+          target=/var/www/zapiski.cmpas.ru/updates
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "mkdir -p ${target}"
+
+          # Сначала установщик и подпись, latest.json — последним. Порядок не
+          # косметический: манифест ссылается на файл, и клиент, увидевший
+          # новый latest.json раньше самого .exe, получил бы 404.
+          for file in release/*.exe release/*.exe.sig release/*.msi; do
+            [ -e "${file}" ] || continue
+            scp -i ~/.ssh/deploy_key "${file}" \
+              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
+          done
+          scp -i ~/.ssh/deploy_key release/latest.json \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
+
+          echo "Обновление выложено в ${target}."
+
+      - name: Проверить, что фид отвечает
+        run: |
+          set -euo pipefail
+          # Версия заведомо старая: фид обязан ответить 200 и отдать манифест.
+          # 204 здесь означал бы, что API не видит latest.json.
+          code="$(curl -sS -o /tmp/feed.json -w '%{http_code}' \
+            'https://zapiski.cmpas.ru/api/v1/updates/windows-x86_64/0.0.1')"
+          if [ "${code}" != '200' ]; then
+            echo "::warning::Фид обновлений ответил ${code}, а не 200. Проверьте UPDATES_MANIFEST_PATH у API: манифест выложен в /var/www/zapiski.cmpas.ru/updates/latest.json, и API должен читать именно его."
+            exit 0
+          fi
+          cat /tmp/feed.json

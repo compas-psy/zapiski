@@ -9,6 +9,7 @@ mod hello;
 mod hotkey;
 mod platform;
 mod print;
+mod save;
 mod tray;
 mod vault;
 
@@ -44,6 +45,7 @@ pub fn run() {
             Some(vec![platform::TRAY_ARG]),
         ))
         .manage(vault::VaultRoot::default())
+        .manage(platform::WindowGate::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_open,
             vault::vault_root,
@@ -55,14 +57,21 @@ pub fn run() {
             hello::hello_unlock,
             hello::hello_remove,
             print::pdf_render,
+            save::save_file,
             tray::tray_init,
+            platform::shell_ready,
         ])
         .setup(move |app| {
-            // Окно объявлено скрытым в конфиге: так плагин состояния успевает
-            // вернуть ему прошлые размеры, и пользователь не видит, как окно
-            // прыгает из центра экрана в своё место.
-            if !platform::started_in_tray(&arguments) {
-                platform::show_main_window(app.handle());
+            // Окно объявлено скрытым в конфиге и показывается по сигналу
+            // фронтенда (`shell_ready`): так плагин состояния успевает вернуть
+            // ему прошлые размеры, тема применяется до первого кадра, и
+            // пользователь не видит ни белой вспышки, ни прыжка окна из центра
+            // экрана в своё место. Подстраховка на случай, если фронтенд не
+            // подал сигнала, — таймер в `platform`.
+            if platform::started_in_tray(&arguments) {
+                app.state::<platform::WindowGate>().suppress();
+            } else {
+                platform::arm_reveal_fallback(app.handle().clone());
             }
             platform::forward_file_arguments(app.handle(), &arguments);
             Ok(())

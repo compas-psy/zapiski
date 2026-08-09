@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "baseUrl": ".",
+    "paths": {
+      "@zapiski/app": ["../../packages/app/src/index.ts"],
+      "@zapiski/core": ["../../packages/core/src/index.ts"],
+      "@zapiski/core/contract": ["../../packages/core/src/contract.ts"],
+      "@zapiski/editor": ["../../packages/editor/src/index.ts"],
+      "@zapiski/ui": ["../../packages/ui/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

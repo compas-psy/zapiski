@@ -5,13 +5,9 @@
   "description": "Ядро КОМПАС.ЗАПИСКИ: vault, markdown, индекс+FTS, крипто, CRDT, синк, импорт/экспорт, i18n",
   "license": "UNLICENSED",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
   "files": [
     "dist"
@@ -32,5 +28,15 @@
     "@vitest/coverage-v8": "^3.0.5",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
   }
 }

@@ -99,7 +99,8 @@ fn open_print_window<R: Runtime>(
     app: &AppHandle<R>,
     workspace: &Workspace,
 ) -> Result<tauri::WebviewWindow<R>, String> {
-    use tauri::webview::{PageLoadEvent, WebviewUrl, WebviewWindowBuilder};
+    use tauri::webview::PageLoadEvent;
+    use tauri::{WebviewUrl, WebviewWindowBuilder};
 
     let url = tauri::Url::from_file_path(&workspace.html)
         .map_err(|_| format!("некорректный путь {}", workspace.html.display()))?;

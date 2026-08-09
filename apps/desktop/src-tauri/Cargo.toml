@@ -19,7 +19,10 @@ crate-type = ["lib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "image-png"] }
+# `protocol-asset` — обязателен под `assetProtocol.enable` в tauri.conf.json:
+# без него вложения не покажутся в <img src="asset://...">, а tauri-build
+# отказывается собирать конфиг, у которого фича не объявлена.
+tauri = { version = "2", features = ["tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-fs = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"

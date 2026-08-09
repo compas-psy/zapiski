@@ -201,6 +201,45 @@ jobs:
           fi
           echo 'Файлов с секретами в индексе нет.'
 
+      # SEC-024. Проверка выше смотрит на то, что УЖЕ в индексе, и потому
+      # молчит, пока файла нет. Правило `!apps/mobile/keystore/zapiski-release.jks`
+      # в .gitignore отменяло `*.jks` именно для релизного ключа Android:
+      # обычный `git add` положил бы ключ подписи в репозиторий в тот день,
+      # когда его сгенерируют. Ключ подписи Android нельзя сменить после
+      # первой публикации в Google Play — утечка необратима. Сторожим правило.
+      - name: В .gitignore нет исключений для секретов
+        run: |
+          set -euo pipefail
+          # Строки-исключения (`!…`), возвращающие в индекс секретные форматы.
+          bad=$(grep -nE '^!.*\.(jks|keystore|pem|p12|key|env)$' .gitignore || true)
+          if [ -n "${bad}" ]; then
+            echo "::error file=.gitignore::исключение возвращает секрет в git:"
+            echo "${bad}"
+            exit 1
+          fi
+          # Контрольный выстрел: файлы этих форматов обязаны игнорироваться
+          # ГДЕ УГОДНО в дереве, а не только там, где мы про них вспомнили.
+          #
+          # Проверка обязана быть НЕРАЗРУШАЮЩЕЙ: `git add --dry-run` индекс не
+          # трогает, временные файлы убираются поимённо, каталог — rmdir.
+          # Ничего вроде `git checkout -- .` здесь быть не должно: оно молча
+          # стирает незакоммиченные правки во всём дереве (проверено на себе —
+          # именно так была потеряна первая версия этого шага).
+          probe_dir="$(mktemp -d ./.secret-probe-XXXXXX)"
+          fail=0
+          for name in zapiski-release.jks server.pem key.p12 upload.keystore; do
+            probe="${probe_dir}/${name}"
+            : > "${probe}"
+            if git add --dry-run "${probe}" >/dev/null 2>&1; then
+              echo "::error file=.gitignore::${name} попадёт в коммит обычным git add"
+              fail=1
+            fi
+            rm -f "${probe}"
+          done
+          rmdir "${probe_dir}"
+          if [ "${fail}" -ne 0 ]; then exit 1; fi
+          echo 'Секретные форматы игнорируются во всём дереве.'
+
   # ───────────────────────────────────────────────────────────────────────────
   # 2. Запреты кодовой базы
   # ───────────────────────────────────────────────────────────────────────────
@@ -423,6 +462,12 @@ jobs:
       - name: Крипто и zero-knowledge ядра
         working-directory: packages/core
         run: pnpm exec vitest run test/security.zero-knowledge.test.ts
+
+      # Путь заметки назначает `list()` бэкенда синка — сторона недоверенная
+      # (THREAT-MODEL.md §2.2). SEC-021…SEC-023.
+      - name: Пути vault’а как недоверенный ввод
+        working-directory: packages/core
+        run: pnpm exec vitest run test/security.vault-paths.test.ts
 
       # Эти два набора команда бэкенда держит сама, но они — часть контура
       # безопасности, поэтому запускаются и здесь.

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>КОМПАС.ЗАПИСКИ</title>
+    <!--
+      Здесь нет ни разметки экрана, ни стилей, ни строк интерфейса
+      (ARCHITECTURE §1): всё это живёт в `packages/app` и `packages/ui`.
+
+      Инлайнового `themeInitScript` из `@zapiski/ui`, который оболочка веба
+      обязана вставлять в <head>, тут намеренно нет: окно объявлено скрытым
+      (`tauri.conf.json` → `visible: false`) и показывается только после того,
+      как React смонтировался и ThemeProvider применил тему. Показывать нечему
+      мигнуть — первый же кадр окна уже в нужной теме.
+    -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

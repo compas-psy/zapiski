@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <!--
+      Первым в <head> плагин сборки вставляет инлайновый themeInitScript из
+      @zapiski/ui: он ставит data-theme/data-accent до первого кадра.
+      `theme-color` здесь намеренно нет — цвет не может быть литералом
+      (ARCHITECTURE §3.4), его выставляет main.tsx из токена --bg.
+    -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>КОМПАС.ЗАПИСКИ</title>
+    <meta
+      name="description"
+      content="Тихая комната для мыслей: заметки в Markdown обычными файлами, шифрование и синхронизация через своё хранилище."
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

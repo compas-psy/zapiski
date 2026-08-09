@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@zapiski/core": ["../../packages/core/src/index.ts"],
+      "@zapiski/ui": ["../../packages/ui/src/index.ts"],
+      "@zapiski/app": ["../../packages/app/src/index.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

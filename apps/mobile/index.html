@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      viewport-fit=cover — приложение рисует под вырезом и жестовой полосой,
+      отступы берутся из env(safe-area-inset-*) в токенах.
+      Масштабирование пользователем НЕ запрещаем: ТЗ §6 требует поддержки
+      системного шрифта до 200%, а user-scalable=no ломает эту гарантию.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>КОМПАС.ЗАПИСКИ</title>
+    <style>
+      /*
+        Единственный стиль оболочки — фон первого кадра.
+        Без него между показом окна и применением токенов мигает белым, и
+        на тёмной теме это видно каждым запуском.
+
+        Canvas/CanvasText — системные цвета CSS: следуют теме ОС и не являются
+        литералом цвета (инвариант «ни одного hex вне токенов», ARCHITECTURE §3.4).
+        Как только `applyAppearance` выставит data-theme, фон возьмут токены.
+      */
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: Canvas;
+        color: CanvasText;
+        /* Резинка-оверскролл мешает pull-to-search (BEHAVIOR §1.4). */
+        overscroll-behavior: none;
+      }
+      #root {
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

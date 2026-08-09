@@ -39,6 +39,15 @@ pnpm-debug.log*
 # secrets — never commit
 *.pem
 *.jks
-!apps/mobile/keystore/zapiski-release.jks
+*.keystore
+# НЕ ДОБАВЛЯТЬ СЮДА ИСКЛЮЧЕНИЯ (`!…`) ДЛЯ КЛЮЧЕЙ ПОДПИСИ.
+# Здесь стояло `!apps/mobile/keystore/zapiski-release.jks`. Это правило
+# отменяло `*.jks` ровно для релизного ключа Android: обычный `git add`
+# положил бы ключ подписи в репозиторий (проверено `git add --dry-run`).
+# Ключ приезжает в сборку из секрета `ANDROID_KEYSTORE_BASE64`
+# (deploy/SETUP.md §Секреты, docs/dev/build-and-release.md) — в git он не
+# попадает никогда. Алиас и keystore нельзя сменить после первой публикации
+# в Google Play, поэтому утечка необратима: чужой APK можно будет подписать
+# как наше обновление. Правило сторожит .github/workflows/security.yml.
 tauri-private.key
 *.p12
