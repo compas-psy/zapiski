@@ -299,9 +299,6 @@ importers:
       '@fontsource/geist-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@fontsource/geist-sans':
-        specifier: 5.3.0
-        version: 5.3.0
       '@fontsource/golos-text':
         specifier: ^5.3.0
         version: 5.3.0
@@ -798,9 +795,6 @@ packages:
 
   '@fontsource/geist-mono@5.3.0':
     resolution: {integrity: sha512-UtJ1BBBCVpMYdIcW7nEB45UAoAw5M53ZXs2t0ciPW+IokuAAIc56M8+kW5tXbRJCTpDw4XTtU7proT6NdQAHTg==}
-
-  '@fontsource/geist-sans@5.3.0':
-    resolution: {integrity: sha512-AmG7cE1AvE4NHROPaOl1sN+a02cB5xy6pA/ZV76HXqWTCsJTV2SCBc9DTFHfJqnVOODm7HhXIYtUIb75NP5QXQ==}
 
   '@fontsource/geist@5.3.0':
     resolution: {integrity: sha512-u03ftlfVwb05uijq2jGDJ03/HKGqMKaNFk7KOhkpBUex8+BhrAOfMs/XciJ2UUNUX9fEsZbZQld/RWMA2oFU7g==}
@@ -2916,8 +2910,6 @@ snapshots:
       - utf-8-validate
 
   '@fontsource/geist-mono@5.3.0': {}
-
-  '@fontsource/geist-sans@5.3.0': {}
 
   '@fontsource/geist@5.3.0': {}
 

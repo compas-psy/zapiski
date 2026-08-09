@@ -20,7 +20,10 @@ import { NativeUpdater } from './updater';
 import { openVaultAt } from './vault';
 
 /** Боевой KompasCloud. В дев-режиме подменяется переменной окружения Vite. */
-const CLOUD_BASE_URL = import.meta.env.VITE_CLOUD_BASE_URL ?? 'https://zapiski.cmpas.ru';
+// База ОБЯЗАНА включать префикс версии: приложение дописывает только путь
+// ручки (см. AppHost.cloudBaseUrl). Без `/api/v1` вход уходил в 404.
+const CLOUD_BASE_URL =
+  import.meta.env.VITE_CLOUD_BASE_URL ?? 'https://zapiski.cmpas.ru/api/v1';
 
 export interface DesktopShell {
   host: AppHost;

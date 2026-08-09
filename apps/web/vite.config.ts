@@ -93,7 +93,7 @@ export default defineConfig(async () => ({
   server: {
     /* В деве API проксируется на локальный сервер — путь тот же, что в проде. */
     proxy: {
-      '/api': { target: 'http://127.0.0.1:8787', changeOrigin: true },
+      '/api': { target: 'http://127.0.0.1:3100', changeOrigin: true },
     },
   },
 }));

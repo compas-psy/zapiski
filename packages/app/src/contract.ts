@@ -34,7 +34,14 @@ export interface AppHost {
   /** Открыть ссылку во внешнем браузере (deep link в КОМПАС.Дневник и т.п.). */
   openExternal(url: string): Promise<void>;
 
-  /** Базовый URL KompasCloud. Отличается только в дев-режиме. */
+  /**
+   * Базовый URL API облака, **включая префикс версии**: `…/api/v1`.
+   *
+   * Приложение дописывает к нему только путь ручки (`/auth/magic-link`),
+   * поэтому база без префикса даёт 404. Формулировка уточнена после того,
+   * как веб отдавал `origin + /api/v1`, а обе Tauri-оболочки — голый origin,
+   * и вход на Windows и Android молча ломался.
+   */
   readonly cloudBaseUrl: string;
 }
 
