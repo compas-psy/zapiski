@@ -121,8 +121,11 @@
   color: var(--text-tertiary);
   cursor: pointer;
 }
-.z-search__clear:hover {
-  color: var(--text);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-search__clear:hover {
+    color: var(--text);
+  }
 }
 .z-search__clear:focus {
   outline: none;

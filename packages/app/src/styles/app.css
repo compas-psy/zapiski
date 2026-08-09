@@ -401,8 +401,11 @@
   text-align: start;
   cursor: pointer;
 }
-.za-nav__item:hover {
-  background-color: var(--surface-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .za-nav__item:hover {
+    background-color: var(--surface-hover);
+  }
 }
 .za-nav__item--active {
   background-color: var(--surface-sunken);
@@ -974,8 +977,11 @@
   text-align: start;
   cursor: pointer;
 }
-.za-menu__item:hover {
-  background-color: var(--surface-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .za-menu__item:hover {
+    background-color: var(--surface-hover);
+  }
 }
 .za-menu__item--danger {
   color: var(--danger-text);

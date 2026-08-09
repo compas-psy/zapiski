@@ -130,3 +130,67 @@ describe('подсветка нажатия принадлежит нам', () =
     expect(app).toMatch(press);
   });
 });
+
+/**
+ * Наведение не должно прилипать на тач-устройстве.
+ *
+ * На живом Android основная кнопка стояла в hover-цвете постоянно: замер
+ * пикселя дал #539A6D при `--accent` = #3B8F5A (DS-ALIGNMENT §5). Разница
+ * ровно на `--accent-hover`. Причина не в цвете, а в том, что браузер
+ * применяет `:hover` к последнему тронутому элементу и не снимает его.
+ *
+ * Понять это по коду было нельзя — только по пикселю с устройства. Поэтому
+ * правило теперь стережётся тестом: каждое `:hover` в наших стилях живёт под
+ * `@media (hover: hover)`.
+ */
+describe('наведение не прилипает на тач', () => {
+  /** Наши стили. Снимок системы не наш — его правит владелец, не мы. */
+  const OURS = [
+    'components/Button/Button.css',
+    'components/Chip/Chip.css',
+    'components/Field/Field.css',
+    'components/List/List.css',
+    'components/Special/Special.css',
+  ];
+
+  function unguardedHovers(source: string): string[] {
+    // Комментарии выбрасываем: упоминание `:hover` в объяснении — не правило.
+    // Перевод строки вместо пустой строки, чтобы номера строк не съезжали.
+    const css = source.replace(/\/\*[\s\S]*?\*\//g, (block) =>
+      block.replace(/[^\n]/g, ' '),
+    );
+    const lines = css.split('\n');
+    const bad: string[] = [];
+    let depth = 0;
+    let guarded: number | null = null;
+    for (const line of lines) {
+      if (/@media[^{]*\(hover:\s*hover\)/.test(line)) guarded = depth;
+      const opens = (line.match(/\{/g) ?? []).length;
+      const closes = (line.match(/\}/g) ?? []).length;
+      if (/:hover/.test(line) && !/@media/.test(line) && guarded === null) {
+        bad.push(line.trim());
+      }
+      depth += opens - closes;
+      if (guarded !== null && depth <= guarded) guarded = null;
+    }
+    return bad;
+  }
+
+  for (const file of OURS) {
+    it(`${file}: ни одного незащищённого :hover`, () => {
+      const css = readFileSync(resolve(STYLES_DIR, '..', file), 'utf8');
+      expect(unguardedHovers(css)).toEqual([]);
+    });
+  }
+
+  it('стили экранов приложения — тоже', () => {
+    const css = readFileSync(resolve(STYLES_DIR, '../../../app/src/styles/app.css'), 'utf8');
+    expect(unguardedHovers(css)).toEqual([]);
+  });
+
+  it('сторож работает: подсунутый незащищённый :hover находится', () => {
+    // Без этой проверки тест выше мог бы молча ничего не проверять.
+    expect(unguardedHovers('.x:hover { color: red; }')).toHaveLength(1);
+    expect(unguardedHovers('@media (hover: hover) {\n.x:hover { color: red; }\n}')).toHaveLength(0);
+  });
+});

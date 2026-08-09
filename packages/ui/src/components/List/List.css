@@ -42,8 +42,11 @@
 .z-row--static {
   cursor: default;
 }
-.z-row:hover {
-  background-color: var(--surface-alt);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-row:hover {
+    background-color: var(--surface-alt);
+  }
 }
 .z-row:focus {
   outline: none;
@@ -53,9 +56,17 @@
   box-shadow: inset 0 0 0 var(--focus-ring-w) var(--focus-ring);
 }
 /* Выбранная (desktop): фон --accent-soft, вторичный текст --accent-on-soft, без рамки */
-.z-row--selected,
-.z-row--selected:hover {
+.z-row--selected {
   background-color: var(--accent-soft);
+}
+/* Наведение на выбранную оставляет её цвет: без этого правила `.z-row:hover`
+   перебивает `.z-row--selected` по специфичности и выбранная строка под
+   курсором теряет акцентную подложку.
+   hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-row--selected:hover {
+    background-color: var(--accent-soft);
+  }
 }
 .z-row--selected .z-row__snippet,
 .z-row--selected .z-row__meta {

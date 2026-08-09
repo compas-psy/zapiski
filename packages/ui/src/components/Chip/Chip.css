@@ -96,9 +96,12 @@
   inset-inline: 0;
   inset-block: calc((var(--tap-min) - 32px) / -2);
 }
-.z-filter:hover:not(:disabled) {
-  background-color: var(--surface-sunken);
-  color: var(--text);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-filter:hover:not(:disabled) {
+    background-color: var(--surface-sunken);
+    color: var(--text);
+  }
 }
 .z-filter:active:not(:disabled) {
   transform: scale(var(--press-scale));
@@ -118,9 +121,12 @@
   border-color: var(--accent-border);
   color: var(--accent-on-soft);
 }
-.z-filter--active:hover:not(:disabled) {
-  background-color: var(--accent-soft);
-  color: var(--accent-on-soft);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-filter--active:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+    color: var(--accent-on-soft);
+  }
 }
 
 /* Вариант со сбросом: контейнер не кнопка (вложенные кнопки запрещены),

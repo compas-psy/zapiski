@@ -39,9 +39,12 @@
   position: absolute;
   inset: calc((var(--tap-min) - var(--toolbar-item)) / -2);
 }
-.z-toolbar__item:hover:not(:disabled) {
-  background-color: var(--surface-sunken);
-  color: var(--text);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-toolbar__item:hover:not(:disabled) {
+    background-color: var(--surface-sunken);
+    color: var(--text);
+  }
 }
 .z-toolbar__item:active:not(:disabled) {
   transform: scale(var(--press-scale));
@@ -96,8 +99,11 @@
   position: absolute;
   inset: calc((var(--tap-min) - 34px) / -2);
 }
-.z-player__button:hover {
-  background-color: var(--accent-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-player__button:hover {
+    background-color: var(--accent-hover);
+  }
 }
 .z-player__button:active {
   transform: scale(var(--press-scale));
@@ -135,9 +141,12 @@
   font-weight: 600;
   cursor: pointer;
 }
-.z-player__speed:hover {
-  background-color: var(--surface-sunken);
-  color: var(--text);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-player__speed:hover {
+    background-color: var(--surface-sunken);
+    color: var(--text);
+  }
 }
 .z-player__speed:focus {
   outline: none;
@@ -173,8 +182,11 @@
   font-size: var(--fs-mono-xs);
   color: var(--text-tertiary);
 }
-.z-timecode:hover {
-  background-color: var(--surface-alt);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-timecode:hover {
+    background-color: var(--surface-alt);
+  }
 }
 .z-timecode:focus {
   outline: none;
@@ -271,8 +283,11 @@
   cursor: pointer;
   transition: background-color var(--dur-base) var(--ease-out);
 }
-.z-tree__item:hover {
-  background-color: var(--surface-sunken);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-tree__item:hover {
+    background-color: var(--surface-sunken);
+  }
 }
 .z-tree__item:focus {
   outline: none;

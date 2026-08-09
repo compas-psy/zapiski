@@ -77,16 +77,22 @@
   color: var(--on-accent);
 }
 /* «Никогда не уменьшать непрозрачность для основной кнопки» — только цвет */
-.z-btn--primary:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-btn--primary:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+  }
 }
 
 .z-btn--secondary {
   background-color: var(--surface-sunken);
   color: var(--text);
 }
-.z-btn--secondary:hover:not(:disabled) {
-  background-color: var(--sunken-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-btn--secondary:hover:not(:disabled) {
+    background-color: var(--sunken-hover);
+  }
 }
 
 .z-btn--outline {
@@ -94,8 +100,11 @@
   border-color: var(--line);
   color: var(--text);
 }
-.z-btn--outline:hover:not(:disabled) {
-  background-color: var(--surface-sunken);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-btn--outline:hover:not(:disabled) {
+    background-color: var(--surface-sunken);
+  }
 }
 
 .z-btn--text {
@@ -103,8 +112,11 @@
   color: var(--accent);
   padding-inline: var(--sp-12);
 }
-.z-btn--text:hover:not(:disabled) {
-  background-color: var(--accent-soft);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-btn--text:hover:not(:disabled) {
+    background-color: var(--accent-soft);
+  }
 }
 
 /* Текст — --danger-text, не --danger: на soft-подложке нужен текстовый порог
@@ -113,8 +125,11 @@
   background-color: var(--danger-soft);
   color: var(--danger-text);
 }
-.z-btn--destructive:hover:not(:disabled) {
-  background-color: color-mix(in srgb, var(--danger-soft) 88%, var(--danger));
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-btn--destructive:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--danger-soft) 88%, var(--danger));
+  }
 }
 
 /* ── Иконочная 44×44, радиус 14 ─────────────────────────────────────────── */
@@ -139,9 +154,12 @@
     box-shadow var(--dur-base) var(--ease-out),
     transform var(--dur-press) var(--ease-out);
 }
-.z-icon-btn:hover:not(:disabled) {
-  background-color: var(--sunken-hover);
-  color: var(--text);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-icon-btn:hover:not(:disabled) {
+    background-color: var(--sunken-hover);
+    color: var(--text);
+  }
 }
 .z-icon-btn:focus {
   outline: none;
@@ -165,9 +183,12 @@
   background-color: var(--accent-fill);
   color: var(--on-accent);
 }
-.z-icon-btn--accent:hover:not(:disabled) {
-  background-color: var(--accent-hover);
-  color: var(--on-accent);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-icon-btn--accent:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+    color: var(--on-accent);
+  }
 }
 /* Компактная иконочная: сама 34–36, зона нажатия по-прежнему 44 */
 .z-icon-btn--compact {
@@ -202,8 +223,11 @@
     background-color var(--dur-base) var(--ease-out),
     transform var(--dur-press) var(--ease-out);
 }
-.z-fab:hover:not(:disabled) {
-  background-color: var(--accent-hover);
+/* hover — только для устройств с указателем; почему, см. styles/base.css. */
+@media (hover: hover) {
+  .z-fab:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+  }
 }
 .z-fab:active:not(:disabled) {
   transform: scale(var(--press-scale));
