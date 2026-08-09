@@ -1,6 +1,11 @@
 /**
- * Мини-движок каскада для tokens.css: разбирает НАСТОЯЩИЙ файл токенов и
- * вычисляет значения переменных для конкретной пары тема × акцент.
+ * Мини-движок каскада: разбирает НАСТОЯЩИЕ файлы стилей и вычисляет значения
+ * переменных для конкретной пары тема × акцент.
+ *
+ * Читается весь слой, а не один файл: с переходом на дизайн-систему
+ * `tokens.css` стал слоем алиасов (`--bg: var(--background)`), и без снимка
+ * СИМПАСА ни один алиас не разворачивается до литерала. Порядок тот же, что в
+ * `styles/index.css`: слой системы → наши токены.
  *
  * Тесты обязаны проверять то, что реально уедет в сборку, а не копию значений
  * в TypeScript, — иначе проверка контраста измеряет саму себя.
@@ -10,7 +15,12 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const TOKENS_PATH = resolve(here, '../src/styles/tokens.css');
+export const STYLES_DIR = resolve(here, '../src/styles');
+export const TOKENS_PATH = resolve(STYLES_DIR, 'tokens.css');
+/** Наш слой подключения системы: он же список того, что реально загружается. */
+export const SIMPAS_ENTRY_PATH = resolve(STYLES_DIR, 'simpas-offline.css');
+/** Точка входа самой дизайн-системы (в рантайме не используется — см. §CDN). */
+export const SIMPAS_VENDOR_ENTRY_PATH = resolve(STYLES_DIR, 'simpas/vendor/styles.css');
 
 export interface Rule {
   selectors: string[];
@@ -28,6 +38,21 @@ export interface RootState {
 
 function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+/**
+ * `@import …` из файла, в порядке объявления. Комментарии вырезаются заранее:
+ * в шапке `simpas-offline.css` разобранный CDN-импорт процитирован как пример
+ * того, чего мы избегаем, — цитата не должна попасть в список загрузок.
+ */
+export function readImports(path: string): string[] {
+  const css = stripComments(readFileSync(path, 'utf8'));
+  return [...css.matchAll(/@import\s+(?:url\()?["']([^"']+)["']\)?\s*;/g)].map((m) => m[1]!);
+}
+
+/** `@import …;` — директива загрузки, не правило. Вырезаем до разбора селекторов. */
+function stripImports(css: string): string {
+  return css.replace(/@import\s+[^;]+;/g, '');
 }
 
 /** Блоки @media/@supports для токенов цвета не используются — вырезаем целиком. */
@@ -63,7 +88,7 @@ function stripAtBlocks(css: string): string {
 }
 
 export function parseRules(css: string): Rule[] {
-  const clean = stripAtBlocks(stripComments(css));
+  const clean = stripAtBlocks(stripImports(stripComments(css)));
   const rules: Rule[] = [];
   const re = /([^{}]+)\{([^{}]*)\}/g;
   let match: RegExpExecArray | null;
@@ -164,8 +189,26 @@ export function resolveVar(tokens: Record<string, string>, name: string, depth =
   return raw.trim();
 }
 
+/**
+ * Полный каскад пакета: слой СИМПАСА (в том порядке, в каком его импортирует
+ * `simpas-offline.css`) и следом наш `tokens.css`. Список не захардкожен —
+ * он читается из самого файла, поэтому тест не разойдётся со сборкой.
+ * `fonts.css` пропускается: там только `@font-face`, переменных нет.
+ */
 export function loadTokenRules(): Rule[] {
-  return parseRules(readFileSync(TOKENS_PATH, 'utf8'));
+  const rules: Rule[] = [];
+  let order = 0;
+  const push = (path: string): void => {
+    for (const rule of parseRules(readFileSync(path, 'utf8'))) {
+      rules.push({ ...rule, order: order++ });
+    }
+  };
+  for (const relativePath of readImports(SIMPAS_ENTRY_PATH)) {
+    if (relativePath.endsWith('fonts.css')) continue;
+    push(resolve(STYLES_DIR, relativePath));
+  }
+  push(TOKENS_PATH);
+  return rules;
 }
 
 /* ── Цвет ────────────────────────────────────────────────────────────────── */

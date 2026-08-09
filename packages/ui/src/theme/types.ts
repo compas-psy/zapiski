@@ -18,8 +18,9 @@ export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
 /**
  * Шесть пресетов акцента — DS-ALIGNMENT §3: Хвоя, Лес, Золото, Сумерки,
- * Гранит, Глина. Терракоты в наборе НЕТ: `#C8604A` — цвет идентичности,
- * а не интерфейса, предлагать пользователю красить в него интерфейс нельзя.
+ * Гранит, Глина. Терракоты в наборе НЕТ: `--svc-zapiski-bg` — цвет
+ * идентичности, а не интерфейса; предлагать пользователю красить в него
+ * интерфейс нельзя.
  */
 export const ACCENTS = ['pine', 'forest', 'gold', 'dusk', 'granite', 'clay'] as const;
 export type Accent = (typeof ACCENTS)[number];

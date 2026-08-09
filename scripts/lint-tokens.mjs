@@ -8,8 +8,10 @@
  *     packages/<pkg>/src/**    apps/<app>/src/**
  *
  * Падает, если находит литерал цвета: #rgb, #rgba, #rrggbb, #rrggbbaa,
- * rgb(, rgba(, hsl(, hsla(. Единственное исключение — файл токенов
- * packages/ui/src/styles/tokens.css, где значения и обязаны жить.
+ * rgb(, rgba(, hsl(, hsla(. Исключения — TOKEN_FILES (наш файл токенов и
+ * сгенерированная палитра экспорта) и TOKEN_DIRECTORIES (снимок дизайн-системы
+ * СИМПАС и знак сервиса: чужие файлы, править которые запрещено). Обоснование
+ * каждого исключения — рядом с ним.
  *
  * Запуск:  node scripts/lint-tokens.mjs [--root <путь>] [--quiet]
  * Выход:   0 — чисто, 1 — есть нарушения, 2 — ошибка запуска.
@@ -32,6 +34,24 @@ const TOKEN_FILES = [
   // с источником. Литеральные цвета здесь неизбежны: экспортный документ
   // покидает приложение и не может ссылаться на рантайм-переменные темы.
   'packages/core/src/export/print-palette.ts',
+];
+
+/**
+ * Каталоги, целиком выведенные из-под правила, — вместе с обоснованием.
+ * Такое исключение уместно ровно тогда, когда файлы НЕ НАШИ и правка их
+ * запрещена: чинить нарушение всё равно нельзя, а точечный перечень файлов
+ * пришлось бы обновлять при каждом обновлении снимка.
+ */
+const TOKEN_DIRECTORIES = [
+  // Снимок дизайн-системы СИМПАС (DS-ALIGNMENT.md §2). Побайтовая копия чужих
+  // файлов: `vendor/` — не форк и не место для правок, при открытии пакета
+  // `@simpas/design-system` каталог удаляется целиком. Литералы здесь и обязаны
+  // быть — это и есть источник значений, на который ссылается tokens.css.
+  // Знак сервиса `zapiski.svg` лежит рядом по той же причине: терракота
+  // `#C8604A` внутри него — цвет идентичности, менять контур и цвет запрещено
+  // (DS-ALIGNMENT §9), а в интерфейсные токены она не попадает.
+  'packages/ui/src/styles/simpas/',
+  'packages/ui/src/assets/services/',
 ];
 
 /** Что вообще имеет смысл читать как текст. */
@@ -138,11 +158,20 @@ function findViolations(text) {
 function main() {
   const { root, quiet } = parseArgs(process.argv.slice(2));
   const allowed = new Set(TOKEN_FILES.map((file) => resolve(root, file)));
+  const allowedDirectories = TOKEN_DIRECTORIES.map((dir) => resolve(root, dir));
 
   for (const file of allowed) {
     if (!existsSync(file)) {
       console.error(
         `lint-tokens: токен-файл ${relative(root, file)} не найден — исключение указывает в пустоту`,
+      );
+      process.exit(2);
+    }
+  }
+  for (const directory of allowedDirectories) {
+    if (!existsSync(directory)) {
+      console.error(
+        `lint-tokens: каталог-исключение ${relative(root, directory)} не найден — правило указывает в пустоту`,
       );
       process.exit(2);
     }
@@ -160,6 +189,7 @@ function main() {
   for (const sourceRoot of sourceRoots) {
     for (const file of walk(sourceRoot)) {
       if (allowed.has(file)) continue;
+      if (allowedDirectories.some((directory) => file.startsWith(directory + sep))) continue;
       const dot = file.lastIndexOf('.');
       const extension = dot === -1 ? '' : file.slice(dot);
       if (!SCANNED_EXTENSIONS.has(extension)) continue;
@@ -179,7 +209,8 @@ function main() {
     }
     console.error('');
     console.error(
-      `Найдено нарушений: ${violations.length}. Используйте var(--*) из ${TOKEN_FILES.join(', ')}.`,
+      `Найдено нарушений: ${violations.length}. Используйте var(--*) из ${TOKEN_FILES.join(', ')}\n` +
+        `или переменные дизайн-системы из ${TOKEN_DIRECTORIES.join(', ')}.`,
     );
     console.error('Правило: ARCHITECTURE.md §3.4, docs/spec/DESIGN_TOKENS.md §4.');
     console.error(

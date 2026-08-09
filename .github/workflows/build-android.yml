@@ -146,31 +146,32 @@ jobs:
           preferred="${ZAPISKI_NDK_VERSION}"
           home=''
 
+          # Порядок важен: сначала пин, и только потом что подвернётся. Иначе
+          # сборка молча поедет на той версии, которую сегодня положили в образ,
+          # и «у меня собиралось» перестанет что-либо значить.
+          #
+          # Без `yes |`: под `set -o pipefail` конвейер с `yes` падает по
+          # SIGPIPE. Лицензии уже приняты действием setup-android, а
+          # `</dev/null` гарантирует, что неожиданный запрос не подвесит job.
           if [ -d "${sdk}/ndk/${preferred}" ]; then
             home="${sdk}/ndk/${preferred}"
-          elif [ -d "${sdk}/ndk" ]; then
-            newest="$(ls -1 "${sdk}/ndk" | sort -V | tail -1)"
+          elif sdkmanager --install "ndk;${preferred}" >/dev/null </dev/null; then
+            home="${sdk}/ndk/${preferred}"
+          else
+            echo "::warning::NDK ${preferred} недоступен ни в образе, ни в sdkmanager — берём самый свежий из доступных"
+            newest=''
+            if [ -d "${sdk}/ndk" ]; then
+              newest="$(ls -1 "${sdk}/ndk" | sort -V | tail -1)"
+            fi
             if [ -n "${newest}" ]; then
               home="${sdk}/ndk/${newest}"
-              echo "::warning::NDK ${preferred} в образе не найден, берём предустановленный ${newest}"
-            fi
-          fi
-
-          if [ -z "${home}" ]; then
-            available="$(sdkmanager --list 2>/dev/null | awk -F'|' '/^[[:space:]]*ndk;/ {gsub(/[[:space:]]/,"",$1); print $1}' | sort -u -V)"
-            if printf '%s\n' "${available}" | grep -qx "ndk;${preferred}"; then
-              package="ndk;${preferred}"
             else
-              package="$(printf '%s\n' "${available}" | tail -1)"
-              echo "::warning::NDK ${preferred} недоступен в sdkmanager, ставим ${package}"
+              package="$(sdkmanager --list 2>/dev/null | awk -F'|' '/^[[:space:]]*ndk;/ {gsub(/[[:space:]]/,"",$1); print $1}' | sort -u -V | tail -1)"
+              [ -n "${package}" ] || { echo 'sdkmanager не предлагает ни одного NDK' >&2; exit 1; }
+              sdkmanager --install "${package}" >/dev/null </dev/null
+              home="${sdk}/ndk/${package#ndk;}"
             fi
-            [ -n "${package}" ] || { echo 'sdkmanager не предлагает ни одного NDK' >&2; exit 1; }
-
-            # Без `yes |`: под `set -o pipefail` конвейер с `yes` падает по
-            # SIGPIPE. Лицензии уже приняты действием setup-android, а
-            # `</dev/null` гарантирует, что неожиданный запрос не подвесит job.
-            sdkmanager --install "${package}" >/dev/null </dev/null
-            home="${sdk}/ndk/${package#ndk;}"
+            echo "::warning::сборка идёт на NDK ${home##*/}, а не на зафиксированном ${preferred}"
           fi
 
           # source.properties читает сам tauri-cli: без него он падает с
