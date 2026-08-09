@@ -50,6 +50,7 @@ step 'Проверка типов' pnpm -r typecheck
 step 'Линт токенов' pnpm run lint:tokens
 step 'Тесты' pnpm -r test
 step 'Сборка PWA' pnpm --filter '@zapiski/web...' build
+step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
 step 'Скрипты, исполняемые на сервере' bash -c 'bash -n deploy/deploy-production-remote.sh && bash -n deploy/merge-update-manifest.sh'
 

@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- English catalogue. Wording mirrors packages/app/src/i18n/en.ts. -->
 <resources>
-    <string name="app_name">KOMPAS.NOTES</string>
+    <!-- Wordmark, matching packages/app/src/i18n/en.ts (`brand.wordmark`). -->
+    <string name="app_name">ZAPISKI</string>
+    <string name="main_activity_title">ZAPISKI</string>
 
     <string name="widget_quick_note">Write</string>
     <string name="widget_quick_note_description">A new note in one tap</string>

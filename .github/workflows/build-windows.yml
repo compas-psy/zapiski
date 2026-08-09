@@ -1,6 +1,6 @@
 name: Сборка Windows
 
-# Установщик КОМПАС.ЗАПИСОК для Windows (Tauri 2).
+# Установщик ЗАПИСОК для Windows (Tauri 2).
 #
 # Windows-тулчейна в разработке нет (зафиксировано в docs/ACCEPTANCE.md),
 # поэтому единственное место, где вообще собирается .msi/.exe, — этот
@@ -24,7 +24,7 @@ name: Сборка Windows
 #       отвергнет, а мы будем думать, что обновления выложены;
 #     * есть ключ → полный путь с подписью, latest.json и выкладкой.
 #
-# ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ КОМПАС.Дневник И ВЕБ ЗАПИСОК:
+# ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ ДНЕВНИК И ВЕБ ЗАПИСОК:
 #   * job `release` пишет ровно в /var/www/zapiski.cmpas.ru/updates/ и ничего
 #     не удаляет: scp кладёт файлы, `rsync --delete` здесь не используется;
 #   * nginx не трогается вообще — конфиг ставится провижном;
@@ -301,7 +301,7 @@ jobs:
           }
 
           /* Бандлер называет установщик по productName, а он у нас
-             кириллический («КОМПАС.ЗАПИСКИ_0.1.0_x64-setup.exe»). Такое имя
+             кириллический («ЗАПИСКИ_0.1.0_x64-setup.exe»). Такое имя
              уехало бы в URL манифеста в percent-encoded виде и в имя файла на
              сервере — лишний способ ошибиться на каждом шаге пути. Поэтому
              наружу файлы едут под латинскими именами. Подпись считается по
@@ -333,7 +333,7 @@ jobs:
                server/src/routes/updates.ts и понимает клиентский плагин. */
             const manifest = {
               version,
-              notes: `КОМПАС.ЗАПИСКИ ${version}`,
+              notes: `ЗАПИСКИ ${version}`,
               pub_date: new Date().toISOString(),
               platforms: {
                 'windows-x86_64': {
@@ -542,7 +542,7 @@ jobs:
             gh release upload "${GITHUB_REF_NAME}" release/* --clobber
           else
             gh release create "${GITHUB_REF_NAME}" release/* \
-              --title "КОМПАС.ЗАПИСКИ ${GITHUB_REF_NAME}" \
+              --title "ЗАПИСКИ ${GITHUB_REF_NAME}" \
               --notes "${notes}"
           fi
 

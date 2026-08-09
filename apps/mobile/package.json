@@ -2,7 +2,7 @@
   "name": "@zapiski/mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "КОМПАС.ЗАПИСКИ для Android: тонкая оболочка Tauri 2 Mobile — точка входа и реализация платформенных портов, ни одного экрана",
+  "description": "ЗАПИСКИ для Android: тонкая оболочка Tauri 2 Mobile — точка входа и реализация платформенных портов, ни одного экрана",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
@@ -15,7 +15,8 @@
     "android:overlay": "node scripts/apply-android-overlay.mjs",
     "android:overlay:selftest": "node scripts/apply-android-overlay.mjs --self-test",
     "android:build": "tauri android build",
-    "test": "node scripts/apply-android-overlay.mjs --self-test"
+    "test": "node scripts/apply-android-overlay.mjs --self-test",
+    "android:kotlin:check": "node scripts/check-kotlin-imports.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",

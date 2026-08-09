@@ -321,7 +321,7 @@ mod tests {
         assert_eq!(text.kind, "text");
         assert_eq!(text.text.as_deref(), Some("Привет"));
 
-        let link = parse_intent(r#"{"kind":"link","url":"https://cmpas.ru","text":"КОМПАС"}"#)
+        let link = parse_intent(r#"{"kind":"link","url":"https://cmpas.ru","text":"СИМПАС"}"#)
             .expect("ссылка");
         assert_eq!(link.url.as_deref(), Some("https://cmpas.ru"));
     }

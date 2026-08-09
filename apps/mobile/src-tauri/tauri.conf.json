@@ -35,11 +35,11 @@
       "icons/128x128@2x.png",
       "icons/icon.png"
     ],
-    "publisher": "КОМПАС",
-    "copyright": "КОМПАС",
+    "publisher": "СИМПАС",
+    "copyright": "СИМПАС",
     "category": "Productivity",
     "shortDescription": "Заметки в Markdown",
-    "longDescription": "КОМПАС.ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
+    "longDescription": "ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
     "android": {
       "minSdkVersion": 24
     }

@@ -2,7 +2,7 @@
   "name": "@zapiski/web",
   "version": "0.1.0",
   "private": true,
-  "description": "КОМПАС.ЗАПИСКИ: веб-оболочка (PWA). Экранов здесь нет — только платформенные порты",
+  "description": "ЗАПИСКИ: веб-оболочка (PWA). Экранов здесь нет — только платформенные порты",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {

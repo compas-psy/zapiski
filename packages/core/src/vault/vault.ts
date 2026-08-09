@@ -243,6 +243,85 @@ export class Vault {
     return out;
   }
 
+  // ── Папки ──────────────────────────────────────────────────────────────────
+  //
+  // Папка здесь — настоящий каталог на диске, а не выдумка приложения.
+  // `folders()` выше читает `listDirsRecursive`, поэтому пустая папка видна в
+  // дереве и переживает перезапуск. Это прямо следует из обещания «файл важнее
+  // приложения»: человек вправе разложить структуру заранее и увидеть её тем же
+  // Проводником.
+
+  /**
+   * Создаёт папку. Имя подбирается свободное: две «Практики» рядом сбили бы с
+   * толку, а отказ с ошибкой заставил бы придумывать имя дважды.
+   */
+  async createFolder(parent: VaultPath, name: string): Promise<VaultPath> {
+    const base = safeFileName(name);
+    const folder = normalizePath(parent);
+    let target = joinPath(folder, base);
+    for (let n = 2; n < 10_000 && (await this.storage.stat(target)) !== null; n += 1) {
+      target = joinPath(folder, `${base} ${n}`);
+    }
+    await this.storage.mkdir(target);
+    this.emit([target]);
+    return target;
+  }
+
+  /**
+   * Переименование папки — это переезд всех заметок внутри неё.
+   *
+   * Каждая едет через `renameTo`, а не «одним махом» на уровне каталога:
+   * только так перепишутся `[[вики-ссылки]]` на переехавшие заметки и
+   * пересчитаются идентификаторы CRDT-логов. Цена — цикл по заметкам; выгода —
+   * ни одной битой ссылки, что и обещает BEHAVIOR.
+   */
+  async renameFolder(from: VaultPath, name: string): Promise<{ to: VaultPath; updatedLinks: number }> {
+    const source = normalizePath(from);
+    const base = safeFileName(name);
+    let target = joinPath(dirName(source), base);
+    if (target === source) return { to: source, updatedLinks: 0 };
+    for (let n = 2; n < 10_000 && (await this.storage.stat(target)) !== null; n += 1) {
+      target = joinPath(dirName(source), `${base} ${n}`);
+    }
+
+    await this.storage.mkdir(target);
+    let updatedLinks = 0;
+    /* Снимок путей до начала: во время цикла индекс меняется под нами. */
+    const inside = this.index
+      .all()
+      .map((note) => note.path)
+      .filter((path) => path === source || path.startsWith(`${source}/`));
+    for (const path of inside) {
+      const result = await this.renameTo(path, joinPath(target, path.slice(source.length + 1)));
+      updatedLinks += result.updatedLinks;
+    }
+
+    /* Пустые подкаталоги переносим следом, иначе структура схлопнется. */
+    for (const dir of await this.listDirsRecursive(source)) {
+      await this.storage.mkdir(joinPath(target, dir.slice(source.length + 1)));
+    }
+    await this.storage.remove(source).catch(() => undefined);
+    this.emit([source, target]);
+    return { to: target, updatedLinks };
+  }
+
+  /**
+   * Удаление папки. Заметки внутри уезжают в корзину поштучно — ТЗ обещает,
+   * что ни одно действие не теряет текст безвозвратно, и папка не исключение.
+   * Возвращает пути, отправленные в корзину, чтобы экран сказал сколько.
+   */
+  async deleteFolder(path: VaultPath): Promise<VaultPath[]> {
+    const folder = normalizePath(path);
+    const inside = this.index
+      .all()
+      .map((note) => note.path)
+      .filter((item) => item.startsWith(`${folder}/`));
+    for (const note of inside) await this.trash(note);
+    await this.storage.remove(folder).catch(() => undefined);
+    this.emit([folder]);
+    return inside;
+  }
+
   // ── Чтение и запись заметок ────────────────────────────────────────────────
 
   notes(): NoteMeta[] {

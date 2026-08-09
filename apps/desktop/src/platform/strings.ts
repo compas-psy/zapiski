@@ -58,13 +58,13 @@ const CATALOGS: Record<Locale, PlatformStrings> = {
   en: {
     tray: {
       quickNote: 'Quick note',
-      open: 'Open KOMPAS.NOTES',
+      open: 'Open ZAPISKI',
       autostart: 'Launch at sign-in',
       quit: 'Quit',
-      tooltip: 'KOMPAS.NOTES',
+      tooltip: 'ZAPISKI',
     },
     update: {
-      title: 'KOMPAS.NOTES',
+      title: 'ZAPISKI',
       question: (version) => `Version ${version} is available. Update now?`,
       install: 'Update',
       later: 'Later',

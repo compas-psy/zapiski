@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "КОМПАС.ЗАПИСКИ",
+  "productName": "ЗАПИСКИ",
   "mainBinaryName": "zapiski-desktop",
   "version": "0.1.0",
   "identifier": "ru.cmpas.zapiski",
@@ -14,7 +14,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "КОМПАС.ЗАПИСКИ",
+        "title": "ЗАПИСКИ",
         "width": 1280,
         "height": 832,
         "minWidth": 640,
@@ -46,11 +46,11 @@
       "icons/icon.png",
       "icons/icon.ico"
     ],
-    "publisher": "КОМПАС",
-    "copyright": "КОМПАС",
+    "publisher": "СИМПАС",
+    "copyright": "СИМПАС",
     "category": "Productivity",
     "shortDescription": "Заметки в Markdown",
-    "longDescription": "КОМПАС.ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
+    "longDescription": "ЗАПИСКИ — спокойное приложение для заметок в Markdown. Файлы .md на диске, работа без сети и без аккаунта.",
     "fileAssociations": [
       {
         "ext": ["md", "markdown"],

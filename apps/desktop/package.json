@@ -2,7 +2,7 @@
   "name": "@zapiski/desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "КОМПАС.ЗАПИСКИ для Windows: тонкая оболочка Tauri 2 — точка входа и платформенные порты, ни одного экрана",
+  "description": "ЗАПИСКИ для Windows: тонкая оболочка Tauri 2 — точка входа и платформенные порты, ни одного экрана",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {

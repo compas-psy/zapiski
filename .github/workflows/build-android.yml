@@ -1,6 +1,6 @@
 name: Сборка Android
 
-# Сборка КОМПАС.ЗАПИСОК под Android (Tauri 2 Mobile).
+# Сборка ЗАПИСОК под Android (Tauri 2 Mobile).
 #
 # Android SDK и NDK есть только здесь: на машине разработчика `tauri android
 # build` не выполняется в принципе, поэтому этот workflow — единственное место,
@@ -261,6 +261,13 @@ jobs:
 
       # Патч AndroidManifest прогоняется на эталоне до того, как понадобится
       # настоящий: ошибка в патче иначе всплыла бы аварией сборки Gradle.
+      # Kotlin компилируется только здесь, и забытый импорт стоит четырёх минут
+      # сборки, а видно его в середине длинного лога. Этот шаг ловит такое за
+      # секунду и до компиляции: пять прогонов подряд падали на отсутствующем
+      # `import android.content.Intent`.
+      - name: Импорты Kotlin
+        run: pnpm --filter @zapiski/mobile android:kotlin:check
+
       - name: Самопроверка Android-оверлея
         run: pnpm --filter @zapiski/mobile android:overlay:selftest
 
@@ -698,7 +705,7 @@ jobs:
             gh release upload "${tag}" artifacts/*.apk --clobber
           else
             gh release create "${tag}" artifacts/*.apk \
-              --title "КОМПАС.ЗАПИСКИ ${{ needs.build.outputs.version }}" \
+              --title "ЗАПИСКИ ${{ needs.build.outputs.version }}" \
               --generate-notes
           fi
 
