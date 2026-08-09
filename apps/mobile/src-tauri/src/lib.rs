@@ -17,6 +17,7 @@ mod biometrics;
 mod files;
 mod platform;
 mod print;
+mod saf;
 mod updater;
 mod vault;
 mod widgets;
@@ -33,9 +34,20 @@ pub fn run() {
             vault::vault_root,
             vault::vault_default_root,
             vault::vault_write_atomic,
+            /* Папка пользователя через SAF (ТЗ §4.1 п. 1) — см. saf.rs. */
+            saf::saf_pick,
+            saf::saf_probe,
+            saf::saf_list,
+            saf::saf_read,
+            saf::saf_write,
+            saf::saf_stat,
+            saf::saf_mkdir,
+            saf::saf_remove,
+            saf::saf_rename,
             platform::secure_flag,
             platform::haptic_impact,
             platform::share_take,
+            platform::auth_take,
             biometrics::biometrics_available,
             biometrics::biometrics_enroll,
             biometrics::biometrics_unlock,

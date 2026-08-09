@@ -41,6 +41,7 @@ export type {
   VaultPath,
   VaultStat,
   VaultStorage,
+  VaultWriteMode,
   VersionSnapshot,
 } from './contract.js';
 

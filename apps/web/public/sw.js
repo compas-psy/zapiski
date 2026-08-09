@@ -21,6 +21,8 @@ const VERSION = 'v1';
 const SHELL_CACHE = `zapiski-shell-${VERSION}`;
 const ASSET_CACHE = `zapiski-assets-${VERSION}`;
 const SHELL_URL = '/index.html';
+/** Адрес из письма (`server/src/routes/auth.ts`, `buildMagicLinkUrl`). */
+const MAGIC_LINK_CALLBACK = '/api/v1/auth/magic-link/callback';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -50,6 +52,16 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  /* Единственное исключение из «/api/* — только сеть»: переход по ссылке из
+     письма. Сервер ждёт к токену `device_id`, а знает его приложение, а не
+     браузер, поэтому переход уводится в приложение вместе с токеном, и обмен
+     делает оно (`packages/app/src/state/session.ts`). Ответ API при этом не
+     кэшируется — здесь только маршрут, ни байта данных. */
+  if (request.mode === 'navigate' && url.pathname === MAGIC_LINK_CALLBACK) {
+    event.respondWith(Response.redirect(`/auth/callback${url.search}`, 303));
+    return;
+  }
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {

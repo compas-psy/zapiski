@@ -14,6 +14,8 @@ export type {
   Appearance,
   AccentChoice,
   AppHost,
+  AppIntent,
+  AuthCallback,
   DebugOverrides,
   Layout,
   PreferencesStore,
@@ -21,7 +23,18 @@ export type {
   ScreenState,
   SettingsSection,
   ThemeChoice,
+  WidgetSnapshot,
 } from './contract.js';
+
+// ── Возврат после входа: разбор адреса и очистка адресной строки ────────────
+// Оболочка получает ссылку своим механизмом, но разбирает её общим кодом —
+// иначе три платформы разошлись бы в трактовке одного и того же адреса.
+export {
+  AUTH_CALLBACK_PARAMS,
+  hasAuthCallback,
+  parseAuthCallback,
+  stripAuthParams,
+} from './lib/auth-callback.js';
 
 // ── Состояние и строки ──────────────────────────────────────────────────────
 export {
@@ -34,6 +47,14 @@ export {
   type SortMode,
   type ToastRequest,
 } from './state/store.js';
+export {
+  AUTH_PREF,
+  AuthError,
+  SessionStore,
+  type AuthErrorCode,
+  type CloudSession,
+} from './state/session.js';
+export { createKompasBackend, originOf, type CloudBackendOptions } from './state/cloud.js';
 export {
   AppProvider,
   layoutFor,

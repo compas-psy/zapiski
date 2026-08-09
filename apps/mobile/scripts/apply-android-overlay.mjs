@@ -84,6 +84,50 @@ const APPLICATION_CHILDREN = `
         </intent-filter>
     </activity>
 
+    <!--
+      Возврат после входа (ТЗ §5.5). Активность невидима, как и share-target,
+      и по той же причине: ссылка поднимает приложение с нуля, а очередь
+      переживает холодный старт.
+
+      Три фильтра:
+        1) своя схема zapiski:// — ею сервер уводит браузер обратно
+           в приложение (AUTH_SUCCESS_REDIRECT);
+        2) App Link на /auth/… — тот же адрес открывается приложением, а не
+           браузером, если владение доменом подтверждено assetlinks.json;
+        3) App Link на сам адрес из письма. Сервер ждёт к токену device_id,
+           а знает его приложение, а не браузер, — поэтому переход по ссылке
+           обязан попасть в приложение того устройства, которое её и просило.
+           Не подтверждено владение доменом — откроется браузер, и обмен
+           сделает веб-оболочка. Ни один путь не теряется.
+    -->
+    <activity
+        android:name=".AuthActivity"
+        android:exported="true"
+        android:excludeFromRecents="true"
+        android:noHistory="true"
+        android:taskAffinity=""
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="zapiski" />
+        </intent-filter>
+        <intent-filter android:autoVerify="true">
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:scheme="https"
+                android:host="zapiski.cmpas.ru"
+                android:pathPrefix="/auth" />
+            <data
+                android:scheme="https"
+                android:host="zapiski.cmpas.ru"
+                android:path="/api/v1/auth/magic-link/callback" />
+        </intent-filter>
+    </activity>
+
     <!-- Плитка Quick Settings — эквивалент быстрой заметки (ТЗ §5.4). -->
     <service
         android:name=".QuickNoteTileService"
@@ -348,6 +392,11 @@ const EXPECTATIONS = [
   ['share-target: SEND_MULTIPLE', 'android.intent.action.SEND_MULTIPLE'],
   ['share-target: текст', 'android:mimeType="text/plain"'],
   ['share-target: картинка', 'android:mimeType="image/*"'],
+  ['возврат входа: активность', 'android:name=".AuthActivity"'],
+  ['возврат входа: схема zapiski://', 'android:scheme="zapiski"'],
+  ['возврат входа: App Link на /auth', 'android:pathPrefix="/auth"'],
+  ['возврат входа: App Link на ссылку из письма', 'android:path="/api/v1/auth/magic-link/callback"'],
+  ['возврат входа: проверка домена', 'android:autoVerify="true"'],
   ['плитка Quick Settings', 'android.service.quicksettings.action.QS_TILE'],
   ['FileProvider', '.UpdatesFileProvider'],
   ['FileProvider: authorities', 'android:authorities="${applicationId}.updates"'],

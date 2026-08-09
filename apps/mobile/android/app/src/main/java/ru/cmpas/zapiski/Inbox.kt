@@ -23,6 +23,7 @@ object Inbox {
     private const val DIR = "inbox"
     private const val SHARE = "share.jsonl"
     private const val QUICK_NOTE = "quick-note"
+    private const val AUTH = "auth.jsonl"
 
     private fun dir(context: Context): File = File(context.filesDir, DIR).apply { mkdirs() }
 
@@ -41,6 +42,17 @@ object Inbox {
     fun markQuickNote(context: Context) {
         File(dir(context), QUICK_NOTE).also { if (!it.exists()) it.createNewFile() }
         NativeBridge.pokeQuickNote()
+    }
+
+    /**
+     * Положить в очередь адрес возврата после входа и разбудить приложение.
+     *
+     * Одна строка = один переход. Адрес не пишется в журнал ни здесь, ни
+     * дальше по дороге: во фрагменте едет токен сессии (ТЗ §5.5).
+     */
+    fun putAuth(context: Context, url: String) {
+        append(File(dir(context), AUTH), url.replace("\n", ""))
+        NativeBridge.pokeAuthCallback()
     }
 
     /** Дописать строку. Ошибку глотаем: очередь — не источник истины. */

@@ -344,6 +344,194 @@ mod api {
         })
     }
 
+    // ── Папка пользователя через SAF (ТЗ §4.1 п. 1) ─────────────────────────
+    //
+    // Строковый результат этих методов — либо полезное значение, либо `null`
+    // как «нет такого». Отказ отличается от «нет такого» исключением на
+    // Java-стороне: `with_env` превращает его в ошибку команды.
+
+    /// Системный выбор папки. `None` — пользователь отменил.
+    pub fn saf_pick_folder() -> Result<Option<String>, String> {
+        let (id, rx) = register();
+        let started = with_env(|env| {
+            env.call_static_method(BRIDGE, "safPickFolder", "(J)V", &[JValue::Long(id)])?;
+            Ok(())
+        });
+        if let Err(error) = started {
+            forget(id);
+            return Err(error);
+        }
+        // Человек у диалога выбора думает столько же, сколько у биометрии.
+        let outcome = wait(id, rx, SLOW)?;
+        if !outcome.ok {
+            return Err(outcome
+                .text
+                .unwrap_or_else(|| "не удалось открыть выбор папки".to_owned()));
+        }
+        Ok(outcome.text.filter(|value| !value.is_empty()))
+    }
+
+    /// Строковый метод с одним строковым аргументом.
+    fn saf_string(method: &str, tree: &str) -> Result<Option<String>, String> {
+        with_env(|env| {
+            let argument = env.new_string(tree)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    method,
+                    "(Ljava/lang/String;)Ljava/lang/String;",
+                    &[JValue::Object(&argument)],
+                )?
+                .l()?;
+            if value.is_null() {
+                return Ok(None);
+            }
+            let text: String = env.get_string(&JString::from(value))?.into();
+            Ok(Some(text))
+        })
+    }
+
+    fn saf_bool(method: &str, tree: &str) -> Result<bool, String> {
+        with_env(|env| {
+            let argument = env.new_string(tree)?;
+            env.call_static_method(BRIDGE, method, "(Ljava/lang/String;)Z", &[JValue::Object(&argument)])?
+                .z()
+        })
+    }
+
+    pub fn saf_label(tree: &str) -> Result<Option<String>, String> {
+        saf_string("safLabel", tree)
+    }
+
+    pub fn saf_supports_rename(tree: &str) -> Result<bool, String> {
+        saf_bool("safSupportsRename", tree)
+    }
+
+    pub fn saf_has_access(tree: &str) -> Result<bool, String> {
+        saf_bool("safHasAccess", tree)
+    }
+
+    /// Метод «дерево + путь → строка». `None` — такого документа нет.
+    fn saf_path_string(method: &str, tree: &str, path: &str) -> Result<Option<String>, String> {
+        with_env(|env| {
+            let tree = env.new_string(tree)?;
+            let path = env.new_string(path)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    method,
+                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                    &[JValue::Object(&tree), JValue::Object(&path)],
+                )?
+                .l()?;
+            if value.is_null() {
+                return Ok(None);
+            }
+            let text: String = env.get_string(&JString::from(value))?.into();
+            Ok(Some(text))
+        })
+    }
+
+    pub fn saf_list(tree: &str, path: &str) -> Result<String, String> {
+        saf_path_string("safList", tree, path)?
+            .ok_or_else(|| format!("каталога нет: {path}"))
+    }
+
+    pub fn saf_stat(tree: &str, path: &str) -> Result<Option<String>, String> {
+        saf_path_string("safStat", tree, path)
+    }
+
+    pub fn saf_read(tree: &str, path: &str) -> Result<Vec<u8>, String> {
+        with_env(|env| {
+            let tree = env.new_string(tree)?;
+            let path = env.new_string(path)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    "safRead",
+                    "(Ljava/lang/String;Ljava/lang/String;)[B",
+                    &[JValue::Object(&tree), JValue::Object(&path)],
+                )?
+                .l()?;
+            if value.is_null() {
+                return Ok(None);
+            }
+            let array = JByteArray::from(value);
+            Ok(Some(env.convert_byte_array(&array)?))
+        })?
+        .ok_or_else(|| format!("файла нет: {path}"))
+    }
+
+    /// Запись. Java возвращает фактический режим: `staged` либо `direct`.
+    pub fn saf_write(tree: &str, path: &str, data: &[u8]) -> Result<String, String> {
+        with_env(|env| {
+            let tree = env.new_string(tree)?;
+            let path = env.new_string(path)?;
+            let bytes = env.byte_array_from_slice(data)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    "safWrite",
+                    "(Ljava/lang/String;Ljava/lang/String;[B)Ljava/lang/String;",
+                    &[
+                        JValue::Object(&tree),
+                        JValue::Object(&path),
+                        JValue::Object(&bytes),
+                    ],
+                )?
+                .l()?;
+            if value.is_null() {
+                return Ok(String::new());
+            }
+            let text: String = env.get_string(&JString::from(value))?.into();
+            Ok(text)
+        })
+    }
+
+    /// Действие без результата: неудача приходит исключением Java-стороны.
+    fn saf_action(method: &str, tree: &str, first: &str, second: Option<&str>) -> Result<(), String> {
+        with_env(|env| {
+            let tree = env.new_string(tree)?;
+            let first = env.new_string(first)?;
+            match second {
+                None => {
+                    env.call_static_method(
+                        BRIDGE,
+                        method,
+                        "(Ljava/lang/String;Ljava/lang/String;)V",
+                        &[JValue::Object(&tree), JValue::Object(&first)],
+                    )?;
+                }
+                Some(second) => {
+                    let second = env.new_string(second)?;
+                    env.call_static_method(
+                        BRIDGE,
+                        method,
+                        "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                        &[
+                            JValue::Object(&tree),
+                            JValue::Object(&first),
+                            JValue::Object(&second),
+                        ],
+                    )?;
+                }
+            }
+            Ok(())
+        })
+    }
+
+    pub fn saf_mkdir(tree: &str, path: &str) -> Result<(), String> {
+        saf_action("safMkdir", tree, path, None)
+    }
+
+    pub fn saf_remove(tree: &str, path: &str) -> Result<(), String> {
+        saf_action("safRemove", tree, path, None)
+    }
+
+    pub fn saf_rename(tree: &str, from: &str, to: &str) -> Result<(), String> {
+        saf_action("safRename", tree, from, Some(to))
+    }
+
     /// Положить готовый файл туда, где пользователь его найдёт. Java
     /// возвращает `null` при успехе и текст ошибки иначе.
     pub fn save_to_downloads(name: &str, mime: &str, source: &str) -> Result<(), String> {
@@ -466,6 +654,18 @@ mod api {
     ) {
         widgets::poke();
     }
+
+    /// Возврат после входа: `zapiski://…` или App Link на `zapiski.cmpas.ru`.
+    /// Адрес не передаётся аргументом и не попадает в журнал — во фрагменте
+    /// едет токен сессии. Он уже лежит в файле очереди, откуда его заберут
+    /// ровно один раз.
+    #[no_mangle]
+    pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeAuthCallback(
+        _env: JNIEnv,
+        _this: JObject,
+    ) {
+        platform::poke_auth();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -528,10 +728,53 @@ mod api {
     pub fn save_to_downloads(_name: &str, _mime: &str, _source: &str) -> Result<(), String> {
         only_android("сохранение файла")
     }
+
+    // ── SAF ─────────────────────────────────────────────────────────────────
+    //
+    // `saf_pick_folder` отвечает «выбора нет» (`Ok(None)`), а не ошибкой:
+    // ровно так же выглядит отмена пользователем, и вызывающий на обеих
+    // платформах поступает одинаково — остаётся в каталоге приложения.
+
+    pub fn saf_pick_folder() -> Result<Option<String>, String> {
+        Ok(None)
+    }
+    pub fn saf_label(_tree: &str) -> Result<Option<String>, String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_supports_rename(_tree: &str) -> Result<bool, String> {
+        only_android("папка через SAF")
+    }
+    /// Доступа к чужой папке здесь нет и быть не может — но это не отказ.
+    pub fn saf_has_access(_tree: &str) -> Result<bool, String> {
+        Ok(false)
+    }
+    pub fn saf_list(_tree: &str, _path: &str) -> Result<String, String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_stat(_tree: &str, _path: &str) -> Result<Option<String>, String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_read(_tree: &str, _path: &str) -> Result<Vec<u8>, String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_write(_tree: &str, _path: &str, _data: &[u8]) -> Result<String, String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_mkdir(_tree: &str, _path: &str) -> Result<(), String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_remove(_tree: &str, _path: &str) -> Result<(), String> {
+        only_android("папка через SAF")
+    }
+    pub fn saf_rename(_tree: &str, _from: &str, _to: &str) -> Result<(), String> {
+        only_android("папка через SAF")
+    }
 }
 
 pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
-    render_pdf, save_to_downloads, set_secure,
+    render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_pick_folder, saf_read,
+    saf_remove, saf_rename, saf_stat, saf_supports_rename, saf_write, save_to_downloads,
+    set_secure,
 };

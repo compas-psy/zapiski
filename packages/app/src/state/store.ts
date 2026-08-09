@@ -11,6 +11,7 @@ import {
   Vault,
   VersionHistory,
   WebCryptoProvider,
+  catalog as coreCatalog,
   countWords,
   decryptNoteFile,
   decryptNoteToDisk,
@@ -31,8 +32,11 @@ import {
   type SyncBackend,
   type SyncStatus,
   type TrashEntry,
+  type Catalog,
   type UndoableToast,
   type UnlockGuardRecord,
+  type VaultLocation,
+  type VaultLocationInfo,
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
@@ -144,6 +148,12 @@ export interface AppState {
 
   account: AccountState | null;
 
+  /**
+   * Где лежат заметки и что это место умеет (ТЗ §4.3). `null` — платформа
+   * различий не делает: выбранная папка ничем не хуже умолчания.
+   */
+  vaultLocation: VaultLocationInfo | null;
+
   /** Пути с открытым (расшифрованным) содержимым. */
   unlocked: Record<VaultPath, UnlockedNote>;
   /**
@@ -207,6 +217,7 @@ function initialState(locale: Locale): AppState {
     shareOpen: false,
     firstRun: false,
     account: null,
+    vaultLocation: null,
     unlocked: {},
     failedAttempts: 0,
     lockedUntil: 0,
@@ -345,6 +356,11 @@ export class AppController {
     await this.restoreUnlockGuard(unlockGuard);
     this.patch({ sortByFolder, recentQueries, lastOpened, account });
 
+    /* Где лежат заметки — вопрос платформы, а не настроек: место могло быть
+       выбрано в прошлый запуск, а разрешение на папку — отозвано (ТЗ §4.1). */
+    const vaultLocation = (await this.host.platform.vaultFolders?.current().catch(() => null)) ?? null;
+    if (vaultLocation) this.patch({ vaultLocation });
+
     /* Вход: сессия из настроек и подписка на возврат по ссылке. Делается до
        открытия vault'а — ссылка может прийти в первую же секунду. */
     await this.restoreSession();
@@ -362,6 +378,11 @@ export class AppController {
   /** Открыть vault поверх готового хранилища и перейти к списку. */
   async openVault(storage: VaultStorage): Promise<void> {
     this.patch({ booting: true });
+    /* Смена папки открывает vault повторно: старые таймеры прежнего vault'а
+       обязаны остановиться, иначе они продолжат переименовывать файлы там,
+       откуда мы уже ушли. */
+    if (this.renameTimer) clearInterval(this.renameTimer);
+    if (this.lockTimer) clearInterval(this.lockTimer);
     const vault = await Vault.open(storage, { locale: this.state.locale });
     this.vault = vault;
     this.versions = new VersionHistory(storage);
@@ -395,6 +416,78 @@ export class AppController {
     if (this.syncTimer) clearTimeout(this.syncTimer);
     this.authOff?.();
     this.authOff = null;
+  }
+
+  // ── Где лежат заметки (ТЗ §2.1.1, §4.1 п. 1, §4.3) ─────────────────────────
+  //
+  // Android отдаёт чужие папки только через системный выбор (SAF), а поверх
+  // дерева `content://` атомарной записи может не быть — значит, формально
+  // нарушается §4.3. Раньше мы решали это за пользователя: выбора папки на
+  // Android просто не было. Цена оказалась выше: закрывался ключевой
+  // бесплатный сценарий §4.1 п. 1 — «LocalFolder, в т.ч. папка, которую
+  // синкает сторонний клиент», то есть папка приложения Яндекс.Диска.
+  //
+  // Теперь выбор есть, а вместе с ним — честное предупреждение. Умолчание не
+  // изменилось: каталог приложения с настоящими `.md` и атомарной записью.
+
+  /** Показывать ли выбор папки: платформа даёт его не везде. */
+  get canChooseVaultFolder(): boolean {
+    return Boolean(this.host.platform.vaultFolders);
+  }
+
+  /** Тексты раздела «Где лежат заметки» — из каталога ядра (ТЗ §6). */
+  get storageStrings(): Catalog['storage'] {
+    return coreCatalog(this.state.locale).storage;
+  }
+
+  /**
+   * Что нужно честно сказать о текущем месте. `null` — говорить нечего:
+   * запись атомарна, поведение обычное.
+   */
+  get vaultLocationWarning(): string | null {
+    const location = this.state.vaultLocation;
+    if (!location || location.writeMode === 'atomic') return null;
+    const texts = this.storageStrings;
+    const note = location.writeMode === 'staged' ? texts.stagedNote : texts.directNote;
+    return `${note}. ${texts.why}`;
+  }
+
+  /**
+   * Системный выбор папки. `null` — выбора нет на этой платформе либо
+   * пользователь отменил его (отмена не ошибка и сообщений не требует).
+   */
+  async chooseVaultFolder(): Promise<VaultLocationInfo | null> {
+    const picker = this.host.platform.vaultFolders;
+    if (!picker) return null;
+    const chosen = await picker.chooseFolder().catch(() => null);
+    if (!chosen) return null;
+    await this.switchVaultLocation(chosen);
+    this.toast({ message: this.storageStrings.chosen(chosen.label) });
+    return this.state.vaultLocation;
+  }
+
+  /** Вернуться в каталог приложения — надёжный путь с атомарной записью. */
+  async useAppVaultFolder(): Promise<VaultLocationInfo | null> {
+    const picker = this.host.platform.vaultFolders;
+    if (!picker) return null;
+    const location = await picker.useAppFolder().catch(() => null);
+    if (!location) return null;
+    await this.switchVaultLocation(location);
+    this.toast({ message: this.storageStrings.returned });
+    return this.state.vaultLocation;
+  }
+
+  /**
+   * Переезд на другое место. Открытые (расшифрованные) заметки при этом
+   * закрываются: их содержимое живёт только в памяти и относится к прежнему
+   * хранилищу (ТЗ §3.3, BEHAVIOR §5.3).
+   */
+  private async switchVaultLocation(location: VaultLocation): Promise<void> {
+    this.lockAll();
+    this.patch({
+      vaultLocation: { kind: location.kind, writeMode: location.writeMode, label: location.label },
+    });
+    await this.openVault(location.storage);
   }
 
   // ── Вход в облако (ТЗ §5.5, SCREENS §2) ────────────────────────────────────

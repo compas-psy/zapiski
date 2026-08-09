@@ -72,6 +72,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["zapiski"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://zapiski.cmpas.ru/api/v1/updates/windows/{{current_version}}"

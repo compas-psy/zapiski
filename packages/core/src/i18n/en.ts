@@ -63,13 +63,12 @@ export const en: Catalog = {
     chooseFolder: 'Choose another folder',
     useAppFolder: 'Go back to the app folder',
     userFolder: 'Chosen folder',
-    nonAtomicTitle: 'What to know about the chosen folder',
-    nonAtomicBody:
-      'Android opens other folders through the system picker, and writing there happens directly, without a temporary file. If the power goes out exactly while a note is being written, that note may stay incomplete. Other notes are not affected',
-    nonAtomicWhy:
-      'In return other apps can see the folder: the Yandex.Disk client, for example, syncs it on its own, with no subscription and no cloud of ours',
-    atomicKept:
-      'This folder supports renaming, so writing goes through a temporary file — same as in the app folder',
+    warningTitle: 'What to know about the chosen folder',
+    stagedNote:
+      'A note is written to a temporary file first and only then takes its place. That is nearly as safe as the app folder: the replacement happens in two steps, and a very rare power failure exactly between them can leave the note in its previous version',
+    directNote:
+      'This folder does not support renaming, so notes are written into it directly. If the power goes out exactly while a note is being written, that note may stay incomplete. Other notes are not affected',
+    why: 'In return other apps can see the folder: the Yandex.Disk client, for example, syncs it on its own, with no subscription and no cloud of ours',
     chosen: (folder: string): string => `Notes are now in the “${folder}” folder`,
     returned: 'Notes are back in the app folder',
   },

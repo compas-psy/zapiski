@@ -10,6 +10,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 import type { Locale, VaultStorage } from '@zapiski/core';
 
+import { onAuthCallback, takeInitialAuthCallback } from './auth';
 import { createBiometrics } from './biometrics';
 import { createCapabilities } from './capabilities';
 import { DEFAULT_HOTKEY, NativeGlobalHotkey } from './hotkey';
@@ -83,6 +84,10 @@ export async function createDesktopShell(): Promise<DesktopShell> {
     },
 
     cloudBaseUrl: CLOUD_BASE_URL,
+
+    /** Возврат после входа по `zapiski://` (см. `platform/auth.ts`). */
+    takeInitialAuthCallback,
+    onAuthCallback,
 
     pdf: new WebviewPdfRenderer(),
 

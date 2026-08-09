@@ -92,7 +92,7 @@ export function PaywallScreen(): ReactNode {
           </tbody>
         </table>
 
-        <Button fullWidth onClick={() => app.navigate({ name: 'signin' })}>
+        <Button fullWidth onClick={() => app.beginSignIn({ name: 'paywall' })}>
           {copy.trial}
         </Button>
         <p className="za-muted">{copy.honest}</p>

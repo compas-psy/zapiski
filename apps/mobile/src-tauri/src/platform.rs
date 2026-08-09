@@ -22,6 +22,9 @@ use tauri::{AppHandle, Emitter};
 /// собирается ради проверки компиляции, и до этих точек дело не доходит.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub const EVENT_SHARE: &str = "zapiski://share";
+/// Возврат после входа: deep-link `zapiski://` или App Link на наш домен.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub const EVENT_AUTH_CALLBACK: &str = "zapiski://auth-callback";
 /// Быстрая заметка: плитка Quick Settings или виджет «Записать» 1×1.
 pub const EVENT_QUICK_NOTE: &str = "zapiski://quick-note";
 /// Прогресс скачивания обновления, доля 0…1.
@@ -35,11 +38,16 @@ const SHARE_QUEUE: &str = "share.jsonl";
 const SHARE_TAKEN: &str = "share.taken.jsonl";
 /// Пустой файл-отметка: пользователь нажал «Записать».
 const QUICK_NOTE_MARK: &str = "quick-note";
+/// Возврат после входа: по строке-адресу на переход (`zapiski://…`).
+const AUTH_QUEUE: &str = "auth.jsonl";
+const AUTH_TAKEN: &str = "auth.taken.jsonl";
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 
 /// Разобранные payload'ы, которые ещё никому не отдали.
 static PENDING: Mutex<Vec<SharedPayload>> = Mutex::new(Vec::new());
+/// Адреса возврата после входа, которые ещё никто не забрал.
+static PENDING_AUTH: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// Забор очереди — «прочитать и опустошить», двумя потоками сразу нельзя.
 static DRAIN_LOCK: Mutex<()> = Mutex::new(());
 
@@ -169,6 +177,64 @@ pub fn poke_share() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Возврат после входа (ТЗ §5.5)
+//
+// Дорога та же, что у share-target, и по той же причине: ссылка из письма
+// поднимает приложение с нуля, и адрес появляется раньше, чем фронтенд успеет
+// подписаться. Поэтому Kotlin кладёт адрес строкой в `auth.jsonl`, а Rust
+// забирает файл, когда фронтенд уже готов.
+//
+// Адрес нигде не печатается: во фрагменте едет токен сессии.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Забрать файл очереди возвратов и разложить его в память.
+fn collect_auth_from_disk() {
+    let _guard = DRAIN_LOCK.lock();
+    let Some(directory) = inbox_dir() else {
+        return;
+    };
+
+    let queue = directory.join(AUTH_QUEUE);
+    let taken = directory.join(AUTH_TAKEN);
+    if std::fs::rename(&queue, &taken).is_err() {
+        return;
+    }
+    let content = std::fs::read_to_string(&taken).unwrap_or_default();
+    let _ = std::fs::remove_file(&taken);
+
+    let parsed: Vec<String> = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+
+    if let Ok(mut pending) = PENDING_AUTH.lock() {
+        pending.extend(parsed);
+    }
+}
+
+fn take_pending_auth() -> Vec<String> {
+    PENDING_AUTH
+        .lock()
+        .map(|mut queue| std::mem::take(&mut *queue))
+        .unwrap_or_default()
+}
+
+/// Kotlin сообщил, что пришёл возврат, и приложение живо.
+/// Используется только Android-веткой (`android.rs`).
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub fn poke_auth() {
+    collect_auth_from_disk();
+    let Some(handle) = app() else {
+        return;
+    };
+    for url in take_pending_auth() {
+        let _ = handle.emit(EVENT_AUTH_CALLBACK, url);
+    }
+}
+
 /// Тап по плитке Quick Settings или виджету «Записать» при живом приложении.
 pub fn emit_quick_note() {
     if let Some(handle) = app() {
@@ -212,6 +278,16 @@ pub fn share_take() -> Vec<SharedPayload> {
     collect_from_disk();
     flush_quick_note();
     take_pending()
+}
+
+/// Забрать накопившиеся адреса возврата после входа.
+///
+/// Очередь опустошается: одноразовый токен из письма не должен обмениваться
+/// дважды — второй обмен сервер отклонит как «ссылка уже использована».
+#[tauri::command(async)]
+pub fn auth_take() -> Vec<String> {
+    collect_auth_from_disk();
+    take_pending_auth()
 }
 
 /// FLAG_SECURE (BEHAVIOR §5.3, приёмочный критерий №7).

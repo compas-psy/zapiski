@@ -36,6 +36,8 @@ class ZapiskiApplication : Application() {
                 NativeBridge.attach(activity)
                 NativeBridge.pokeShare()
                 NativeBridge.pokeWidgetCommand()
+                // …или вернулся из браузера после входа (ТЗ §5.5).
+                NativeBridge.pokeAuthCallback()
             }
 
             override fun onActivityPaused(activity: Activity) = Unit

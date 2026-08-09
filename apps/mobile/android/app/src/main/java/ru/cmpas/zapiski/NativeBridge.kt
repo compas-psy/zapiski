@@ -256,6 +256,8 @@ object NativeBridge {
 
     private external fun nativeWidgetCommand()
 
+    private external fun nativeAuthCallback()
+
     /**
      * Результат асинхронной операции. `ok = true` с пустыми данными — это не
      * ошибка, а отмена пользователем (BEHAVIOR §5.2).
@@ -282,5 +284,14 @@ object NativeBridge {
     /** В очереди виджетов появилась отметка чекбокса. */
     fun pokeWidgetCommand() {
         if (attached) nativeWidgetCommand()
+    }
+
+    /**
+     * В очереди появился возврат после входа: `zapiski://…` или App Link.
+     * Адрес не передаётся аргументом — он уже лежит в файле очереди, и это
+     * единственный способ не обменять одноразовый токен дважды.
+     */
+    fun pokeAuthCallback() {
+        if (attached) nativeAuthCallback()
     }
 }
