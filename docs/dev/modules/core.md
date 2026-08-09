@@ -63,12 +63,14 @@ interface VaultStorage {
 | Web (прочие) | OPFS |
 | Tauri desktop / Android | `@tauri-apps/plugin-fs` поверх нативной ФС |
 
-> ⏳ **В TypeScript ни одна из них ещё не написана.** Единственная существующая
-> реализация — `MemoryVaultStorage` (`memory-storage.ts`): всё в памяти,
-> с управляемыми часами и инъекцией сбоев записи (`failWriteAt`,
-> `failWriteAfter`, `failWriteOnce`) — на ней держатся тесты транзакционности.
-> Нативная сторона для Windows начата в `apps/desktop/src-tauri/src/vault.rs`,
-> но TS-обёртки над ней пока нет.
+Все три написаны: `apps/web/src/vault-storage.ts` (FSA с фолбэком на OPFS),
+`apps/desktop/src/platform/vault.ts` и `apps/mobile/src/platform/vault.ts`
+(plugin-fs, а `write` — атомарная команда Rust `vault_write_atomic`).
+Подробности и оговорки — [platforms.md](platforms.md).
+
+Плюс `MemoryVaultStorage` (`memory-storage.ts`) для тестов: всё в памяти, с
+управляемыми часами и инъекцией сбоев записи (`failWriteAt`, `failWriteAfter`,
+`failWriteOnce`) — на ней держатся тесты транзакционности.
 
 `VaultPath` — всегда прямые слэши, без ведущего слэша, нормализуется
 `normalizePath()`. Служебный каталог — `.zapiski/`:
@@ -117,12 +119,20 @@ interface PlatformCapabilities {
 Возможность, которой на платформе нет, равна `null`, и UI обязан **скрыть**
 соответствующий элемент, а не показать его выключенным (`BEHAVIOR.md` §5.1).
 
-> ⏳ Все эти интерфейсы объявлены, но **ни одной реализации на TypeScript в
-> репозитории нет**: биометрия, хэптика, `FLAG_SECURE`, глобальный хоткей,
-> share-target и автообновление появятся вместе с `apps/*`. В
-> `apps/desktop/src-tauri` уже начаты Rust-стороны глобального хоткея, трея и
-> файлового доступа. Реализация `PdfRenderer` — тоже платформенная и тоже
-> отсутствует.
+Реализации живут в оболочках. Кратко, кто что умеет:
+
+| Порт | web | windows | android |
+| --- | --- | --- | --- |
+| `biometrics` | WebAuthn-PRF | Windows Hello | Keystore + BiometricPrompt |
+| `haptics` | `null` | `null` | ✓ |
+| `globalHotkey` | `null` | ✓ `Ctrl+Alt+N` | `null` |
+| `shareTarget` | `null` | `null` | ✓ `ACTION_SEND` |
+| `updater` | `null` | Tauri updater | свой: фид → APK |
+| `secureFlag` | no-op | no-op | ✓ `FLAG_SECURE` |
+| `PdfRenderer` | печать iframe | WebView2 `PrintToPdf` | `PrintDocumentAdapter` |
+
+Почему каждый `null` — это природа платформы, а не недоделка, разобрано в
+[platforms.md](platforms.md#почему-null--это-не-недоделка).
 
 ---
 
@@ -546,6 +556,12 @@ engine.status();                           // SyncStatus для точки в ш
 > Дополнительно: `KompasCloudBackend.pushUpdates` / `pullUpdates`
 > (delta-синк по CRDT-векторам, ТЗ §4.1) написаны, но `SyncEngine` их не
 > вызывает — он синкает CRDT-логи как обычные файлы.
+>
+> Следствие в интерфейсе: `packages/app` этот бэкенд не создаёт вовсе. В
+> настройках синка подключаются только «локальная папка» и WebDAV; кнопка
+> «Облако КОМПАС» ведёт на paywall, «Яндекс.Диск» — на экран входа, потому что
+> `YandexDiskBackend` нужен OAuth-токен, а приём токена в оболочках ещё не
+> написан ([app.md](app.md#чего-в-пакете-нет)).
 
 ---
 
@@ -587,9 +603,9 @@ const report = await applyImport(vault, bundle, {
 
 Текст отчёта — из реестра: «Импортировано N · Пропущено M — показать».
 
-> ⏳ Мастера импорта (четыре шага из `BEHAVIOR.md` §9) в коде нет — это экран,
-> он живёт в `packages/app`. Ядро отдаёт всё необходимое: предпросмотр
-> собирается из `ImportBundle`, прогресс и отмена — из опций `applyImport`.
+Мастер импорта (четыре шага из `BEHAVIOR.md` §9) живёт в `packages/app` —
+`ImportScreen`. Ядро отдаёт всё необходимое: предпросмотр собирается из
+`ImportBundle`, прогресс и отмена — из опций `applyImport`.
 
 ## Экспорт
 
@@ -606,9 +622,14 @@ await exportPdf(note, renderer);               // renderer — платформ�
 всегда светлый («Бумага»), колонка 640, без интерфейсных элементов
 (`PDF_PAGE_SETUP`).
 
-> ⏳ **PDF в текущей сборке получить нечем.** `exportPdf` требует внешний
-> `PdfRenderer`, растеризация — дело платформы (печать iframe в вебе, печать
-> WebView в Tauri). Реализаций нет.
+`exportPdf` требует внешний `PdfRenderer`: растеризация — дело платформы.
+Реализации есть в вебе (печать скрытого iframe) и на Windows (WebView2
+`PrintToPdf`); на Android код порта написан, но в `AppHost` не подставлен —
+[platforms.md](platforms.md#android-что-осталось).
+
+> Веб байтов PDF не отдаёт: файл сохраняет сам браузер через системный диалог
+> печати, поэтому `render` возвращает пустой массив, и `exportNoteAs` в этом
+> случае не «скачивает» ничего повторно.
 >
 > Зашифрованная заметка в архив не попадает: `exportArchive` пропускает
 > `note.encrypted` — экспорт возможен только после разблокировки.
@@ -638,7 +659,7 @@ DEFAULT_LOCALE;                 // 'ru'
 | Синк: KompasCloud | ⚠️ клиент написан, пути протокола расходятся с сервером |
 | Импорт: папка/Obsidian, Bear, Notion, Evernote | ✅ |
 | Экспорт: md, HTML, DOCX | ✅ |
-| Экспорт: PDF | ⏳ нужен платформенный `PdfRenderer` |
-| Реализации `VaultStorage` (FSA, OPFS, Tauri FS) | ⏳ в TypeScript есть только `MemoryVaultStorage`; нативная часть Windows-оболочки начата в `apps/desktop/src-tauri/src/vault.rs` |
-| `PlatformCapabilities`: биометрия, хэптика, хоткей, share, updater | ⏳ только интерфейсы; в `apps/desktop/src-tauri` начаты Rust-стороны глобального хоткея и трея |
-| `FLAG_SECURE` | ⏳ только порт `secureFlag` |
+| Экспорт: PDF | ✅ в вебе и на Windows; на Android порт написан, но не подставлен в `AppHost` |
+| Реализации `VaultStorage` (FSA, OPFS, Tauri FS) | ✅ во всех трёх оболочках |
+| `PlatformCapabilities`: биометрия, хэптика, хоткей, share, updater | ✅ там, где платформа это умеет — [platforms.md](platforms.md) |
+| `FLAG_SECURE` | ✅ на Android; на Windows и в вебе — осознанный no-op |

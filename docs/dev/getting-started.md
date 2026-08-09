@@ -159,11 +159,19 @@ TEST_DATABASE_URL='postgresql://user:pass@localhost:5432/zapiski_test' \
   pnpm --filter @zapiski/server test
 ```
 
-### `packages/ui` не собирается в `dist/`
+### `packages/ui` и `packages/app` не собираются в `dist/`
 
-Так задумано: `@zapiski/ui` отдаётся исходниками (`main: ./src/index.ts`),
-потому что его CSS должен пройти через сборщик приложения. Скрипт `build` там —
-это `tsc --noEmit`, то есть проверка типов, а не компиляция.
+Так задумано: оба отдаются исходниками (`main: ./src/index.ts`), потому что их
+CSS должен пройти через сборщик приложения. Скрипт `build` там — это
+`tsc --noEmit`, то есть проверка типов, а не компиляция. Собираемые в `dist`
+пакеты — только `@zapiski/core` и `@zapiski/editor`.
+
+### Предупреждение Vite «chunks are larger than 500 kB»
+
+Сборка веба печатает его на главный бандл (~648 КБ, ~205 КБ в gzip). Это
+ожидаемо: туда попадают CodeMirror и всё приложение целиком. Подсветка языков
+кода уже вынесена в динамические чанки. Бюджета на размер веб-бандла в ТЗ нет —
+бюджеты §6 заданы для установщика Windows (<25 МБ) и APK (<30 МБ).
 
 ### Шрифты
 
@@ -182,4 +190,6 @@ Node 22.
 
 * Как устроено ядро — [modules/core.md](modules/core.md).
 * Как устроен редактор — [modules/editor.md](modules/editor.md).
+* Как устроены экраны — [modules/app.md](modules/app.md).
+* Чем различаются три оболочки — [modules/platforms.md](modules/platforms.md).
 * Правила совместной работы — [contributing.md](contributing.md).
