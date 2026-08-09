@@ -32,6 +32,9 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 /// Событие «пользователь что-то сделал в виджете».
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub const EVENT_WIDGET_COMMAND: &str = "zapiski://widget-command";
 
 const DIR: &str = "widgets";
@@ -104,6 +107,9 @@ pub fn widgets_take_commands<R: Runtime>(app: AppHandle<R>) -> Vec<WidgetCommand
 
 /// Kotlin сообщил, что в очереди что-то появилось. Забираем и отправляем
 /// фронтенду — приложение работает, значит, отметка применится сразу.
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub fn poke() {
     let Some(handle) = crate::platform::app_handle() else {
         return;

@@ -131,6 +131,12 @@ export interface AppState {
   rawMode: boolean;
   debugOpen: boolean;
   shareOpen: boolean;
+  /**
+   * Онбординг только что закончился и открыта ПЕРВАЯ заметка: над текстом
+   * висит чип «Локальный режим включён — можно писать» (SCREENS §1, шаг 3).
+   * Отдельного экрана «успех» нет — есть этот чип и курсор в заголовке.
+   */
+  firstRun: boolean;
 
   account: AccountState | null;
 
@@ -181,6 +187,7 @@ function initialState(locale: Locale): AppState {
     rawMode: false,
     debugOpen: false,
     shareOpen: false,
+    firstRun: false,
     account: null,
     unlocked: {},
     failedAttempts: 0,
@@ -371,7 +378,22 @@ export class AppController {
 
   navigate(route: Route, options: { replace?: boolean } = {}): void {
     const stack = options.replace ? this.state.stack : [...this.state.stack, this.state.route];
-    this.patch({ route, stack: stack.slice(-20), libraryOpen: false, paletteOpen: false });
+    this.patch({
+      route,
+      stack: stack.slice(-20),
+      libraryOpen: false,
+      paletteOpen: false,
+      /* Чип первого запуска живёт ровно до ухода с первой заметки. */
+      firstRun: this.state.firstRun && route.name === 'note',
+    });
+  }
+
+  /**
+   * Онбординг закончен: следующая созданная заметка — первая, и над ней
+   * показывается чип шага 3 (SCREENS §1). Отдельного экрана «успех» нет.
+   */
+  startFirstNote(): void {
+    this.patch({ firstRun: true });
   }
 
   back(): void {

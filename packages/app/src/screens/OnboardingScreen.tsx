@@ -117,7 +117,9 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
         app.navigate({ name: 'settings', section: 'sync' });
         return;
       }
-      /* Шаг 3 = первая заметка с курсором в тексте, без экрана «успех». */
+      /* Шаг 3 = первая заметка с курсором в тексте, без экрана «успех»:
+         чип «Локальный режим включён» рисует уже сам редактор. */
+      app.startFirstNote();
       await app.createNote();
     } finally {
       setBusy(false);

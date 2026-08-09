@@ -38,7 +38,6 @@ object NativeBridge {
      * понять, можно ли достучаться до приложения напрямую или отметку нужно
      * положить в файл очереди и дождаться запуска.
      */
-    @JvmStatic
     @Volatile
     var attached: Boolean = false
         private set
@@ -104,23 +103,25 @@ object NativeBridge {
     @JvmStatic
     fun haptic(strength: Int) {
         val current = activity?.get()
-        if (current != null) {
-            val constant = if (strength >= 1) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    HapticFeedbackConstants.CONFIRM
-                } else {
-                    HapticFeedbackConstants.LONG_PRESS
-                }
-            } else {
-                HapticFeedbackConstants.KEYBOARD_TAP
-            }
-            var handled = false
-            current.runOnUiThread {
-                handled = current.window.decorView.performHapticFeedback(constant)
-            }
-            if (handled) return
+        if (current == null) {
+            vibrate(strength)
+            return
         }
-        vibrate(strength)
+        val constant = if (strength >= 1) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                HapticFeedbackConstants.CONFIRM
+            } else {
+                HapticFeedbackConstants.LONG_PRESS
+            }
+        } else {
+            HapticFeedbackConstants.KEYBOARD_TAP
+        }
+        // Ответ `performHapticFeedback` доступен только на UI-потоке, поэтому и
+        // решение о запасном пути принимается там же: читать его снаружи
+        // означало бы гонку с ещё не выполненным Runnable.
+        current.runOnUiThread {
+            if (!current.window.decorView.performHapticFeedback(constant)) vibrate(strength)
+        }
     }
 
     private fun vibrate(strength: Int) {

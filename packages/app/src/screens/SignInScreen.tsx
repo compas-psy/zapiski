@@ -43,7 +43,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
     setBusy(true);
     setFailed(null);
     try {
-      const response = await fetch(`${app.host.cloudBaseUrl}/api/v1/auth/magic-link`, {
+      const response = await fetch(`${app.host.cloudBaseUrl}/auth/magic-link`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -110,7 +110,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
                 />
               }
               onClick={() =>
-                void app.host.openExternal(`${app.host.cloudBaseUrl}/api/v1/auth/yandex`)
+                void app.host.openExternal(`${app.host.cloudBaseUrl}/auth/yandex`)
               }
             >
               {strings.signIn.yandex}

@@ -5,6 +5,7 @@
  * Оба пробела закрываем здесь — иначе каждый тест начинал бы с одной и той же
  * заглушки.
  */
+import { cleanup } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 interface MediaState {
@@ -68,5 +69,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  /* Без globals:true автоочистка не подключается сама, а без неё соседние
+     тесты видят разметку друг друга. */
+  cleanup();
   vi.useRealTimers();
 });

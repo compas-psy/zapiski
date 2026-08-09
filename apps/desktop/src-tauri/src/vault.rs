@@ -362,7 +362,7 @@ mod tests {
         let dir = temporary_dir("subdir");
         let target = dir.join("Проекты").join("Идея.md");
 
-        write_atomic(&dir, &target, b"внутри").expect("запись в новый подкаталог");
+        write_atomic(&dir, &target, "внутри".as_bytes()).expect("запись в новый подкаталог");
         assert_eq!(fs::read(&target).unwrap(), "внутри".as_bytes());
 
         let _ = fs::remove_dir_all(&dir);
@@ -386,7 +386,7 @@ mod tests {
         // Лексическая проверка такой путь пропускает — он «внутри» строкой.
         let target = resolve_in_root(&vault, "архив/Секрет.md").expect("строкой путь валиден");
 
-        let denied = write_atomic(&vault, &target, b"наружу")
+        let denied = write_atomic(&vault, &target, "наружу".as_bytes())
             .expect_err("запись по симлинку наружу должна быть отвергнута");
         assert_eq!(denied.kind(), std::io::ErrorKind::PermissionDenied);
         assert!(!outside.join("Секрет.md").exists(), "файл всё-таки уехал наружу");
@@ -405,7 +405,7 @@ mod tests {
         std::os::unix::fs::symlink(vault.join("Проекты"), vault.join("Ярлык")).unwrap();
 
         let target = resolve_in_root(&vault, "Ярлык/Идея.md").expect("строкой путь валиден");
-        write_atomic(&vault, &target, b"внутри").expect("запись по ссылке внутрь vault'а");
+        write_atomic(&vault, &target, "внутри".as_bytes()).expect("запись по ссылке внутрь vault'а");
         assert_eq!(fs::read(vault.join("Проекты").join("Идея.md")).unwrap(), "внутри".as_bytes());
 
         let _ = fs::remove_dir_all(&dir);

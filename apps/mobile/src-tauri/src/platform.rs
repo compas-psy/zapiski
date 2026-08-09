@@ -18,10 +18,16 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
 /// ОС передала контент в приложение (BEHAVIOR §8).
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub const EVENT_SHARE: &str = "zapiski://share";
 /// Быстрая заметка: плитка Quick Settings или виджет «Записать» 1×1.
 pub const EVENT_QUICK_NOTE: &str = "zapiski://quick-note";
 /// Прогресс скачивания обновления, доля 0…1.
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub const EVENT_UPDATE_PROGRESS: &str = "zapiski://update-progress";
 
 const INBOX_DIR: &str = "inbox";
@@ -72,6 +78,9 @@ fn app() -> Option<&'static AppHandle> {
 
 /// Хэндл приложения для тех, кто пришёл из Java и не имеет доступа к
 /// состоянию Tauri.
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub fn app_handle() -> Option<AppHandle> {
     APP.get().cloned()
 }
@@ -147,6 +156,9 @@ fn take_pending() -> Vec<SharedPayload> {
 }
 
 /// Kotlin сообщил, что в очереди что-то появилось, и приложение живо.
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub fn poke_share() {
     collect_from_disk();
     let Some(handle) = app() else {
@@ -180,6 +192,9 @@ pub fn flush_quick_note() {
     }
 }
 
+/// Используется только Android-веткой (`android.rs`): под linux крейт
+/// собирается ради проверки компиляции, и до этих точек дело не доходит.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub fn emit_update_progress(fraction: f64) {
     if let Some(handle) = app() {
         let _ = handle.emit(EVENT_UPDATE_PROGRESS, fraction);

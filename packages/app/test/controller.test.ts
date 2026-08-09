@@ -116,6 +116,21 @@ describe('отладочное меню воспроизводит матриц�
   });
 });
 
+describe('онбординг — SCREENS §1, шаг 3', () => {
+  it('признак первого запуска живёт до ухода с первой заметки', async () => {
+    const app = await boot();
+    expect(app.getState().firstRun).toBe(false);
+    app.startFirstNote();
+    await app.createNote();
+    /* Открыт редактор — чип шага 3 показывается над текстом. */
+    expect(app.getState().route.name).toBe('note');
+    expect(app.getState().firstRun).toBe(true);
+    app.navigate({ name: 'list' });
+    expect(app.getState().firstRun).toBe(false);
+    app.dispose();
+  });
+});
+
 describe('сортировка запоминается на папку, а не глобально — BEHAVIOR §1.2', () => {
   it('смена режима в одной папке не трогает другую', async () => {
     const app = await boot();

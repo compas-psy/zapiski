@@ -151,6 +151,11 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
 
         <div className="za-editor__surface">
           <div className="za-editor__column">
+            {/* Шаг 3 онбординга — здесь, а не на отдельном экране (SCREENS §1). */}
+            {state.firstRun ? (
+              <span className="za-chip za-chip--success">{strings.onboarding.step3.chip}</span>
+            ) : null}
+
             {/* Чип автозамка расшифрованной заметки (SCREENS §7 `2g`). */}
             {unlocked ? <DecryptedChip lockAt={unlocked.lockAt} /> : null}
 
