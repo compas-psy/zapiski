@@ -9,7 +9,7 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, IconArrowLeft, IconButton, IconCheck, InfoNote, TextField } from '@zapiski/ui';
-import { useApp, useStrings } from '../state/context.js';
+import { useApp, useAppState, useStrings } from '../state/context.js';
 
 type Stage = 'form' | 'sent' | 'expired';
 
@@ -26,12 +26,12 @@ export interface SignInScreenProps {
 
 export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): ReactNode {
   const app = useApp();
+  const state = useAppState();
   const strings = useStrings();
   const [email, setEmail] = useState('');
   const [stage, setStage] = useState<Stage>(initialStage);
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -39,24 +39,19 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
     return () => clearTimeout(timer);
   }, [cooldown]);
 
+  /* Ссылка не сработала — экран переходит в «прислать новую». Модалки нет:
+     ошибка входа не блокирует локальную работу (BEHAVIOR §0). */
+  useEffect(() => {
+    if (state.authError === strings.errors.magicLinkExpired) setStage('expired');
+  }, [state.authError, strings]);
+
   const sendLink = async (): Promise<void> => {
     setBusy(true);
-    setFailed(null);
-    try {
-      const response = await fetch(`${app.host.cloudBaseUrl}/auth/magic-link`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      if (!response.ok) throw new Error(String(response.status));
-      setStage('sent');
-      setCooldown(RESEND_COOLDOWN_S);
-    } catch {
-      /* Сетевая ошибка — текстом на экране, без модалки и без блокировки. */
-      setFailed(strings.errors.syncFailed);
-    } finally {
-      setBusy(false);
-    }
+    const sent = await app.sendMagicLink(email);
+    setBusy(false);
+    if (!sent) return;
+    setStage('sent');
+    setCooldown(RESEND_COOLDOWN_S);
   };
 
   return (
@@ -109,9 +104,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
                   height={20}
                 />
               }
-              onClick={() =>
-                void app.host.openExternal(`${app.host.cloudBaseUrl}/auth/yandex`)
-              }
+              onClick={() => void app.startYandexSignIn()}
             >
               {strings.signIn.yandex}
             </Button>
@@ -130,7 +123,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
             <Button
               variant="secondary"
               fullWidth
-              loading={busy}
+              loading={busy || state.authBusy}
               disabled={!email.includes('@')}
               onClick={() => void sendLink()}
             >
@@ -140,7 +133,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
             <InfoNote tone="success" icon={<IconCheck size={15} />}>
               {strings.signIn.promise}
             </InfoNote>
-            {failed ? <p className="za-muted">{failed}</p> : null}
+            {state.authError !== null ? <p className="za-muted">{state.authError}</p> : null}
           </>
         )}
 

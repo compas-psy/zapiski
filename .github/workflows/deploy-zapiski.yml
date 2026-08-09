@@ -91,10 +91,18 @@ jobs:
         run: |
           set -euo pipefail
           pnpm config set store-dir ~/.pnpm-store
-          if [ -f pnpm-lock.yaml ]; then
-            pnpm install --frozen-lockfile
-          else
+          # Устаревший лок-файл роняет сборку на ПЕРВОМ шаге, до единой строчки
+          # полезной работы, и в логе это выглядит как «сборка упала» — причину
+          # видно только в середине лога. Так была потеряна не одна выкладка.
+          # Поэтому: строгий режим сначала, при расхождении — продолжаем
+          # с громким предупреждением и точной подсказкой, чем чинить.
+          if [ ! -f pnpm-lock.yaml ]; then
             echo "::notice::pnpm-lock.yaml ещё нет — ставим без --frozen-lockfile"
+            pnpm install --no-frozen-lockfile
+          elif pnpm install --frozen-lockfile; then
+            echo 'Лок-файл актуален.'
+          else
+            echo "::warning title=Лок-файл устарел::pnpm-lock.yaml разошёлся с package.json. Выполните «pnpm install» и закоммитьте pnpm-lock.yaml. Сейчас ставим без --frozen-lockfile."
             pnpm install --no-frozen-lockfile
           fi
 
@@ -248,7 +256,10 @@ jobs:
         run: |
           set -euo pipefail
           [ -d apps/web ] || { echo '::notice::apps/web нет — статику не собираем'; exit 0; }
-          pnpm install --frozen-lockfile
+          if ! pnpm install --frozen-lockfile; then
+            echo "::warning title=Лок-файл устарел::pnpm-lock.yaml разошёлся с package.json. Выполните «pnpm install» и закоммитьте pnpm-lock.yaml."
+            pnpm install --no-frozen-lockfile
+          fi
           # `@zapiski/web...` (с многоточием) — собрать пакет ВМЕСТЕ с его
           # зависимостями по графу воркспейса и в правильном порядке, ровно как
           # в preflight. Без многоточия сборка веба зависела бы от того, что

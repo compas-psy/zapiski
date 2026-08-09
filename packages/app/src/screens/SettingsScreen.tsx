@@ -282,9 +282,17 @@ function SyncSection(): ReactNode {
       );
       return;
     }
+    if (id === 'kompas') {
+      /* Облако СИМПАС: вошли — подключаем, не вошли — отправляем входить и
+         возвращаемся сюда же (ТЗ §5.5, аккаунт нужен только для облака). */
+      void app.connectCloud().then((connected) => {
+        if (!connected) app.beginSignIn({ name: 'settings', section: 'sync' });
+      });
+      return;
+    }
     if (id === 'yandex') {
       /* Токен приходит из входа; без него отправляем на экран входа. */
-      app.navigate({ name: 'signin' });
+      app.beginSignIn({ name: 'settings', section: 'sync' });
       return;
     }
     app.navigate({ name: 'paywall' });
@@ -568,7 +576,9 @@ function AccountSection(): ReactNode {
     return (
       <>
         <InfoNote icon={<IconInfo size={15} />}>{copy.noAccount}</InfoNote>
-        <Button onClick={() => app.navigate({ name: 'signin' })}>{copy.signIn}</Button>
+        <Button onClick={() => app.beginSignIn({ name: 'settings', section: 'account' })}>
+          {copy.signIn}
+        </Button>
       </>
     );
   }
@@ -597,7 +607,7 @@ function AccountSection(): ReactNode {
         question={copy.signOutQuestion}
         confirmLabel={copy.signOutConfirm}
         onClose={() => setConfirm(false)}
-        onConfirm={() => app.setAccount(null)}
+        onConfirm={() => void app.signOutCloud()}
       />
     </>
   );

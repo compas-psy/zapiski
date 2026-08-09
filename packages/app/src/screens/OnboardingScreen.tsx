@@ -115,7 +115,9 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
       else await app.openMemoryVault();
 
       if (choice === 'kompas') {
-        app.navigate({ name: 'signin' });
+        /* Вошли — и сразу к заметкам: экран входа не самоцель, а шаг к тому,
+           ради чего входили (SCREENS §1, шаг 2). */
+        app.beginSignIn({ name: 'list' });
         return;
       }
       if (choice === 'own') {
