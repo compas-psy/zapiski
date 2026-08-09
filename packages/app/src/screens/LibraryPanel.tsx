@@ -4,7 +4,15 @@
  * Разделы «Все заметки» / «Закреплённые», деревья папок и тегов со счётчиками
  * (моно, без бейджей-кружков), внизу за разделителем — «Архив» и «Корзина».
  */
-import { useMemo, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from 'react';
 import type { FolderNode } from '@zapiski/core';
 import {
   Button,
@@ -17,10 +25,15 @@ import {
   type TreeNode,
 } from '@zapiski/ui';
 import { IconArchive } from '../components/icons.js';
+import { useLongPress } from '../lib/gestures.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { EmptyBlock, Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
-import { FolderDeleteSheet, FolderNameDialog } from '../components/FolderDialogs.js';
+import {
+  FolderDeleteSheet,
+  FolderNameDialog,
+  FolderPickerDialog,
+} from '../components/FolderDialogs.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
 
 export function LibraryPanel(): ReactNode {
@@ -35,10 +48,55 @@ export function LibraryPanel(): ReactNode {
   const [renaming, setRenaming] = useState<string | null>(null);
   /** Какую папку удаляем. `null` — лист закрыт. */
   const [deleting, setDeleting] = useState<string | null>(null);
+  /** Какую папку переносим. `null` — диалог закрыт. */
+  const [moving, setMoving] = useState<string | null>(null);
+  /** Какой тег переименовываем. `null` — диалог закрыт. */
+  const [renamingTag, setRenamingTag] = useState<string | null>(null);
+
+  /**
+   * Долгое нажатие по узлу дерева — единственный путь к меню папки и тега
+   * (BEHAVIOR §3: «Long-press — меню: Новая подпапка · Переименовать ·
+   * Переместить · Удалить»).
+   *
+   * Без этих строк меню существовало, но открыть его было НЕЧЕМ: `setFolderMenu`
+   * и `setTagMenu` вызывались только с `null` из `onClose`. Три пункта меню
+   * папки и переименование тега были недостижимы из интерфейса — тот самый
+   * класс «код есть, кнопки нет», за который заказчик уже спрашивал.
+   *
+   * Идентификатор узла запоминается на нажатии: `useLongPress` — хук, звать его
+   * в цикле по узлам нельзя, поэтому обработчик один на всё дерево, а узел он
+   * узнаёт из ссылки, выставленной в момент касания.
+   */
+  const haptic = app.host.platform.haptics
+    ? app.host.platform.haptics.impact.bind(app.host.platform.haptics)
+    : undefined;
+  const pressedFolder = useRef<string | null>(null);
+  const pressedTag = useRef<string | null>(null);
+  const openFolderMenu = useCallback(() => setFolderMenu(pressedFolder.current), []);
+  const openTagMenu = useCallback(() => setTagMenu(pressedTag.current), []);
+  const folderPress = useLongPress(openFolderMenu, haptic);
+  const tagPress = useLongPress(openTagMenu, haptic);
+
+  const nodePropsFor = (
+    remember: typeof pressedFolder,
+    press: typeof folderPress,
+  ): ((id: string) => Record<string, unknown>) => (id) => ({
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => {
+      remember.current = id;
+      press.onPointerDown(event);
+    },
+    onPointerUp: press.onPointerUp,
+    onPointerLeave: press.onPointerLeave,
+    onContextMenu: (event: ReactMouseEvent<HTMLElement>) => {
+      remember.current = id;
+      press.onContextMenu(event);
+    },
+  });
 
   const screenState = app.screenState('library', state.folders.length === 0);
 
   const folderNodes = useMemo(() => state.folders.map(toTreeNode), [state.folders]);
+  const folderPaths = useMemo(() => flattenFolders(state.folders), [state.folders]);
   const tagNodes = useMemo(() => buildTagTree(state.tags), [state.tags]);
 
   const activeNotes = state.notes.filter((note) => !note.archived);
@@ -114,6 +172,7 @@ export function LibraryPanel(): ReactNode {
                 label={strings.library.folders}
                 selectedId={state.folder ?? undefined}
                 onSelect={(id) => app.openFolder(id)}
+                nodeProps={nodePropsFor(pressedFolder, folderPress)}
               />
             </>
           ) : null}
@@ -126,6 +185,7 @@ export function LibraryPanel(): ReactNode {
                 label={strings.library.tags}
                 selectedId={state.tag ?? undefined}
                 onSelect={(id) => app.openTag(id)}
+                nodeProps={nodePropsFor(pressedTag, tagPress)}
               />
             </>
           ) : null}
@@ -168,6 +228,7 @@ export function LibraryPanel(): ReactNode {
             onSelect: () => setCreatingIn(folderMenu ?? ''),
           },
           { id: 'rename', label: strings.library.rename, onSelect: () => setRenaming(folderMenu) },
+          { id: 'move', label: strings.library.moveFolder, onSelect: () => setMoving(folderMenu) },
           { id: 'delete', label: strings.library.deleteFolder, onSelect: () => setDeleting(folderMenu) },
         ]}
       />
@@ -189,6 +250,23 @@ export function LibraryPanel(): ReactNode {
         onClose={() => setRenaming(null)}
       />
 
+      <FolderNameDialog
+        open={renamingTag !== null}
+        initial={renamingTag ?? ''}
+        title={strings.library.rename}
+        confirmLabel={strings.library.rename}
+        onConfirm={(name) => void app.renameTag(renamingTag ?? '', name)}
+        onClose={() => setRenamingTag(null)}
+      />
+
+      <FolderPickerDialog
+        open={moving !== null}
+        source={moving ?? ''}
+        folders={folderPaths}
+        onPick={(parent) => void app.moveFolder(moving ?? '', parent)}
+        onClose={() => setMoving(null)}
+      />
+
       <FolderDeleteSheet
         open={deleting !== null}
         name={deleting ? (deleting.split('/').pop() ?? '') : ''}
@@ -205,10 +283,25 @@ export function LibraryPanel(): ReactNode {
         open={tagMenu !== null}
         onClose={() => setTagMenu(null)}
         title={tagMenu ? `#${tagMenu}` : ''}
-        items={[{ id: 'rename', label: strings.library.rename, onSelect: () => undefined }]}
+        items={[
+          { id: 'rename', label: strings.library.rename, onSelect: () => setRenamingTag(tagMenu) },
+        ]}
       />
     </div>
   );
+}
+
+/** Плоский список путей всех папок — для выбора получателя при переносе. */
+function flattenFolders(nodes: readonly FolderNode[]): string[] {
+  const out: string[] = [];
+  const walk = (list: readonly FolderNode[]): void => {
+    for (const node of list) {
+      out.push(node.path);
+      walk(node.children);
+    }
+  };
+  walk(nodes);
+  return out;
 }
 
 function toTreeNode(node: FolderNode): TreeNode {

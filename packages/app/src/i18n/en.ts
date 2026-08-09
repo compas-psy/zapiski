@@ -189,7 +189,9 @@ export const en: AppCatalog = {
     newFolder: 'New folder',
     folderNamePrompt: 'Folder name',
     folderNameDefault: 'New folder',
-    renamedTags: (count: number): string => `Renamed in ${count} ${pl(count, 'note', 'notes')}`,
+    moveFolder: 'Move',
+    moveFolderTitle: 'Move to',
+    moveToRoot: 'To root',
   },
 
   search: {

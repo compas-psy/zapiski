@@ -26,6 +26,8 @@ export const en: Catalog = {
     subscriptionExpired: 'The subscription has ended. Your notes are here, syncing via SIMPAS cloud is paused',
     importPartial: (imported: number, skipped: number): string => `Imported ${imported} · Skipped ${skipped} — show`,
     linksUpdated: (count: number): string => `Links updated: ${count}`,
+    renamedTags: (count: number): string =>
+      `Renamed in ${count} note${count === 1 ? '' : 's'}`,
     noteArchived: 'Note archived · Undo',
     noteTrashed: 'Note moved to trash · Undo',
   },

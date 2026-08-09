@@ -77,6 +77,64 @@ export function FolderNameDialog({
   );
 }
 
+export interface FolderPickerDialogProps {
+  open: boolean;
+  /** Что перемещаем: сама папка и её поддерево из списка исключаются. */
+  source: string;
+  /** Плоский список путей всех папок хранилища. */
+  folders: readonly string[];
+  onPick: (parent: string) => void;
+  onClose: () => void;
+}
+
+/**
+ * Выбор папки-получателя для «Переместить» (BEHAVIOR §3).
+ *
+ * Список плоский, с полными путями: дерево внутри дерева читается хуже, а путь
+ * снимает вопрос «которая из двух „Супервизии“».
+ *
+ * Себя и своё поддерево в списке нет: положить папку внутрь себя — значит
+ * отрезать её от хранилища. Ядро такую попытку и так отклоняет, но показывать
+ * заведомо нерабочий пункт нельзя — это обещание, которое не будет исполнено.
+ */
+export function FolderPickerDialog({
+  open,
+  source,
+  folders,
+  onPick,
+  onClose,
+}: FolderPickerDialogProps): ReactNode {
+  const strings = useStrings();
+  const parent = source.includes('/') ? source.slice(0, source.lastIndexOf('/')) : '';
+  const targets = folders.filter(
+    (path) => path !== source && !path.startsWith(`${source}/`) && path !== parent,
+  );
+
+  const choose = (target: string) => () => {
+    onPick(target);
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={strings.library.moveFolderTitle}>
+      {/* «В корень» не показывается, когда папка уже в корне. */}
+      {parent === '' ? null : (
+        <Button variant="secondary" fullWidth onClick={choose('')}>
+          {strings.library.moveToRoot}
+        </Button>
+      )}
+      {targets.map((path) => (
+        <Button key={path} variant="secondary" fullWidth onClick={choose(path)}>
+          {path}
+        </Button>
+      ))}
+      <Button variant="text" fullWidth onClick={onClose}>
+        {strings.app.cancel}
+      </Button>
+    </Modal>
+  );
+}
+
 export interface FolderDeleteSheetProps {
   open: boolean;
   /** Имя папки — для вопроса. */

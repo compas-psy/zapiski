@@ -734,6 +734,39 @@ export class AppController {
     this.navigate({ name: 'list', tag });
   }
 
+  /**
+   * Переименовать тег во всех заметках. ОО-действие: тост с «Отменить»
+   * (BEHAVIOR §3). Тег живёт в тексте заметки, поэтому отмена — обратная
+   * замена, а не восстановление отдельной записи.
+   *
+   * Возвращает, скольких заметок коснулась замена.
+   */
+  async renameTag(from: string, to: string): Promise<number> {
+    const vault = this.vault;
+    if (!vault) return 0;
+    const result = await vault.renameTag(from, to);
+    await this.refresh();
+    if (!result) return 0;
+
+    const before = from.replace(/^#/, '');
+    const after = to.replace(/^#/, '').trim();
+    /* Открытый фильтр по старому тегу надо перевести на новый: старого больше
+       нет, список опустеет и это будет выглядеть как потеря заметок. Отмена
+       ведёт фильтр обратно по той же причине — иначе после «Отменить» человек
+       упирается в пустой экран вместо вернувшихся заметок. */
+    const following = this.state.tag === before;
+    if (following) this.openTag(after);
+
+    this.undoable({
+      ...result.undo,
+      onAction: async () => {
+        await result.undo.onAction?.();
+        if (following && this.state.tag === after) this.openTag(before);
+      },
+    });
+    return result.changed;
+  }
+
   // ── Папки (BEHAVIOR, дерево папок) ─────────────────────────────────────────
   //
   // До этого места добраться было нельзя: в меню стояло «Новая подпапка»,
@@ -759,10 +792,33 @@ export class AppController {
   async renameFolder(path: string, name: string): Promise<string | null> {
     const vault = this.vault;
     if (!vault) return null;
-    const result = await vault.renameFolder(path, name);
-    /* Открытая заметка могла лежать внутри — путь у неё сменился. */
+    return this.afterFolderRelocated(path, await vault.renameFolder(path, name));
+  }
+
+  /**
+   * Переместить папку в другого родителя — «Переместить» из меню (BEHAVIOR §3).
+   * Пустая строка означает корень хранилища.
+   */
+  async moveFolder(path: string, parent: string): Promise<string | null> {
+    const vault = this.vault;
+    if (!vault) return null;
+    return this.afterFolderRelocated(path, await vault.moveFolder(path, parent));
+  }
+
+  /**
+   * Общий хвост переименования и перемещения: папка сменила путь, и вслед за
+   * ней надо перевести всё, что на неё смотрело.
+   *
+   * Тот самый класс «состояние держит старый путь»: открытая заметка внутри
+   * папки после переезда лежит по новому адресу, и если экран этого не узнает,
+   * следующее автосохранение создаст файл заново по старому.
+   */
+  private async afterFolderRelocated(
+    path: string,
+    result: { to: string; updatedLinks: number },
+  ): Promise<string> {
     if (this.state.route.name === 'note' && this.state.route.id.startsWith(`${path}/`)) {
-      this.noteMoved(this.state.route.id, this.state.route.id.replace(path, result.to));
+      this.noteMoved(this.state.route.id, `${result.to}${this.state.route.id.slice(path.length)}`);
     }
     if (this.state.folder === path) this.patch({ folder: result.to });
     await this.refresh();

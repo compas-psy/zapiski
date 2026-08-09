@@ -1,4 +1,9 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { cx } from '../../internal/cx';
 import { IconChevronRight } from '../../icons';
 import './Special.css';
@@ -22,6 +27,19 @@ export interface TreeProps {
   expandedIds?: readonly string[];
   onToggle?: (id: string, expanded: boolean) => void;
   defaultExpandedIds?: readonly string[];
+  /**
+   * Дополнительные атрибуты на строку узла.
+   *
+   * Через этот шов приложение вешает долгое нажатие: BEHAVIOR §3 открывает
+   * меню папки и тега именно им, а таймер жеста живёт в `@zapiski/app`
+   * (`useLongPress`), куда дизайн-системе ходить нельзя — зависимость идёт в
+   * обратную сторону. Дублировать жест здесь значило бы завести вторую
+   * реализацию с собственным сроком удержания.
+   *
+   * Собственные `onClick` и `onKeyDown` дерева заданы ПОСЛЕ распаковки и
+   * поэтому не перебиваются: выбор узла и стрелки остаются за деревом.
+   */
+  nodeProps?: (id: string) => Partial<ButtonHTMLAttributes<HTMLButtonElement>>;
   className?: string;
 }
 
@@ -34,6 +52,7 @@ export function Tree({
   expandedIds,
   onToggle,
   defaultExpandedIds = [],
+  nodeProps,
   className,
 }: TreeProps): ReactNode {
   const [internal, setInternal] = useState<Set<string>>(() => new Set(defaultExpandedIds));
@@ -60,6 +79,7 @@ export function Tree({
       return (
         <div className="z-tree__group" key={node.id} role="none">
           <button
+            {...nodeProps?.(node.id)}
             type="button"
             role="treeitem"
             aria-level={level + 1}

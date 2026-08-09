@@ -45,6 +45,9 @@ export const ru = {
     importPartial: (imported: number, skipped: number): string => `Импортировано ${imported} · Пропущено ${skipped} — показать`,
     /** Ссылки обновлены */
     linksUpdated: (count: number): string => `Обновлено ссылок: ${count}`,
+    /** Переименование тега — замена во всех заметках (BEHAVIOR §3). */
+    renamedTags: (count: number): string =>
+      `Переименовано в ${count} ${count % 10 === 1 && count % 100 !== 11 ? 'заметке' : 'заметках'}`,
     /** Заметка в архиве */
     noteArchived: 'Заметка в архиве · Отменить',
     /** Заметка удалена */

@@ -203,8 +203,11 @@ export const ru = {
     newFolder: 'Новая папка',
     folderNamePrompt: 'Название папки',
     folderNameDefault: 'Новая папка',
-    renamedTags: (count: number): string =>
-      `Переименовано в ${count} ${plural(count, 'заметке', 'заметках', 'заметках')}`,
+    /** Четвёртый пункт меню папки (BEHAVIOR §3), до этого отсутствовавший. */
+    moveFolder: 'Переместить',
+    moveFolderTitle: 'Куда переместить',
+    /** Верхний уровень хранилища — не «никуда», а осмысленное место. */
+    moveToRoot: 'В корень',
   },
 
   // ── Поиск (SCREENS §6, BEHAVIOR §4) ───────────────────────────────────────

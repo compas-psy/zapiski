@@ -24,7 +24,7 @@ import {
   stemOf,
   TRASH_DIR,
 } from '../util/path.js';
-import { isoDate } from '../util/text.js';
+import { escapeRegExp, isoDate } from '../util/text.js';
 import { readJson, readText, writeAtomic, writeJsonAtomic, writeTextAtomic } from './atomic.js';
 import { attachmentName, safeFileName, uniqueNotePath } from './naming.js';
 import { commitRename, recoverRename, rewriteWikiLinks, wikiTargetFor, type RenameResult } from './rename.js';
@@ -277,11 +277,39 @@ export class Vault {
    */
   async renameFolder(from: VaultPath, name: string): Promise<{ to: VaultPath; updatedLinks: number }> {
     const source = normalizePath(from);
-    const base = safeFileName(name);
-    let target = joinPath(dirName(source), base);
+    return this.relocateFolder(source, dirName(source), safeFileName(name));
+  }
+
+  /**
+   * Перемещение папки в другого родителя — «Переместить» из меню (BEHAVIOR §3).
+   *
+   * Отличается от переименования ровно одним: меняется родитель, а не имя. Всё
+   * остальное — переезд заметок по одной с переписыванием вики-ссылок — то же
+   * самое, поэтому и делается тем же кодом.
+   *
+   * Папку нельзя положить внутрь себя же: получится отрезанное поддерево,
+   * потерянное и для дерева, и для диска. Такая попытка возвращает папку на
+   * месте, без изменений.
+   */
+  async moveFolder(from: VaultPath, parent: VaultPath): Promise<{ to: VaultPath; updatedLinks: number }> {
+    const source = normalizePath(from);
+    const destination = normalizePath(parent);
+    if (destination === source || destination.startsWith(`${source}/`)) {
+      return { to: source, updatedLinks: 0 };
+    }
+    return this.relocateFolder(source, destination, baseName(source));
+  }
+
+  /** Общий переезд папки: и переименование, и перемещение — это он. */
+  private async relocateFolder(
+    source: VaultPath,
+    parent: VaultPath,
+    base: string,
+  ): Promise<{ to: VaultPath; updatedLinks: number }> {
+    let target = joinPath(parent, base);
     if (target === source) return { to: source, updatedLinks: 0 };
     for (let n = 2; n < 10_000 && (await this.storage.stat(target)) !== null; n += 1) {
-      target = joinPath(dirName(source), `${base} ${n}`);
+      target = joinPath(parent, `${base} ${n}`);
     }
 
     await this.storage.mkdir(target);
@@ -629,6 +657,75 @@ export class Vault {
         await this.setArchived(path, false);
       },
     };
+  }
+
+  /**
+   * Переименование тега — замена во ВСЕХ заметках, где он встречается.
+   *
+   * Дерево тегов строится из текстов и напрямую не редактируется: тег живёт в
+   * заметке, а не в отдельном списке. Поэтому «переименовать» здесь значит
+   * переписать `#старый` на `#новый` в каждой заметке — и отменить это тоже
+   * можно только обратной заменой, что и делает ОО-тост (BEHAVIOR §3).
+   *
+   * Вложенные теги переезжают вместе с родителем: переименовав `практика`,
+   * человек ожидает, что `практика/супервизия` тоже станет `работа/супервизия`,
+   * а не осиротеет.
+   *
+   * `null` означает «ни одна заметка не изменилась» — тогда и тоста быть не
+   * должно: сообщение «переименовано в 0 заметках» ничего не сообщает.
+   */
+  async renameTag(
+    from: string,
+    to: string,
+  ): Promise<{ changed: number; undo: UndoableToast } | null> {
+    const changed = await this.replaceTag(from, to);
+    if (changed === 0) return null;
+    return {
+      changed,
+      undo: {
+        message: this.strings.errors.renamedTags(changed),
+        actionLabel: this.strings.actions.undo,
+        onAction: async () => {
+          await this.replaceTag(to, from);
+        },
+      },
+    };
+  }
+
+  /** Одна замена по всем заметкам. Возвращает, скольких она коснулась. */
+  private async replaceTag(from: string, to: string): Promise<number> {
+    const source = from.replace(/^#/, '');
+    const target = to.replace(/^#/, '').trim();
+    if (source === '' || target === '' || source === target) return 0;
+
+    /* `#практика` и `#практика/супервизия` — да; `#практикант` — нет.
+       Граница слева та же, что в разборе тегов, иначе замена заденет
+       `##практика` внутри заголовка и адрес в ссылке. Вложенность держится
+       на просмотре вперёд: после `практика` идёт `/`, он в границу входит,
+       поэтому хвост `/супервизия` остаётся на месте и переезжает с корнем. */
+    const pattern = new RegExp(
+      `(^|[^\\p{L}\\p{N}_/\\\\#])#${escapeRegExp(source)}(?=$|[^\\p{L}\\p{N}_-])`,
+      'gu',
+    );
+
+    let changed = 0;
+    for (const meta of this.index.all()) {
+      /* Зашифрованную заметку читать нечем, пока хранилище заперто, а гадать
+         по шифротексту нельзя. Тег внутри неё останется старым — это честнее
+         молчаливой порчи файла. */
+      if (meta.encrypted) continue;
+      const note = await this.read(meta.path);
+      if (!note) continue;
+      const rewritten = note.body.replace(pattern, (_, before: string) => `${before}#${target}`);
+      if (rewritten === note.body) continue;
+      /* `touch: false` — переименование тега не делает заметку «изменённой
+         только что»: иначе список по дате перетасуется весь разом.
+         `scheduleRename: false` — заголовок не менялся, файлу переезжать
+         некуда. */
+      await this.write(meta.path, rewritten, { touch: false, scheduleRename: false });
+      changed += 1;
+    }
+    return changed;
   }
 
   private async patchMeta(

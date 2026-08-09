@@ -192,6 +192,47 @@ if (canCreateFolder) {
     folders.join(' · ') || 'дерево пусто',
   );
 }
+// ── Меню папки: до него надо ДОТЯНУТЬСЯ ────────────────────────────────────
+//
+// Кнопка «Новая папка» была единственным, что я починил в прошлый раз, и
+// сторож проверял её же. А меню — «Новая подпапка · Переименовать ·
+// Переместить · Удалить» — открыть было нечем: `setFolderMenu` вызывался
+// только с `null`. Здесь проверяется настоящий жест: правый клик по узлу
+// дерева (на desktop это тот же путь, что long-press на телефоне).
+if (canCreateFolder) {
+  const node = page.getByRole('treeitem', { name: /Практика/ }).first();
+  if ((await node.count()) === 0) {
+    check(false, 'созданной папки нет в дереве — меню открывать не на чем');
+  } else {
+    await node.click({ button: 'right' });
+    await page.waitForTimeout(400);
+    const items = await page.getByRole('menuitem').allTextContents();
+    check(items.length > 0, 'меню папки не открылось долгим нажатием');
+    for (const label of ['Новая подпапка', 'Переименовать', 'Переместить', 'Удалить папку']) {
+      check(
+        items.some((text) => text.includes(label)),
+        `в меню папки нет пункта «${label}»`,
+        items.join(' · ') || 'меню пусто',
+      );
+    }
+
+    if (items.length > 0) {
+      await page.getByRole('menuitem', { name: 'Переименовать' }).click();
+      await page.waitForTimeout(300);
+      await page.getByLabel(/Название папки|Folder name/).fill('Супервизии');
+      await page.getByRole('button', { name: /^Переименовать$/ }).last().click();
+      await page.waitForTimeout(900);
+      const folders = await page.$$eval('.z-tree__label', (nodes) =>
+        nodes.map((n) => n.textContent),
+      );
+      check(
+        folders.some((name) => name?.includes('Супервизии')),
+        'папка не переименовалась из меню',
+        folders.join(' · ') || 'дерево пусто',
+      );
+    }
+  }
+}
 // Создание папки уводит В НЕЁ — так и задумано, иначе непонятно, случилось ли
 // что-то. Дальше проверять список заметок бессмысленно: он теперь пуст по делу.
 

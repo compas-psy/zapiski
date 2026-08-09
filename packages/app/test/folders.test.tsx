@@ -77,6 +77,43 @@ describe('папки', () => {
     expect(await app.vaultRef!.storage.read('Практика/Заметка.md')).toBeNull();
   });
 
+  it('перенос кладёт папку в нового родителя вместе с заметками', async () => {
+    const app = await boot({ 'Практика/Заметка.md': '# Заметка\n\nтекст\n' });
+    await app.createFolder('', 'Работа');
+
+    const to = await app.moveFolder('Практика', 'Работа');
+
+    expect(to).toBe('Работа/Практика');
+    expect(app.getState().notes[0]!.path).toBe('Работа/Практика/Заметка.md');
+  });
+
+  it('перенос в корень поднимает папку наверх', async () => {
+    const app = await boot({ 'Работа/Практика/Заметка.md': '# Заметка\n' });
+
+    expect(await app.moveFolder('Работа/Практика', '')).toBe('Практика');
+    expect(app.getState().notes[0]!.path).toBe('Практика/Заметка.md');
+  });
+
+  it('папку нельзя положить внутрь себя — она осталась бы отрезанной', async () => {
+    const app = await boot({ 'Практика/Супервизии/Заметка.md': '# Заметка\n' });
+
+    expect(await app.moveFolder('Практика', 'Практика/Супервизии')).toBe('Практика');
+    expect(app.getState().notes[0]!.path).toBe('Практика/Супервизии/Заметка.md');
+  });
+
+  it('открытая заметка внутри перенесённой папки едет за ней', async () => {
+    const app = await boot({ 'Практика/Заметка.md': '# Заметка\n\nтекст\n' });
+    await app.createFolder('', 'Работа');
+    app.navigate({ name: 'note', id: 'Практика/Заметка.md' });
+
+    await app.moveFolder('Практика', 'Работа');
+
+    // Тот самый класс «состояние держит старый путь»: без этого следующее
+    // автосохранение создало бы файл заново по прежнему адресу.
+    const route = app.getState().route;
+    expect(route.name === 'note' && route.id).toBe('Работа/Практика/Заметка.md');
+  });
+
   it('удаление «с заметками» кладёт их в корзину, а не стирает', async () => {
     const app = await boot({ 'Практика/Заметка.md': '# Заметка\n\nтекст\n' });
 
