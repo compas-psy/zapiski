@@ -100,9 +100,20 @@ const APPLICATION_CHILDREN = `
       FileProvider отдаёт системному установщику скачанный APK.
       Область — только cache/updates (res/xml/file_provider_paths.xml):
       ни vault, ни ключи биометрии наружу не выдаются.
+
+      Имя класса — СВОЙ подкласс UpdatesFileProvider, а не
+      androidx.core.content.FileProvider. Причины две, обе обязательные:
+        1) шаблон Tauri уже объявляет провайдер с именем androidx-класса,
+           и второе объявление с тем же android:name роняет манифест-мержер
+           («Element provider#… duplicated»);
+        2) очевидная альтернатива — слить оба объявления, перечислив
+           authorities через `;` — собирается, но РАСШИРЯЕТ область: у шаблона
+           в путях стоят <external-path path="."/> и <cache-path path="."/>,
+           то есть внешний каталог и кеш целиком. Установщику это не нужно.
+      Подкласс снимает конфликт имён и сохраняет узкую область.
     -->
     <provider
-        android:name="androidx.core.content.FileProvider"
+        android:name=".UpdatesFileProvider"
         android:authorities="\${applicationId}.updates"
         android:exported="false"
         android:grantUriPermissions="true">
@@ -338,7 +349,7 @@ const EXPECTATIONS = [
   ['share-target: текст', 'android:mimeType="text/plain"'],
   ['share-target: картинка', 'android:mimeType="image/*"'],
   ['плитка Quick Settings', 'android.service.quicksettings.action.QS_TILE'],
-  ['FileProvider', 'androidx.core.content.FileProvider'],
+  ['FileProvider', '.UpdatesFileProvider'],
   ['FileProvider: authorities', 'android:authorities="${applicationId}.updates"'],
   ['FileProvider: пути', '@xml/file_provider_paths'],
   ['виджет «Записать»', 'android:name=".QuickNoteWidget"'],
