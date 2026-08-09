@@ -104,23 +104,36 @@ pub async fn vault_write_atomic<R: Runtime>(
 
     let root = state.get().ok_or_else(|| "vault не открыт".to_owned())?;
     let target = resolve_in_root(&root, &relative)?;
-    write_atomic(&target, data).map_err(|error| format!("{}: {error}", target.display()))
+    write_atomic(&root, &target, data).map_err(|error| format!("{}: {error}", target.display()))
 }
 
 /// tmp → fsync → rename. Именно в этом порядке и без возврата управления
 /// наружу между шагами.
-fn write_atomic(target: &Path, data: &[u8]) -> std::io::Result<()> {
+fn write_atomic(root: &Path, target: &Path, data: &[u8]) -> std::io::Result<()> {
     let parent = target.parent().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, "у пути нет каталога")
     })?;
+
+    // Проверка ДО create_dir_all: иначе каталоги создались бы уже по ту
+    // сторону симлинка, и запрет опоздал бы.
+    ensure_inside(root, parent)?;
     fs::create_dir_all(parent)?;
+    // И после: теперь каталог точно существует и раскрывается целиком, а не
+    // до ближайшего существующего предка.
+    ensure_inside(root, parent)?;
 
     let temporary = parent.join(temporary_name(target));
 
     // Блок нужен, чтобы файл закрылся до rename: на Windows переименовать
     // открытый файл нельзя.
     let write_result = (|| -> std::io::Result<()> {
-        let mut file = fs::File::create(&temporary)?;
+        // `create_new`, а не `create`: если по этому имени кто-то успел
+        // положить симлинк, открытие обязано провалиться, а не пройти по
+        // ссылке наружу. Обычный `File::create` симлинк бы разыменовал.
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)?;
         file.write_all(data)?;
         // Без fsync rename может «обогнать» данные: каталожная запись уже
         // указывает на новый файл, а его содержимое ещё в кэше. После
@@ -150,6 +163,58 @@ fn write_atomic(target: &Path, data: &[u8]) -> std::io::Result<()> {
         let _ = dir.sync_all();
     }
 
+    Ok(())
+}
+
+/// Каталог `dir` действительно лежит внутри vault'а — с раскрытием ссылок.
+///
+/// Лексической проверки `resolve_in_root` для этого мало. Она смотрит на
+/// строку, а строка ничего не знает о симлинках и junction'ах: путь
+/// `vault/архив/Идея.md`, где `архив` — ссылка на `C:\Windows\System32`,
+/// проходит её целиком и уводит запись наружу. А ссылку в vault может
+/// положить не только пользователь: vault синхронизируется, и вредоносный
+/// «архив» приезжает с чужого устройства как обычный файл.
+///
+/// Поэтому берём ближайшего **существующего** предка (сам каталог мог ещё не
+/// быть создан), раскрываем его `canonicalize` — то есть проходим все ссылки
+/// до настоящего пути — и сверяем с так же раскрытым корнем. Симлинк внутри
+/// vault'а, ведущий внутрь же vault'а, при этом остаётся разрешённым: он
+/// никуда не уводит.
+fn ensure_inside(root: &Path, dir: &Path) -> std::io::Result<()> {
+    let root = fs::canonicalize(root)?;
+
+    // `symlink_metadata`, а не `exists`: `exists` идёт по ссылке и на висячей
+    // ссылке отвечает «нет», из-за чего мы проскочили бы её и проверили
+    // предка, который уже ни при чём.
+    let mut probe = dir;
+    let anchor = loop {
+        if probe.symlink_metadata().is_ok() {
+            break probe;
+        }
+        match probe.parent() {
+            Some(parent) => probe = parent,
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "не нашли ни одного существующего каталога на пути",
+                ))
+            }
+        }
+    };
+
+    // canonicalize висячей ссылки провалится — и это правильный исход:
+    // писать по ссылке в никуда мы не станем.
+    let anchor = fs::canonicalize(anchor)?;
+    if !anchor.starts_with(&root) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "путь ведёт за пределы vault'а: {} вне {}",
+                anchor.display(),
+                root.display()
+            ),
+        ));
+    }
     Ok(())
 }
 
@@ -261,16 +326,24 @@ mod tests {
         assert!(percent_decode("%D0").is_err());
     }
 
+    /// Свой каталог на каждый тест: тесты идут в потоках одного процесса, и
+    /// общий каталог они бы делили.
+    fn temporary_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("zapiski-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("каталог для теста");
+        dir
+    }
+
     #[test]
     fn запись_атомарна_и_перезаписывает() {
-        let dir = std::env::temp_dir().join(format!("zapiski-test-{}", std::process::id()));
-        let _ = fs::create_dir_all(&dir);
+        let dir = temporary_dir("write");
         let target = dir.join("Заметка.md");
 
-        write_atomic(&target, b"first").expect("первая запись");
+        write_atomic(&dir, &target, b"first").expect("первая запись");
         assert_eq!(fs::read(&target).unwrap(), b"first");
 
-        write_atomic(&target, b"second").expect("перезапись");
+        write_atomic(&dir, &target, b"second").expect("перезапись");
         assert_eq!(fs::read(&target).unwrap(), b"second");
 
         // Временных файлов после успешной записи не остаётся.
@@ -280,6 +353,60 @@ mod tests {
             .filter(|entry| entry.file_name().to_string_lossy().ends_with(".tmp"))
             .collect();
         assert!(leftovers.is_empty(), "временный файл не убран");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn создаёт_подкаталоги_внутри_vault() {
+        let dir = temporary_dir("subdir");
+        let target = dir.join("Проекты").join("Идея.md");
+
+        write_atomic(&dir, &target, b"внутри").expect("запись в новый подкаталог");
+        assert_eq!(fs::read(&target).unwrap(), "внутри".as_bytes());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Регрессия на обход строковой проверки корня симлинком.
+    ///
+    /// Симлинк внутрь vault'а мог приехать синхронизацией с чужого
+    /// устройства, поэтому проверка не может опираться на то, что содержимое
+    /// vault'а создавал сам пользователь.
+    #[cfg(unix)]
+    #[test]
+    fn не_пишет_по_симлинку_наружу() {
+        let dir = temporary_dir("symlink");
+        let vault = dir.join("vault");
+        let outside = dir.join("снаружи");
+        fs::create_dir_all(&vault).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, vault.join("архив")).unwrap();
+
+        // Лексическая проверка такой путь пропускает — он «внутри» строкой.
+        let target = resolve_in_root(&vault, "архив/Секрет.md").expect("строкой путь валиден");
+
+        let denied = write_atomic(&vault, &target, b"наружу")
+            .expect_err("запись по симлинку наружу должна быть отвергнута");
+        assert_eq!(denied.kind(), std::io::ErrorKind::PermissionDenied);
+        assert!(!outside.join("Секрет.md").exists(), "файл всё-таки уехал наружу");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Симлинк, ведущий внутрь того же vault'а, остаётся разрешённым: он
+    /// никуда не уводит, и запрещать его значило бы ломать рабочие раскладки.
+    #[cfg(unix)]
+    #[test]
+    fn разрешает_симлинк_внутрь_vault() {
+        let dir = temporary_dir("symlink-inside");
+        let vault = dir.join("vault");
+        fs::create_dir_all(vault.join("Проекты")).unwrap();
+        std::os::unix::fs::symlink(vault.join("Проекты"), vault.join("Ярлык")).unwrap();
+
+        let target = resolve_in_root(&vault, "Ярлык/Идея.md").expect("строкой путь валиден");
+        write_atomic(&vault, &target, b"внутри").expect("запись по ссылке внутрь vault'а");
+        assert_eq!(fs::read(vault.join("Проекты").join("Идея.md")).unwrap(), "внутри".as_bytes());
 
         let _ = fs::remove_dir_all(&dir);
     }

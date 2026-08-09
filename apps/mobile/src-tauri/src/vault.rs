@@ -70,6 +70,13 @@ pub fn vault_open<R: Runtime>(
         .map_err(|error| format!("не удалось выдать доступ к {}: {error}", root.display()))?;
 
     state.set(root.clone());
+
+    // Открытие vault'а — первое, что делает приложение на старте, и к этому
+    // моменту фронтенд уже подписан на события. Поэтому именно здесь
+    // взводится отложенная «быстрая заметка»: раньше событие ушло бы в
+    // пустоту (BEHAVIOR §8, плитка Quick Settings поднимает приложение с нуля).
+    crate::platform::flush_quick_note();
+
     Ok(root.to_string_lossy().into_owned())
 }
 

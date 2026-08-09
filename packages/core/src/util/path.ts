@@ -59,18 +59,50 @@ export function stemOf(path: VaultPath): string {
   return idx <= 0 ? base : base.slice(0, idx);
 }
 
+/**
+ * Сравнение путей и расширений — БЕЗ учёта регистра.
+ *
+ * Windows (NTFS) и macOS (APFS по умолчанию) регистр в именах не различают:
+ * `.ZAPISKI/index.json` и `.zapiski/index.json` там один и тот же файл.
+ * Регистрозависимая проверка на таких системах пропускала бы служебный путь
+ * в дерево заметок — а запись по нему затирала бы настоящий снапшот индекса.
+ * Вектор не теоретический: имена приходят из `list()` бэкенда синхронизации,
+ * то есть управляются противоположной стороной.
+ *
+ * По той же причине `.MD` обязан распознаваться как заметка: файл, созданный
+ * другим редактором на Windows, иначе просто не появился бы в списке.
+ */
+function lower(value: string): string {
+  return value.toLowerCase();
+}
+
 export function isNotePath(path: VaultPath): boolean {
-  return path.endsWith('.md') || path.endsWith('.md.enc');
+  const p = lower(path);
+  return p.endsWith('.md') || p.endsWith('.md.enc');
 }
 
 export function isEncryptedPath(path: VaultPath): boolean {
-  return path.endsWith('.md.enc');
+  return lower(path).endsWith('.md.enc');
 }
 
-/** Служебные пути (`.zapiski/...`) в дерево заметок не попадают. */
+/**
+ * Служебные пути (`.zapiski/...`) в дерево заметок не попадают.
+ *
+ * Проверка намеренно параноидальная: помимо регистра снимаются точки и
+ * пробелы в конце каждого сегмента. Windows отбрасывает их при открытии
+ * файла, поэтому `.zapiski.` и `.zapiski ` ведут в тот же каталог, а
+ * простое сравнение строк их пропускало.
+ *
+ * Ложное срабатывание здесь безопасно: заметка со странным именем вида
+ * `.zapiski.` просто не попадёт в список. Пропуск же означает, что чужие
+ * байты запишутся поверх служебных файлов vault'а.
+ */
 export function isMetaPath(path: VaultPath): boolean {
-  const normalized = normalizePath(path);
-  return normalized === META_DIR || normalized.startsWith(`${META_DIR}/`);
+  const meta = lower(META_DIR);
+  const segments = lower(normalizePath(path))
+    .split('/')
+    .map((segment) => segment.replace(/[. ]+$/, ''));
+  return segments[0] === meta;
 }
 
 export function isInside(dir: VaultPath, path: VaultPath): boolean {

@@ -126,31 +126,39 @@ describe('normalizePath: выход за корень vault’а', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('SEC-022: .zapiski защищён сравнением строк, а ФС регистр не различает', () => {
-  it('[ДЕФЕКТ] isMetaPath пропускает служебный путь в другом регистре', () => {
+  // ИСПРАВЛЕНО. Ниже — регрессия: проверки сформулированы как желаемое
+  // свойство и обязаны проходить. Если они снова покраснеют, значит фильтр
+  // служебного каталога опять стал регистрозависимым.
+
+  it('[SEC-022] isMetaPath ловит служебный путь в любом регистре', () => {
     expect(isMetaPath('.zapiski/index.json')).toBe(true);
-    // На NTFS и APFS это ТОТ ЖЕ файл, но фильтр считает его обычной заметкой.
-    expect(isMetaPath('.ZAPISKI/index.json')).toBe(false);
-    expect(isMetaPath('.Zapiski/index.json')).toBe(false);
+    // На NTFS и APFS это ТОТ ЖЕ файл — фильтр обязан его узнать.
+    expect(isMetaPath('.ZAPISKI/index.json')).toBe(true);
+    expect(isMetaPath('.Zapiski/index.json')).toBe(true);
+    // Обычные заметки служебными не становятся.
+    expect(isMetaPath('Заметка.md')).toBe(false);
+    expect(isMetaPath('zapiski.md')).toBe(false);
   });
 
-  it('[ДЕФЕКТ] враждебный сервер синка переписывает индекс vault’а', async () => {
+  it('[SEC-022] враждебный сервер синка не переписывает индекс vault’а', async () => {
     const storage = new CaseInsensitiveStorage({ files: { 'Заметка.md': '# Заметка\n' } });
     await syncFrom(storage, { '.ZAPISKI/index.json': '{"отравлено":true}' });
-    // Приложение прочитает это как свой снапшот индекса.
-    expect(text(await storage.read('.zapiski/index.json'))).toContain('отравлено');
+
+    // Сверяем не «файл не изменился», а «в файле нет байтов противника»:
+    // vault при открытии законно пишет собственный снапшот индекса, и
+    // требование неизменности ловило бы эту штатную запись как атаку.
+    const after = text(await storage.read('.zapiski/index.json'));
+    expect(after).not.toContain('отравлено');
+
+    // И payload не осел где-то ещё под своим именем.
+    expect(text(await storage.read('.ZAPISKI/index.json'))).not.toContain('отравлено');
   });
 
-  it.fails('[SEC-022] служебный каталог закрыт независимо от регистра', async () => {
-    const storage = new CaseInsensitiveStorage({ files: { 'Заметка.md': '# Заметка\n' } });
-    const before = text(await storage.read('.zapiski/index.json'));
-    await syncFrom(storage, { '.ZAPISKI/index.json': '{"отравлено":true}' });
-    expect(text(await storage.read('.zapiski/index.json'))).toBe(before);
-  });
-
-  it.fails('[SEC-022] Windows срезает точки и пробелы в конце — фильтр обязан это учитывать', () => {
+  it('[SEC-022] Windows срезает точки и пробелы в конце — фильтр это учитывает', () => {
     // `.zapiski.` и `.zapiski ` на Windows открывают каталог `.zapiski`.
     expect(isMetaPath('.zapiski./config.json')).toBe(true);
     expect(isMetaPath('.zapiski /config.json')).toBe(true);
+    expect(isMetaPath('.ZAPISKI. /crdt/x.bin')).toBe(true);
   });
 });
 

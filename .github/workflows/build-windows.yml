@@ -28,21 +28,24 @@ name: Сборка Windows
 # установщик, который клиент проверяет публичным ключом из tauri.conf.json.
 
 on:
+  # Только теги. Фильтра `paths` здесь намеренно нет: GitHub требует
+  # совпадения ОБОИХ фильтров сразу, и тег, поставленный на коммит без
+  # изменений в apps/desktop, тихо не запустил бы релиз — а узнали бы мы об
+  # этом, когда пользователи не увидели обновления.
   push:
+    tags:
+      - 'v*'
+  # Изменения проверяются на pull request: раннер windows-latest считается по
+  # двойному тарифу, и гонять его на каждый push в main незачем — до main
+  # изменение доезжает через PR, уже собранным.
+  pull_request:
     branches: ["main"]
     paths:
       - 'apps/desktop/**'
       - 'packages/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/build-windows.yml'
-    tags:
-      - 'v*'
-  pull_request:
-    branches: ["main"]
-    paths:
-      - 'apps/desktop/**'
-      - 'packages/**'
-      - '.github/workflows/build-windows.yml'
+  # Ручной запуск — для проверки сборки на ветке без PR.
   workflow_dispatch:
 
 permissions:

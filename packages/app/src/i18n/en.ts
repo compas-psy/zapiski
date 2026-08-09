@@ -109,7 +109,6 @@ export const en: AppCatalog = {
     emptyTitle: 'It is quiet here',
     emptyText: 'The first thought takes two seconds',
     emptyFolderTitle: 'This folder is empty',
-    offlineChip: 'Offline · everything is saved locally',
     sortMenu: 'Sorting',
     sort: {
       updated: 'By date modified',

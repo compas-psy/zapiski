@@ -404,16 +404,15 @@ mod api {
         platform::emit_update_progress(fraction);
     }
 
-    /// ОС передала контент через «Поделиться» (BEHAVIOR §8).
+    /// В очереди share-target что-то появилось (BEHAVIOR §8). Полезной
+    /// нагрузки нет намеренно: контент уже лежит в файле очереди, и забрать
+    /// его оттуда — единственный способ не отдать одну картинку дважды.
     #[no_mangle]
     pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeShare(
-        mut env: JNIEnv,
+        _env: JNIEnv,
         _this: JObject,
-        json: JString,
     ) {
-        if let Ok(value) = env.get_string(&json) {
-            platform::accept_share(&String::from(value));
-        }
+        platform::poke_share();
     }
 
     /// Плитка Quick Settings или виджет «Записать».

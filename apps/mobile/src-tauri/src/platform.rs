@@ -1,7 +1,17 @@
 //! Мелочи платформы, которые нельзя сделать из webview: FLAG_SECURE, хэптика,
 //! доставка share-payload и события фронтенду.
+//!
+//! Share-target и быстрая заметка приходят из **другого процессного
+//! состояния**: «поделиться» и плитка Quick Settings умеют поднимать
+//! приложение с нуля. Поэтому и то и другое сначала ложится файлом в
+//! `inbox/` (это делает Kotlin), а Rust забирает файл, когда фронтенд уже
+//! готов. Живому приложению Kotlin дополнительно стучится через JNI, чтобы
+//! контент попал в заметку сразу, а не при следующем запуске.
+//!
+//! Очередь всегда забирается через `rename`: Kotlin с этого момента пишет в
+//! новый файл, и одна и та же картинка не попадёт в заметку дважды.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
@@ -14,21 +24,21 @@ pub const EVENT_QUICK_NOTE: &str = "zapiski://quick-note";
 /// Прогресс скачивания обновления, доля 0…1.
 pub const EVENT_UPDATE_PROGRESS: &str = "zapiski://update-progress";
 
+const INBOX_DIR: &str = "inbox";
+const SHARE_QUEUE: &str = "share.jsonl";
+const SHARE_TAKEN: &str = "share.taken.jsonl";
+/// Пустой файл-отметка: пользователь нажал «Записать».
+const QUICK_NOTE_MARK: &str = "quick-note";
+
 static APP: OnceLock<AppHandle> = OnceLock::new();
 
-/// Очередь share-payload'ов: «поделиться» может поднять приложение с нуля, и
-/// тогда контент приходит раньше, чем фронтенд успевает подписаться.
-static INBOX: OnceLock<Mutex<Vec<SharedPayload>>> = OnceLock::new();
+/// Разобранные payload'ы, которые ещё никому не отдали.
+static PENDING: Mutex<Vec<SharedPayload>> = Mutex::new(Vec::new());
+/// Забор очереди — «прочитать и опустошить», двумя потоками сразу нельзя.
+static DRAIN_LOCK: Mutex<()> = Mutex::new(());
 
-/// Тап по плитке произошёл до готовности фронтенда — событие ждёт своего часа.
-static QUICK_NOTE_PENDING: AtomicBool = AtomicBool::new(false);
-
-fn inbox() -> &'static Mutex<Vec<SharedPayload>> {
-    INBOX.get_or_init(|| Mutex::new(Vec::new()))
-}
-
-/// То, что присылает Kotlin. Картинку он кладёт во временный файл и передаёт
-/// путь: гонять мегабайты фотографии через JNI-строку незачем.
+/// То, что пишет Kotlin. Картинку он кладёт во временный файл и передаёт
+/// путь: гонять мегабайты фотографии через JNI незачем.
 #[derive(Deserialize)]
 struct SharedIntent {
     kind: String,
@@ -54,9 +64,6 @@ pub struct SharedPayload {
 
 pub fn remember_app(handle: AppHandle) {
     let _ = APP.set(handle);
-    if QUICK_NOTE_PENDING.swap(false, Ordering::Relaxed) {
-        emit_quick_note();
-    }
 }
 
 fn app() -> Option<&'static AppHandle> {
@@ -69,17 +76,24 @@ pub fn app_handle() -> Option<AppHandle> {
     APP.get().cloned()
 }
 
-/// Разобрать JSON от Kotlin и положить payload в очередь + отправить событие.
+fn inbox_dir() -> Option<PathBuf> {
+    crate::android::files_dir()
+        .ok()
+        .flatten()
+        .map(|base| PathBuf::from(base).join(INBOX_DIR))
+}
+
+/// Разобрать одну строку очереди. Отдельная функция — потому что это
+/// единственное место, где мы доверяем данным из чужого приложения, и его
+/// нужно уметь проверить тестом.
 ///
 /// Разбор терпимый: неизвестный `kind` или битый JSON просто игнорируются.
-/// Уронить приложение из-за странного intent'а от другой программы нельзя —
-/// intent приходит извне и доверия к нему нет.
-pub fn accept_share(json: &str) {
-    let Ok(intent) = serde_json::from_str::<SharedIntent>(json) else {
-        return;
-    };
+/// Уронить приложение из-за странного intent'а нельзя — intent приходит
+/// извне, и доверия к нему нет.
+fn parse_intent(line: &str) -> Option<SharedPayload> {
+    let intent: SharedIntent = serde_json::from_str(line).ok()?;
     if !matches!(intent.kind.as_str(), "text" | "link" | "image") {
-        return;
+        return None;
     }
 
     // Картинка приезжает файлом: читаем и сразу убираем за собой — временная
@@ -90,28 +104,79 @@ pub fn accept_share(json: &str) {
         data
     });
 
-    let payload = SharedPayload {
+    Some(SharedPayload {
         kind: intent.kind,
         text: intent.text,
         url: intent.url,
         bytes,
         mime: intent.mime,
+    })
+}
+
+/// Забрать файл очереди и разложить его в память.
+fn collect_from_disk() {
+    let _guard = DRAIN_LOCK.lock();
+    let Some(directory) = inbox_dir() else {
+        return;
     };
 
-    if let Ok(mut queue) = inbox().lock() {
-        queue.push(payload.clone());
+    let queue = directory.join(SHARE_QUEUE);
+    let taken = directory.join(SHARE_TAKEN);
+    if std::fs::rename(&queue, &taken).is_err() {
+        return;
     }
-    if let Some(handle) = app() {
+    let content = std::fs::read_to_string(&taken).unwrap_or_default();
+    let _ = std::fs::remove_file(&taken);
+
+    let parsed: Vec<SharedPayload> = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .filter_map(parse_intent)
+        .collect();
+
+    if let Ok(mut pending) = PENDING.lock() {
+        pending.extend(parsed);
+    }
+}
+
+fn take_pending() -> Vec<SharedPayload> {
+    PENDING
+        .lock()
+        .map(|mut queue| std::mem::take(&mut *queue))
+        .unwrap_or_default()
+}
+
+/// Kotlin сообщил, что в очереди что-то появилось, и приложение живо.
+pub fn poke_share() {
+    collect_from_disk();
+    let Some(handle) = app() else {
+        return;
+    };
+    for payload in take_pending() {
         let _ = handle.emit(EVENT_SHARE, payload);
     }
 }
 
+/// Тап по плитке Quick Settings или виджету «Записать» при живом приложении.
 pub fn emit_quick_note() {
-    match app() {
-        Some(handle) => {
-            let _ = handle.emit(EVENT_QUICK_NOTE, ());
-        }
-        None => QUICK_NOTE_PENDING.store(true, Ordering::Relaxed),
+    if let Some(handle) = app() {
+        let _ = handle.emit(EVENT_QUICK_NOTE, ());
+    }
+}
+
+/// Отметка «нажали „Записать“», оставленная до запуска приложения.
+///
+/// Проверяется в момент, когда фронтенд заведомо жив, — то есть из команд,
+/// которые он зовёт на старте. Отправлять событие раньше бессмысленно:
+/// подписчиков ещё нет, и событие потеряется.
+pub fn flush_quick_note() {
+    let Some(directory) = inbox_dir() else {
+        return;
+    };
+    let mark = directory.join(QUICK_NOTE_MARK);
+    if mark.exists() {
+        let _ = std::fs::remove_file(&mark);
+        emit_quick_note();
     }
 }
 
@@ -129,10 +194,9 @@ pub fn emit_update_progress(fraction: f64) {
 /// контент в заметку не попадёт.
 #[tauri::command(async)]
 pub fn share_take() -> Vec<SharedPayload> {
-    inbox()
-        .lock()
-        .map(|mut queue| std::mem::take(&mut *queue))
-        .unwrap_or_default()
+    collect_from_disk();
+    flush_quick_note();
+    take_pending()
 }
 
 /// FLAG_SECURE (BEHAVIOR §5.3, приёмочный критерий №7).
@@ -160,26 +224,23 @@ pub fn haptic_impact(strength: String) -> Result<(), String> {
 mod tests {
     use super::*;
 
-    /// Один тест на всю очередь: она глобальная, а тесты в Rust идут
-    /// параллельно — два теста на одном INBOX мешали бы друг другу.
     #[test]
-    fn очередь_share_принимает_своё_и_отвергает_чужое() {
-        // Битый JSON и неизвестный тип не должны ни падать, ни попадать в
-        // очередь: intent приходит от произвольного приложения.
-        accept_share("не json");
-        accept_share(r#"{"kind":"video"}"#);
-        assert!(inbox().lock().unwrap().is_empty());
+    fn принимает_текст_и_ссылку() {
+        let text = parse_intent(r#"{"kind":"text","text":"Привет"}"#).expect("текст");
+        assert_eq!(text.kind, "text");
+        assert_eq!(text.text.as_deref(), Some("Привет"));
 
-        accept_share(r#"{"kind":"text","text":"Привет"}"#);
-        accept_share(r#"{"kind":"link","url":"https://cmpas.ru","text":"КОМПАС"}"#);
+        let link = parse_intent(r#"{"kind":"link","url":"https://cmpas.ru","text":"КОМПАС"}"#)
+            .expect("ссылка");
+        assert_eq!(link.url.as_deref(), Some("https://cmpas.ru"));
+    }
 
-        let taken = share_take();
-        assert_eq!(taken.len(), 2);
-        assert_eq!(taken[0].kind, "text");
-        assert_eq!(taken[0].text.as_deref(), Some("Привет"));
-        assert_eq!(taken[1].url.as_deref(), Some("https://cmpas.ru"));
-
-        // Очередь опустела: тот же контент не попадёт в заметку дважды.
-        assert!(share_take().is_empty());
+    #[test]
+    fn отвергает_чужое_и_битое() {
+        // Битый JSON, обрыв записи и незнакомый тип не должны ни падать, ни
+        // попадать в очередь: intent приходит от произвольного приложения.
+        assert!(parse_intent("не json").is_none());
+        assert!(parse_intent(r#"{"kind":"text","te"#).is_none());
+        assert!(parse_intent(r#"{"kind":"video","path":"/sdcard/x.mp4"}"#).is_none());
     }
 }

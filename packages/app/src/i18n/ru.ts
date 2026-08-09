@@ -119,7 +119,6 @@ export const ru = {
     emptyTitle: 'Здесь пока тихо',
     emptyText: 'Первая мысль появится за две секунды',
     emptyFolderTitle: 'В этой папке пусто',
-    offlineChip: 'Оффлайн · всё сохранено локально',
     sortMenu: 'Сортировка',
     sort: {
       updated: 'По дате изменения',
