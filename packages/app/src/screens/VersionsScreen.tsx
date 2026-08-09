@@ -103,8 +103,8 @@ export function VersionsScreen({ noteId }: VersionsScreenProps): ReactNode {
 
 /** Построчный diff версии и текущего текста. */
 function toDiffLines(from: string, to: string): DiffLine[] {
-  const edits = diffText(from, to);
-  if (edits.length === 0) {
+  /* `diffText` возвращает null, если тексты совпали посимвольно. */
+  if (diffText(from, to) === null) {
     return to.split('\n').map((text) => ({ type: 'context', text }));
   }
   const lines: DiffLine[] = [];

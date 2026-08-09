@@ -27,7 +27,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .manage(vault::VaultRoot::default())
-        .manage(platform::Inbox::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_open,
             vault::vault_root,

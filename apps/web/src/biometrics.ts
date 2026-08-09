@@ -16,7 +16,7 @@ import type { BiometricProvider } from '@zapiski/core';
 const DB_NAME = 'zapiski';
 const STORE = 'biometrics';
 /** Соль PRF: фиксированная, различает назначения вывода, секретом не является. */
-const PRF_SALT = new TextEncoder().encode('zapiski.note-key.v1');
+const PRF_SALT: ArrayBuffer = toBuffer(new TextEncoder().encode('zapiski.note-key.v1'));
 
 interface Enrollment {
   credentialId: ArrayBuffer;
@@ -74,12 +74,8 @@ export function createWebAuthnBiometrics(): BiometricProvider | null {
 
       const key = await importWrapKey(output);
       const iv = randomBytes(12);
-      const wrapped = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv },
-        key,
-        secret.slice().buffer as ArrayBuffer,
-      );
-      await put(keyId, { credentialId: created.rawId, iv: iv.buffer as ArrayBuffer, wrapped });
+      const wrapped = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, toBuffer(secret));
+      await put(keyId, { credentialId: created.rawId, iv: iv.buffer, wrapped });
     },
 
     /** `null` — пользователь отменил или ключа нет. Отмена не ошибка (§5.2). */
@@ -91,7 +87,7 @@ export function createWebAuthnBiometrics(): BiometricProvider | null {
       try {
         const key = await importWrapKey(output);
         const plain = await crypto.subtle.decrypt(
-          { name: 'AES-GCM', iv: new Uint8Array(record.iv) },
+          { name: 'AES-GCM', iv: record.iv },
           key,
           record.wrapped,
         );
@@ -117,7 +113,7 @@ async function evaluatePrf(credentialId: ArrayBuffer): Promise<Uint8Array | null
         userVerification: 'required',
         allowCredentials: [{ type: 'public-key', id: credentialId }],
         extensions: {
-          prf: { eval: { first: PRF_SALT.slice().buffer } },
+          prf: { eval: { first: PRF_SALT } },
         } as AuthenticationExtensionsClientInputs,
       },
     })) as PublicKeyCredential | null;
@@ -132,12 +128,21 @@ async function evaluatePrf(credentialId: ArrayBuffer): Promise<Uint8Array | null
 }
 
 async function importWrapKey(material: Uint8Array): Promise<CryptoKey> {
-  const digest = await crypto.subtle.digest('SHA-256', material.slice().buffer as ArrayBuffer);
+  const digest = await crypto.subtle.digest('SHA-256', toBuffer(material));
   return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
-function randomBytes(length: number): Uint8Array {
-  return crypto.getRandomValues(new Uint8Array(length));
+/** Байты со СВОИМ `ArrayBuffer`: WebCrypto не принимает вид на SharedArrayBuffer. */
+function randomBytes(length: number): Uint8Array<ArrayBuffer> {
+  const bytes = new Uint8Array(new ArrayBuffer(length));
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
+
+function toBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(new ArrayBuffer(bytes.byteLength));
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 /* ── IndexedDB ────────────────────────────────────────────────────────────── */

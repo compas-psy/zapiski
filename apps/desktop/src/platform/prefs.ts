@@ -4,7 +4,8 @@
  * vault'е: vault синхронизируется между устройствами, а тема — свойство
  * конкретной машины.
  */
-import { load, type Store, type UnlistenFn } from '@tauri-apps/plugin-store';
+import type { UnlistenFn } from '@tauri-apps/api/event';
+import { load, type Store } from '@tauri-apps/plugin-store';
 import type { PreferencesStore } from '@zapiski/app';
 
 const FILE = 'prefs.json';

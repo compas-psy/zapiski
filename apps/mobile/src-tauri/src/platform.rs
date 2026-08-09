@@ -154,17 +154,16 @@ pub fn haptic_impact(strength: String) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// Один тест на всю очередь: она глобальная, а тесты в Rust идут
+    /// параллельно — два теста на одном INBOX мешали бы друг другу.
     #[test]
-    fn игнорирует_чужой_intent() {
+    fn очередь_share_принимает_своё_и_отвергает_чужое() {
         // Битый JSON и неизвестный тип не должны ни падать, ни попадать в
         // очередь: intent приходит от произвольного приложения.
         accept_share("не json");
         accept_share(r#"{"kind":"video"}"#);
         assert!(inbox().lock().unwrap().is_empty());
-    }
 
-    #[test]
-    fn принимает_текст_и_ссылку() {
         accept_share(r#"{"kind":"text","text":"Привет"}"#);
         accept_share(r#"{"kind":"link","url":"https://cmpas.ru","text":"КОМПАС"}"#);
 

@@ -456,8 +456,13 @@ function SecuritySection(): ReactNode {
 
 function TransferSection(): ReactNode {
   const app = useApp();
+  const state = useAppState();
   const strings = useStrings();
   const copy = strings.settings.transfer;
+  const [busy, setBusy] = useState(false);
+
+  /* Экспортируем ту заметку, что открыта; иначе — последнюю открытую. */
+  const notePath = state.route.name === 'note' ? state.route.id : (state.lastOpened[0] ?? null);
 
   return (
     <>
@@ -468,11 +473,39 @@ function TransferSection(): ReactNode {
       <p className="za-muted">{strings.importer.neverOverwrites}</p>
 
       <Section>{copy.exportTitle}</Section>
-      <Button variant="secondary" onClick={() => undefined}>
+      {notePath !== null ? (
+        <div className="za-field-row">
+          {(['md', 'html', 'docx', 'pdf'] as const).map((format) =>
+            /* PDF печатает платформа. Порта нет — пункта тоже нет, не «серый». */
+            format === 'pdf' && !app.host.pdf ? null : (
+              <Button
+                key={format}
+                variant="secondary"
+                size="compact"
+                disabled={busy}
+                onClick={() => void run(() => app.exportNoteAs(notePath, format))}
+              >
+                {copy.formats[format]}
+              </Button>
+            ),
+          )}
+        </div>
+      ) : null}
+
+      <Button variant="secondary" loading={busy} onClick={() => void run(() => app.exportAll())}>
         {copy.exportAll}
       </Button>
     </>
   );
+
+  async function run(action: () => Promise<void>): Promise<void> {
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  }
 }
 
 function StorageSection(): ReactNode {

@@ -541,6 +541,19 @@
   color: var(--text-tertiary);
 }
 
+/* Выбор папки в share-target и мастере импорта (SCREENS §10b `4f`) */
+.za-select {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-8) var(--sp-12);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-md);
+  background-color: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-control-sm);
+}
+
 .za-card {
   box-sizing: border-box;
   inline-size: 100%;

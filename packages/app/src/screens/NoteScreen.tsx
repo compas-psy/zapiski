@@ -41,6 +41,7 @@ import {
   IconWikiLink,
 } from '../components/icons.js';
 import { useApp, useAppState, useLayout, useStrings } from '../state/context.js';
+import { setActiveEditor } from '../state/active-editor.js';
 import { NoteSkeleton } from '../components/ScreenStates.js';
 import { LockScreen } from './LockScreen.js';
 import { InfoPanel } from './InfoPanel.js';
@@ -83,6 +84,13 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       if (isEncryptedPath(path)) app.lockNote(path);
     };
   }, [app, path]);
+
+  /* Палитра команд и хоткеи оболочки выполняют команды над этим представлением
+     (`editorCommands`, а не копией списка). */
+  useEffect(() => {
+    setActiveEditor(editorRef.current);
+    return () => setActiveEditor(null);
+  }, [path, loading]);
 
   /* Навигация «назад» и закрытие — принудительное сохранение (BEHAVIOR §0). */
   const flush = useCallback(() => editorRef.current?.save(), []);
@@ -336,7 +344,8 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     return () => {
       const view = editorRef.current?.view;
       if (!view) return;
-      editorCommands.find((item) => item.id === id)?.run(view);
+      const run = editorCommands.find((item) => item.id === id)?.run;
+      run?.(view);
     };
   }
 

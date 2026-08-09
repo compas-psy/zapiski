@@ -28,6 +28,9 @@ use tauri::{AppHandle, Manager, Runtime};
 /// сетевых обращений, поэтому секунды здесь — запас, а не норма.
 const LOAD_TIMEOUT: Duration = Duration::from_secs(20);
 /// Сколько ждём саму печать. Крупная заметка с картинками рисуется дольше.
+/// Используется только в windows-ветке `print_window`; под linux (там
+/// проверяется компиляция) печати нет, и константа остаётся невостребованной.
+#[cfg_attr(not(windows), allow(dead_code))]
 const PRINT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// `PdfRenderer.render`: HTML на входе, байты PDF на выходе.

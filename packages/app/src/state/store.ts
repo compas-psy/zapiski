@@ -16,6 +16,9 @@ import {
   decryptNoteToDisk,
   encryptNoteFile,
   encryptedPathOf,
+  exportArchive,
+  exportNote,
+  exportPdf,
   isEncryptedPath,
   parseQuery,
   passwordHint,
@@ -192,6 +195,13 @@ export interface ToastRequest {
   actionLabel?: string | undefined;
   onAction?: (() => void | Promise<void>) | undefined;
 }
+
+/** MIME-типы экспорта — платформа отдаёт файл пользователю (BEHAVIOR §9). */
+const MIME: Record<'md' | 'html' | 'docx', string> = {
+  md: 'text/markdown',
+  html: 'text/html',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+};
 
 /** Ключи в `PreferencesStore` (настройки вне vault'а). */
 const PREF = {
@@ -818,6 +828,43 @@ export class AppController {
 
   clearError(): void {
     this.patch({ syncError: null, sync: { ...this.state.sync, state: 'synced' } });
+  }
+
+  // ── Экспорт (BEHAVIOR §9) ──────────────────────────────────────────────────
+
+  /**
+   * Одна заметка в выбранном формате. PDF всегда светлая «Бумага», колонка 640
+   * и без интерфейсных элементов — за это отвечает `PDF_PAGE_SETUP` ядра.
+   *
+   * Зашифрованная заметка экспортируется только после разблокировки: тело
+   * берётся из `readNote`, а он отдаёт текст лишь для открытой заметки.
+   */
+  async exportNoteAs(path: VaultPath, format: 'md' | 'html' | 'docx' | 'pdf'): Promise<void> {
+    const note = await this.readNote(path);
+    if (!note) return;
+    if (note.encrypted && !this.isUnlocked(path)) return;
+    if (format === 'pdf') {
+      const renderer = this.host.pdf;
+      if (!renderer) return;
+      const data = await exportPdf(note, renderer);
+      /* Веб печатает средствами браузера и байтов не отдаёт: файл уже у
+         пользователя, сохранять нечего. */
+      if (data.byteLength > 0) {
+        await this.host.saveFile(`${note.title || stemOf(path)}.pdf`, data, 'application/pdf');
+      }
+      return;
+    }
+    const file = exportNote(note, format);
+    await this.host.saveFile(file.name, file.data, MIME[format]);
+  }
+
+  /** Все заметки — zip со структурой папок и `attachments`. */
+  async exportAll(): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    const paths = this.state.notes.filter((note) => !note.encrypted).map((note) => note.path);
+    const data = await exportArchive(vault, paths);
+    await this.host.saveFile('zapiski.zip', data, 'application/zip');
   }
 
   // ── Аккаунт ────────────────────────────────────────────────────────────────
