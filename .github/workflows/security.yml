@@ -73,6 +73,26 @@ jobs:
             /^\.github\/workflows\/security\.yml$/,
           ];
 
+          /**
+           * Энтропия Шеннона на символ. Отсекает осмысленные заглушки
+           * («строка-минимум-32-символа-длиной») от случайных строк, которыми
+           * и бывают настоящие секреты.
+           */
+          const entropy = (value) => {
+            const counts = new Map();
+            for (const ch of value) counts.set(ch, (counts.get(ch) ?? 0) + 1);
+            let bits = 0;
+            for (const n of counts.values()) {
+              const p = n / value.length;
+              bits -= p * Math.log2(p);
+            }
+            return bits;
+          };
+
+          /** Похоже ли значение на настоящий секрет, а не на пример в документации. */
+          const looksRandom = (value) =>
+            !/[А-Яа-яЁё\s]/.test(value) && value.length >= 16 && entropy(value) >= 3.2;
+
           const RULES = [
             { id: 'private-key', re: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/ },
             { id: 'aws-access-key', re: /\bAKIA[0-9A-Z]{16}\b/ },
@@ -82,13 +102,15 @@ jobs:
             { id: 'jwt', re: /\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/ },
             { id: 'yookassa-key', re: /\blive_[A-Za-z0-9_-]{30,}\b/ },
             {
-              // Присваивание секрета длинным литералом: AUTH_SECRET=..., password: '...'
+              // Присваивание секрета длинным литералом: AUTH_SECRET='...', password: "..."
               id: 'assigned-secret',
-              re: /\b(auth[_-]?secret|client[_-]?secret|api[_-]?key|secret[_-]?key|webhook[_-]?secret|password|passwd|token)\b\s*[:=]\s*['"`][^'"`\n]{16,}['"`]/i,
+              re: /\b(auth[_-]?secret|client[_-]?secret|api[_-]?key|secret[_-]?key|webhook[_-]?secret|password|passwd|token)\b\s*[:=]\s*['"`]([^'"`\n]{16,})['"`]/i,
+              value: 2,
             },
             {
               id: 'assigned-secret-env',
-              re: /^\s*[A-Z0-9_]*(SECRET|PASSWORD|TOKEN|API_KEY)[A-Z0-9_]*\s*=\s*\S{16,}/,
+              re: /^\s*[A-Z0-9_]*(?:SECRET|PASSWORD|TOKEN|API_KEY)[A-Z0-9_]*\s*=\s*['"`]?(\S{16,}?)['"`]?\s*$/,
+              value: 1,
             },
           ];
 
@@ -118,10 +140,13 @@ jobs:
           const inspect = (file, line, text) => {
             if (ALLOW_LINE.some((re) => re.test(text))) return;
             for (const rule of RULES) {
-              if (rule.re.test(text)) {
-                findings.push({ file, line, rule: rule.id, text: text.trim().slice(0, 120) });
-                return;
-              }
+              const match = rule.re.exec(text);
+              if (match === null) continue;
+              // Правила с явным значением проверяем на случайность: иначе
+              // сканер спотыкается о примеры в документации и его отключают.
+              if (rule.value !== undefined && !looksRandom(match[rule.value] ?? '')) continue;
+              findings.push({ file, line, rule: rule.id, text: text.trim().slice(0, 120) });
+              return;
             }
           };
 
@@ -201,6 +226,34 @@ jobs:
           import { execFileSync } from 'node:child_process';
           import { readFileSync } from 'node:fs';
 
+          /**
+           * ARCHITECTURE §3.6, ТЗ §5.5: «Ни одного SMS-зависимого пути».
+           *
+           * Буквальный `grep -i sms` из ACCEPTANCE A6 ловит и комментарии, которые как
+           * раз фиксируют запрет, и фразу в интерфейсе «без паролей и СМС», которая о
+           * запрете сообщает пользователю. Поэтому запрет проверяется по конструкциям,
+           * из которых состоит настоящая зависимость: вызов, идентификатор, импорт,
+           * адрес эндпоинта, известный шлюз. Все прочие упоминания печатаются справкой —
+           * их читает человек.
+           */
+
+          const CODE = [
+            // вызов: sendSms(...), requestSmsCode(...)
+            { id: 'вызов', re: /\b[A-Za-z_]*sms[A-Za-z_]*\s*\(/i },
+            // идентификатор: smsCode, sms_code, SMS_GATEWAY, otpBySms
+            { id: 'идентификатор', re: /\b(?:[A-Za-z0-9]+_)?sms(?:_[a-z0-9]+|[A-Z][A-Za-z0-9]*)/ },
+            { id: 'идентификатор', re: /\b[A-Za-z0-9]+Sms\b/ },
+            // импорт или адрес
+            { id: 'импорт', re: /\b(?:import|require)\b[^\n]*['"][^'"\n]*sms[^'"\n]*['"]/i },
+            { id: 'эндпоинт', re: /['"`][^'"`\n]*\/sms(?:\/|['"`])/i },
+            // колонка в схеме
+            { id: 'колонка', re: /^\s*sms[_a-z0-9]*\s+(?:text|varchar|char|integer|boolean)/i },
+            // известные шлюзы
+            { id: 'шлюз', re: /\b(twilio|smsc\.ru|smsaero|sms\.ru|vonage|nexmo)\b/i },
+          ];
+
+          const MENTION = /\bsms\b|смс/i;
+
           const files = execFileSync('git', ['ls-files', 'packages', 'apps', 'server', 'scripts'], {
             encoding: 'utf8',
           })
@@ -208,30 +261,25 @@ jobs:
             .filter((f) => /\.(ts|tsx|js|mjs|cjs|sql)$/.test(f))
             .filter((f) => !f.includes('node_modules') && !f.includes('/dist/'));
 
-          const WORD = /\bsms\b|смс/i;
           const offenders = [];
           const mentions = [];
 
           for (const file of files) {
-            let block = false;
-            readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
-              const trimmed = line.trim();
-              const wasBlock = block;
-              if (trimmed.startsWith('/*')) block = true;
-              if (block && trimmed.includes('*/')) block = false;
-              const isComment =
-                wasBlock ||
-                block ||
-                trimmed.startsWith('//') ||
-                trimmed.startsWith('*') ||
-                trimmed.startsWith('--');
-              if (!WORD.test(line)) return;
-              (isComment ? mentions : offenders).push(`${file}:${i + 1}: ${trimmed.slice(0, 140)}`);
-            });
+            // Тесты имеют право утверждать отсутствие SMS — там слово обязано быть.
+            const isTest = /(^|\/)(test|tests|__tests__)\//.test(file);
+            readFileSync(file, 'utf8')
+              .split('\n')
+              .forEach((line, i) => {
+                if (!MENTION.test(line) && !CODE.some((rule) => rule.re.test(line))) return;
+                const hit = CODE.find((rule) => rule.re.test(line));
+                const where = `${file}:${i + 1}: ${line.trim().slice(0, 140)}`;
+                if (hit && !isTest) offenders.push(`[${hit.id}] ${where}`);
+                else mentions.push(where);
+              });
           }
 
           if (mentions.length > 0) {
-            console.log('Упоминания SMS в комментариях (это норма — они фиксируют запрет):');
+            console.log('Упоминания SMS вне кода (комментарии, тексты интерфейса, тесты) — это норма:');
             for (const m of mentions) console.log('  ' + m);
             console.log('');
           }
@@ -240,7 +288,7 @@ jobs:
             console.error('ТЗ §5.5 и ARCHITECTURE §3.6 запрещают любой SMS-зависимый путь.');
             process.exit(1);
           }
-          console.log('SMS-зависимых путей в исполняемом коде нет.');
+          console.log(`SMS-зависимых путей в коде нет (проверено файлов: ${files.length}).`);
           NODE
           node /tmp/no-sms.mjs
 
@@ -259,7 +307,8 @@ jobs:
           fi
 
           # ADR-0003 §4: порт базы на хост не пробрасывается.
-          if awk '/^  postgres:/{p=1} p&&/^\s*ports:/{print FILENAME": "NR": "$0; found=1} /^  [a-z]/&&!/^  postgres:/{p=0} END{exit !found}' deploy/docker-compose.yml; then
+          # POSIX-класс вместо `\s`: mawk на раннере `\s` не понимает.
+          if awk '/^  postgres:/{p=1;next} p&&/^[[:space:]]*ports:/{print NR": "$0; found=1} /^  [a-z]/{p=0} END{exit !found}' deploy/docker-compose.yml; then
             echo '::error file=deploy/docker-compose.yml::у postgres появился проброс порта — ADR-0003 §4 это запрещает'
             fail=1
           fi

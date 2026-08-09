@@ -63,10 +63,12 @@ interface VaultStorage {
 | Web (прочие) | OPFS |
 | Tauri desktop / Android | `@tauri-apps/plugin-fs` поверх нативной ФС |
 
-> ⏳ **В текущей сборке ни одна из них не написана.** Единственная существующая
+> ⏳ **В TypeScript ни одна из них ещё не написана.** Единственная существующая
 > реализация — `MemoryVaultStorage` (`memory-storage.ts`): всё в памяти,
 > с управляемыми часами и инъекцией сбоев записи (`failWriteAt`,
 > `failWriteAfter`, `failWriteOnce`) — на ней держатся тесты транзакционности.
+> Нативная сторона для Windows начата в `apps/desktop/src-tauri/src/vault.rs`,
+> но TS-обёртки над ней пока нет.
 
 `VaultPath` — всегда прямые слэши, без ведущего слэша, нормализуется
 `normalizePath()`. Служебный каталог — `.zapiski/`:
@@ -115,10 +117,12 @@ interface PlatformCapabilities {
 Возможность, которой на платформе нет, равна `null`, и UI обязан **скрыть**
 соответствующий элемент, а не показать его выключенным (`BEHAVIOR.md` §5.1).
 
-> ⏳ Все эти интерфейсы объявлены, но **ни одной реализации в репозитории нет**:
-> биометрия, хэптика, `FLAG_SECURE`, глобальный хоткей, share-target и
-> автообновление появятся вместе с `apps/*`. Реализация `PdfRenderer` —
-> тоже платформенная и тоже отсутствует.
+> ⏳ Все эти интерфейсы объявлены, но **ни одной реализации на TypeScript в
+> репозитории нет**: биометрия, хэптика, `FLAG_SECURE`, глобальный хоткей,
+> share-target и автообновление появятся вместе с `apps/*`. В
+> `apps/desktop/src-tauri` уже начаты Rust-стороны глобального хоткея, трея и
+> файлового доступа. Реализация `PdfRenderer` — тоже платформенная и тоже
+> отсутствует.
 
 ---
 
@@ -385,9 +389,11 @@ await passwordHint(storage, provider, path);            // подсказка б
 > неэкспортируемый `CryptoKey`, отсутствие plaintext на диске и автозамок по
 > таймеру.
 >
-> ⏳ Сам **автозамок в коде не реализован**: ни таймера бездействия, ни
-> немедленного замка при сворачивании в репозитории нет. Есть только порт
-> `secureFlag(on)` в `PlatformCapabilities`. Это работа слоя экранов.
+> Сам **автозамок в ядре не живёт** — это работа слоя экранов: таймер
+> бездействия и настройка «1 / 5 / 10 / 30 минут / до выхода» реализуются в
+> `packages/app` (`state/store.ts`, `autoLockMinutes`). Немедленный замок при
+> сворачивании и `FLAG_SECURE` требуют платформенной оболочки: ⏳ порт
+> `secureFlag(on)` объявлен, реализаций нет.
 
 ---
 
@@ -633,6 +639,6 @@ DEFAULT_LOCALE;                 // 'ru'
 | Импорт: папка/Obsidian, Bear, Notion, Evernote | ✅ |
 | Экспорт: md, HTML, DOCX | ✅ |
 | Экспорт: PDF | ⏳ нужен платформенный `PdfRenderer` |
-| Реализации `VaultStorage` (FSA, OPFS, Tauri FS) | ⏳ есть только `MemoryVaultStorage` |
-| `PlatformCapabilities`: биометрия, хэптика, хоткей, share, updater | ⏳ только интерфейсы |
-| Автозамок и `FLAG_SECURE` | ⏳ только порт `secureFlag` |
+| Реализации `VaultStorage` (FSA, OPFS, Tauri FS) | ⏳ в TypeScript есть только `MemoryVaultStorage`; нативная часть Windows-оболочки начата в `apps/desktop/src-tauri/src/vault.rs` |
+| `PlatformCapabilities`: биометрия, хэптика, хоткей, share, updater | ⏳ только интерфейсы; в `apps/desktop/src-tauri` начаты Rust-стороны глобального хоткея и трея |
+| `FLAG_SECURE` | ⏳ только порт `secureFlag` |

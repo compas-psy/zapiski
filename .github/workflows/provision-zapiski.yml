@@ -151,42 +151,20 @@ jobs:
             log "TLS для ${SITE} уже на месте, certbot не запускаем."
           fi
 
-          # ── 5. Рабочая копия репозитория для деплоя API. ──────────────────
+          # ── 5. Каталог для кода API. ──────────────────────────────────────
           # Именно отсюда deploy-zapiski.yml запускает
           # deploy/deploy-production-remote.sh. Каталог свой, /var/www/cmpas.ru
           # не трогается (ADR-0003 §3).
-          if [ -d "${CHECKOUT}/.git" ]; then
-            log "Рабочая копия уже есть: ${CHECKOUT}"
-          else
-            log "Клонируем репозиторий в ${CHECKOUT}..."
-            mkdir -p "$(dirname "${CHECKOUT}")"
-            if git clone --branch main "${REPO_HTTPS_URL}" "${CHECKOUT}"; then
-              log 'OK: репозиторий склонирован по HTTPS.'
-            else
-              # Приватный репозиторий по анонимному HTTPS не отдаётся.
-              # Пробуем SSH — сработает, если на сервере настроен deploy key.
-              ssh_url="$(printf '%s' "${REPO_HTTPS_URL}" \
-                | sed -E 's#^https?://([^/]+)/#git@\1:#')"
-              log 'HTTPS-клон не удался, пробуем SSH (deploy key)...'
-              if git clone --branch main "${ssh_url}" "${CHECKOUT}"; then
-                log 'OK: репозиторий склонирован по SSH.'
-              else
-                rm -rf "${CHECKOUT}"
-                {
-                  echo 'ОШИБКА: не удалось склонировать репозиторий на сервер.'
-                  echo 'Репозиторий приватный, и у сервера нет доступа к GitHub.'
-                  echo 'Сделайте ОДИН раз руками (см. deploy/SETUP.md):'
-                  echo '  1) ssh на сервер;'
-                  echo '  2) ssh-keygen -t ed25519 -C zapiski-deploy (если ключа ещё нет);'
-                  echo '  3) добавьте публичный ключ в Settings → Deploy keys репозитория (read-only);'
-                  echo "  4) git clone --branch main ${ssh_url} ${CHECKOUT}"
-                  echo 'После этого перезапустите этот workflow.'
-                  echo 'ВАЖНО: nginx и TLS уже настроены успешно, cmpas.ru не затронут.'
-                } >&2
-                exit 1
-              fi
-            fi
-          fi
+          #
+          # Репозиторий здесь НЕ клонируется. Раньше клонировался — и упирался
+          # в то, что репозиторий приватный: серверу пришлось бы выдать deploy
+          # key, то есть завести на нём постоянный доступ к GitHub. Вместо
+          # этого код доставляет rsync'ом сам деплой: он и так работает с уже
+          # выкачанного раннера, а на сервере не остаётся ни одного лишнего
+          # ключа. Тот же приём применяется на этом сервере для
+          # moments.cmpas.ru.
+          mkdir -p "${CHECKOUT}"
+          log "Каталог для кода API готов: ${CHECKOUT}"
 
           log 'Провижн завершён.'
           REMOTE

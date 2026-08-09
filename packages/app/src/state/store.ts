@@ -9,6 +9,7 @@ import {
   MemoryVaultStorage,
   SyncEngine,
   Vault,
+  VersionHistory,
   WebCryptoProvider,
   countWords,
   decryptNoteFile,
@@ -30,6 +31,7 @@ import {
   type UndoableToast,
   type VaultPath,
   type VaultStorage,
+  type VersionSnapshot,
 } from '@zapiski/core';
 import type {
   AppHost,
@@ -208,6 +210,8 @@ export class AppController {
   private readonly listeners = new Set<Listener>();
   private vault: Vault | null = null;
   private engine: SyncEngine | null = null;
+  /** История версий доступна и без бэкенда: снапшоты лежат в `.zapiski/`. */
+  private versions: VersionHistory | null = null;
   private backend: SyncBackend | null = null;
   private readonly crypto = new WebCryptoProvider();
   /** Автозамок: единственный таймер на всё приложение (BEHAVIOR §5.3). */
@@ -294,6 +298,7 @@ export class AppController {
     this.patch({ booting: true });
     const vault = await Vault.open(storage, { locale: this.state.locale });
     this.vault = vault;
+    this.versions = new VersionHistory(storage);
     vault.onChange(() => {
       void this.refresh();
     });
@@ -420,10 +425,13 @@ export class AppController {
 
   // ── Заметки ────────────────────────────────────────────────────────────────
 
-  async createNote(folder?: string): Promise<VaultPath | null> {
+  async createNote(folder?: string, title?: string): Promise<VaultPath | null> {
     const vault = this.vault;
     if (!vault) return null;
-    const note = await vault.create(folder ? { folder } : {});
+    const note = await vault.create({
+      ...(folder ? { folder } : {}),
+      ...(title ? { title } : {}),
+    });
     await this.refresh();
     this.openNote(note.path);
     return note.path;
@@ -513,6 +521,29 @@ export class AppController {
     if (result.updatedLinks > 0) {
       this.toast({ message: this.strings.errors.linksUpdated(result.updatedLinks) });
     }
+  }
+
+  // ── История версий (BEHAVIOR §6, SCREENS §10b `4h`) ────────────────────────
+
+  async versionsFor(noteId: string): Promise<VersionSnapshot[]> {
+    return (await this.versions?.list(noteId)) ?? [];
+  }
+
+  /** «Восстановить эту версию» — ОО: 6-секундный тост с «Отменить». */
+  async restoreVersion(path: VaultPath, body: string): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    const previous = (await vault.read(path))?.body ?? '';
+    await vault.write(path, body);
+    await this.refresh();
+    this.toast({
+      message: this.strings.versions.restored,
+      actionLabel: this.strings.actions.undo,
+      onAction: async () => {
+        await vault.write(path, previous);
+        await this.refresh();
+      },
+    });
   }
 
   // ── Поиск (BEHAVIOR §4) ────────────────────────────────────────────────────

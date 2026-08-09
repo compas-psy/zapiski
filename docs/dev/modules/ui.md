@@ -74,9 +74,9 @@ pnpm lint:tokens        # node scripts/lint-tokens.mjs
 совпадении. Единственное исключение — `packages/ui/src/styles/tokens.css`.
 Шаг «Линт токенов» есть в CI (`deploy-zapiski.yml`), падение валит сборку.
 
-> ⚠️ На момент написания линтер красный: 11 литералов в
-> `packages/core/src/export/html.ts` (CSS печатного документа для экспорта).
-> См. [getting-started.md](../getting-started.md#pnpm-linttokens-падает).
+На момент сверки линтер зелёный: 135 файлов, нарушений нет. Правило
+распространяется и на печатный CSS экспорта в `packages/core` — исключений для
+«документа, который покидает приложение» не делается.
 
 ### API темизации
 
@@ -127,7 +127,7 @@ const { preference, theme, accent, editor, prefersDark, prefersReducedMotion,
 >
 > Это значения из самого `DESIGN_TOKENS.md` — решение за дизайнером. Тест
 > падает и в обратную сторону: если отклонение исчезло, реестр пора обновить.
-> Файл `packages/ui/CONTRAST.md`, на который ссылается тест, ещё не создан.
+> Развёрнутое описание каждого отклонения — в `packages/ui/CONTRAST.md`.
 
 ---
 

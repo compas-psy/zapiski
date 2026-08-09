@@ -3,13 +3,21 @@
 Точка входа для разработчика. Здесь — как поднять окружение, как устроено
 монорепо, куда что класть и по каким правилам мы работаем.
 
-> **Статус сборки 0.1.0.** Готовы четыре слоя: ядро (`packages/core`),
-> редактор (`packages/editor`), дизайн-система (`packages/ui`) и облачный
-> бэкенд (`server`). **Слоя экранов (`packages/app`) и платформенных оболочек
-> (`apps/web`, `apps/desktop`, `apps/mobile`) в репозитории ещё нет** — в
-> `packages/app` лежит только контракт типов, каталог `apps/` пуст. Из-за
-> этого `pnpm dev` и `pnpm build` в корне сейчас падают: см.
-> [getting-started.md](getting-started.md#известные-грабли).
+> **Статус сборки 0.1.0** (сверено на коммите `f0226b0`). Готовы и покрыты
+> тестами четыре слоя: ядро (`packages/core`), редактор (`packages/editor`),
+> дизайн-система (`packages/ui`) и облачный бэкенд (`server`).
+>
+> **Слой экранов и оболочки — в активной разработке прямо сейчас**, состав
+> меняется от часа к часу. На момент сверки в `packages/app` есть состояние
+> приложения и девять экранов и панелей (список, заметка, поиск, библиотека,
+> архив, разблокировка, «Инфо», меню заметки, шифрование), но **нет
+> `src/index.ts`** — публичного API пакет пока не отдаёт. В `apps/` есть только
+> Rust-часть Tauri-оболочки для Windows (`apps/desktop/src-tauri`);
+> `apps/web` и `apps/mobile` не созданы, поэтому `pnpm dev` и `pnpm build` в
+> корне падают.
+>
+> Проверить состояние на сейчас: `ls packages/app/src/screens apps` и
+> `pnpm -r test`. Подробности — [getting-started.md](getting-started.md#известные-грабли).
 
 ## Документы
 
@@ -54,9 +62,9 @@ packages/core     логика: vault, markdown, индекс+FTS, крипто,
                   синк, импорт/экспорт, i18n. Платформо-независима
 packages/ui       токены тем и библиотека React-компонентов
 packages/editor   CodeMirror 6 live-preview + React-обёртка
-packages/app      ВСЕ экраны и всё поведение     ← пока только contract.ts
+packages/app      ВСЕ экраны и всё поведение     ← в работе, без src/index.ts
 apps/web          оболочка PWA                   ← пока не создана
-apps/desktop      оболочка Tauri 2 (Windows)     ← пока не создана
+apps/desktop      оболочка Tauri 2 (Windows)     ← только src-tauri (Rust)
 apps/mobile       оболочка Tauri 2 (Android)     ← пока не создана
 server            KompasCloud API (Node 22 + Fastify + PostgreSQL)
 deploy            nginx, Docker Compose, скрипты развёртывания
@@ -65,8 +73,8 @@ docs              документация (этот каталог) и ТЗ
 ```
 
 Пакеты воркспейса объявлены в `pnpm-workspace.yaml`: `packages/*`, `apps/*`,
-`server`. `packages/app` **не является пакетом воркспейса**, пока у него нет
-`package.json`.
+`server`. Каталог попадает в воркспейс только когда у него есть
+`package.json`: у `packages/app` он уже есть, у `apps/desktop` — ещё нет.
 
 ## Куда что класть
 
