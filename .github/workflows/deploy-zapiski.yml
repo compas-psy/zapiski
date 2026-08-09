@@ -250,7 +250,10 @@ jobs:
           set -Eeuo pipefail
           missing=0
           [ -d /var/www/zapiski.cmpas.ru ] || { echo 'нет /var/www/zapiski.cmpas.ru' >&2; missing=1; }
-          [ -d /var/www/zapiski/.git ]     || { echo 'нет рабочей копии /var/www/zapiski' >&2; missing=1; }
+          # Проверяем каталог, а НЕ наличие .git: код приезжает rsync'ом
+          # с раннера, репозиторием этот каталог не является (см. коммит
+          # «Доставлять код API rsync'ом вместо клонирования на сервере»).
+          [ -d /var/www/zapiski ]          || { echo 'нет каталога /var/www/zapiski' >&2; missing=1; }
           if [ "$missing" -ne 0 ]; then
             echo 'Сначала запустите workflow «Провижн zapiski.cmpas.ru» (см. deploy/SETUP.md).' >&2
             exit 1
