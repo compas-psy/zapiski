@@ -18,21 +18,28 @@ import { CONTAINER_VERSION, decodeContainer, encodeContainer, MAGIC, NONCE_LENGT
  * t = 3, m = 64 МиБ, p = 4, длина тега 32 байта. Версия контейнера = версия
  * параметров: смена параметров means bump `CONTAINER_VERSION`.
  */
-export const ARGON2_PARAMS = {
+export interface Argon2Params {
+  iterations: number;
+  memorySize: number;
+  parallelism: number;
+  hashLength: number;
+}
+
+export const ARGON2_PARAMS: Argon2Params = {
   iterations: 3,
   memorySize: 65_536,
   parallelism: 4,
   hashLength: 32,
-} as const;
+};
 
 export interface WebCryptoProviderOptions {
   /** Облегчённые параметры для тестов и слабых устройств. */
-  argon2?: Partial<typeof ARGON2_PARAMS>;
+  argon2?: Partial<Argon2Params>;
   subtle?: SubtleCrypto;
 }
 
 export class WebCryptoProvider implements CryptoProvider {
-  private readonly params: typeof ARGON2_PARAMS;
+  private readonly params: Argon2Params;
   private readonly subtle: SubtleCrypto;
   /**
    * Соль, из которой выведен ключ. Контракт `encrypt(plaintext, key)` соли не

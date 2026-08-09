@@ -70,6 +70,26 @@ export function Button({
   );
 }
 
+export interface FabProps extends Omit<ComponentPropsWithRef<'button'>, 'children'> {
+  icon: ReactNode;
+  /** Обязательная подпись для скринридера. */
+  label: string;
+}
+
+/** FAB 52×52, радиус 18, тень акцентом 35% (DESIGN_TOKENS.md §3). */
+export function Fab({ icon, label, className, type = 'button', ...rest }: FabProps): ReactNode {
+  return (
+    <button
+      {...rest}
+      type={type}
+      aria-label={label}
+      className={cx('z-fab', className)}
+    >
+      {icon}
+    </button>
+  );
+}
+
 export interface IconButtonProps extends Omit<ComponentPropsWithRef<'button'>, 'children'> {
   /** Глиф. */
   icon: ReactNode;

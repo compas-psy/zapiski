@@ -82,6 +82,7 @@ describe('шифрование round-trip', () => {
     const key = await provider.deriveMasterKey('пароль12', salt);
     const container = await provider.encrypt(PLAIN, key, 'девичья фамилия');
     const header = provider.parseHeader(container);
+    expect(header).not.toBeNull();
     expect(header?.version).toBe(1);
     expect(header?.salt).toEqual(salt);
     expect(header?.hint).toBe('девичья фамилия');
@@ -101,7 +102,7 @@ describe('шифрование round-trip', () => {
     const key = await provider.deriveMasterKey('пароль12', salt);
     const container = await provider.encrypt(PLAIN, key);
     const damaged = new Uint8Array(container);
-    damaged[damaged.length - 5] ^= 0xff;
+    damaged[damaged.length - 5] = ((damaged[damaged.length - 5] ?? 0) ^ 0xff) & 0xff;
     await expect(provider.decrypt(damaged, key)).resolves.toBeNull();
     await expect(provider.decrypt(new Uint8Array([0, 1, 2]), key)).resolves.toBeNull();
   });

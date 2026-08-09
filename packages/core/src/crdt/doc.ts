@@ -63,6 +63,12 @@ export class NoteDoc {
   static fromUpdate(update: Uint8Array, deviceName = 'local'): NoteDoc {
     const noteDoc = new NoteDoc(deviceName);
     Y.applyUpdate(noteDoc.doc, update);
+    // Если в логе уже есть операции этого клиента, оставляем идентификатор,
+    // назначенный Yjs: переиспользовать пару (clientID, clock) нельзя — на
+    // этом ломается сходимость (ТЗ §4.3, логические часы).
+    if (!noteDoc.doc.store.clients.has(clientIdFor(deviceName))) {
+      noteDoc.doc.clientID = clientIdFor(deviceName);
+    }
     return noteDoc;
   }
 

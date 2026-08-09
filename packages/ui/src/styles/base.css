@@ -104,6 +104,16 @@ body {
   display: none;
 }
 
+/* Градиент-фейд 96 px над плавающей нижней панелью (DESIGN_TOKENS.md §3):
+   последняя строка списка не подлезает под поиск и FAB. */
+.z-bottom-fade {
+  position: absolute;
+  inset-inline: 0;
+  block-size: 96px;
+  background: linear-gradient(to bottom, transparent, var(--bg));
+  pointer-events: none;
+}
+
 /* Появление оверлеев: fade + сдвиг снизу 8px */
 @keyframes z-rise {
   from {

@@ -46,9 +46,32 @@ export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Подсчёт слов для панели «Инфо» (BEHAVIOR §2.9). */
+/**
+ * Подсчёт слов для панели «Инфо» (BEHAVIOR §2.9).
+ *
+ * Считаем посимвольно, без регулярок и без выделения массива токенов:
+ * на заметке 1 МБ разница с `tokenize().length` — десятки миллисекунд, а
+ * бюджет открытия заметки — 150 мс (ТЗ §6).
+ */
 export function countWords(text: string): number {
-  return tokenize(text).length;
+  let count = 0;
+  let inWord = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    const isWordChar =
+      (code >= 48 && code <= 57) ||
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      code === 95 ||
+      code >= 0x00c0;
+    if (isWordChar) {
+      if (!inWord) {
+        count += 1;
+        inWord = true;
+      }
+    } else inWord = false;
+  }
+  return count;
 }
 
 /** Обрезка по границе слова — для сниппета в строке списка. */

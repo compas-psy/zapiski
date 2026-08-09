@@ -34,9 +34,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     },
     trustProxy: ctx.env.TRUST_PROXY,
     bodyLimit: DEFAULT_BODY_LIMIT,
-    disableRequestLogging: false,
-    // Заголовок Server отдавать незачем.
-    ignoreTrailingSlash: true,
+    routerOptions: { ignoreTrailingSlash: true },
   });
 
   app.decorate('ctx', ctx);

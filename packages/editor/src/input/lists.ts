@@ -8,7 +8,10 @@
  * про наш предел.
  */
 
-import { insertNewlineContinueMarkup, deleteMarkupBackward } from '@codemirror/lang-markdown';
+import {
+  insertNewlineContinueMarkupCommand,
+  deleteMarkupBackward,
+} from '@codemirror/lang-markdown';
 import type { StateCommand } from '@codemirror/state';
 
 /** Элемент списка любого вида, включая задачи. */
@@ -25,8 +28,16 @@ function depthOf(indent: string): number {
   return Math.floor(spaces / STEP.length);
 }
 
-/** Enter в списке: следующий элемент того же типа; на пустом — выход из списка. */
-export const listNewline: StateCommand = insertNewlineContinueMarkup;
+/**
+ * Enter в списке: следующий элемент того же типа; на пустом — выход из списка.
+ *
+ * `nonTightLists: false` принципиально: с настройкой по умолчанию CodeMirror на
+ * пустом втором элементе «разрежает» список, добавляя пустую строку, а
+ * BEHAVIOR §2.1 требует именно выхода из списка со снятием маркера.
+ */
+export const listNewline: StateCommand = insertNewlineContinueMarkupCommand({
+  nonTightLists: false,
+});
 
 /** Backspace в начале элемента списка снимает маркер, не удаляя строку. */
 export const listBackspace: StateCommand = deleteMarkupBackward;

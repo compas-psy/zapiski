@@ -179,6 +179,46 @@
   inset: calc((var(--tap-min) - var(--control-h-compact)) / -2);
 }
 
+/* ── FAB 52×52, радиус 18, тень 0 8px 24px accent@35% ───────────────────── */
+.z-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  inline-size: var(--fab-size);
+  block-size: var(--fab-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-fab);
+  background-color: var(--accent);
+  color: var(--on-accent);
+  box-shadow: var(--elev-fab);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    transform var(--dur-press) var(--ease-out);
+}
+.z-fab:hover:not(:disabled) {
+  background-color: var(--accent-hover);
+}
+.z-fab:active:not(:disabled) {
+  transform: scale(var(--press-scale));
+}
+.z-fab:focus {
+  outline: none;
+}
+.z-fab:focus-visible {
+  box-shadow:
+    var(--elev-fab),
+    0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+.z-fab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ── Загрузка: ширина не прыгает ──────────────────────────────────────────
    Обе подписи лежат в одной ячейке грида, поэтому ширина кнопки равна
    максимальной из двух состояний и не меняется при переключении.            */

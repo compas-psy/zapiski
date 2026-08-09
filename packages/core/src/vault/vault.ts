@@ -10,7 +10,7 @@ import { catalog, DEFAULT_LOCALE, type Locale } from '../i18n/i18n.js';
 import { InvertedIndex } from '../index/note-index.js';
 import { joinFrontmatter, splitFrontmatter, Frontmatter } from '../markdown/frontmatter.js';
 import { parseNote } from '../markdown/parse.js';
-import { newId, shortHash } from '../util/bytes.js';
+import { fnv1a, newId, shortHash } from '../util/bytes.js';
 import {
   ATTACHMENTS_DIR,
   baseName,
@@ -28,6 +28,22 @@ import { isoDate } from '../util/text.js';
 import { readJson, readText, writeAtomic, writeJsonAtomic, writeTextAtomic } from './atomic.js';
 import { attachmentName, safeFileName, uniqueNotePath } from './naming.js';
 import { commitRename, recoverRename, rewriteWikiLinks, wikiTargetFor, type RenameResult } from './rename.js';
+
+/**
+ * Идентификатор заметки, когда его нет во frontmatter (ТЗ §3.2: «служебные
+ * метаданные — во frontmatter при наличии, иначе в индексе»).
+ *
+ * Выводится ДЕТЕРМИНИРОВАННО из пути, а не случайно. Это обязательное условие
+ * синхронизации: CRDT-логи и история версий лежат в `.zapiski/` по `id`, и без
+ * совпадения id на двух устройствах three-way merge через CRDT-лог был бы
+ * невозможен (ТЗ §4.2). Плата — id меняется при переименовании файла; для UI
+ * это безразлично (обращение идёт по пути), а лог после переименования
+ * пересобирается из текста.
+ */
+export function derivePathId(path: VaultPath): string {
+  const normalized = normalizePath(path);
+  return `${fnv1a(normalized).toString(36)}${normalized.length.toString(36)}`;
+}
 
 /** Задержка переименования файла после правки первой строки (BEHAVIOR §2.2). */
 export const RENAME_DELAY_MS = 2000;
@@ -271,7 +287,7 @@ export class Vault {
     const existing = this.meta.get(path);
     if (existing) return existing;
     const created: ServiceMeta = {
-      id: newId(),
+      id: derivePathId(path),
       createdAt: mtime,
       updatedAt: mtime,
       pinned: false,
@@ -348,7 +364,7 @@ export class Vault {
     const timestamp = this.now();
     const previous = this.meta.get(normalized);
     const service: ServiceMeta = previous ?? {
-      id: newId(),
+      id: derivePathId(normalized),
       createdAt: timestamp,
       updatedAt: timestamp,
       pinned: false,
@@ -453,7 +469,9 @@ export class Vault {
     const service = this.meta.get(source);
     if (service) {
       this.meta.delete(source);
-      this.meta.set(destination, service);
+      // id выводится из пути — после переезда он обязан пересчитаться, иначе
+      // устройства разойдутся в именах CRDT-логов (см. derivePathId).
+      this.meta.set(destination, { ...service, id: derivePathId(destination) });
     }
     this.mtimes.delete(source);
     const previous = this.index.byPathLookup(source);

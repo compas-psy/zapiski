@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,6 +41,10 @@ export interface ThemeContextValue {
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+
+/* Тема применяется ДО первого кадра — иначе первый кадр мигает светлым.
+   На сервере layout-эффекта нет, там за это отвечает themeInitScript. */
+const useApplyEffect = typeof document === 'undefined' ? useEffect : useLayoutEffect;
 
 function matches(query: string): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -92,7 +97,7 @@ export function ThemeProvider({
 
   /* Применение состояния к DOM. Никакого ререндера дерева: меняются только
      атрибуты и переменные на корне, каскад делает остальное. */
-  useEffect(() => {
+  useApplyEffect(() => {
     if (!root) return;
     const isFirst = firstApply.current;
     firstApply.current = false;

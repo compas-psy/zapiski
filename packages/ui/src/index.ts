@@ -50,10 +50,12 @@ export {
 /* ── Кнопки ──────────────────────────────────────────────────────────────── */
 export {
   Button,
+  Fab,
   IconButton,
   type ButtonProps,
   type ButtonVariant,
   type ControlSize,
+  type FabProps,
   type IconButtonProps,
 } from './components/Button/Button';
 

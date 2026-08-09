@@ -27,6 +27,13 @@ import { PreconditionFailed } from './local-folder.js';
 import { SyncError } from './webdav.js';
 
 const STATE_FILE = `${META_DIR}/sync-state.json`;
+
+/** Заметки синкаются раньше служебных CRDT-логов. */
+function byNotesFirst(a: VaultPath, b: VaultPath): number {
+  const left = a.startsWith(`${CRDT_DIR}/`) ? 1 : 0;
+  const right = b.startsWith(`${CRDT_DIR}/`) ? 1 : 0;
+  return left - right || a.localeCompare(b);
+}
 const STATE_VERSION = 1;
 
 interface SyncEntryState {
@@ -169,7 +176,10 @@ export class SyncEngine {
     const local = new Set<VaultPath>(await this.syncablePaths());
     const paths = new Set<VaultPath>([...local, ...remote.keys(), ...this.queue.list().map((item) => item.path)]);
 
-    for (const path of [...paths].sort()) {
+    // Порядок важен: сначала заметки, потом CRDT-логи. Иначе при слиянии
+    // локальный лог уже содержал бы чужие правки, и материализация `.md`
+    // затёрла бы их (ТЗ §4.2).
+    for (const path of [...paths].sort(byNotesFirst)) {
       if (!this.isSyncable(path)) continue;
       try {
         await this.syncOne(path, local.has(path), remote.get(path), outcome);
@@ -340,10 +350,16 @@ export class SyncEngine {
     // 2. У контрагента есть CRDT-лог — three-way merge через него (ТЗ §4.2).
     const remoteLog = await this.backend.get(`${CRDT_DIR}/${noteId}.bin`);
     if (remoteLog && remoteLog.data.length > 0) {
+      // Чужой лог мог отстать от чужого `.md` — если файл правили сторонним
+      // редактором, лог об этом не знает. Догоняем чужую сторону её же
+      // текстом, иначе слияние молча потеряло бы чужую правку (ТЗ §2.1.4).
+      const theirDoc = NoteDoc.fromUpdate(remoteLog.data, `${this.deviceName}/remote`);
+      if (theirDoc.toMarkdown() !== theirs) theirDoc.setText(theirs);
       const doc = await this.crdt.loadDoc(noteId, ours);
-      doc.applyUpdate(remoteLog.data);
+      doc.applyUpdate(theirDoc.encodeState());
       mergedText = doc.toMarkdown();
       await this.crdt.save(noteId, doc);
+      theirDoc.destroy();
       doc.destroy();
     } else {
       // 3. Лога нет (правили чужим редактором) — построчный diff3.

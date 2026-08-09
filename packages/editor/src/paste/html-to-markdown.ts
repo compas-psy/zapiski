@@ -58,9 +58,9 @@ function listItems(list: Element, ctx: Ctx, ordered: boolean): string {
     const checkbox = child.querySelector(':scope > input[type="checkbox"]');
     const task = checkbox ? (checkbox.hasAttribute('checked') ? '[x] ' : '[ ] ') : '';
     const bullet = ordered ? `${index}. ` : '- ';
-    // Продолжения многострочного элемента выравниваем под текстом маркера.
-    const body = inner.split('\n').join(`\n${indent}${' '.repeat(bullet.length)}`);
-    out += `${indent}${bullet}${task}${body}\n`;
+    // Вложенные списки уже несут собственный отступ (`depth + 1`), поэтому
+    // повторно сдвигать строки нельзя — получится двойная вложенность.
+    out += `${indent}${bullet}${task}${inner}\n`;
   }
   return out;
 }

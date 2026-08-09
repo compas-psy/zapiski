@@ -219,18 +219,26 @@ function isExternal(url: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(url);
 }
 
-/** Полный разбор. `text` — содержимое файла целиком, вместе с frontmatter. */
+/** Сколько символов тела достаточно, чтобы собрать сниппет в 200 знаков. */
+const SNIPPET_SOURCE_LENGTH = 4000;
+
+/**
+ * Полный разбор. `text` — содержимое файла целиком, вместе с frontmatter.
+ *
+ * `plain` вычисляется ЛЕНИВО: снятие разметки со всего тела нужно индексу, но
+ * не нужно открытию заметки, а бюджет открытия — 150 мс на 1 МБ (ТЗ §6).
+ */
 export function parseNote(text: string): ParsedNote {
   const { frontmatter, body } = splitFrontmatter(text);
   const wikiLinks = extractWikiLinks(body);
   const links = extractLinks(body);
-  const plain = stripMarkdown(body);
   const title = extractTitle(body);
 
   // Сниппет — тело без строки заголовка, без разметки, ~200 знаков (contract.ts).
-  const plainLines = plain.split('\n');
-  const titleLineIndex = plainLines.findIndex((line) => line.trim() !== '');
-  const rest = plainLines
+  const head = stripMarkdown(body.slice(0, SNIPPET_SOURCE_LENGTH));
+  const headLines = head.split('\n');
+  const titleLineIndex = headLines.findIndex((line) => line.trim() !== '');
+  const rest = headLines
     .slice(titleLineIndex + 1)
     .join(' ')
     .replace(/\s+/g, ' ')
@@ -240,7 +248,7 @@ export function parseNote(text: string): ParsedNote {
   const images = links.filter((l) => l.image || isImageUrl(l.url));
   const files = links.filter((l) => !l.image && !isImageUrl(l.url) && !isExternal(l.url));
 
-  return {
+  const parsed: ParsedNote = {
     title,
     snippet,
     tags: extractTags(body),
@@ -252,9 +260,19 @@ export function parseNote(text: string): ParsedNote {
     // `has:link` — про ссылки, а не про встроенные картинки: у изображения
     // свой оператор `has:image`.
     hasLink: links.some((link) => !link.image && !isImageUrl(link.url)) || wikiLinks.length > 0,
-    wordCount: countWords(plain),
+    wordCount: countWords(body),
     frontmatter,
     body,
-    plain,
+    plain: '',
   };
+
+  let plainCache: string | null = null;
+  Object.defineProperty(parsed, 'plain', {
+    enumerable: true,
+    get(): string {
+      if (plainCache === null) plainCache = stripMarkdown(body);
+      return plainCache;
+    },
+  });
+  return parsed;
 }

@@ -5,7 +5,8 @@
  */
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { decorationsOf, makeState } from './helpers.js';
 
@@ -21,8 +22,12 @@ function srcFiles(dir: string): string[] {
 
 describe('LAYOUT НЕ СДВИГАЕТСЯ (BEHAVIOR §2.1, приёмочный критерий №3)', () => {
   it('во всём пакете нет ни одного Decoration.replace', () => {
-    const files = srcFiles(new URL('../src', import.meta.url).pathname);
-    const guilty = files.filter((f) => /Decoration\.replace/.test(readFileSync(f, 'utf8')));
+    const stripComments = (code: string): string =>
+      code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const files = srcFiles(join(dirname(fileURLToPath(import.meta.url)), '..', 'src'));
+    const guilty = files.filter((f) =>
+      /Decoration\.replace/.test(stripComments(readFileSync(f, 'utf8'))),
+    );
     expect(guilty).toEqual([]);
   });
 
@@ -112,7 +117,9 @@ describe('стилизация элементов (DESIGN_TOKENS §2, SCREENS §
 
   it('цитата, код-блок, разделитель и таблица — построчные декорации', () => {
     expect(classesFor('> цитата', 'cm-z-quote').length).toBe(1);
-    const code = classesFor('```js\nlet a = 1;\n```', 'cm-z-code');
+    const code = classesFor('```js\nlet a = 1;\n```', 'cm-z-code').filter(
+      (c) => !c.includes('cm-z-code-info'),
+    );
     expect(code.length).toBe(3);
     expect(code[0]).toContain('cm-z-code-first');
     expect(code[2]).toContain('cm-z-code-last');
@@ -155,7 +162,7 @@ describe('wiki-ссылки и теги', () => {
 
   it('алиас `[[цель|подпись]]` резолвится по цели', () => {
     const seen: string[] = [];
-    makeState('[[Цель|подпись]]', {
+    const state = makeState('[[Цель|подпись]]', {
       runtime: {
         wikiExists: (t) => {
           seen.push(t);
@@ -164,6 +171,7 @@ describe('wiki-ссылки и теги', () => {
       },
       selection: { anchor: 0 },
     });
+    decorationsOf(state);
     expect(seen).toContain('Цель');
   });
 

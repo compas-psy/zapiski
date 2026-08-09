@@ -33,12 +33,20 @@ class CompositionGuard implements PluginValue {
   composing = false;
   /** Сколько раз пересчёт был отложен — читается тестами. */
   deferrals = 0;
+  /**
+   * Видели ли мы хоть одно событие композиции. Если да — наш флаг становится
+   * единственным источником правды: он умеет разблокироваться по `blur`,
+   * а внутренний счётчик CodeMirror — нет. Если нет (экзотическая клавиатура,
+   * не шлющая `compositionstart`) — доверяем детектору CodeMirror.
+   */
+  sawEvents = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly view: EditorView) {}
 
   start(): void {
     this.composing = true;
+    this.sawEvents = true;
     if (this.timer !== null) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -95,7 +103,9 @@ export const compositionGuard = ViewPlugin.fromClass(CompositionGuard, {
 /** Идёт ли композиция IME — единственная точка правды для всех плагинов. */
 export function isComposing(view: EditorView): boolean {
   const guard = view.plugin(compositionGuard);
-  return (guard?.composing ?? false) || view.compositionStarted;
+  if (guard?.composing) return true;
+  if (guard?.sawEvents) return false;
+  return view.compositionStarted;
 }
 
 /** Отметить отложенный пересчёт (для диагностики и тестов). */

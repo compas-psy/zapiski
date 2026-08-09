@@ -11,7 +11,7 @@ import {
   type EditorLineHeight,
   type ThemePreference,
 } from '../theme/types';
-import { Button, IconButton } from '../components/Button/Button';
+import { Button, Fab, IconButton } from '../components/Button/Button';
 import { TextField } from '../components/Field/TextField';
 import { SearchField } from '../components/Field/SearchField';
 import { CodeInput, PinDots } from '../components/Field/CodeInput';
@@ -59,6 +59,7 @@ import {
   IconPaperclip,
   IconPen,
   IconPin,
+  IconPlus,
   IconSearch,
 } from '../icons';
 import './Gallery.css';
@@ -253,6 +254,10 @@ function ButtonsSection(): ReactNode {
           <Button fullWidth iconStart={<IconPen size={17} />}>
             Новая заметка
           </Button>
+          <div className="z-gallery__row">
+            <Fab icon={<IconPlus size={22} />} label="Новая заметка" />
+            <span className="z-gallery__label">FAB 52×52, радиус 18</span>
+          </div>
         </Panel>
       </div>
     </Section>

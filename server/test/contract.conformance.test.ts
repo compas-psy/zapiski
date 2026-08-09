@@ -118,10 +118,15 @@ describe('контракт протокола с @zapiski/core', () => {
       path.resolve(fileURLToPath(new URL('../src/routes/vault.ts', import.meta.url))),
       'utf8',
     );
-    expect(routes).toContain('/api/v1/vault/manifest'); // list
-    expect(routes).toContain("app.get('/api/v1/vault/blob/*'"); // get
-    expect(routes).toContain("app.put('/api/v1/vault/blob/*'"); // put
-    expect(routes).toContain("app.delete('/api/v1/vault/blob/*'"); // remove
+    // list / get / put / remove — каждый должен быть объявлен своим методом.
+    const declared = (method: string, route: string): boolean =>
+      new RegExp(`app\\.${method}\\(\\s*'${route.replace(/[*/]/g, (c) => `\\${c}`)}'`).test(routes);
+
+    expect(routes).toContain('/api/v1/vault/manifest');
+    expect(declared('get', '/api/v1/vault/manifest'), 'нет GET manifest (list)').toBe(true);
+    expect(declared('get', '/api/v1/vault/blob/*'), 'нет GET blob (get)').toBe(true);
+    expect(declared('put', '/api/v1/vault/blob/*'), 'нет PUT blob (put)').toBe(true);
+    expect(declared('delete', '/api/v1/vault/blob/*'), 'нет DELETE blob (remove)').toBe(true);
 
     const live = await readFile(
       path.resolve(fileURLToPath(new URL('../src/routes/live.ts', import.meta.url))),
