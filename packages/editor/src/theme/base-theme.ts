@@ -245,17 +245,21 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   },
   // Когда курсор внутри — показываем сырой `[x]` поверх нарисованного квадрата.
   '.cm-z-task.cm-z-mark-on': { backgroundColor: 'var(--bg)' },
+  // Квадрат ЗАМЕЩАЕТ сырые `[ ]`, поэтому у него собственная ширина. Нулевая
+  // была верна, пока скобки держали место прозрачными: виджет ложился в их
+  // просвет. После схлопывания разметки нулевая ширина дала «☐адача» —
+  // квадрат поверх первых букв.
   '.cm-z-taskbox': {
     position: 'relative',
     display: 'inline-block',
-    width: '0',
-    height: '0',
+    width: '1.3em',
+    height: '1em',
     verticalAlign: 'baseline',
   },
   '.cm-z-taskbox svg': {
     position: 'absolute',
-    left: '2px',
-    top: '-0.32em',
+    left: '0',
+    top: '0.55em',
     width: '18px',
     height: '18px',
     transform: 'translateY(-50%)',

@@ -3,16 +3,35 @@
  * §13.3; DESIGN_TOKENS §3).
  *
  * ЗАКОН ЭТОГО ФАЙЛА:
- *   Символы разметки (`**`, `#`, `>`, `==`, `[[`, …) ВСЕГДА занимают своё место
- *   в потоке текста. Меняется ТОЛЬКО `opacity`: 0 вне активного узла, 1 (цвет
- *   `--text-disabled`) когда курсор внутри узла или узел попал в выделение.
- *   Переход 160 мс. LAYOUT НЕ СДВИГАЕТСЯ НИКОГДА.
+ *   Символы разметки (`**`, `#`, `>`, `==`, `[[`, …) видны, когда курсор внутри
+ *   узла или узел в выделении, и СХЛОПНУТЫ, когда курсор снаружи.
  *
- * Следствия, которые нельзя нарушать:
- *   • `Decoration.replace()` не используется ни разу — он схлопывает символы;
- *   • ни один класс, зависящий от курсора, не меняет метрику (font-size,
- *     display, width, padding, letter-spacing) — только `opacity`;
- *   • виджеты (чекбокс, картинка) добавляются, а не заменяют текст.
+ * ПОЧЕМУ НЕ `opacity: 0`, КАК БЫЛО. Прежняя редакция прятала символы
+ * прозрачностью, оставляя им место в потоке, — ради обещания «layout не
+ * сдвигается никогда». Обещание выполнялось, а результат заказчик описал так:
+ * «убирает `**`, но оставляет 2 пробела, как будто эти символы ещё там».
+ * Так и было: они там и оставались, просто невидимые. Каждый жирный фрагмент
+ * получал по дыре с обеих сторон, каждый чекбокс — дыру рядом с квадратом, и
+ * текст выглядел дырявым.
+ *
+ * Хуже того, прозрачный символ остаётся местом, куда встаёт курсор. После
+ * Ctrl+B по выделению курсор оказывался МЕЖДУ маркерами, стрелка их не
+ * перешагивала, и всё напечатанное дальше уезжало внутрь жирного:
+ * `**жирное продолжаю печатать дальше**`. Это и есть «редактор очень неумный».
+ *
+ * `Decoration.replace()` решает обе беды разом: диапазон схлопывается, а
+ * `EditorView.atomicRanges` (см. `plugin.ts`) делает его неделимым для курсора,
+ * так что стрелка перешагивает пару целиком.
+ *
+ * Расхождение с BEHAVIOR §2.1 и §13.3 нового пакета — сознательное и названо
+ * вслух: там записано «всегда занимают место, меняется только opacity». Прямое
+ * указание заказчика от 2026-08-10 перечисляет это поведение первым пунктом
+ * списка дефектов. Вернуть прежнее — это `hiddenMark` → `markDeco` ниже.
+ *
+ * Что осталось неизменным:
+ *   • активность считается по РОДИТЕЛЮ символа;
+ *   • виджеты (чекбокс, картинка) добавляются, а не заменяют текст;
+ *   • композиция IME никогда не прерывается пересчётом декораций.
  *
  * «Активный узел» = узел синтаксического дерева, в диапазон которого курсор
  * попадает или к границе которого примыкает. Для символа разметки активность
@@ -61,11 +80,14 @@ function lineDeco(cls: string): Decoration {
 }
 
 /**
- * Класс символа разметки. Единственное, что зависит от курсора во всём файле, —
- * добавление `cm-z-mark-on`, а оно меняет исключительно `opacity`.
+ * Схлопнутый символ разметки. Один объект на всё приложение: CodeMirror
+ * сравнивает декорации по значению, а замена без виджета не несёт состояния.
  */
-function syntaxClass(active: boolean, extra?: string): string {
-  const base = active ? 'cm-z-mark cm-z-mark-on' : 'cm-z-mark';
+const hiddenMark = Decoration.replace({});
+
+/** Класс ВИДИМОГО символа разметки — он рисуется только у курсора. */
+function syntaxClass(extra?: string): string {
+  const base = 'cm-z-mark cm-z-mark-on';
   return extra ? `${base} ${extra}` : base;
 }
 
@@ -133,6 +155,8 @@ interface AncestorFrame {
 
 class LivePreviewBuilder {
   private readonly out: Range<Decoration>[] = [];
+  /** Схлопнутые символы — они же неделимые для курсора диапазоны. */
+  private readonly hidden: Range<Decoration>[] = [];
   private readonly stack: AncestorFrame[] = [];
   /** Строки, на которых уже стоит блочная декорация данного класса. */
   private readonly seenLines = new Set<string>();
@@ -169,6 +193,24 @@ class LivePreviewBuilder {
     if (to > from) this.out.push(markDeco(cls).range(from, to));
   }
 
+  /**
+   * Символ разметки: показать у курсора, схлопнуть вне его.
+   *
+   * Схлопнутый диапазон попадает ещё и в `hidden` — из него собирается набор
+   * неделимых для курсора диапазонов. Без этого стрелка встаёт между двумя
+   * `*`, где нет ни одного пикселя, и набранное дальше уезжает внутрь жирного.
+   */
+  private fade(from: number, to: number, active: boolean, extra?: string): void {
+    if (to <= from) return;
+    if (active) {
+      this.out.push(markDeco(syntaxClass(extra)).range(from, to));
+      return;
+    }
+    const range = hiddenMark.range(from, to);
+    this.out.push(range);
+    this.hidden.push(range);
+  }
+
   private widget(pos: number, deco: Decoration): void {
     this.out.push(deco.range(pos));
   }
@@ -202,7 +244,7 @@ class LivePreviewBuilder {
     if (FADING_MARKS.has(name)) {
       const owner = this.parent();
       const active = owner ? this.isActive(owner.from, owner.to) : this.isActive(from, to);
-      this.mark(from, to, syntaxClass(active));
+      this.fade(from, to, active);
       return;
     }
 
@@ -211,9 +253,20 @@ class LivePreviewBuilder {
       const raw = this.state.doc.sliceString(from, to);
       const checked = TASK_CHECKED.test(raw);
       const owner = this.parent();
-      const active = owner ? this.isActive(owner.from, owner.to) : this.isActive(from, to);
-      this.widget(from, Decoration.widget({ widget: new TaskBoxWidget(checked), side: -1 }));
-      this.mark(from, to, syntaxClass(active, 'cm-z-task'));
+      /*
+        Квадрат ЗАМЕЩАЕТ сырые `[ ]`, а не добавляется рядом.
+
+        Пока разметка пряталась прозрачностью, скобки держали место, и виджет
+        помещался в него. Теперь разметка схлопывается — и добавочный виджет
+        оказался поверх текста: «☐адача» вместо «☐ задача».
+
+        Замена, а не пара «виджет + скрытый текст», ещё и честнее: у квадрата
+        появляется собственная ширина, а курсор перешагивает его целиком, как
+        любой другой схлопнутый диапазон.
+      */
+      const box = Decoration.replace({ widget: new TaskBoxWidget(checked) }).range(from, to);
+      this.out.push(box);
+      this.hidden.push(box);
       if (checked && owner && owner.to > to) {
         // Текст выполненной задачи: secondary + line-through (BEHAVIOR §2.3).
         this.mark(to, owner.to, 'cm-z-task-done');
@@ -250,7 +303,7 @@ class LivePreviewBuilder {
         return;
       case 'HorizontalRule':
         this.lines(from, to, 'cm-z-hr');
-        this.mark(from, to, syntaxClass(this.isActive(from, to)));
+        this.fade(from, to, this.isActive(from, to));
         return;
       case 'Table':
         this.lines(from, to, 'cm-z-table', undefined, 'cm-z-table-last');
@@ -323,12 +376,29 @@ class LivePreviewBuilder {
    * а обход дерева выдаёт строчные и инлайновые декорации вперемешку —
    * поэтому сортируем один раз в конце. На видимом куске это десятки элементов.
    */
-  finish(): DecorationSet {
-    this.out.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
-    const builder = new RangeSetBuilder<Decoration>();
-    for (const range of this.out) builder.add(range.from, range.to, range.value);
-    return builder.finish();
+  finish(): LivePreviewSets {
+    return { decorations: pack(this.out), atomic: pack(this.hidden) };
   }
+}
+
+/** Отсортировать и собрать набор диапазонов. */
+function pack(ranges: Range<Decoration>[]): DecorationSet {
+  ranges.sort((a, b) => a.from - b.from || a.value.startSide - b.value.startSide);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const range of ranges) builder.add(range.from, range.to, range.value);
+  return builder.finish();
+}
+
+export interface LivePreviewSets {
+  /** Всё, что рисуется. */
+  decorations: DecorationSet;
+  /**
+   * Схлопнутые символы разметки — их курсор перешагивает целиком
+   * (`EditorView.atomicRanges`). Отдельный набор, а не весь предыдущий:
+   * неделимыми должны стать ровно невидимые куски, иначе курсор перестанет
+   * ходить по обычному тексту внутри жирного.
+   */
+  atomic: DecorationSet;
 }
 
 /**
@@ -340,7 +410,7 @@ class LivePreviewBuilder {
 export function buildLivePreview(
   state: EditorState,
   ranges: readonly { from: number; to: number }[],
-): DecorationSet {
+): LivePreviewSets {
   const runtime = state.facet(editorRuntime);
   const builder = new LivePreviewBuilder(state, runtime);
   const tree = syntaxTree(state);

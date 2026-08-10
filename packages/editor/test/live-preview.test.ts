@@ -1,72 +1,35 @@
 /**
- * Приёмочный критерий редактора (BEHAVIOR §2.1, §13.3):
- * символы разметки всегда занимают место, меняется только opacity,
- * layout не сдвигается никогда.
+ * Поведение разметки у курсора — главный приёмочный критерий редактора.
+ *
+ * ПРЕЖНИЙ КОНТРАКТ ОТМЕНЁН. Раньше здесь проверялось, что символы разметки
+ * всегда занимают место в потоке и меняется только `opacity`, а
+ * `Decoration.replace` не встречается ни разу. Формально это выполнялось,
+ * а на живом устройстве заказчик увидел: «убирает `**`, но оставляет 2
+ * пробела, как будто эти символы ещё там». Они там и оставались — невидимые,
+ * но занимающие место, — и вдобавок служили местом, куда встаёт курсор:
+ * после Ctrl+B по выделению всё напечатанное дальше уезжало ВНУТРЬ жирного.
+ *
+ * Новый контракт: вне активного узла символы схлопнуты и неделимы для
+ * курсора; внутри — показаны классом `cm-z-mark cm-z-mark-on`.
  */
 
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { decorationsOf, makeState } from './helpers.js';
+import { decorationsOf, hiddenRanges, makeState } from './helpers.js';
 
-function srcFiles(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) out.push(...srcFiles(full));
-    else if (/\.tsx?$/.test(entry)) out.push(full);
-  }
-  return out;
-}
-
-describe('LAYOUT НЕ СДВИГАЕТСЯ (BEHAVIOR §2.1, приёмочный критерий №3)', () => {
-  it('во всём пакете нет ни одного Decoration.replace', () => {
-    const stripComments = (code: string): string =>
-      code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
-    const files = srcFiles(join(dirname(fileURLToPath(import.meta.url)), '..', 'src'));
-    const guilty = files.filter((f) =>
-      /Decoration\.replace/.test(stripComments(readFileSync(f, 'utf8'))),
-    );
-    expect(guilty).toEqual([]);
-  });
-
-  it('ни одна декорация с длиной > 0 не является заменяющей', () => {
-    const doc = '# Заголовок\n\nТекст **жирный** и *курсив* и ==подсветка==.\n\n> Цитата\n';
-    for (const d of decorationsOf(makeState(doc))) {
-      if (d.to > d.from) {
-        // Диапазонная декорация обязана быть mark-декорацией с классом:
-        // replace-декорация класса не имеет, она заменяет содержимое.
-        expect(d.class, `декорация ${d.from}..${d.to} должна быть mark`).toBeTruthy();
-        expect(d.widget).toBeNull();
-      }
-    }
-  });
-
-  it('вход курсора в узел меняет ТОЛЬКО класс, диапазоны остаются теми же', () => {
+describe('разметка схлопывается вне курсора и проявляется внутри', () => {
+  it('вне активного узла символов нет в потоке — ни одной дыры', () => {
     const doc = 'Текст **жирный** дальше.';
-    const boldFrom = doc.indexOf('**');
-    const outside = decorationsOf(makeState(doc, { selection: { anchor: 0 } }));
-    const inside = decorationsOf(
-      makeState(doc, { selection: { anchor: boldFrom + 4 } }),
-    );
-
-    expect(inside.map((d) => [d.from, d.to])).toEqual(outside.map((d) => [d.from, d.to]));
-
-    const changed = inside.filter((d, i) => d.class !== outside[i]?.class);
-    expect(changed.length).toBeGreaterThan(0);
-    for (const d of changed) {
-      // Разница строго в добавлении модификатора непрозрачности.
-      expect(d.class).toBe('cm-z-mark cm-z-mark-on');
-    }
+    const decos = decorationsOf(makeState(doc, { selection: { anchor: 0 } }));
+    const visible = decos.filter((d) => d.class?.startsWith('cm-z-mark'));
+    expect(visible).toEqual([]);
   });
 
-  it('символы разметки получают класс cm-z-mark и вне активного узла, и внутри', () => {
+  it('внутри узла символы показаны и занимают ровно свои границы', () => {
     const doc = 'Текст **жирный** дальше.';
     const from = doc.indexOf('**');
-    const far = decorationsOf(makeState(doc, { selection: { anchor: 0 } }));
-    const open = far.find((d) => d.from === from && d.to === from + 2);
-    expect(open?.class).toBe('cm-z-mark');
+    const decos = decorationsOf(makeState(doc, { selection: { anchor: from + 4 } }));
+    const open = decos.find((d) => d.from === from && d.to === from + 2);
+    expect(open?.class).toBe('cm-z-mark cm-z-mark-on');
   });
 
   it('курсор, примыкающий к границе узла, тоже считается внутри', () => {
@@ -77,32 +40,48 @@ describe('LAYOUT НЕ СДВИГАЕТСЯ (BEHAVIOR §2.1, приёмочный
     expect(closing?.class).toBe('cm-z-mark cm-z-mark-on');
   });
 
-  it.each([
-    ['заголовок', '# Заголовок', '#', 0],
-    ['цитата', '> Цитата', '>', 0],
-    ['жирный', 'а **ж** б', '**', 2],
-    ['подсветка', 'а ==п== б', '==', 2],
-    ['wiki', 'а [[Цель]] б', '[[', 2],
-    ['код', 'а `код` б', '`', 2],
-    ['ссылка', 'а [т](u) б', '[', 2],
-  ])('символ разметки %s занимает место и фейдится, а не исчезает', (_name, doc, mark, at) => {
-    const state = makeState(doc, { selection: { anchor: doc.length } });
-    const deco = decorationsOf(state).find(
-      (d) => d.from === at && d.to === at + mark.length && d.class?.startsWith('cm-z-mark'),
-    );
-    expect(deco, `нет декорации для «${mark}» в «${doc}»`).toBeDefined();
-    // Диапазон совпадает с символами: они остались в потоке текста.
-    expect(doc.slice(deco?.from ?? 0, deco?.to ?? 0)).toBe(mark);
-  });
-
   it('выделение, накрывающее узел, проявляет его разметку', () => {
     const doc = 'Текст **жирный** дальше.';
-    const decos = decorationsOf(
-      makeState(doc, { selection: { anchor: 0, head: doc.length } }),
-    );
+    const decos = decorationsOf(makeState(doc, { selection: { anchor: 0, head: doc.length } }));
     const marks = decos.filter((d) => d.class?.startsWith('cm-z-mark'));
     expect(marks.length).toBeGreaterThan(0);
     expect(marks.every((d) => d.class === 'cm-z-mark cm-z-mark-on')).toBe(true);
+  });
+
+  /* Курсор ставится ЗАВЕДОМО вне узла. Для строчных маркеров (`#`, `>`) это
+     соседняя строка: узел начинается в позиции 0, и курсор в начале документа
+     к нему примыкает — то есть считается активным. Прежняя редакция теста
+     ставила курсор в конец строки и по той же причине проверяла проявленное
+     состояние под видом скрытого. */
+  it.each([
+    ['заголовок', '# Заголовок\n\nдалее', '#', 0, 15],
+    ['цитата', '> Цитата\n\nдалее', '>', 0, 12],
+    ['жирный', 'а **ж** б', '**', 2, 0],
+    ['подсветка', 'а ==п== б', '==', 2, 0],
+    ['wiki', 'а [[Цель]] б', '[[', 2, 0],
+    ['код', 'а `код` б', '`', 2, 0],
+    ['ссылка', 'а [т](u) б', '[', 2, 0],
+  ])('символ разметки %s схлопывается, когда курсор далеко', (_name, doc, mark, at, cursor) => {
+    const state = makeState(doc, { selection: { anchor: cursor } });
+    const hidden = hiddenRanges(state);
+    const found = hidden.find((r) => r.from === at && r.to === at + mark.length);
+    expect(found, `символ «${mark}» в «${doc}» не схлопнут`).toBeDefined();
+  });
+
+  it('схлопнутое неделимо для курсора: пара перешагивается целиком', () => {
+    const doc = 'Текст **жирный** дальше.';
+    const state = makeState(doc, { selection: { anchor: 0 } });
+    const hidden = hiddenRanges(state);
+    // Обе пары `**` целиком, а не по одной звёздочке: иначе курсор встанет
+    // между ними и набранное уедет внутрь жирного.
+    expect(hidden.map((r) => doc.slice(r.from, r.to))).toContain('**');
+    for (const range of hidden) expect(range.to - range.from).toBeGreaterThan(0);
+  });
+
+  it('внутри активного узла ничего не схлопнуто — текст можно править', () => {
+    const doc = 'Текст **жирный** дальше.';
+    const from = doc.indexOf('**');
+    expect(hiddenRanges(makeState(doc, { selection: { anchor: from + 4 } }))).toEqual([]);
   });
 });
 
@@ -207,14 +186,25 @@ describe('wiki-ссылки и теги', () => {
   });
 });
 
-describe('чекбоксы и картинки — виджеты, а не замены', () => {
-  it('у чекбокса появляется виджет-квадрат и mark на сырых скобках', () => {
-    const state = makeState('- [ ] задача', { selection: { anchor: 0 } });
-    const decos = decorationsOf(state);
-    const widget = decos.find((d) => d.widget === 'TaskBoxWidget');
+describe('чекбокс и картинки', () => {
+  /*
+    Квадрат ЗАМЕЩАЕТ `[ ]`, а не стоит рядом. Пока разметка пряталась
+    прозрачностью, скобки держали место и добавочный виджет ложился в их
+    просвет; после схлопывания он оказался поверх текста — «☐адача».
+  */
+  it.each([
+    ['курсор далеко', 19],
+    ['курсор в самой строке задачи', 8],
+  ])('квадрат замещает сырые скобки — %s', (_name, anchor) => {
+    const doc = '- [ ] задача\n\nдалее';
+    const state = makeState(doc, { selection: { anchor } });
+    const widget = decorationsOf(state).find((d) => d.widget === 'TaskBoxWidget');
     expect(widget).toBeDefined();
-    expect(widget?.from).toBe(widget?.to);
-    expect(decos.some((d) => d.class?.includes('cm-z-task'))).toBe(true);
+    const raw = doc.indexOf('[ ]');
+    // Диапазон виджета — ровно скобки: у квадрата своя ширина, дыры рядом нет.
+    expect(widget?.from).toBe(raw);
+    expect(widget?.to).toBe(raw + 3);
+    expect(hiddenRanges(state)).toContainEqual({ from: raw, to: raw + 3 });
   });
 
   it('отмеченная задача получает line-through на тексте', () => {

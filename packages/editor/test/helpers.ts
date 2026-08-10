@@ -44,9 +44,9 @@ export interface DecoInfo {
 
 /** Плоский список декораций по всему документу. */
 export function decorationsOf(state: EditorState): DecoInfo[] {
-  const set = buildLivePreview(state, [{ from: 0, to: state.doc.length }]);
+  const { decorations } = buildLivePreview(state, [{ from: 0, to: state.doc.length }]);
   const out: DecoInfo[] = [];
-  const iter = set.iter();
+  const iter = decorations.iter();
   while (iter.value) {
     const spec = iter.value.spec as { class?: string; widget?: { constructor: { name: string } } };
     out.push({
@@ -55,6 +55,21 @@ export function decorationsOf(state: EditorState): DecoInfo[] {
       class: spec.class ?? null,
       widget: spec.widget ? spec.widget.constructor.name : null,
     });
+    iter.next();
+  }
+  return out;
+}
+
+/**
+ * Схлопнутые символы разметки — те, что курсор обязан перешагивать целиком.
+ * Возвращает их границы в порядке появления.
+ */
+export function hiddenRanges(state: EditorState): Array<{ from: number; to: number }> {
+  const { atomic } = buildLivePreview(state, [{ from: 0, to: state.doc.length }]);
+  const out: Array<{ from: number; to: number }> = [];
+  const iter = atomic.iter();
+  while (iter.value) {
+    out.push({ from: iter.from, to: iter.to });
     iter.next();
   }
   return out;
