@@ -691,8 +691,26 @@ export class AppController {
 
   // ── Навигация ──────────────────────────────────────────────────────────────
 
+  /**
+   * Маршруты, которые НЕ кладутся в историю: назад в них возвращаться нельзя.
+   *
+   * Онбординг — дверь в одну сторону. Он заканчивается курсором в первой
+   * заметке и больше не показывается (SCREENS §1); попасть в него «назад» —
+   * значит увидеть предложение выбрать хранилище поверх готового хранилища.
+   * Найдено живым прогоном: после шифрования два нажатия «Назад» приводили на
+   * первый экран онбординга.
+   *
+   * Экран разблокировки по той же причине: за ним стоит запертая заметка, и
+   * возврат в него из списка ничего не открывает.
+   */
+  private static readonly ONE_WAY: ReadonlySet<Route['name']> = new Set([
+    'onboarding',
+  ] as const);
+
   navigate(route: Route, options: { replace?: boolean } = {}): void {
-    const stack = options.replace ? this.state.stack : [...this.state.stack, this.state.route];
+    const oneWay = AppController.ONE_WAY.has(this.state.route.name);
+    const stack =
+      options.replace || oneWay ? this.state.stack : [...this.state.stack, this.state.route];
     this.patch({
       route,
       stack: stack.slice(-20),
