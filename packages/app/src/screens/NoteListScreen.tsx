@@ -14,6 +14,8 @@ import { IconMenu } from '../components/icons.js';
 import { NoteRow } from '../components/NoteRow.js';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
+import { flattenFolders, FolderPickerDialog } from '../components/FolderDialogs.js';
+import { EncryptSheet } from './EncryptSheet.js';
 import {
   EmptyBlock,
   InlineError,
@@ -38,6 +40,15 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
   const strings = useStrings();
   const layout = useLayout();
   const [menuFor, setMenuFor] = useState<NoteMeta | null>(null);
+  /** Какую заметку переносим в другую папку. `null` — диалог закрыт. */
+  const [movingNote, setMovingNote] = useState<NoteMeta | null>(null);
+  /** Какую заметку шифруем. */
+  const [encrypting, setEncrypting] = useState<NoteMeta | null>(null);
+  /** Какую заметку выгружаем и в каком формате. */
+  const [exporting, setExporting] = useState<NoteMeta | null>(null);
+
+  /** Плоский список папок — для выбора получателя при переносе заметки. */
+  const folderPaths = useMemo(() => flattenFolders(state.folders), [state.folders]);
   const [sortMenu, setSortMenu] = useState(false);
 
   const haptic = app.host.platform.haptics
@@ -191,6 +202,45 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
         items={menuFor ? noteMenuItems(menuFor) : []}
       />
 
+      {/*
+        Перенос заметки в папку. Раньше пункт «Переместить» открывал НАСТРОЙКИ
+        ХРАНИЛИЩА — экран про путь к vault'у, к переносу отношения не имеющий.
+      */}
+      <FolderPickerDialog
+        open={movingNote !== null}
+        current={
+          movingNote && movingNote.path.includes('/')
+            ? movingNote.path.slice(0, movingNote.path.lastIndexOf('/'))
+            : ''
+        }
+        folders={folderPaths}
+        onPick={(folder) => {
+          if (movingNote) void app.move(movingNote.path, folder);
+        }}
+        onClose={() => setMovingNote(null)}
+      />
+
+      {/* Шифрование. Пункт «Зашифровать» просто открывал заметку. */}
+      <EncryptSheet
+        open={encrypting !== null}
+        path={encrypting?.path ?? ''}
+        onClose={() => setEncrypting(null)}
+      />
+
+      {/* Экспорт одной заметки. Пункт уводил в настройки переноса. */}
+      <ContextMenu
+        open={exporting !== null}
+        onClose={() => setExporting(null)}
+        title={strings.list.exportNote}
+        items={(['md', 'html', 'docx', 'pdf'] as const).map((format) => ({
+          id: format,
+          label: format.toUpperCase(),
+          onSelect: () => {
+            if (exporting) void app.exportNoteAs(exporting.path, format);
+          },
+        }))}
+      />
+
       <ContextMenu
         open={sortMenu}
         onClose={() => setSortMenu(false)}
@@ -218,22 +268,28 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
         hidden: note.encrypted,
         onSelect: () => void app.duplicate(note.path),
       },
+      /*
+        Три пункта ниже вели не туда. «Переместить» открывало настройки
+        хранилища, «Зашифровать» просто открывало заметку, «Экспорт» уводило в
+        настройки переноса. Со стороны это ровно то, что описал заказчик:
+        «почти никакой функционал не работает, типа шифрования».
+      */
       {
         id: 'move',
         label: strings.list.move,
-        onSelect: () => app.navigate({ name: 'settings', section: 'storage' }),
+        onSelect: () => setMovingNote(note),
       },
       {
         id: 'encrypt',
         label: strings.list.encrypt,
         hidden: note.encrypted,
-        onSelect: () => app.openNote(note.path),
+        onSelect: () => setEncrypting(note),
       },
       {
         id: 'export',
         label: strings.list.exportNote,
         hidden: note.encrypted,
-        onSelect: () => app.navigate({ name: 'settings', section: 'transfer' }),
+        onSelect: () => setExporting(note),
       },
       {
         id: 'archive',

@@ -116,3 +116,28 @@ describe('меню тега открывается тем же жестом', ()
     expect(field.value).toBe('практика');
   });
 });
+
+/**
+ * Вход в настройки.
+ *
+ * До этого теста экран настроек был недостижим НА ТЕЛЕФОНЕ ВООБЩЕ: попасть в
+ * него можно было только по Ctrl+, или через палитру команд (Ctrl+K) — то есть
+ * с клавиатуры, которой на Android нет. За ним заперты выбор темы и акцента,
+ * размер шрифта, шифрование, синхронизация и хранилище. Отсюда и «нельзя
+ * сменить темы», и «почти никакой функционал не работает».
+ */
+describe('настройки достижимы без клавиатуры', () => {
+  it('в библиотеке есть кнопка «Настройки»', async () => {
+    await mount({});
+    expect(screen.getByRole('button', { name: ru.settings.title })).toBeTruthy();
+  });
+
+  it('она открывает экран настроек, а не просто закрывает панель', async () => {
+    const app = await mount({});
+    fireEvent.click(screen.getByRole('button', { name: ru.settings.title }));
+    const route = app.getState().route;
+    expect(route.name).toBe('settings');
+    // Первым разделом — «Внешний вид»: там темы, из-за которых и спрашивали.
+    expect(route.name === 'settings' && route.section).toBe('appearance');
+  });
+});

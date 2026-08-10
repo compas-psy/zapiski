@@ -12,8 +12,25 @@
  * подлежит — BEHAVIOR §0.
  */
 import { useEffect, useState, type ReactNode } from 'react';
+import type { FolderNode } from '@zapiski/core';
 import { Button, Modal, TextField } from '@zapiski/ui';
 import { useStrings } from '../state/context.js';
+
+/**
+ * Плоский список путей всех папок — для выбора получателя при переносе.
+ * Лежит здесь, а не в экране: получателя выбирают и для папки, и для заметки.
+ */
+export function flattenFolders(nodes: readonly FolderNode[]): string[] {
+  const out: string[] = [];
+  const walk = (list: readonly FolderNode[]): void => {
+    for (const node of list) {
+      out.push(node.path);
+      walk(node.children);
+    }
+  };
+  walk(nodes);
+  return out;
+}
 
 export interface FolderNameDialogProps {
   open: boolean;
@@ -79,8 +96,13 @@ export function FolderNameDialog({
 
 export interface FolderPickerDialogProps {
   open: boolean;
-  /** Что перемещаем: сама папка и её поддерево из списка исключаются. */
-  source: string;
+  /**
+   * Перемещаемая ПАПКА: она сама и её поддерево из списка исключаются.
+   * Для заметки — пустая строка: заметке любое поддерево подходит.
+   */
+  source?: string;
+  /** Где объект лежит сейчас — туда переносить некуда, пункта нет. */
+  current: string;
   /** Плоский список путей всех папок хранилища. */
   folders: readonly string[];
   onPick: (parent: string) => void;
@@ -99,15 +121,17 @@ export interface FolderPickerDialogProps {
  */
 export function FolderPickerDialog({
   open,
-  source,
+  source = '',
+  current,
   folders,
   onPick,
   onClose,
 }: FolderPickerDialogProps): ReactNode {
   const strings = useStrings();
-  const parent = source.includes('/') ? source.slice(0, source.lastIndexOf('/')) : '';
   const targets = folders.filter(
-    (path) => path !== source && !path.startsWith(`${source}/`) && path !== parent,
+    (path) =>
+      path !== current &&
+      (source === '' || (path !== source && !path.startsWith(`${source}/`))),
   );
 
   const choose = (target: string) => () => {
@@ -117,8 +141,8 @@ export function FolderPickerDialog({
 
   return (
     <Modal open={open} onClose={onClose} title={strings.library.moveFolderTitle}>
-      {/* «В корень» не показывается, когда папка уже в корне. */}
-      {parent === '' ? null : (
+      {/* «В корень» не показывается, когда объект уже в корне. */}
+      {current === '' ? null : (
         <Button variant="secondary" fullWidth onClick={choose('')}>
           {strings.library.moveToRoot}
         </Button>

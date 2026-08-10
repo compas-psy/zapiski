@@ -24,12 +24,13 @@ import {
   Tree,
   type TreeNode,
 } from '@zapiski/ui';
-import { IconArchive } from '../components/icons.js';
+import { IconArchive, IconSettings } from '../components/icons.js';
 import { useLongPress } from '../lib/gestures.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { EmptyBlock, Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
 import {
+  flattenFolders,
   FolderDeleteSheet,
   FolderNameDialog,
   FolderPickerDialog,
@@ -214,6 +215,22 @@ export function LibraryPanel(): ReactNode {
               <span className="za-nav__count">{state.trash.length}</span>
             ) : null}
           </button>
+          {/*
+            Настройки. До этой строки экран настроек был недостижим НА ТЕЛЕФОНЕ
+            ВООБЩЕ: попасть в него можно было только по Ctrl+, или через палитру
+            команд (Ctrl+K) — то есть с клавиатуры, которой на Android нет.
+            За ним заперты выбор темы и акцента, шрифт, шифрование, синк и
+            хранилище. Отсюда и «нельзя сменить темы», и «почти никакой
+            функционал не работает».
+          */}
+          <button
+            type="button"
+            className="za-nav__item"
+            onClick={() => app.openSettings()}
+          >
+            <IconSettings size={15} />
+            {strings.settings.title}
+          </button>
         </div>
       </div>
 
@@ -262,6 +279,9 @@ export function LibraryPanel(): ReactNode {
       <FolderPickerDialog
         open={moving !== null}
         source={moving ?? ''}
+        current={
+          moving && moving.includes('/') ? moving.slice(0, moving.lastIndexOf('/')) : ''
+        }
         folders={folderPaths}
         onPick={(parent) => void app.moveFolder(moving ?? '', parent)}
         onClose={() => setMoving(null)}
@@ -289,19 +309,6 @@ export function LibraryPanel(): ReactNode {
       />
     </div>
   );
-}
-
-/** Плоский список путей всех папок — для выбора получателя при переносе. */
-function flattenFolders(nodes: readonly FolderNode[]): string[] {
-  const out: string[] = [];
-  const walk = (list: readonly FolderNode[]): void => {
-    for (const node of list) {
-      out.push(node.path);
-      walk(node.children);
-    }
-  };
-  walk(nodes);
-  return out;
 }
 
 function toTreeNode(node: FolderNode): TreeNode {
