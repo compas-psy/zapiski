@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SharedPayload, VaultPath } from '@zapiski/core';
 /* `@zapiski/ui` подключает токены и стили компонентов сам (side effect). */
-import { Drawer, ThemeProvider, ToastProvider } from '@zapiski/ui';
+import { Button, Drawer, IconPen, ThemeProvider, ToastProvider } from '@zapiski/ui';
 import './styles/app.css';
 import type { AppHost, Layout } from './contract.js';
 import type { Locale } from './i18n/index.js';
@@ -18,6 +18,7 @@ import { useKeyboardInset } from './lib/keyboard.js';
 import type { AppController } from './state/store.js';
 import { flushActiveEditor } from './state/active-editor.js';
 import { IconBug } from './components/icons.js';
+import { EmptyBlock } from './components/ScreenStates.js';
 import { CommandPalette } from './screens/CommandPalette.js';
 import { DebugMenu } from './screens/DebugMenu.js';
 import { LibraryPanel } from './screens/LibraryPanel.js';
@@ -274,12 +275,19 @@ function AppShell(): ReactNode {
     notePath !== null ? (
       <NoteScreen key={noteKey} path={notePath} />
     ) : (
-      /* Пустое состояние редактора — плейсхолдер-подсказка (BEHAVIOR §12). */
+      /*
+        REBUILD §1.9: без выбранной заметки здесь было белое поле на 70%
+        ширины без единого элемента. Теперь пустое состояние по образцу `1n`:
+        круг, «Выберите заметку», подпись и одна кнопка — по центру области.
+      */
       <div className="za-editor">
-        <div className="za-editor__surface">
-          <div className="za-editor__column">
-            <p className="za-muted">{strings.note.placeholder}</p>
-          </div>
+        <div className="za-editor__surface za-editor__surface--empty">
+          <EmptyBlock
+            title={strings.notePane.title}
+            description={strings.notePane.subtitle}
+            icon={<IconPen size={24} />}
+            action={<Button onClick={() => void app.createNote()}>{strings.list.newNote}</Button>}
+          />
         </div>
       </div>
     );

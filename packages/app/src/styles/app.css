@@ -451,6 +451,26 @@
   padding-block-end: var(--z-keyboard, 0px);
   transition: padding-block-end 120ms var(--ease-out, ease-out);
 }
+/* REBUILD §1.7: пустой экран поиска — одна строка по центру верхней трети. */
+.za-search__hint {
+  margin: 0;
+  padding-block-start: 18vh;
+  padding-inline: var(--sp-16);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* REBUILD §1.9: пустое состояние третьей панели — по центру области,
+   максимум 280 px ширины, а не растянуто по всей панели. */
+.za-editor__surface--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.za-editor__surface--empty > * {
+  max-inline-size: 280px;
+}
+
 .za-editor__surface {
   flex: 1;
   min-block-size: 0;

@@ -79,7 +79,7 @@ export function SearchScreen(): ReactNode {
               active={active}
               onClick={() => toggleFilter({ has: [value] }, active)}
             >
-              {strings.search.hasValues[value]}
+              {strings.search.hasChips[value]}
             </FilterChip>
           );
         })}
@@ -104,7 +104,17 @@ export function SearchScreen(): ReactNode {
                 ))}
               </>
             ) : null}
-            <Section>{strings.search.lastOpened}</Section>
+            {/* REBUILD §1.7: секция без элементов не рендерится вместе с
+                заголовком. «ПОСЛЕДНИЕ ОТКРЫТЫЕ» висели над пустотой в
+                пол-экрана. */}
+            {state.lastOpened.some((path) => state.notes.some((n) => n.path === path)) ? (
+              <Section>{strings.search.lastOpened}</Section>
+            ) : null}
+            {/* Когда обеих секций нет — одна строка-подсказка, не заголовки. */}
+            {state.recentQueries.length === 0 &&
+            !state.lastOpened.some((path) => state.notes.some((n) => n.path === path)) ? (
+              <p className="za-search__hint">{strings.search.hint}</p>
+            ) : null}
             {state.lastOpened.map((path) => {
               const note = state.notes.find((item) => item.path === path);
               if (!note) return null;

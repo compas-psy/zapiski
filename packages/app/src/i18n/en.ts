@@ -201,9 +201,11 @@ export const en: AppCatalog = {
     recent: 'RECENT',
     lastOpened: 'RECENTLY OPENED',
     emptyTitle: 'Nothing found',
+    hint: 'Start typing — we search titles, text and tags',
     emptyHintPrefix: 'Try removing a filter:',
     filters: { tag: 'Tag', folder: 'Folder', period: 'Period', has: 'Contains' },
     hasValues: { image: 'an image', file: 'a file', todo: 'a task', link: 'a link' },
+    hasChips: { image: 'with an image', file: 'with a file', todo: 'with a task', link: 'with a link' },
     periodValues: { today: 'today', week: 'week', month: 'month', year: 'year' },
     inNote: 'Find in note',
     counter: (index: number, total: number): string => `${index} of ${total}`,
@@ -211,6 +213,8 @@ export const en: AppCatalog = {
     replaceAll: 'Replace all',
     replaced: (count: number): string => `Replaced: ${count}`,
   },
+
+  notePane: { title: 'Pick a note', subtitle: 'or start a new one' },
 
   archive: { title: 'Archive', emptyTitle: 'The archive is empty' },
   trash: {
