@@ -433,7 +433,11 @@ function SyncSection(): ReactNode {
             <Button
               variant="text"
               size="compact"
-              onClick={() => app.navigate({ name: 'versions', noteId: conflicted[0]!.id })}
+              /* ПУТЬ, а не идентификатор: `VersionsScreen` объявляет
+                 `noteId: VaultPath` и зовёт `vault.read(noteId)`. С `.id`
+                 ссылка вела на пустой экран — заметка по такому «пути» не
+                 читается. Рядом, в `InfoPanel.tsx`, сделано верно. */
+              onClick={() => app.navigate({ name: 'versions', noteId: conflicted[0]!.path })}
             >
               {copy.historyLink}
             </Button>

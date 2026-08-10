@@ -196,6 +196,13 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/check-focus-ring.mjs
 
+      # Размеры отрисованных элементов против эталона (REBUILD §3): токен может
+      # быть верным, а к элементу приложен не тот. Без браузера шаг пропускает
+      # себя сам.
+      - name: Размеры против эталона
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-measurements.mjs
+
       # Compose-файл — такой же артефакт, как код: битый YAML обнаружится
       # здесь, а не на проде в момент `up -d`.
       - name: Проверить deploy/docker-compose.yml

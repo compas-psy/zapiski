@@ -392,7 +392,10 @@
   min-block-size: var(--tap-min);
   padding: var(--sp-8) var(--sp-12);
   border: 0;
-  border-radius: var(--r-sm);
+  /* Эталон: `.zp-nav__item` — радиус 10. Высоту 44 оставляем своей: у эталона
+     40, а README §6 требует touch-target ≥44 dp, и это требование доступности
+     сильнее, чем совпадение с макетом на четыре пикселя. */
+  border-radius: 10px;
   background-color: transparent;
   color: var(--text);
   font-family: inherit;

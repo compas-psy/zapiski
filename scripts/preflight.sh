@@ -57,6 +57,9 @@ step 'Токены против эталона дизайна' node scripts/chec
 # Одно кольцо фокуса на поле (REBUILD §1.5). Правила лежат в разных пакетах и
 # складываются только на экране — поэтому меряются вычисленные стили.
 step 'Одно кольцо фокуса' node scripts/check-focus-ring.mjs
+# Размеры отрисованных элементов против эталона (REBUILD §3). Токен может быть
+# верным, а к элементу приложен не тот — так кнопка и брала радиус 16 вместо 14.
+step 'Размеры против эталона' node scripts/check-measurements.mjs
 step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
 step 'Скрипты, исполняемые на сервере' bash -c 'bash -n deploy/deploy-production-remote.sh && bash -n deploy/merge-update-manifest.sh'

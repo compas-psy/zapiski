@@ -69,7 +69,9 @@
   min-inline-size: 0;
   max-inline-size: var(--modal-w-max);
   padding: var(--sp-24);
-  border-radius: var(--r-xl);
+  /* Эталон: `.zp-modal` — 24 (`--r-panel`), не 20. Радиус берётся от панели,
+     как у bottom sheet, а не от карточки. */
+  border-radius: var(--r-sheet);
   background-color: var(--bg);
   color: var(--text);
   box-shadow: var(--elev-modal);

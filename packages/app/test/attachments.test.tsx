@@ -178,5 +178,15 @@ describe('плашка конфликтов говорит правду', () => 
     screen.getByRole('button', { name: ru.settings.sync.historyLink }).click();
     const route = app.getState().route;
     expect(route.name).toBe('versions');
+    /*
+      Проверяется НЕ ТОЛЬКО имя маршрута, но и то, что в него передано.
+      Прежняя редакция теста обрывалась на имени — и пропустила, что ссылка
+      отдавала `.id` заметки, тогда как `VersionsScreen` объявляет
+      `noteId: VaultPath` и зовёт `vault.read(noteId)`. Экран открывался
+      пустым: заметки по такому «пути» на диске нет.
+    */
+    expect(route.name === 'versions' && route.noteId).toBe(
+      'Заметка (конфликт, устройство Samsung).md',
+    );
   });
 });
