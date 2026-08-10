@@ -125,7 +125,12 @@ export function LibraryPanel(): ReactNode {
           }}
         >
           {strings.library.all}
-          <span className="za-nav__count">{activeNotes.length}</span>
+          {/* REBUILD §1.12: ноль не отображается вовсе — ни в навигации, ни в
+              бейджах. Он печатался наравне с числами и притягивал внимание к
+              пустоте. Место счётчика просто остаётся пустым. */}
+          {activeNotes.length > 0 ? (
+            <span className="za-nav__count">{activeNotes.length}</span>
+          ) : null}
         </button>
         <button
           type="button"
@@ -137,7 +142,7 @@ export function LibraryPanel(): ReactNode {
         >
           <IconPin size={15} />
           {strings.library.pinned}
-          <span className="za-nav__count">{pinnedCount}</span>
+          {pinnedCount > 0 ? <span className="za-nav__count">{pinnedCount}</span> : null}
         </button>
       </div>
 
@@ -316,6 +321,7 @@ function toTreeNode(node: FolderNode): TreeNode {
     id: node.path,
     label: node.name,
     icon: <IconFolder size={15} />,
+    // REBUILD §1.12: ноль не отображается вовсе.
     count: node.count > 0 ? node.count : undefined,
     ...(node.children.length > 0 ? { children: node.children.map(toTreeNode) } : {}),
   };
@@ -351,7 +357,7 @@ function buildTagTree(tags: ReadonlyArray<{ tag: string; count: number }>): Tree
     id: draft.id,
     label: `#${draft.label}`,
     icon: <IconHash size={15} />,
-    count: draft.count,
+    ...(draft.count > 0 ? { count: draft.count } : {}),
     ...(draft.children.size > 0
       ? { children: [...draft.children.values()].map(materialize) }
       : {}),

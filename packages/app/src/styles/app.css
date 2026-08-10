@@ -431,6 +431,15 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /*
+    Отступ на высоту экранной клавиатуры (см. `lib/keyboard.ts`).
+
+    Без него тулбар с жирным/курсивом/списком оставался ПОД клавиатурой:
+    layout-вьюпорт при её появлении не меняется, окно остаётся прежней высоты,
+    и клавиатура ложится поверх нижней трети экрана вместе с панелью.
+  */
+  padding-block-end: var(--z-keyboard, 0px);
+  transition: padding-block-end 120ms var(--ease-out, ease-out);
 }
 .za-editor__surface {
   flex: 1;

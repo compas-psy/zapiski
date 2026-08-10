@@ -14,6 +14,7 @@ import './styles/app.css';
 import type { AppHost, Layout } from './contract.js';
 import type { Locale } from './i18n/index.js';
 import { AppProvider, useApp, useAppState, useLayout, useStrings } from './state/context.js';
+import { useKeyboardInset } from './lib/keyboard.js';
 import type { AppController } from './state/store.js';
 import { flushActiveEditor } from './state/active-editor.js';
 import { IconBug } from './components/icons.js';
@@ -77,6 +78,9 @@ function AppShell(): ReactNode {
   const strings = useStrings();
   const layout = useLayout();
   const sideBySide = useSideBySide(layout);
+  /* Высота экранной клавиатуры в `--z-keyboard`: без неё тулбар редактора
+     остаётся ПОД клавиатурой, что заказчик и увидел на Android. */
+  useKeyboardInset();
   const [shared, setShared] = useState<SharedPayload | null>(null);
   /** Что показывает панель редактора, когда маршрут — список (desktop). */
   const [lastNote, setLastNote] = useState<VaultPath | null>(null);

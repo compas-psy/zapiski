@@ -268,7 +268,15 @@ export function patchManifest(source) {
   //    обратное (ТЗ §6, «серверы и данные в РФ»).
   manifest = setApplicationAttribute(manifest, 'android:allowBackup', 'false');
 
-  // 5. Наши компоненты — перед </application>.
+  // 5. Клавиатура ужимает окно, а не ложится поверх него.
+  //
+  //    Без этого атрибута WebView не сообщает об изменении видимой области, и
+  //    `visualViewport` в вебе остаётся прежней высоты: тулбар редактора с
+  //    жирным, курсивом и списком уходит ПОД клавиатуру. Вторая половина
+  //    решения — `packages/app/src/lib/keyboard.ts`; нужны обе.
+  manifest = setMainActivitySoftInput(manifest);
+
+  // 6. Наши компоненты — перед </application>.
   manifest = insertBefore(
     manifest,
     /<\/application>/,
@@ -280,6 +288,23 @@ export function patchManifest(source) {
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * `android:windowSoftInputMode="adjustResize"` на активность Tauri.
+ *
+ * Правится существующий тег, а не добавляется свой: активность генерирует
+ * шаблон Tauri, и вторая с тем же именем — это ошибка сборки.
+ */
+export function setMainActivitySoftInput(manifest) {
+  return manifest.replace(
+    /<activity\b[^>]*android:name="\.MainActivity"[^>]*?\s*(\/?)>/,
+    (whole, selfClosing) => {
+      if (whole.includes('android:windowSoftInputMode')) return whole;
+      const head = whole.slice(0, whole.length - (selfClosing ? 2 : 1)).trimEnd();
+      return `${head}\n            android:windowSoftInputMode="adjustResize"${selfClosing ? ' />' : '>'}`;
+    },
+  );
 }
 
 /**
@@ -422,6 +447,7 @@ const EXPECTATIONS = [
   ['виджет «Закреплённая»', 'android:name=".PinnedWidget"'],
   ['приёмник тапов', 'android:name=".ZapiskiWidgetReceiver"'],
   ['сохранена активность Tauri', 'android:name=".MainActivity"'],
+  ['клавиатура ужимает окно', 'android:windowSoftInputMode="adjustResize"'],
   ['сохранён LAUNCHER', 'android.intent.category.LAUNCHER'],
 ];
 
