@@ -480,7 +480,24 @@ jobs:
              || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
             echo 'signed=false' >> "$GITHUB_OUTPUT"
             echo "::warning::Секретов подписи нет (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) — собираем DEBUG-APK"
-            echo "::warning::Debug-APK подписан отладочным ключом AGP: он ставится на устройство, но релизом НЕ является и обновлением поверх релизной сборки не встанет"
+            echo "::warning::Debug-APK подписан отладочным ключом репозитория: он ставится на устройство, но релизом НЕ является и обновлением поверх релизной сборки не встанет"
+
+            # ПОСТОЯННЫЙ отладочный ключ вместо случайного.
+            #
+            # Свой ключ Android-плагин генерирует на машине сборки. Раннер
+            # GitHub каждый раз новый — значит, новый ключ и новая подпись.
+            # Первый APK встаёт, каждый следующий отказывается: Android не
+            # ставит пакет с тем же applicationId, но чужой подписью, и пишет
+            # «Приложение не установлено», не называя причины. Заказчик потерял
+            # на этом вечер.
+            #
+            # Ключ отладочный, общеизвестный (android/androiddebugkey), ничего
+            # не защищает и в Play не принимается — почему это не утечка,
+            # написано в apps/mobile/keys/README.md.
+            mkdir -p ~/.android
+            base64 -d apps/mobile/keys/debug.keystore.base64 > ~/.android/debug.keystore
+            keytool -list -keystore ~/.android/debug.keystore -storepass android \
+              -alias androiddebugkey | tail -2
             echo "::warning::latest.json по этой сборке не публикуется — иначе клиенты пошли бы обновляться на пакет с чужой подписью"
             exit 0
           fi

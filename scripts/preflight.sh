@@ -62,6 +62,15 @@ step 'Одно кольцо фокуса' node scripts/check-focus-ring.mjs
 step 'Размеры против эталона' node scripts/check-measurements.mjs
 step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
+# Отладочный ключ подписи должен раскодироваться и содержать нужный алиас: без
+# него debug-сборки снова получат случайную подпись, и каждая следующая
+# перестанет ставиться поверх предыдущей («Приложение не установлено»).
+step 'Отладочный ключ Android' bash -c '
+  set -euo pipefail
+  tmp="$(mktemp)"
+  base64 -d apps/mobile/keys/debug.keystore.base64 > "$tmp"
+  keytool -list -keystore "$tmp" -storepass android -alias androiddebugkey >/dev/null
+  rm -f "$tmp"'
 step 'Скрипты, исполняемые на сервере' bash -c 'bash -n deploy/deploy-production-remote.sh && bash -n deploy/merge-update-manifest.sh'
 
 # Битый workflow не даёт ни одного job'а: прогон падает за секунду, и в списке
