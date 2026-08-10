@@ -37,10 +37,12 @@ interface Entry {
  * `view.focus` и `view.raw` — исключение: переключает их оболочка (от этого
  * зависит хром экрана), но ключ всё равно читается из списка редактора.
  */
-const SHELL_HOTKEYS: Record<string, string> = {
+export const SHELL_HOTKEYS: Record<string, string> = {
   'app.newNote': 'Ctrl+N',
   'app.newNoteHere': 'Ctrl+Shift+N',
-  'app.palette': 'Ctrl+K',
+  /* Оба сочетания, как в таблице §7: `Ctrl+P` работал, но в палитре не
+     показывался, а критерий §13.8 требует, чтобы хоткеи были в ней отражены. */
+  'app.palette': 'Ctrl+K / Ctrl+P',
   'app.globalSearch': 'Ctrl+Shift+S',
   'app.toggleLibrary': 'Ctrl+\\',
   'app.settings': 'Ctrl+,',

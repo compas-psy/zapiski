@@ -9,7 +9,6 @@
  */
 import { editorCommands } from '@zapiski/editor';
 import { describe, expect, it } from 'vitest';
-import HOTKEY_SPEC from '../../../docs/spec/BEHAVIOR.md?raw';
 import PALETTE_SOURCE from '../src/screens/CommandPalette.tsx?raw';
 import { displayHotkey, editorHotkey } from '../src/screens/CommandPalette.js';
 import { strings } from '../src/i18n/index.js';
@@ -58,33 +57,12 @@ describe('палитра построена из editorCommands', () => {
     expect(labels.has(catalog.commands.moveLineDown)).toBe(true);
   });
 
-  it('покрывает каждый хоткей таблицы §7', () => {
-    const section = HOTKEY_SPEC.slice(
-      HOTKEY_SPEC.indexOf('### Desktop'),
-      HOTKEY_SPEC.indexOf('### Палитра команд'),
-    );
-    const specHotkeys = section
-      .split('\n')
-      .filter((line) => line.startsWith('| Ctrl') || line.startsWith('| Alt'))
-      .map((line) => (line.split('|')[1] ?? '').trim());
-    expect(specHotkeys.length).toBeGreaterThan(20);
-
-    /* Хоткеи текста — из редактора, хоткеи оболочки — из карты в палитре. */
-    const fromEditor = new Set(editorCommands.map((command) => displayHotkey(command.key)));
-    const fromShell = new Set(
-      [...PALETTE_SOURCE.matchAll(/'(Ctrl\+[^']+)'/g)].map((match) => match[1] as string),
-    );
-
-    const missing = specHotkeys.filter((hotkey) => {
-      /* В ТЗ часть строк записана диапазоном («Ctrl+1…6»), через слэш
-         («Ctrl+K / Ctrl+P») или сокращением («Alt+↑/↓») — разворачиваем. */
-      const variants = hotkey
-        .replace('Ctrl+1…6', 'Ctrl+1')
-        .replace('Alt+↑/↓', 'Alt+↑ / Alt+↓')
-        .split(' / ')
-        .map((item) => item.trim());
-      return !variants.some((variant) => fromEditor.has(variant) || fromShell.has(variant));
-    });
-    expect(missing, `не отражены в палитре: ${missing.join(', ')}`).toEqual([]);
-  });
+  /*
+    Проверка «покрывает каждый хоткей таблицы §7» переехала в
+    `hotkeys.test.ts`. Здешняя редакция была слабее и потому пропустила
+    настоящее расхождение: она требовала, чтобы нашлась ХОТЯ БЫ ОДНА из
+    альтернатив, и строка «Ctrl+K / Ctrl+P» проходила при отсутствии Ctrl+P.
+    Плюс читала реестр оболочки регулярным выражением по тексту файла, а не
+    как данные, — и ломалась от любой правки записи.
+  */
 });
