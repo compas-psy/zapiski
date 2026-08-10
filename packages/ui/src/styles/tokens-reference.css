@@ -1,0 +1,128 @@
+/*
+ * ТОКЕНЫ ИЗ ПАКЕТА ДИЗАЙНА — ПЕРЕНЕСЕНЫ ДОСЛОВНО, ПРАВИТЬ ЗДЕСЬ НЕЛЬЗЯ.
+ *
+ * Источник: `design_handoff_zapiski/zapiski.css`, раздел «1. ТОКЕНЫ ТЕМ».
+ * README пакета: «Приоритет документов при конфликте: zapiski.css (значения) >
+ * REBUILD.md > DS-ALIGNMENT.md > BEHAVIOR.md > SCREENS.md > DESIGN_TOKENS.md».
+ * То есть по любому цвету, радиусу и отступу спор решается этим файлом.
+ *
+ * ПОЧЕМУ ОТДЕЛЬНЫМ ФАЙЛОМ И ПОСЛЕДНИМ В ПОРЯДКЕ ИМПОРТА. Он должен выигрывать
+ * каскадом у `tokens.css`, где те же имена выводились через промежуточные
+ * переменные системы СИМПАС (`--bg: var(--background)`). Промежуточное звено
+ * и было причиной расхождения с макетами: значение приходило из чужого файла
+ * и менялось вместе с ним. Здесь значения записаны буквально.
+ *
+ * Что осталось в `tokens.css`: имена, которых в эталоне нет вовсе (размеры
+ * строк, длительности, служебные алиасы). Они не переопределяются.
+ *
+ * Перенесён ТОЛЬКО раздел токенов. Слой классов `.zp-*` из того же файла не
+ * подключён: экраны собраны на классах `.z-*` и `.za-*`, и одномоментная
+ * замена ста с лишним классов — это переверстка всех экранов разом, без
+ * возможности проверить каждый. Значения при этом одни и те же, а
+ * расхождения в композиции закрываются по списку REBUILD §1.1–1.12.
+ */
+
+:root[data-theme="simpas"], :root:not([data-theme]) {
+  --bg:              #F7F8F4;
+  --surface:         #FFFFFF;
+  --surface-alt:     #F6FAF6;
+  --surface-sunken:  #F2F4EF;
+  --line:            #E4E9E3;
+  --line-soft:       #EEF1EC;
+  --text:            #142018;
+  --text-secondary:  #5F6C64;
+  --text-tertiary:   #7E8A83;
+  --text-disabled:   #A3ADA7;
+  --text-ghost:      #C2CBC5;
+  --scrim:           rgba(20,32,24,.32);
+  --on-accent:       #FFFFFF;
+  --shadow-card:     0 8px 30px rgba(20,32,24,.06);
+  --shadow-pop:      0 24px 60px rgba(20,32,24,.18);
+  --shadow-sheet:    0 -12px 40px rgba(20,32,24,.18);
+  --success: #3B8F5A; --success-soft: #EAF7EE; --success-text: #2C6B44;
+  --warning: #CC9E50; --warning-soft: #FBF3E3; --warning-text: #886522;
+  --danger:  #C2503F; --danger-soft:  #FAECE9; --danger-text:  #B23B2E;
+  --info:    #4A6FA8; --info-soft:    #ECF1F8; --info-text:    #2C5FA8;
+}
+
+:root[data-theme="graphite"] {
+  --bg:              #121A15;
+  --surface:         #1A241E;
+  --surface-alt:     #16201A;
+  --surface-sunken:  #1E2A23;
+  --line:            #26332B;
+  --line-soft:       #1E2A23;
+  --text:            #EEF4EF;
+  --text-secondary:  #9FB0A6;
+  --text-tertiary:   #75847B;
+  --text-disabled:   #56635B;
+  --text-ghost:      #3A4841;
+  --scrim:           rgba(0,0,0,.55);
+  --on-accent:       #EDF4EF;
+  --shadow-card:     0 8px 30px rgba(0,0,0,.35);
+  --shadow-pop:      0 24px 60px rgba(0,0,0,.55);
+  --shadow-sheet:    0 -12px 40px rgba(0,0,0,.5);
+  --success: #5FAF7C; --success-soft: rgba(95,175,124,.16); --success-text: #8FCBA5;
+  --warning: #D8AE67; --warning-soft: rgba(216,174,103,.16); --warning-text: #E3C48C;
+  --danger:  #D0776A; --danger-soft:  rgba(208,119,106,.16); --danger-text:  #E09E93;
+  --info:    #7C9DC9; --info-soft:    rgba(124,157,201,.16); --info-text:    #A5BFDE;
+}
+
+:root[data-theme="ink"] {
+  --bg: #000000; --surface: #0D1310; --surface-alt: #080C0A; --surface-sunken: #121915;
+  --line: #1B241E; --line-soft: #121915;
+  --text: #EEF4EF; --text-secondary: #93A399; --text-tertiary: #6C7B72;
+  --text-disabled: #4E5A53; --text-ghost: #333E38;
+  --scrim: rgba(0,0,0,.7); --on-accent: #EDF4EF;
+  --shadow-card: none; --shadow-pop: 0 24px 60px rgba(0,0,0,.7); --shadow-sheet: 0 -12px 40px rgba(0,0,0,.6);
+  --success: #5FAF7C; --success-soft: rgba(95,175,124,.16); --success-text: #8FCBA5;
+  --warning: #D8AE67; --warning-soft: rgba(216,174,103,.16); --warning-text: #E3C48C;
+  --danger:  #D0776A; --danger-soft:  rgba(208,119,106,.16); --danger-text:  #E09E93;
+  --info:    #7C9DC9; --info-soft:    rgba(124,157,201,.16); --info-text:    #A5BFDE;
+}
+
+/* --- Акценты. ОДИН зелёный на экран: --accent используют кнопка, FAB и активный пункт. --- */
+[data-accent="pine"],   :root:not([data-accent]) { --accent:#1D4735; --accent-hover:#143D2F; --accent-soft:#E7F0EA; --accent-on-soft:#1D4735; }
+[data-accent="forest"]  { --accent:#3B8F5A; --accent-hover:#2F7749; --accent-soft:#EAF7EE; --accent-on-soft:#256B41; }
+[data-accent="gold"]    { --accent:#8F6B26; --accent-hover:#775820; --accent-soft:#FBF3E3; --accent-on-soft:#886522; --on-accent:#143D2F; }
+[data-accent="dusk"]    { --accent:#4A4E78; --accent-hover:#3E4266; --accent-soft:#ECEDF5; --accent-on-soft:#3E4266; }
+[data-accent="granite"] { --accent:#6A5F63; --accent-hover:#584E52; --accent-soft:#F1EEEF; --accent-on-soft:#584E52; }
+[data-accent="clay"]    { --accent:#A47864; --accent-hover:#8A6152; --accent-soft:#F6EFEA; --accent-on-soft:#7E5A4A; }
+
+/* В тёмных темах заливка приглушается, светлый тон — только для текста и иконок. */
+:root[data-theme="graphite"], :root[data-theme="ink"] {
+  --accent:       #2E6B4A;
+  --accent-hover: #377D58;
+  --accent-text:  #7FC49B;
+  --accent-soft:  rgba(127,196,155,.14);
+  --accent-on-soft:#9FD5B5;
+}
+:root[data-theme="simpas"] { --accent-text: var(--accent); }
+
+/*
+ * ЧТО СЮДА НАМЕРЕННО НЕ ПЕРЕНЕСЕНО И ПОЧЕМУ.
+ *
+ * В эталоне следом идёт общий блок `:root` с геометрией и типографикой:
+ * `--sp-1…--sp-8`, `--r-sm…--r-panel`, `--font-*`, `--dur`, `--ease`.
+ * Имена совпадают с нашими, а смысл — нет:
+ *
+ *     эталон  --sp-8: 32px     у нас  --sp-8: 0.5rem  (8px)
+ *     эталон  --r-sm: 12px     у нас  --r-sm: 8px
+ *
+ * Шкала эталона шаговая (sp-N = N × 4px), наша пиксельная (sp-N = N px).
+ * Перенос вчетверо раздул каждый отступ в приложении: пункты навигации
+ * разъехались по вертикали и выглядели центрированными от огромных боковых
+ * полей. Это было видно на снимке экрана и не видно ни одному тесту.
+ *
+ * Геометрия эталона относится к его же классам `.zp-*`, которых мы не
+ * используем. Значения размеров берутся из SCREENS.md и COMPONENTS.md, где они
+ * названы в пикселях без опоры на шкалу.
+ *
+ * Два имени ниже перенесены: они про цвет, а не про размер.
+ */
+:root {
+  /* Кольцо фокуса — одно на поле (REBUILD §1.5). */
+  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  /* ТОЛЬКО знак сервиса ≤24px. В интерфейсе не использовать (REBUILD §1.1). */
+  --svc-zapiski-bg: #C8604A;
+}

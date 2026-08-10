@@ -50,6 +50,13 @@ step 'Проверка типов' pnpm -r typecheck
 step 'Линт токенов' pnpm run lint:tokens
 step 'Тесты' pnpm -r test
 step 'Сборка PWA' pnpm --filter '@zapiski/web...' build
+# Значения токенов должны совпадать с `docs/design/zapiski.css` — он приоритетнее
+# любого текста спецификации. Сравниваются ВЫЧИСЛЕННЫЕ значения в браузере:
+# между файлом и экраном стоят каскад и порядок импортов, и расходится именно там.
+step 'Токены против эталона дизайна' node scripts/check-design-tokens.mjs
+# Одно кольцо фокуса на поле (REBUILD §1.5). Правила лежат в разных пакетах и
+# складываются только на экране — поэтому меряются вычисленные стили.
+step 'Одно кольцо фокуса' node scripts/check-focus-ring.mjs
 step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
 step 'Скрипты, исполняемые на сервере' bash -c 'bash -n deploy/deploy-production-remote.sh && bash -n deploy/merge-update-manifest.sh'

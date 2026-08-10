@@ -4,5 +4,7 @@
    переменные (DS-ALIGNMENT.md §2). */
 @import './simpas-offline.css';
 @import './tokens.css';
+/* Эталонные значения — последними, чтобы выигрывать каскадом. */
+@import './tokens-reference.css';
 @import './base.css';
 @import './typography.css';

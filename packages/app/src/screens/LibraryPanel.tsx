@@ -27,7 +27,7 @@ import {
 import { IconArchive, IconSettings } from '../components/icons.js';
 import { useLongPress } from '../lib/gestures.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
-import { EmptyBlock, Section, TreeSkeleton } from '../components/ScreenStates.js';
+import { Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
 import {
   flattenFolders,
@@ -149,20 +149,24 @@ export function LibraryPanel(): ReactNode {
       {screenState === 'loading' ? (
         <TreeSkeleton />
       ) : screenState === 'empty' && tagNodes.length === 0 ? (
-        <EmptyBlock
-          title={strings.empty.library}
-          icon={<IconFolder size={24} />}
-          action={
-            <>
-              <Button onClick={() => void app.createNote()}>{strings.list.newNote}</Button>
-              {/* Без этой кнопки первую папку создать было НЕЧЕМ: меню папки
-                  открывается долгим нажатием на папку, а папок ещё нет. */}
-              <Button variant="secondary" onClick={() => setCreatingIn('')}>
-                {strings.library.newFolder}
-              </Button>
-            </>
-          }
-        />
+        /*
+          REBUILD §1.3: навигация — не контент, и права показывать иллюстрацию
+          и CTA у неё нет. Здесь стояло полноценное пустое состояние: круг,
+          заголовок и две кнопки. Теперь одна строка и обычный пункт списка
+          с «+» — в общем ритме, не отдельной кнопкой.
+
+          Пункт «Новая папка» остаётся: без него первую папку создать нечем
+          вообще, меню открывается долгим нажатием НА ПАПКУ.
+        */
+        <>
+          <p className="za-nav__hint">{strings.library.emptyFolders}</p>
+          <div className="za-nav">
+            <button type="button" className="za-nav__item" onClick={() => setCreatingIn('')}>
+              <span aria-hidden="true">+</span>
+              {strings.library.newFolder}
+            </button>
+          </div>
+        </>
       ) : (
         <>
           {folderNodes.length > 0 ? (
@@ -256,9 +260,10 @@ export function LibraryPanel(): ReactNode {
       />
       <FolderNameDialog
         open={creatingIn !== null}
-        initial={strings.library.folderNameDefault}
+        initial=""
+        placeholder={strings.library.folderNameHint}
         title={creatingIn ? strings.library.newSubfolder : strings.library.newFolder}
-        confirmLabel={strings.library.newFolder}
+        confirmLabel={strings.library.create}
         onConfirm={(name) => void app.createFolder(creatingIn ?? '', name)}
         onClose={() => setCreatingIn(null)}
       />

@@ -417,6 +417,16 @@
   font-weight: 400;
   color: var(--text-tertiary);
 }
+.za-nav__hint {
+  /* REBUILD §1.3: в навигации при отсутствии папок — ОДНА строка, а не
+     иллюстрация с призывом к действию. Размер и цвет заданы там же. */
+  margin: 0;
+  padding-inline: var(--sp-3);
+  padding-block: var(--sp-2);
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
 .za-library__footer {
   margin-block-start: auto;
   padding: var(--sp-12) var(--sp-8) var(--sp-16);

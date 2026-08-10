@@ -29,13 +29,29 @@
     box-shadow var(--dur-base) var(--ease-out),
     background-color var(--dur-base) var(--ease-out);
 }
-/* Фокус: рамка 1.5 акцента (inset-тень, чтобы layout не дёргался)
-   + кольцо 3 px акцента 20%. */
+/*
+  Фокус: ОДНО кольцо (REBUILD §1.5).
+
+  Было два: `inset 0 0 0 0.5px` рисовал вторую линию внутри рамки, и на снимке
+  экрана поле получало два контура разного радиуса. Правило документа
+  буквально: «border-color: var(--accent) + box-shadow: 0 0 0 3px
+  var(--focus-ring), радиус тени совпадает с радиусом поля».
+*/
 .z-field__control:focus-within {
   border-color: var(--accent);
-  box-shadow:
-    inset 0 0 0 0.5px var(--accent),
-    0 0 0 var(--focus-ring-w) var(--field-ring);
+  box-shadow: 0 0 0 var(--focus-ring-w) var(--field-ring);
+}
+/*
+  Внутри поля кольцо рисует ОБОЛОЧКА, а не сам `input`.
+
+  Общее правило `.z-focusable:focus-visible` из `base.css` вешало на него своё
+  кольцо радиусом 8 внутри кольца оболочки радиусом 12 — и получалось два
+  контура разного радиуса, ровно как описано в REBUILD §1.5. Найдено не
+  чтением кода, а замером вычисленных стилей в живом браузере.
+*/
+.z-field__control .z-field__input:focus,
+.z-field__control .z-field__input:focus-visible {
+  box-shadow: none;
 }
 .z-field__input {
   flex: 1 1 auto;
@@ -43,6 +59,9 @@
   margin: 0;
   padding: 0;
   border: 0;
+  /* Браузерное кольцо снимается вместе с добавлением своего — оно рисуется на
+     `.z-field__control` выше и было бы третьим контуром (REBUILD §1.5). */
+  outline: none;
   background: transparent;
   color: inherit;
   font-family: inherit;

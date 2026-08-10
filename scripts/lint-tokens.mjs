@@ -28,6 +28,14 @@ const DEFAULT_ROOT = resolve(SCRIPT_DIR, '..');
 const TOKEN_FILES = [
   'packages/ui/src/styles/tokens.css',
 
+  // Токены из пакета дизайна, перенесённые ДОСЛОВНО. Исключение осознанное:
+  // это и есть файл токенов — по README пакета `zapiski.css` приоритетнее
+  // любого текста спецификации по любому цвету и радиусу. Правки в нём
+  // запрещены, а расхождение с эталоном ловит `scripts/check-design-tokens.mjs`,
+  // сравнивая ВЫЧИСЛЕННЫЕ значения в браузере со значениями из
+  // `docs/design/zapiski.css`.
+  'packages/ui/src/styles/tokens-reference.css',
+
   // Палитра экспорта. Исключение осознанное и безопасное: файл СГЕНЕРИРОВАН из
   // tokens.css (`node scripts/gen-print-palette.mjs`), руками не правится, а
   // тест `packages/core/test/export-palette.test.ts` падает, если он разошёлся

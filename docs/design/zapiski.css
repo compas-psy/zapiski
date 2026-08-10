@@ -1,0 +1,368 @@
+/* ЗАПИСКИ — production-слой стилей.
+ *
+ * Единственный источник цвета, размера, радиуса и тени в продукте.
+ * В компонентах не должно остаться ни одного hex, px-радиуса или отступа-магии.
+ *
+ * Основание: дизайн-система СИМПАС (ds/simpas.css) + продуктовые расширения
+ * (тёмные темы, компоненты редактора — их в системе нет).
+ * Правила поведения — BEHAVIOR.md, разбор дефектов — REBUILD.md.
+ */
+
+@import "../ds/simpas.css";
+
+/* ============================================================
+   1. ТОКЕНЫ ТЕМ
+   ============================================================ */
+
+:root[data-theme="simpas"], :root:not([data-theme]) {
+  --bg:              #F7F8F4;
+  --surface:         #FFFFFF;
+  --surface-alt:     #F6FAF6;
+  --surface-sunken:  #F2F4EF;
+  --line:            #E4E9E3;
+  --line-soft:       #EEF1EC;
+  --text:            #142018;
+  --text-secondary:  #5F6C64;
+  --text-tertiary:   #7E8A83;
+  --text-disabled:   #A3ADA7;
+  --text-ghost:      #C2CBC5;
+  --scrim:           rgba(20,32,24,.32);
+  --on-accent:       #FFFFFF;
+  --shadow-card:     0 8px 30px rgba(20,32,24,.06);
+  --shadow-pop:      0 24px 60px rgba(20,32,24,.18);
+  --shadow-sheet:    0 -12px 40px rgba(20,32,24,.18);
+  --success: #3B8F5A; --success-soft: #EAF7EE; --success-text: #2C6B44;
+  --warning: #CC9E50; --warning-soft: #FBF3E3; --warning-text: #886522;
+  --danger:  #C2503F; --danger-soft:  #FAECE9; --danger-text:  #B23B2E;
+  --info:    #4A6FA8; --info-soft:    #ECF1F8; --info-text:    #2C5FA8;
+}
+
+:root[data-theme="graphite"] {
+  --bg:              #121A15;
+  --surface:         #1A241E;
+  --surface-alt:     #16201A;
+  --surface-sunken:  #1E2A23;
+  --line:            #26332B;
+  --line-soft:       #1E2A23;
+  --text:            #EEF4EF;
+  --text-secondary:  #9FB0A6;
+  --text-tertiary:   #75847B;
+  --text-disabled:   #56635B;
+  --text-ghost:      #3A4841;
+  --scrim:           rgba(0,0,0,.55);
+  --on-accent:       #EDF4EF;
+  --shadow-card:     0 8px 30px rgba(0,0,0,.35);
+  --shadow-pop:      0 24px 60px rgba(0,0,0,.55);
+  --shadow-sheet:    0 -12px 40px rgba(0,0,0,.5);
+  --success: #5FAF7C; --success-soft: rgba(95,175,124,.16); --success-text: #8FCBA5;
+  --warning: #D8AE67; --warning-soft: rgba(216,174,103,.16); --warning-text: #E3C48C;
+  --danger:  #D0776A; --danger-soft:  rgba(208,119,106,.16); --danger-text:  #E09E93;
+  --info:    #7C9DC9; --info-soft:    rgba(124,157,201,.16); --info-text:    #A5BFDE;
+}
+
+:root[data-theme="ink"] {
+  --bg: #000000; --surface: #0D1310; --surface-alt: #080C0A; --surface-sunken: #121915;
+  --line: #1B241E; --line-soft: #121915;
+  --text: #EEF4EF; --text-secondary: #93A399; --text-tertiary: #6C7B72;
+  --text-disabled: #4E5A53; --text-ghost: #333E38;
+  --scrim: rgba(0,0,0,.7); --on-accent: #EDF4EF;
+  --shadow-card: none; --shadow-pop: 0 24px 60px rgba(0,0,0,.7); --shadow-sheet: 0 -12px 40px rgba(0,0,0,.6);
+  --success: #5FAF7C; --success-soft: rgba(95,175,124,.16); --success-text: #8FCBA5;
+  --warning: #D8AE67; --warning-soft: rgba(216,174,103,.16); --warning-text: #E3C48C;
+  --danger:  #D0776A; --danger-soft:  rgba(208,119,106,.16); --danger-text:  #E09E93;
+  --info:    #7C9DC9; --info-soft:    rgba(124,157,201,.16); --info-text:    #A5BFDE;
+}
+
+/* --- Акценты. ОДИН зелёный на экран: --accent используют кнопка, FAB и активный пункт. --- */
+[data-accent="pine"],   :root:not([data-accent]) { --accent:#1D4735; --accent-hover:#143D2F; --accent-soft:#E7F0EA; --accent-on-soft:#1D4735; }
+[data-accent="forest"]  { --accent:#3B8F5A; --accent-hover:#2F7749; --accent-soft:#EAF7EE; --accent-on-soft:#256B41; }
+[data-accent="gold"]    { --accent:#8F6B26; --accent-hover:#775820; --accent-soft:#FBF3E3; --accent-on-soft:#886522; --on-accent:#143D2F; }
+[data-accent="dusk"]    { --accent:#4A4E78; --accent-hover:#3E4266; --accent-soft:#ECEDF5; --accent-on-soft:#3E4266; }
+[data-accent="granite"] { --accent:#6A5F63; --accent-hover:#584E52; --accent-soft:#F1EEEF; --accent-on-soft:#584E52; }
+[data-accent="clay"]    { --accent:#A47864; --accent-hover:#8A6152; --accent-soft:#F6EFEA; --accent-on-soft:#7E5A4A; }
+
+/* В тёмных темах заливка приглушается, светлый тон — только для текста и иконок. */
+:root[data-theme="graphite"], :root[data-theme="ink"] {
+  --accent:       #2E6B4A;
+  --accent-hover: #377D58;
+  --accent-text:  #7FC49B;
+  --accent-soft:  rgba(127,196,155,.14);
+  --accent-on-soft:#9FD5B5;
+}
+:root[data-theme="simpas"] { --accent-text: var(--accent); }
+
+:root {
+  --focus-ring: color-mix(in srgb, var(--accent) 40%, transparent);
+  --svc-zapiski-bg: #C8604A;   /* ТОЛЬКО знак сервиса ≤24px. В интерфейсе не использовать. */
+  --font-sans: "Geist", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-serif: "Source Serif 4", Georgia, serif;
+  --r-sm:12px; --r-md:14px; --r-lg:16px; --r-card:20px; --r-panel:24px; --r-full:999px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+  --dur:200ms; --ease:cubic-bezier(.2,.7,.3,1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:1ms !important; transition-duration:1ms !important; }
+}
+
+/* ============================================================
+   2. БАЗА
+   ============================================================ */
+
+body {
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--font-sans); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+a { color:var(--accent-text); text-decoration:none; }
+a:hover { color:var(--accent-hover); }
+.zp-mono { font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.zp-caption { font-size:10.5px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--text-tertiary); }
+.zp-h1 { font-size:24px; font-weight:700; letter-spacing:-.02em; line-height:1.25; margin:0; }
+.zp-h1--desktop { font-size:30px; line-height:1.2; }
+.zp-h2 { font-size:19px; font-weight:600; letter-spacing:-.01em; margin:0; }
+.zp-muted { color:var(--text-secondary); }
+.zp-meta  { font-family:var(--font-mono); font-size:10.5px; color:var(--text-tertiary); }
+
+/* Счётчик: ноль не печатается (REBUILD 1.12) — компонент не рендерит значение 0. */
+.zp-count { font-family:var(--font-mono); font-size:11px; color:var(--text-tertiary); }
+
+/* ============================================================
+   3. КНОПКИ  — высота 44, радиус 14, вес 600
+   ============================================================ */
+
+.zp-btn {
+  display:inline-flex; align-items:center; justify-content:center; gap:var(--sp-2);
+  height:44px; padding:0 22px; border:0; border-radius:var(--r-md);
+  font:600 14.5px/1 var(--font-sans); cursor:pointer;
+  transition:background var(--dur) var(--ease), transform 120ms var(--ease);
+  white-space:nowrap;
+}
+.zp-btn:active { transform:scale(.97); }
+.zp-btn:focus-visible { outline:none; box-shadow:0 0 0 3px var(--focus-ring); }
+.zp-btn[disabled] { opacity:.45; cursor:not-allowed; transform:none; }
+
+.zp-btn--primary   { background:var(--accent); color:var(--on-accent); }
+.zp-btn--primary:hover:not([disabled]) { background:var(--accent-hover); }
+.zp-btn--secondary { background:var(--surface-sunken); color:var(--text); }
+.zp-btn--secondary:hover:not([disabled]) { background:var(--surface-alt); }
+.zp-btn--outline   { background:transparent; color:var(--text); box-shadow:inset 0 0 0 1px var(--line); }
+.zp-btn--outline:hover:not([disabled]) { background:var(--surface-alt); }
+.zp-btn--text      { background:transparent; color:var(--accent-text); padding:0 6px; height:40px; }
+.zp-btn--danger    { background:var(--danger-soft); color:var(--danger-text); }
+.zp-btn--icon      { width:44px; padding:0; background:var(--surface-sunken); color:var(--text-secondary); }
+.zp-btn--sm        { height:36px; padding:0 16px; font-size:13.5px; border-radius:var(--r-sm); }
+
+/* FAB — та же заливка, что у primary. Другого зелёного не существует. */
+.zp-fab {
+  width:52px; height:52px; border:0; border-radius:18px; background:var(--accent); color:var(--on-accent);
+  display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+  box-shadow:0 8px 24px color-mix(in srgb, var(--accent) 35%, transparent);
+  transition:transform 120ms var(--ease);
+}
+.zp-fab:active { transform:scale(.97); }
+
+/* ============================================================
+   4. ПОЛЯ  — ОДНО кольцо фокуса (REBUILD 1.5)
+   ============================================================ */
+
+.zp-field {
+  display:block; width:100%; box-sizing:border-box;
+  height:46px; padding:0 15px;
+  background:var(--surface); color:var(--text);
+  border:1px solid var(--line); border-radius:var(--r-sm);
+  font:400 14.5px/1 var(--font-sans);
+  transition:border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.zp-field::placeholder { color:var(--text-tertiary); }
+.zp-field:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); }
+.zp-field[aria-invalid="true"] { border-color:var(--danger); }
+.zp-field[disabled] { background:var(--surface-sunken); color:var(--text-disabled); opacity:.7; }
+.zp-field-error { display:block; margin:6px 4px 0; font-size:12px; color:var(--danger-text); }
+
+.zp-search {
+  display:flex; align-items:center; gap:9px;
+  height:44px; padding:0 16px;
+  background:var(--surface-sunken); border:1px solid var(--line); border-radius:var(--r-full);
+  color:var(--text-tertiary); font-size:14px;
+}
+.zp-search:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--focus-ring); color:var(--text); }
+
+/* ============================================================
+   5. ЧИПЫ И БЕЙДЖИ
+   ============================================================ */
+
+.zp-chip {
+  display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  height:28px; padding:0 11px; border-radius:var(--r-full);
+  border:1px solid var(--line); background:transparent;
+  font-size:12px; color:var(--text-secondary); cursor:pointer;
+}
+.zp-chip--on  { background:var(--accent-soft); border-color:color-mix(in srgb, var(--accent) 35%, transparent); color:var(--accent-on-soft); }
+/* Тег без заливки — плотность добирается воздухом, не цветом (DS-ALIGNMENT §10). */
+.zp-chip--tag { border-color:transparent; color:var(--accent-text); padding:0 4px; }
+
+.zp-badge {
+  display:inline-flex; align-items:center; height:22px; padding:0 9px; border-radius:var(--r-full);
+  font:600 11px/1 var(--font-sans);
+}
+.zp-badge--success { background:var(--success-soft); color:var(--success-text); }
+.zp-badge--warning { background:var(--warning-soft); color:var(--warning-text); }
+.zp-badge--danger  { background:var(--danger-soft);  color:var(--danger-text); }
+.zp-badge--info    { background:var(--info-soft);    color:var(--info-text); }
+
+.zp-dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
+.zp-dot--ok { background:var(--success); }
+.zp-dot--off{ background:var(--text-tertiary); }
+.zp-dot--err{ background:var(--danger); }
+
+/* ============================================================
+   6. НАВИГАЦИЯ  — пустых состояний с иллюстрацией здесь нет (REBUILD 1.3)
+   ============================================================ */
+
+.zp-nav { background:var(--surface-alt); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:var(--sp-4) 0; }
+.zp-nav__brand { display:flex; align-items:center; gap:10px; padding:0 18px var(--sp-3); }
+.zp-nav__mark  { width:24px; height:24px; border-radius:7px; flex:none; }   /* терракота живёт только тут */
+.zp-nav__wordmark { font:700 13px/1 var(--font-sans); letter-spacing:.12em; color:var(--text); }
+
+.zp-nav__item {
+  display:flex; align-items:center; gap:11px;
+  min-height:40px; margin:0 var(--sp-2); padding:0 12px;
+  border-radius:10px; color:var(--text-secondary); font-size:14px; cursor:pointer;
+  transition:background var(--dur) var(--ease);
+}
+.zp-nav__item:hover { background:var(--surface-sunken); }
+.zp-nav__item--on   { background:var(--accent-soft); color:var(--accent-on-soft); font-weight:600; }
+.zp-nav__item--sub  { padding-left:46px; font-size:13.5px; }
+.zp-nav__label { flex:1; }
+.zp-nav__section { padding:var(--sp-4) 20px var(--sp-1); }
+/* Отсутствие папок — одна строка, не иллюстрация. */
+.zp-nav__empty { padding:6px 20px 2px; font-size:13px; color:var(--text-tertiary); }
+
+/* ============================================================
+   7. СПИСОК ЗАМЕТОК
+   ============================================================ */
+
+.zp-row {
+  display:flex; flex-direction:column; gap:3px;
+  padding:11px 16px; border-bottom:1px solid var(--line-soft); cursor:pointer;
+  transition:background var(--dur) var(--ease);
+}
+.zp-row:hover { background:var(--surface-alt); }
+.zp-row--on   { background:var(--accent-soft); }
+.zp-row--on .zp-row__snippet { color:var(--accent-on-soft); }
+.zp-row__title   { font:600 15px/1.35 var(--font-sans); color:var(--text);
+  display:flex; align-items:center; gap:7px; }
+.zp-row__snippet { font-size:13px; line-height:1.45; color:var(--text-secondary);
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.zp-row__meta    { font-family:var(--font-mono); font-size:10.5px; color:var(--text-tertiary); }
+.zp-row--compact { padding:8px 16px; }
+
+/* ============================================================
+   8. КАРТОЧКИ, ОВЕРЛЕИ
+   ============================================================ */
+
+.zp-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); box-shadow:var(--shadow-card); }
+.zp-card--flat { box-shadow:none; }
+.zp-card--picked { border:1.5px solid var(--accent); background:var(--accent-soft); }
+.zp-card__body { padding:var(--sp-4) var(--sp-5); }
+
+.zp-scrim { position:fixed; inset:0; background:var(--scrim); }
+.zp-modal {
+  width:min(520px, calc(100vw - 32px)); background:var(--surface);
+  border-radius:var(--r-panel); box-shadow:var(--shadow-pop); padding:var(--sp-6);
+}
+.zp-modal__title { font:700 19px/1.25 var(--font-sans); letter-spacing:-.01em; margin:0 0 var(--sp-4); }
+.zp-modal__actions { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin-top:var(--sp-5); }
+.zp-sheet {
+  background:var(--surface); border-radius:var(--r-panel) var(--r-panel) 0 0;
+  box-shadow:var(--shadow-sheet); padding:10px var(--sp-6) var(--sp-6);
+}
+.zp-sheet__handle { width:36px; height:4px; border-radius:2px; background:var(--line); margin:0 auto var(--sp-4); }
+
+.zp-toast {
+  display:flex; align-items:center; gap:var(--sp-3);
+  background:var(--text); color:var(--bg); border-radius:var(--r-md); padding:12px 16px;
+  font-size:13.5px; box-shadow:var(--shadow-pop);
+}
+.zp-toast__action { font-weight:600; color:var(--accent-on-soft); cursor:pointer; }
+
+.zp-note { display:flex; align-items:flex-start; gap:10px; background:var(--surface-sunken);
+  border-radius:var(--r-sm); padding:11px 14px; font-size:12.5px; line-height:1.5; color:var(--text-secondary); }
+
+/* ============================================================
+   9. ПУСТЫЕ СОСТОЯНИЯ  — только в контентной области (REBUILD 1.3, 1.9)
+   ============================================================ */
+
+.zp-empty { display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:var(--sp-2); max-width:280px; margin:0 auto; padding:var(--sp-8) 0; }
+/* Круг — нейтральная поверхность, иконка контурная акцентом. Терракоты здесь нет. */
+.zp-empty__icon {
+  width:64px; height:64px; border-radius:50%; background:var(--surface-sunken);
+  display:flex; align-items:center; justify-content:center; color:var(--accent-text);
+  margin-bottom:var(--sp-2);
+}
+.zp-empty__title { font:600 16px/1.3 var(--font-sans); color:var(--text); }
+.zp-empty__text  { font-size:13px; line-height:1.5; color:var(--text-secondary); margin-bottom:var(--sp-3); }
+
+.zp-skeleton { border-radius:6px; background:var(--line-soft); }
+.zp-progress { height:3px; border-radius:2px; background:var(--line); overflow:hidden; }
+.zp-progress__bar { display:block; height:100%; background:var(--accent); border-radius:2px; }
+
+/* ============================================================
+   10. РЕДАКТОР
+   ============================================================ */
+
+.zp-editor { max-width:640px; margin:0 auto; padding:var(--sp-8) var(--sp-8) 0; }
+.zp-editor__title { font:700 24px/1.25 var(--font-sans); letter-spacing:-.02em; color:var(--text); }
+@media (min-width:900px) { .zp-editor__title { font-size:30px; line-height:1.2; } }
+.zp-editor__body { font-size:16px; line-height:1.65; color:var(--text); }
+/* Подсказка стоит НА МЕСТЕ первой строки, не по центру экрана (REBUILD 1.8). */
+.zp-editor__placeholder { font-size:16px; line-height:1.65; color:var(--text-tertiary); }
+.zp-editor--serif .zp-editor__body { font-family:var(--font-serif); font-size:17px; line-height:1.7; }
+.zp-editor--compact .zp-editor__body { font-size:14.5px; line-height:1.5; }
+
+.zp-md-syntax { color:var(--text-ghost); }             /* символы разметки вне курсора */
+.zp-md-mark   { background:var(--warning-soft); border-radius:3px; padding:0 3px; }
+.zp-md-quote  { border-left:2.5px solid var(--line); padding:2px 0 2px 14px; font-style:italic; color:var(--text-secondary); }
+.zp-md-code   { background:var(--surface-sunken); border-radius:var(--r-sm); padding:14px 18px;
+  font-family:var(--font-mono); font-size:12.5px; line-height:1.7; color:var(--text-secondary); }
+.zp-md-link   { color:var(--accent-text); border-bottom:1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
+
+.zp-check { display:flex; align-items:center; gap:10px; }
+.zp-check__box { width:18px; height:18px; border-radius:6px; border:1.5px solid var(--text-disabled);
+  flex:none; display:inline-flex; align-items:center; justify-content:center;
+  transition:background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.zp-check--on .zp-check__box { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+.zp-check--on .zp-check__label { color:var(--text-secondary); text-decoration:line-through; }
+.zp-check__label { font-size:15px; color:var(--text); }
+
+.zp-toolbar { display:flex; align-items:center; justify-content:space-between;
+  height:44px; padding:0 14px; background:var(--surface-alt); border-top:1px solid var(--line); color:var(--text-secondary); }
+.zp-toolbar__btn { width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center;
+  border-radius:9px; background:transparent; border:0; color:inherit; cursor:pointer; }
+.zp-toolbar__btn:active { transform:scale(.97); }
+
+/* ============================================================
+   11. ГОЛОС
+   ============================================================ */
+
+.zp-wave { display:flex; align-items:flex-end; gap:3px; height:52px; }
+.zp-wave__bar { flex:1; border-radius:2px; background:var(--line); }
+.zp-wave__bar--live { background:var(--accent); }
+.zp-player { display:flex; align-items:center; gap:12px; background:var(--surface-alt);
+  border:1px solid var(--line); border-radius:var(--r-md); padding:10px 14px; }
+.zp-player__play { width:34px; height:34px; border-radius:50%; border:0; background:var(--accent);
+  color:var(--on-accent); display:inline-flex; align-items:center; justify-content:center; flex:none; cursor:pointer; }
+.zp-timecode { display:flex; gap:10px; }
+.zp-timecode__t { font-family:var(--font-mono); font-size:10.5px; color:var(--text-tertiary); flex:none; padding-top:4px; }
+.zp-timecode--on { background:var(--accent-soft); border-radius:10px; padding:8px 10px; margin:0 -10px; }
+.zp-timecode--on .zp-timecode__t { color:var(--accent-on-soft); }
+
+/* ============================================================
+   12. DIFF
+   ============================================================ */
+
+.zp-diff-add { background:var(--success-soft); border-radius:3px; padding:0 3px; }
+.zp-diff-del { background:var(--danger-soft); color:var(--danger-text); text-decoration:line-through; border-radius:3px; padding:0 3px; }

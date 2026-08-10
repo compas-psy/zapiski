@@ -31,7 +31,10 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
           {/* Брендовый экран онбординга — второе из четырёх мест терракоты
               (DS-ALIGNMENT §9). Дальше по флоу знака больше нет. */}
           <span className="za-brand za-brand--hero">
-            <ServiceMark size={44} />
+            {/* REBUILD §1.1: терракота допустима только как знак сервиса
+                ≤24 px. Крупная заливка ею читается как ошибка или кнопка —
+                глаз идёт к ней первой, хотя это декорация. */}
+            <ServiceMark size={24} />
             <span className="za-wordmark">{strings.app.wordmark}</span>
           </span>
           <h1 className="za-h1">{strings.onboarding.step1.title}</h1>

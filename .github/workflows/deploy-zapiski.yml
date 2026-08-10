@@ -182,6 +182,20 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: pnpm --filter "${{ steps.scripts.outputs.web_pkg }}..." build
 
+      # Токены обязаны совпадать с эталоном дизайна (docs/design/zapiski.css) —
+      # он приоритетнее любого текста спецификации. Сравниваются вычисленные
+      # значения в браузере: между файлом и экраном стоят каскад и порядок
+      # импортов, и расходится именно там. Без браузера шаг пропускает себя сам.
+      - name: Токены против эталона дизайна
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-design-tokens.mjs
+
+      # Одно кольцо фокуса на поле (REBUILD §1.5): правила из разных пакетов
+      # складываются только на экране. Без браузера шаг пропускает себя сам.
+      - name: Одно кольцо фокуса
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-focus-ring.mjs
+
       # Compose-файл — такой же артефакт, как код: битый YAML обнаружится
       # здесь, а не на проде в момент `up -d`.
       - name: Проверить deploy/docker-compose.yml

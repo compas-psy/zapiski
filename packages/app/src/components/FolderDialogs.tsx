@@ -36,6 +36,8 @@ export interface FolderNameDialogProps {
   open: boolean;
   /** Начальное значение: пусто для создания, текущее имя для переименования. */
   initial: string;
+  /** Подсказка в пустом поле. */
+  placeholder?: string;
   title: string;
   confirmLabel: string;
   onConfirm: (name: string) => void;
@@ -45,6 +47,7 @@ export interface FolderNameDialogProps {
 export function FolderNameDialog({
   open,
   initial,
+  placeholder,
   title,
   confirmLabel,
   onConfirm,
@@ -71,7 +74,10 @@ export function FolderNameDialog({
       <TextField
         /* Диалог с одним полем, в котором надо ещё раз щёлкнуть, раздражает. */
         autoFocus
-        label={strings.library.folderNamePrompt}
+        /* REBUILD §1.4: видимой подписи над полем нет — при одном поле она
+           только повторяет заголовок. Для скринридера имя остаётся. */
+        aria-label={strings.library.folderNamePrompt}
+        {...(placeholder ? { placeholder } : {})}
         value={name}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
