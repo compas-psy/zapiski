@@ -161,7 +161,11 @@ export function LibraryPanel(): ReactNode {
         <>
           <p className="za-nav__hint">{strings.library.emptyFolders}</p>
           <div className="za-nav">
-            <button type="button" className="za-nav__item" onClick={() => setCreatingIn('')}>
+            <button
+              type="button"
+              className="za-nav__item za-nav__item--action"
+              onClick={() => setCreatingIn('')}
+            >
               <span aria-hidden="true">+</span>
               {strings.library.newFolder}
             </button>
@@ -171,12 +175,7 @@ export function LibraryPanel(): ReactNode {
         <>
           {folderNodes.length > 0 ? (
             <>
-              <div className="za-row-between">
-                <Section>{strings.library.folders}</Section>
-                <Button variant="text" onClick={() => setCreatingIn('')}>
-                  {strings.library.newFolder}
-                </Button>
-              </div>
+              <Section>{strings.library.folders}</Section>
               <Tree
                 nodes={folderNodes}
                 label={strings.library.folders}
@@ -184,6 +183,23 @@ export function LibraryPanel(): ReactNode {
                 onSelect={(id) => app.openFolder(id)}
                 nodeProps={nodePropsFor(pressedFolder, folderPress)}
               />
+              {/*
+                «Новая папка» — обычный пункт списка с «+», в общем ритме
+                навигации (REBUILD §1.3, ITERATION-1 §9). Была текстовой
+                кнопкой акцентом справа от заголовка секции и читалась как
+                активный пункт: единственное цветное пятно в столбце серых
+                строк притягивает глаз сильнее, чем выбранная папка.
+              */}
+              <div className="za-nav">
+                <button
+                  type="button"
+                  className="za-nav__item za-nav__item--action"
+                  onClick={() => setCreatingIn('')}
+                >
+                  <span aria-hidden="true">+</span>
+                  {strings.library.newFolder}
+                </button>
+              </div>
             </>
           ) : null}
 

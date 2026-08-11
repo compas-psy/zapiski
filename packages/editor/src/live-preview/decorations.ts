@@ -323,6 +323,11 @@ class LivePreviewBuilder {
 
     const inlineCls = INLINE_STYLE[name];
     if (inlineCls) this.mark(from, to, inlineCls);
+
+    /* Решётка тега — того же цвета, но на 60 % непрозрачности (ITERATION-1 §7).
+       Отдельной декорацией, потому что часть текста иначе не покрасить: сам
+       символ служебный, а читается имя тега. */
+    if (name === 'ZTag' && to > from) this.mark(from, from + 1, 'cm-z-tag-hash');
   }
 
   leave(): void {

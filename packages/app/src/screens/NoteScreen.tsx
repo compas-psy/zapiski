@@ -274,9 +274,13 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
 
             {tags.length > 0 && !state.focusMode ? (
               <div className="za-editor__tags">
+                {/* Отражение тегов из текста; редактируются только там (§7). */}
                 {tags.map((tag) => (
                   <Tag key={tag} onClick={() => app.openTag(tag)} style={{ cursor: 'pointer' }}>
-                    #{tag}
+                    <span className="za-tag__hash" aria-hidden="true">
+                      #
+                    </span>
+                    {tag}
                   </Tag>
                 ))}
               </div>

@@ -239,7 +239,11 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     color: 'var(--accent)',
     backgroundColor: 'transparent',
     cursor: 'pointer',
+    /* Подчёркивания нет — §7 запрещает прямо: тег и так выделен цветом. */
+    textDecoration: 'none',
   },
+  /* Решётка — того же цвета, но приглушённая: читается имя тега, а не символ. */
+  '.cm-z-tag-hash': { opacity: '0.6' },
   '.cm-z-footnote': {
     color: 'var(--accent)',
     fontSize: '0.8em',
