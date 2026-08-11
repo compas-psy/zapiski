@@ -16,13 +16,15 @@ Peer-зависимости: React 19 и React DOM 19.
 
 ### Два независимых измерения
 
-`DESIGN_TOKENS.md` §1: **3 темы × 6 акцентов = 18 валидных сочетаний**, каждое
-обязано проходить контраст AA.
+`tz/ZAPISKI_TZ_1_Design.md` §1.6: **3 темы × 3 акцента = 9 валидных
+сочетаний**, каждое обязано проходить контраст AA. Набор сокращён с шести
+акцентов до трёх ровно ради этой матрицы: восемнадцать комбинаций пришлось бы
+регрессить на каждом релизе.
 
 | Измерение | Атрибут на корне | Значения |
 | --- | --- | --- |
-| Тема (поверхность) | `data-theme` | `paper` (Бумага, светлая, по умолчанию) · `graphite` (Графит, тёмная) · `ink` (Чернила, OLED — истинный `#000`) |
-| Акцент | `data-accent` | `garnet` (Гранат, по умолчанию) · `pine` (Хвоя) · `gold` (Золото) · `blueberry` (Черника) · `heather` (Вереск) · `slate` (Грифель) |
+| Тема (поверхность) | `data-theme` | `paper` (Бумага, светлая, по умолчанию) · `graphite` (Графит, тёмная) · `ink` (Чернила, OLED — `#000008`) |
+| Акцент | `data-accent` | `garnet` (Гранат, по умолчанию и в иконке — Р5) · `blueberry` (Черника) · `slate` (Грифель) |
 | Плотность | `data-density` | `comfortable` · `compact` |
 | Гарнитура | `data-typeface` | `sans` · `serif` |
 
@@ -33,8 +35,9 @@ Peer-зависимости: React 19 и React DOM 19.
 
 ```
 src/styles/
-  index.css        порядок: tokens → fonts → base → typography
-  tokens.css       ЕДИНСТВЕННЫЙ файл, где разрешены цветовые литералы
+  index.css            порядок: fonts → tokens.generated → tokens → base → typography
+  tokens.generated.css СГЕНЕРИРОВАН из design/tokens.json, руками не правится
+  tokens.css           производные: hover, кольца, множители редактора
   fonts.css        @font-face, self-hosted .woff2, без CDN в рантайме
   base.css         сброс, фокус-кольцо, прокрутка, prefers-reduced-motion
   typography.css   роли текста из DESIGN_TOKENS §2

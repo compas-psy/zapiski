@@ -460,7 +460,7 @@ await store.append(noteId, чужойАпдейт);    // добавить и с
 | `LocalFolderBackend` | `local` | Просто папка, в т.ч. синкаемая чужим клиентом (Яндекс.Диск, Syncthing). Никакой сети. ETag = `mtime-size` |
 | `WebDAVBackend` | `webdav` | Универсальный WebDAV: PROPFIND `Depth: infinity`, ETag либо `getlastmodified`, MKCOL для недостающих каталогов, `If-Match` на PUT |
 | `YandexDiskBackend` | `yandex` | Нативный REST поверх OAuth (`cloud-api.yandex.net`) с автоматическим падением обратно на WebDAV |
-| `KompasCloudBackend` | `kompas` | Облако КОМПАС: HTTP + websocket-подписка |
+| `ZapiskiCloudBackend` | `zapiski` | Облако Записок: HTTP + websocket-подписка |
 
 Сетевого клиента в ядре нет — используется `fetch`, одинаковый на всех трёх
 целях; в тестах подменяется опцией `fetch`.
@@ -550,17 +550,17 @@ engine.status();                           // SyncStatus для точки в ш
 > | `WS /api/v1/vault/subscribe` | `WS /api/v1/vault/live` |
 > | `GET /api/v1/vault/versions` | `GET /api/v1/vault/versions/:noteId` |
 >
-> В таком виде `KompasCloudBackend` к работающему серверу не подключится. До
+> В таком виде `ZapiskiCloudBackend` к работающему серверу не подключится. До
 > сведе́ния протокола к одному источнику синк с облаком КОМПАС считать
 > нерабочим. Актуальный список эндпоинтов — [modules/server.md](server.md).
 >
-> Дополнительно: `KompasCloudBackend.pushUpdates` / `pullUpdates`
+> Дополнительно: `ZapiskiCloudBackend.pushUpdates` / `pullUpdates`
 > (delta-синк по CRDT-векторам, ТЗ §4.1) написаны, но `SyncEngine` их не
 > вызывает — он синкает CRDT-логи как обычные файлы.
 >
 > Следствие в интерфейсе: `packages/app` этот бэкенд не создаёт вовсе. В
 > настройках синка подключаются только «локальная папка» и WebDAV; кнопка
-> «Облако КОМПАС» ведёт на paywall, «Яндекс.Диск» — на экран входа, потому что
+> «Облако Записок» ведёт на paywall, «Яндекс.Диск» — на экран входа, потому что
 > `YandexDiskBackend` нужен OAuth-токен, а приём токена в оболочках ещё не
 > написан ([app.md](app.md#чего-в-пакете-нет)).
 

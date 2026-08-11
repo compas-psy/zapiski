@@ -1,4 +1,4 @@
-# Разработка КОМПАС.ЗАПИСКИ
+# Разработка ЗАПИСКИ
 
 Точка входа для разработчика. Здесь — как поднять окружение, как устроено
 монорепо, куда что класть и по каким правилам мы работаем.
@@ -31,7 +31,7 @@
 | --- | --- |
 | [getting-started.md](getting-started.md) | Установка, запуск, тесты, типичные грабли |
 | [modules/core.md](modules/core.md) | Ядро: vault, markdown, индекс, крипто, CRDT, синк, импорт/экспорт |
-| [modules/ui.md](modules/ui.md) | Токен-слой (3 темы × 6 акцентов) и библиотека компонентов |
+| [modules/ui.md](modules/ui.md) | Токен-слой (3 темы × 3 акцента) и библиотека компонентов |
 | [modules/editor.md](modules/editor.md) | Live-preview, IME, хоткеи, как добавить markdown-элемент |
 | [modules/app.md](modules/app.md) | Экраны, `AppHost`, `AppController`, раскладки, матрица состояний, палитра команд |
 | [modules/platforms.md](modules/platforms.md) | Три оболочки: что реализовано на каждой, какие порты `null` и почему |
