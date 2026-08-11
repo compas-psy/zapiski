@@ -50,7 +50,8 @@ describe('SEC-024: задержка после неверных попыток �
   it('5 неверных попыток → перезапуск → задержка ещё действует', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
     const app = await start(host);
-    const encrypted = await app.encryptNote('Секрет.md', PASSWORD);
+    await app.setVaultPassword(PASSWORD);
+    const encrypted = await app.encryptNote('Секрет.md');
     expect(encrypted).toBe('Секрет.md.enc');
     app.lockAll();
 
@@ -80,7 +81,8 @@ describe('SEC-024: задержка после неверных попыток �
   it('перезапуск не дарит новых попыток без задержки', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
     const app = await start(host);
-    const encrypted = (await app.encryptNote('Секрет.md', PASSWORD))!;
+    await app.setVaultPassword(PASSWORD);
+    const encrypted = (await app.encryptNote('Секрет.md'))!;
     app.lockAll();
     for (let attempt = 0; attempt < 4; attempt += 1) await app.unlock(encrypted, 'не тот пароль');
     expect(app.unlockDelayLeftMs).toBe(0);
@@ -98,7 +100,8 @@ describe('SEC-024: задержка после неверных попыток �
   it('перевод часов назад не отменяет задержку', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
     const app = await start(host);
-    const encrypted = (await app.encryptNote('Секрет.md', PASSWORD))!;
+    await app.setVaultPassword(PASSWORD);
+    const encrypted = (await app.encryptNote('Секрет.md'))!;
     app.lockAll();
     for (let attempt = 0; attempt < 5; attempt += 1) await app.unlock(encrypted, 'не тот пароль');
     app.dispose();
@@ -120,7 +123,8 @@ describe('SEC-024: задержка после неверных попыток �
   it('данные не удаляются ни при каком числе попыток (BEHAVIOR §5.2)', async () => {
     const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
     const app = await start(host);
-    const encrypted = (await app.encryptNote('Секрет.md', PASSWORD))!;
+    await app.setVaultPassword(PASSWORD);
+    const encrypted = (await app.encryptNote('Секрет.md'))!;
     app.lockAll();
     const notesBefore = app.getState().notes.length;
 

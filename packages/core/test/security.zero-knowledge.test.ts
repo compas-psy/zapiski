@@ -33,6 +33,15 @@ const provider = new WebCryptoProvider({
    демо-данного в коде, фикстурах, тестах и скриншотах». Для проверки утечки
    важна не клиника, а узнаваемая приватная строка и телефон: если открытый
    текст где-то остался, тест найдёт его по ним. */
+/**
+ * Ключ заметки: пароль → master → per-note (ТЗ §3.3). Тесты ниже проверяют
+ * свойства ШИФРОВАНИЯ, а не иерархии, поэтому вывод ключа спрятан в хелпер.
+ */
+async function noteKeyFrom(password: string, salt: Uint8Array): Promise<CryptoKey> {
+  const master = await provider.deriveMaster(password, salt);
+  return provider.deriveNoteKey(master, provider.randomKeyId());
+}
+
 const SECRET = '# Дневник\n\nЛичное: тревога перед защитой проекта и телефон 79990000000.\n';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,7 +72,7 @@ describe('крипто: инварианты, которые обязаны де
    */
   it('nonce уникален на каждое шифрование одним и тем же ключом', async () => {
     const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('пароль', salt);
+    const key = await noteKeyFrom('пароль', salt);
     const nonces = new Set<string>();
     for (let i = 0; i < 300; i += 1) {
       const container = decodeContainer(await provider.encrypt(SECRET, key));
@@ -75,15 +84,15 @@ describe('крипто: инварианты, которые обязаны де
 
   it('неверный пароль возвращает null, а не бросает (BEHAVIOR §5.2)', async () => {
     const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('верный', salt);
-    const wrong = await provider.deriveMasterKey('неверный', salt);
+    const key = await noteKeyFrom('верный', salt);
+    const wrong = await noteKeyFrom('неверный', salt);
     const blob = await provider.encrypt(SECRET, key);
     await expect(provider.decrypt(blob, wrong)).resolves.toBeNull();
   });
 
   it('усечённый, пустой и побитый контейнер не роняют приложение', async () => {
     const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('пароль', salt);
+    const key = await noteKeyFrom('пароль', salt);
     const blob = await provider.encrypt(SECRET, key);
 
     for (let cut = 0; cut <= blob.length; cut += Math.max(1, Math.floor(blob.length / 17))) {
@@ -102,7 +111,7 @@ describe('крипто: инварианты, которые обязаны де
   });
 
   it('ключ неэкспортируем и не сериализуется', async () => {
-    const key = await provider.deriveMasterKey('пароль', provider.randomSalt());
+    const key = await noteKeyFrom('пароль', provider.randomSalt());
     expect(key.extractable).toBe(false);
     await expect(crypto.subtle.exportKey('raw', key)).rejects.toThrow();
     // Ключ не должен утекать через JSON: в нём нет байтов и нечего печатать.
@@ -111,7 +120,7 @@ describe('крипто: инварианты, которые обязаны де
 
   it('ни пароль, ни открытый текст не попадают в шифротекст как есть', async () => {
     const password = 'очень-личный-пароль';
-    const key = await provider.deriveMasterKey(password, provider.randomSalt());
+    const key = await noteKeyFrom(password, provider.randomSalt());
     const blob = await provider.encrypt(SECRET, key, 'подсказка');
     const asText = Buffer.from(blob).toString('utf8');
     expect(asText).not.toContain(password);
@@ -124,54 +133,52 @@ describe('крипто: инварианты, которые обязаны де
 // SEC-004: заголовок контейнера не аутентифицирован (нет AAD)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('SEC-004: заголовок контейнера .md.enc', () => {
+describe('SEC-004: заголовок контейнера .md.enc — закрыт', () => {
   /**
-   * Заголовок (magic, версия, соль, nonce, подсказка) в AAD не попадает,
-   * поэтому подмена подсказки не ломает расшифровку. Тот, кто держит файл
-   * (облако синка, WebDAV-провайдер, вор устройства), переписывает подсказку
-   * на «введите пароль от почты» — и приложение честно показывает её под
-   * полем ввода (BEHAVIOR §5.2). Это фишинг против единственного секрета,
-   * на котором держится весь zero-knowledge.
+   * Дефект был такой: заголовок (magic, версия, соль, nonce, `keyId`,
+   * подсказка) в AAD не попадал, и подмена подсказки не ломала расшифровку.
+   * Тот, кто держит файл — облако синка, WebDAV-провайдер, вор устройства, —
+   * переписывал подсказку на «введите пароль от вашей почты», и приложение
+   * честно показывало её под полем ввода (BEHAVIOR §5.2). Фишинг против
+   * единственного секрета, на котором держится весь zero-knowledge.
+   *
+   * Закрыт вместе с иерархией ключей (ТЗ §3.3): контейнер версии 2
+   * подписывает заголовок целиком тегом GCM. Отдельной правкой это сделать
+   * было нельзя — старые файлы писались без AAD, а формат менять было некуда,
+   * пока не появилась версия контейнера.
    */
-  it('[ДЕФЕКТ] подмена подсказки видна пользователю и не ломает расшифровку', async () => {
-    const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('пароль', salt);
+  it('подмена подсказки ломает расшифровку', async () => {
+    const key = await noteKeyFrom('пароль', provider.randomSalt());
     const original = await provider.encrypt(SECRET, key, 'как в прошлый раз');
     const parsed = decodeContainer(original)!;
 
     const tampered = encodeContainer({ ...parsed, hint: 'введите пароль от вашей почты' });
 
-    // Вот это и есть дефект: шифротекст не тронут, подсказка чужая,
-    // расшифровка проходит.
-    expect(await provider.decrypt(tampered, key)).toBe(SECRET);
+    expect(await provider.decrypt(tampered, key)).toBeNull();
+    /* Подсказка при этом по-прежнему читается без ключа — она и должна быть
+       видна до разблокировки. Ловится не чтение, а подмена. */
     expect(provider.parseHeader(tampered)?.hint).toBe('введите пароль от вашей почты');
   });
 
-  /**
-   * Тот же корень: соль лежит в заголовке и в AAD не входит. При уже
-   * выведенном ключе её порча вообще не замечается, а при следующей
-   * разблокировке из пароля выведется другой ключ — пользователь увидит
-   * «Пароль не подошёл» на верном пароле и решит, что потерял заметку.
-   */
-  it('[ДЕФЕКТ] порча соли в заголовке не обнаруживается', async () => {
-    const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('пароль', salt);
+  it('порча соли в заголовке обнаруживается', async () => {
+    const key = await noteKeyFrom('пароль', provider.randomSalt());
     const blob = await provider.encrypt(SECRET, key);
     const damaged = Uint8Array.from(blob);
     damaged[10] = (damaged[10]! ^ 0xff) & 0xff; // первый байт соли
 
-    expect(await provider.decrypt(damaged, key)).toBe(SECRET);
-    expect(Buffer.from(provider.parseHeader(damaged)!.salt).equals(Buffer.from(salt))).toBe(false);
+    expect(await provider.decrypt(damaged, key)).toBeNull();
   });
 
-  it.fails('[SEC-004] подмена заголовка обязана ломать расшифровку (AAD)', async () => {
-    const salt = provider.randomSalt();
-    const key = await provider.deriveMasterKey('пароль', salt);
-    const original = await provider.encrypt(SECRET, key, 'как в прошлый раз');
-    const parsed = decodeContainer(original)!;
-    const tampered = encodeContainer({ ...parsed, hint: 'введите пароль от вашей почты' });
+  it('порча keyId обнаруживается — иначе ключ выводился бы не тот молча', async () => {
+    const key = await noteKeyFrom('пароль', provider.randomSalt());
+    const blob = await provider.encrypt(SECRET, key);
+    const parsed = decodeContainer(blob)!;
+    expect(parsed.keyId).toBeDefined();
 
-    expect(await provider.decrypt(tampered, key)).toBeNull();
+    const damaged = Uint8Array.from(blob);
+    /* keyId лежит сразу за солью и nonce: 10 + 16 + 12. */
+    damaged[38] = (damaged[38]! ^ 0xff) & 0xff;
+    expect(await provider.decrypt(damaged, key)).toBeNull();
   });
 });
 
@@ -213,9 +220,9 @@ describe('SEC-003: следы открытого текста после шиф�
 
   it('[ДЕФЕКТ] CRDT-лог и локальная история переживают шифрование', async () => {
     const storage = await buildVaultWithHistory();
-    const key = await provider.deriveMasterKey('пароль', provider.randomSalt());
+    const master = await provider.deriveMaster('пароль', provider.randomSalt());
 
-    await encryptNoteFile(storage, provider, 'Дневник.md', key);
+    await encryptNoteFile(storage, provider, 'Дневник.md', master);
 
     // Сам `.md` затёрт и удалён — это сделано верно.
     expect(await storage.read('Дневник.md')).toBeNull();
@@ -228,8 +235,8 @@ describe('SEC-003: следы открытого текста после шиф�
 
   it.fails('[SEC-003] после шифрования открытого текста на диске не остаётся', async () => {
     const storage = await buildVaultWithHistory();
-    const key = await provider.deriveMasterKey('пароль', provider.randomSalt());
-    await encryptNoteFile(storage, provider, 'Дневник.md', key);
+    const master = await provider.deriveMaster('пароль', provider.randomSalt());
+    await encryptNoteFile(storage, provider, 'Дневник.md', master);
     expect(await plaintextTraces(storage)).toEqual([]);
   });
 });

@@ -474,6 +474,20 @@ export class Vault {
     return this.write(path, body, { created: true });
   }
 
+  /**
+   * Свободный путь под новую заметку — БЕЗ её создания.
+   *
+   * Нужен ровно одному вызывающему: созданию сразу зашифрованной заметки
+   * (ТЗ §3.3). Тот не может воспользоваться `create`, потому что `create`
+   * пишет `.md` — то есть открытый текст на диск, — а зашифрованная заметка
+   * обязана появиться сразу в `.md.enc`. Занятость проверяется тем же
+   * `exists`, что и в `create`, поэтому имена не разъедутся.
+   */
+  freePath(folder: string, title: string, extension = '.md'): VaultPath {
+    const stem = title !== '' ? title : this.strings.notes.untitled;
+    return uniqueNotePath(normalizePath(folder), stem, extension, (candidate) => this.exists(candidate));
+  }
+
   private exists(path: VaultPath): boolean {
     return this.index.byPathLookup(path) !== undefined || this.mtimes.has(path);
   }

@@ -108,10 +108,16 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     }
 
     setLoading(true);
-    void app.readNote(path).then((loaded) => {
+    void app.readNote(path).then(async (loaded) => {
       if (cancelled) return;
       setNote(loaded);
-      setBody(loaded?.body ?? '');
+      /* Хранилище открыто — запертая заметка открывается сама: пароль был
+         введён один раз за сеанс, спрашивать его снова не за что (ТЗ §3.3).
+         Если ключа нет, `openEncrypted` вернёт null и ниже покажется замок. */
+      const text =
+        isEncryptedPath(path) && !app.unlockedNote(path) ? await app.openEncrypted(path) : null;
+      if (cancelled) return;
+      setBody(text ?? loaded?.body ?? '');
       setLoading(false);
     });
     return () => {
@@ -153,7 +159,9 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
 
   const screenState = app.screenState('note', body.trim() === '');
 
-  /* Зашифрованная и ещё не открытая заметка — экран разблокировки. */
+  /* Зашифрованная и ещё не открытая заметка — экран разблокировки. Но если
+     хранилище уже открыто, замок показывать не за что: ключ есть, пароль
+     спрашивали в начале сеанса (ТЗ §3.3). */
   if (encrypted && !unlocked) {
     return (
       <div className="za-editor">

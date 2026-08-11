@@ -14,6 +14,7 @@ export type {
   GlobalHotkeyProvider,
   HapticProvider,
   HapticStrength,
+  MasterKey,
   Note,
   NoteId,
   NoteIndex,
@@ -124,6 +125,9 @@ export {
   CONTAINER_VERSION,
   decodeContainer,
   encodeContainer,
+  encodeHeader,
+  KEY_ID_LENGTH,
+  LEGACY_CONTAINER_VERSION,
   looksEncrypted,
   MAGIC,
   NONCE_LENGTH,
@@ -131,12 +135,14 @@ export {
 } from './crypto/container.js';
 export { ARGON2_PARAMS, unlockDelayMs, WebCryptoProvider, type WebCryptoProviderOptions } from './crypto/provider.js';
 export {
+  createEncryptedNote,
   decryptNoteFile,
   decryptNoteToDisk,
   encryptedPathOf,
   encryptNoteFile,
   passwordHint,
   plainPathOf,
+  rewriteToCurrentVersion,
 } from './crypto/notes.js';
 /* Счётчик попыток переживает перезапуск (BEHAVIOR §5.2, SEC-024). */
 export {

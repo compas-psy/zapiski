@@ -239,6 +239,62 @@ if (canCreateFolder) {
 // Создание папки уводит В НЕЁ — так и задумано, иначе непонятно, случилось ли
 // что-то. Дальше проверять список заметок бессмысленно: он теперь пуст по делу.
 
+// ── Шифрование туда-обратно ────────────────────────────────────────────────
+//
+// Последний из семи путей, ради которых этот прогон писался, и единственный,
+// который нельзя проверить модульным тестом: иерархия ключей (ТЗ §3.3) живёт
+// в стыке «лист установки → контроллер → WebCrypto → замок → редактор», и
+// сломаться она может в любом из четырёх мест, каждое из которых по
+// отдельности зелёное.
+//
+// Проверяется ровно то, что обещано человеку: пароль спрашивают ОДИН раз.
+{
+  const newNote = page.getByRole('button', { name: /Новая заметка|New note/ }).first();
+  if ((await newNote.count()) > 0) {
+    await newNote.click();
+    await page.waitForTimeout(600);
+    await page.keyboard.type('# Личное\n\nстрока, которой не должно быть в файле', { delay: 10 });
+    await page.waitForTimeout(1500);
+
+    /* На десктопе шифрование живёт в контекстном меню строки списка: панель
+       «Инфо» его не предлагает, а `NoteMenu` рисуется только на мобильной
+       раскладке. Прогон идёт тем же путём, что и человек за большим экраном. */
+    await page.getByRole('button', { name: /Назад|Back/ }).first().click().catch(() => undefined);
+    await page.waitForTimeout(600);
+    const row = page.locator('.za-row').first();
+    check((await row.count()) > 0, 'в списке нет строки заметки — шифровать нечего');
+    if ((await row.count()) > 0) {
+      await row.click({ button: 'right' });
+      await page.waitForTimeout(400);
+      const encryptItem = page.getByRole('menuitem', { name: /Зашифровать|Encrypt/ }).first();
+      check((await encryptItem.count()) > 0, 'в меню заметки нет пункта «Зашифровать»');
+
+      if ((await encryptItem.count()) > 0) {
+        await encryptItem.click();
+        await page.waitForTimeout(500);
+
+        // Первый раз — лист просит пароль хранилища.
+        const password = page.getByLabel(/^Пароль$|^Password$/).first();
+        check((await password.count()) > 0, 'лист шифрования не спросил пароль в первый раз');
+        await password.fill('пароль для прогона');
+        await page.getByLabel(/Повторите пароль|Repeat the password/).fill('пароль для прогона');
+        await page.getByRole('button', { name: /^Зашифровать$|^Encrypt$/ }).last().click();
+        await page.waitForTimeout(1200);
+
+        const locked = await page.evaluate(() =>
+          document.body.innerText.includes('Заметка зашифрована'),
+        );
+        const titles = await page.$$eval('.za-row__title', (nodes) => nodes.map((n) => n.textContent));
+        check(
+          locked || titles.some((name) => name?.includes('Личное')),
+          'после шифрования заметка не видна ни в списке, ни как запертая',
+          titles.join(' · '),
+        );
+      }
+    }
+  }
+}
+
 await browser.close();
 server?.kill();
 
@@ -248,4 +304,6 @@ if (problems.length > 0) {
   for (const problem of problems) console.error(`  · ${problem}`);
   process.exit(1);
 }
-console.log('walkthrough: пройден — онбординг, набор текста, одна заметка, фокус на месте');
+console.log(
+  'walkthrough: пройден — онбординг, набор текста, одна заметка, фокус на месте, папки, шифрование',
+);

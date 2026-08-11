@@ -228,6 +228,8 @@ export const en: AppCatalog = {
 
   crypto: {
     setupTitle: 'Encrypt the note',
+    encryptTitle: 'Encrypt the note',
+    reuseVaultPassword: 'With the vault password — the one you set the first time. No new password needed',
     password: 'Password',
     passwordRepeat: 'Repeat the password',
     hint: 'Hint (optional)',
@@ -346,8 +348,19 @@ export const en: AppCatalog = {
     },
     security: {
       encryptDefault: 'Encrypt new notes',
+      encryptDefaultHint: 'While the vault is unlocked. After auto-lock — as usual',
+      encryptDefaultNoPassword: 'Encrypt any note first — that is when the vault password appears',
       biometrics: 'Unlock with biometrics',
+      biometricsPassword: 'Vault password',
       secureScreen: 'Hide content in the task switcher',
+      changePassword: 'Change password',
+      changeTitle: 'Change the vault password',
+      currentPassword: 'Current password',
+      newPassword: 'New password',
+      changeNote: 'Notes will be re-encrypted with the new password. This is the only place it changes',
+      changeDone: (count: number): string => `Password changed · ${count} note(s) re-encrypted`,
+      changePartial: (paths: string[]): string =>
+        `Could not re-encrypt: ${paths.join(' · ')} — they still open with the old password`,
     },
     transfer: {
       importTitle: 'Import',

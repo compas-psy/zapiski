@@ -261,18 +261,60 @@ export interface EncryptedContainer {
   salt: Uint8Array;
   nonce: Uint8Array;
   ciphertext: Uint8Array;
+  /** Идентификатор ключа заметки (версия 2). Случайные байты, не путь. */
+  keyId?: Uint8Array;
+  /**
+   * Байты заголовка, которыми подписан шифротекст (AAD версии 2). Заполняет
+   * разбор контейнера; при записи заголовок собирается заново из полей.
+   */
+  aad?: Uint8Array;
   /** Подсказка к паролю, если задана. Хранится открытым текстом намеренно. */
   hint?: string;
 }
 
+/**
+ * Ключ хранилища: из него выводятся ключи отдельных заметок (ТЗ §3.3).
+ *
+ * Пароль спрашивается ОДИН раз — при установке шифрования, — и дальше живёт
+ * только в этом объекте до автозамка. Argon2id прогоняется один раз за сеанс,
+ * а не на каждую заметку: при 64 МиБ и трёх итерациях второе было бы секундой
+ * ожидания на каждое открытие.
+ *
+ * Соль хранится рядом с ключом, потому что она нужна при записи КАЖДОГО
+ * контейнера: без неё этот же пароль не выведет этот же ключ после
+ * перезапуска.
+ */
+export interface MasterKey {
+  readonly key: CryptoKey;
+  readonly salt: Uint8Array;
+}
+
 export interface CryptoProvider {
-  /** Argon2id по RFC 9106. */
-  deriveMasterKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
+  /**
+   * Argon2id по RFC 9106 → сырой ключевой материал.
+   *
+   * Сырые байты нужны ровно в одном месте — чтобы отдать их платформенному
+   * хранилищу (Android Keystore · Windows Hello · WebAuthn PRF). Тогда
+   * разблокировка биометрией не прогоняет Argon2id вообще, а пароль в
+   * хранилище не попадает.
+   */
+  deriveMasterMaterial(password: string, salt: Uint8Array): Promise<Uint8Array>;
+  /** Материал → неэкспортируемый ключ хранилища. */
+  importMaster(material: Uint8Array, salt: Uint8Array): Promise<MasterKey>;
+  /** HKDF: ключ конкретной заметки по её `keyId` из заголовка контейнера. */
+  deriveNoteKey(master: MasterKey, keyId: Uint8Array): Promise<CryptoKey>;
+  /** Пароль → ключ хранилища одним вызовом (`deriveMasterMaterial` + `importMaster`). */
+  deriveMaster(password: string, salt: Uint8Array): Promise<MasterKey>;
+  /** Ключ контейнера версии 1 — только для чтения старых файлов. */
+  deriveLegacyKey(password: string, salt: Uint8Array): Promise<CryptoKey>;
   encrypt(plaintext: string, key: CryptoKey, hint?: string): Promise<Uint8Array>;
   /** null — пароль не подошёл (BEHAVIOR §5.2, без исключений в UI). */
   decrypt(container: Uint8Array, key: CryptoKey): Promise<string | null>;
-  parseHeader(container: Uint8Array): Pick<EncryptedContainer, 'version' | 'salt' | 'hint'> | null;
+  parseHeader(
+    container: Uint8Array,
+  ): Pick<EncryptedContainer, 'version' | 'salt' | 'hint' | 'keyId'> | null;
   randomSalt(): Uint8Array;
+  randomKeyId(): Uint8Array;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

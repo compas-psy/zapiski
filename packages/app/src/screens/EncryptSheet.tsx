@@ -1,12 +1,19 @@
 /**
  * Установка шифрования — SCREENS §7 (`2e`), BEHAVIOR §5.1.
  *
- * Bottom sheet: пароль, повтор, подсказка, тумблер биометрии (включён по
- * умолчанию, СКРЫТ, если платформа не поддерживает), плашка с честным
- * предупреждением и кнопка «Зашифровать» — неактивная, пока условия не
- * выполнены. Несовпадение повтора показывается только после blur второго поля.
+ * Два состояния, и это следствие иерархии ключей (ТЗ §3.3):
+ *
+ *  · пароля хранилища ещё нет — лист просит его завести: пароль, повтор,
+ *    подсказка, тумблер биометрии, честное предупреждение. Это происходит
+ *    ОДИН раз за всё время жизни хранилища;
+ *  · пароль есть — полей нет вовсе, только кнопка. Спрашивать пароль на
+ *    каждую заметку значило бы заводить по паролю на заметку, а это утопия:
+ *    их невозможно запомнить, и человек либо ставит везде один, либо
+ *    перестаёт шифровать.
+ *
+ * Несовпадение повтора показывается только после blur второго поля.
  */
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { VaultPath } from '@zapiski/core';
 import { BottomSheet, Button, IconInfo, IconLock, InfoNote, Switch, TextField } from '@zapiski/ui';
 import { useApp, useStrings } from '../state/context.js';
@@ -28,20 +35,33 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
   const [hint, setHint] = useState('');
   const [useBiometrics, setUseBiometrics] = useState(true);
   const [busy, setBusy] = useState(false);
+  /* `null` — ещё не знаем: сходить на диск надо, а гадать нельзя. */
+  const [needsPassword, setNeedsPassword] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    void app.hasVaultPassword().then((has) => {
+      if (alive) setNeedsPassword(!has);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [app, open]);
 
   const biometrics = app.host.platform.biometrics;
   const tooShort = password.length > 0 && password.length < MIN_LENGTH;
   const mismatch = repeat.length > 0 && repeat !== password;
-  const ready = password.length >= MIN_LENGTH && repeat === password;
+  const ready =
+    needsPassword === false || (password.length >= MIN_LENGTH && repeat === password);
   /* Три деления, приглушённые цвета, без «слабый/плохой» (BEHAVIOR §5.1). */
   const strength = strengthOf(password);
 
   const submit = async (): Promise<void> => {
     setBusy(true);
-    const target = await app.encryptNote(path, password, hint || undefined);
-    if (target && biometrics && useBiometrics) {
-      await biometrics.enroll(target, new TextEncoder().encode(password)).catch(() => undefined);
-    }
+    /* Пароль задаётся только в первый раз; дальше шифрование молчит. */
+    if (needsPassword) await app.setVaultPassword(password, Boolean(biometrics) && useBiometrics);
+    await app.encryptNote(path, hint || undefined);
     setBusy(false);
     setPassword('');
     setRepeat('');
@@ -53,7 +73,7 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={strings.crypto.setupTitle}
+      title={needsPassword === false ? strings.crypto.encryptTitle : strings.crypto.setupTitle}
       footer={
         <Button fullWidth disabled={!ready} loading={busy} onClick={() => void submit()}>
           {strings.crypto.encrypt}
@@ -65,6 +85,12 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
           <IconLock size={18} />
         </span>
 
+        {needsPassword === false ? (
+          <InfoNote icon={<IconInfo size={15} />}>{strings.crypto.reuseVaultPassword}</InfoNote>
+        ) : null}
+
+        {needsPassword ? (
+          <>
         <TextField
           type="password"
           label={strings.crypto.password}
@@ -116,6 +142,8 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
         ) : null}
 
         <InfoNote icon={<IconInfo size={15} />}>{strings.crypto.warning}</InfoNote>
+          </>
+        ) : null}
       </div>
     </BottomSheet>
   );

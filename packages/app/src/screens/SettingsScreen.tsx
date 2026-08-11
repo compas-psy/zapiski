@@ -17,6 +17,7 @@ import {
   IconButton,
   IconInfo,
   InfoNote,
+  Modal,
   SegmentedControl,
   Switch,
   SyncDot,
@@ -450,19 +451,39 @@ function SyncSection(): ReactNode {
   );
 }
 
+/**
+ * «Безопасность».
+ *
+ * Два тумблера здесь были мёртвыми: «Шифровать новые заметки» и
+ * «Разблокировать биометрией» держали своё состояние в `useState` и не
+ * доходили ни до настроек, ни до keystore. Тумблер, который переключается и
+ * ничего не делает, врёт дважды — обещает поведение и заставляет думать, что
+ * оно уже включено. Оба ожили вместе с иерархией ключей: без общего пароля
+ * хранилища ни тому, ни другому не на чем было работать (ТЗ §3.3).
+ */
 function SecuritySection(): ReactNode {
   const app = useApp();
   const strings = useStrings();
   const copy = strings.settings.security;
-  const [encryptDefault, setEncryptDefault] = useState(false);
+  const [encryptDefault, setEncryptDefault] = useState(app.getEncryptNewNotes());
   const [secureScreen, setSecureScreen] = useState(true);
   const [autoLock, setAutoLock] = useState<number | null>(app.getAutoLockMinutes());
   const biometrics = app.host.platform.biometrics;
   const [biometricsOn, setBiometricsOn] = useState(false);
+  const [hasPassword, setHasPassword] = useState(false);
+  /* Включение биометрии требует пароля: в keystore уезжает ключевой материал,
+     а вывести его без пароля неоткуда. */
+  const [biometricsPassword, setBiometricsPassword] = useState('');
+  const [changeOpen, setChangeOpen] = useState(false);
 
   useEffect(() => {
     app.setAutoLockMinutes(autoLock);
   }, [app, autoLock]);
+
+  useEffect(() => {
+    void app.hasVaultPassword().then(setHasPassword);
+    void app.biometricsEnabled().then(setBiometricsOn);
+  }, [app]);
 
   return (
     <>
@@ -470,19 +491,46 @@ function SecuritySection(): ReactNode {
         <Switch
           label={copy.encryptDefault}
           checked={encryptDefault}
-          onChange={(event) => setEncryptDefault(event.target.checked)}
+          disabled={!hasPassword}
+          onChange={(event) => {
+            setEncryptDefault(event.target.checked);
+            void app.setEncryptNewNotes(event.target.checked);
+          }}
         />
       </div>
+      <p className="za-muted za-hint">
+        {hasPassword ? copy.encryptDefaultHint : copy.encryptDefaultNoPassword}
+      </p>
 
       {/* Биометрии нет на платформе — тумблера тоже нет (BEHAVIOR §5.1). */}
-      {biometrics ? (
+      {biometrics && hasPassword ? (
         <div className="za-field-row">
           <Switch
             label={copy.biometrics}
             checked={biometricsOn}
-            onChange={(event) => setBiometricsOn(event.target.checked)}
+            onChange={(event) => {
+              const on = event.target.checked;
+              if (!on) {
+                setBiometricsOn(false);
+                void app.setBiometricsEnabled(false);
+                return;
+              }
+              void app.setBiometricsEnabled(true, biometricsPassword).then((ok) => {
+                setBiometricsOn(ok);
+                if (ok) setBiometricsPassword('');
+              });
+            }}
           />
         </div>
+      ) : null}
+      {biometrics && hasPassword && !biometricsOn ? (
+        <TextField
+          type="password"
+          label={copy.biometricsPassword}
+          value={biometricsPassword}
+          autoComplete="current-password"
+          onChange={(event) => setBiometricsPassword(event.target.value)}
+        />
       ) : null}
 
       <div className="za-field-row">
@@ -495,6 +543,15 @@ function SecuritySection(): ReactNode {
           }}
         />
       </div>
+
+      {hasPassword ? (
+        <>
+          <Button variant="secondary" onClick={() => setChangeOpen(true)}>
+            {copy.changePassword}
+          </Button>
+          <ChangePasswordDialog open={changeOpen} onClose={() => setChangeOpen(false)} />
+        </>
+      ) : null}
 
       <Section>{strings.crypto.autoLockLabel}</Section>
       <SegmentedControl<string>
@@ -737,6 +794,92 @@ function AccountSection(): ReactNode {
         onConfirm={() => void app.signOutCloud()}
       />
     </>
+  );
+}
+
+/**
+ * Смена пароля хранилища — единственное место, где он меняется (ТЗ §3.3).
+ *
+ * Отчёт после операции обязателен и не сводится к «готово»: ключ выводится из
+ * пароля, поэтому смена перешифровывает заметки, и если часть не переписалась,
+ * человек обязан узнать, какие именно, — они продолжают открываться прежним
+ * паролем, и это не поломка, а половина сделанной работы.
+ */
+function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }): ReactNode {
+  const app = useApp();
+  const strings = useStrings();
+  const copy = strings.settings.security;
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ready = current.length > 0 && next.length >= 8 && next === repeat;
+
+  const submit = async (): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    const result = await app.changeVaultPassword(current, next);
+    setBusy(false);
+    if (!result.ok) {
+      /* Текст — из реестра BEHAVIOR §11, а не свой: «Пароль не подошёл»
+         человек уже видел на замке, и вторая формулировка того же означала бы
+         две разные ошибки в его голове вместо одной. */
+      setError(strings.errors.wrongPassword);
+      return;
+    }
+    app.toast({ message: copy.changeDone(result.changed) });
+    if (result.failed.length > 0) app.toast({ message: copy.changePartial(result.failed) });
+    setCurrent('');
+    setNext('');
+    setRepeat('');
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={copy.changeTitle}
+      closeLabel={strings.app.close}
+      footer={
+        <>
+          <Button variant="text" onClick={onClose}>
+            {strings.app.cancel}
+          </Button>
+          <Button disabled={!ready} loading={busy} onClick={() => void submit()}>
+            {copy.changePassword}
+          </Button>
+        </>
+      }
+    >
+      <div className="za-stack za-stack--tight">
+        <TextField
+          type="password"
+          label={copy.currentPassword}
+          value={current}
+          autoComplete="current-password"
+          error={error ?? undefined}
+          onChange={(event) => setCurrent(event.target.value)}
+        />
+        <TextField
+          type="password"
+          label={copy.newPassword}
+          value={next}
+          autoComplete="new-password"
+          onChange={(event) => setNext(event.target.value)}
+        />
+        <TextField
+          type="password"
+          label={strings.crypto.passwordRepeat}
+          value={repeat}
+          autoComplete="new-password"
+          onChange={(event) => setRepeat(event.target.value)}
+        />
+        <InfoNote icon={<IconInfo size={15} />}>{copy.changeNote}</InfoNote>
+      </div>
+    </Modal>
   );
 }
 

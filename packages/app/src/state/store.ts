@@ -6,7 +6,9 @@
  * работает в вебе, на Windows и на Android (ARCHITECTURE §1).
  */
 import {
+  LEGACY_CONTAINER_VERSION,
   MemoryVaultStorage,
+  META_DIR,
   SyncEngine,
   Vault,
   VersionHistory,
@@ -14,6 +16,7 @@ import {
   YandexDiskBackend,
   catalog as coreCatalog,
   countWords,
+  createEncryptedNote,
   decryptNoteFile,
   decryptNoteToDisk,
   encryptNoteFile,
@@ -21,12 +24,19 @@ import {
   exportArchive,
   exportNote,
   exportPdf,
+  fromBase64,
   isEncryptedPath,
   parseQuery,
   passwordHint,
+  readJson,
+  rewriteToCurrentVersion,
   stemOf,
+  toBase64,
   UnlockGuard,
+  writeAtomic,
+  writeJsonAtomic,
   type FolderNode,
+  type MasterKey,
   type Note,
   type NoteMeta,
   type SearchHit,
@@ -261,8 +271,24 @@ const PREF = {
   account: 'account',
   /** Токен доступа к Яндекс.Диску — он от Диска, а не от входа в аккаунт. */
   yandexToken: 'sync.yandexToken',
+  /** «Шифровать новые заметки» — раздел «Безопасность» (ТЗ §3.3). */
+  encryptNewNotes: 'security.encryptNewNotes',
+  /** Включена ли биометрия для хранилища. Сам ключ живёт в keystore. */
+  biometrics: 'security.biometrics',
   onboarded: 'onboarded',
 } as const;
+
+/**
+ * Где лежит соль хранилища и под каким именем ключ в платформенном хранилище.
+ *
+ * Соль — служебная и восстановимая: она есть в заголовке каждого контейнера,
+ * а этот файл лишь избавляет от их перебора. Поэтому он в `.zapiski/`, вместе
+ * с остальным, что можно потерять без последствий. Ключа хранилища на диске
+ * нет нигде и быть не должно: всё нужное для расшифровки — в самом контейнере
+ * плюс пароль в голове у человека («Ключ только у вас», §1.5 дизайна).
+ */
+const VAULT_KEY_PATH = `${META_DIR}/crypto.json`;
+const VAULT_KEY_ID = 'vault';
 
 export class AppController {
   private state: AppState;
@@ -280,6 +306,13 @@ export class AppController {
   private renameTimer: ReturnType<typeof setInterval> | null = null;
   /** Минут до автозамка; `null` — до выхода из приложения. */
   private autoLockMinutes: number | null = 10;
+  /**
+   * Ключ хранилища: живёт от разблокировки до автозамка и только в памяти.
+   * Пока он есть, шифрование новой заметки не требует ни пароля, ни Argon2id.
+   */
+  private master: MasterKey | null = null;
+  /** «Шифровать новые заметки» — читается при старте вместе с автозамком. */
+  private encryptNewNotes = false;
   /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
@@ -343,17 +376,27 @@ export class AppController {
   // ── Запуск ─────────────────────────────────────────────────────────────────
 
   async boot(): Promise<void> {
-    const [sortByFolder, recentQueries, lastOpened, account, autoLock, onboarded, unlockGuard] =
-      await Promise.all([
-        this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
-        this.host.prefs.get<string[]>(PREF.recent, []),
-        this.host.prefs.get<VaultPath[]>(PREF.lastOpened, []),
-        this.host.prefs.get<AccountState | null>(PREF.account, null),
-        this.host.prefs.get<number | null>(PREF.autoLock, 10),
-        this.host.prefs.get<boolean>(PREF.onboarded, false),
-        this.host.prefs.get<unknown>(PREF.unlockGuard, null),
-      ]);
+    const [
+      sortByFolder,
+      recentQueries,
+      lastOpened,
+      account,
+      autoLock,
+      onboarded,
+      unlockGuard,
+      encryptNewNotes,
+    ] = await Promise.all([
+      this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
+      this.host.prefs.get<string[]>(PREF.recent, []),
+      this.host.prefs.get<VaultPath[]>(PREF.lastOpened, []),
+      this.host.prefs.get<AccountState | null>(PREF.account, null),
+      this.host.prefs.get<number | null>(PREF.autoLock, 10),
+      this.host.prefs.get<boolean>(PREF.onboarded, false),
+      this.host.prefs.get<unknown>(PREF.unlockGuard, null),
+      this.host.prefs.get<boolean>(PREF.encryptNewNotes, false),
+    ]);
     this.autoLockMinutes = autoLock;
+    this.encryptNewNotes = encryptNewNotes;
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -948,9 +991,37 @@ export class AppController {
 
   // ── Заметки ────────────────────────────────────────────────────────────────
 
+  /**
+   * Новая заметка. При включённом «Шифровать новые заметки» — сразу
+   * зашифрованная, без единого вопроса: пароль хранилища задан один раз
+   * (ТЗ §3.3).
+   *
+   * Если хранилище заперто, заметка создаётся обычной. Это не уступка, а
+   * выбор из двух зол: молча создать открытый файл вместо обещанного
+   * зашифрованного нельзя, а прервать набор мысли модальным окном пароля —
+   * прямое нарушение «ноль трения» (§2 продукта). Поэтому тумблер в
+   * настройках честно говорит, что действует при открытом хранилище.
+   */
   async createNote(folder?: string, title?: string): Promise<VaultPath | null> {
     const vault = this.vault;
     if (!vault) return null;
+
+    const master = this.master;
+    if (this.encryptNewNotes && master) {
+      const plain = vault.freePath(folder ?? '', title ?? this.strings.notes.untitled);
+      const body = title ? `# ${title}\n\n` : '';
+      /* Именно `createEncryptedNote`, а не «создать и зашифровать»: второе
+         положило бы открытый текст на диск между двумя операциями. */
+      const target = await createEncryptedNote(vault.storage, this.crypto, plain, master, body);
+      await vault.rebuild();
+      await this.refresh();
+      const data = await vault.storage.read(target);
+      const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
+      if (keyId) this.putUnlocked(target, body, await this.crypto.deriveNoteKey(master, keyId));
+      this.openNote(target);
+      return target;
+    }
+
     const note = await vault.create({
       ...(folder ? { folder } : {}),
       ...(title ? { title } : {}),
@@ -1285,21 +1356,127 @@ export class AppController {
     await this.host.prefs.set(PREF.unlockGuard, record).catch(() => undefined);
   }
 
-  async encryptNote(
-    path: VaultPath,
-    password: string,
-    hint?: string,
-  ): Promise<VaultPath | null> {
+  /**
+   * Есть ли у хранилища пароль. Соль — единственный признак: она появляется
+   * ровно при установке шифрования и живёт, пока есть хоть одна зашифрованная
+   * заметка.
+   */
+  async hasVaultPassword(): Promise<boolean> {
+    return (await this.vaultSalt()) !== null;
+  }
+
+  /** Открыто ли хранилище прямо сейчас (ключ в памяти, автозамок не сработал). */
+  get vaultUnlocked(): boolean {
+    return this.master !== null;
+  }
+
+  /**
+   * Соль хранилища — та, из которой выводится ключ.
+   *
+   * Ищется по трём местам подряд, и порядок здесь важнее самих мест:
+   *   1. память сеанса;
+   *   2. `.zapiski/crypto.json` — служебный файл, который синк НЕ переносит;
+   *   3. заголовок любой зашифрованной заметки.
+   *
+   * Третий пункт и делает второе устройство работоспособным: `.zapiski/`
+   * восстановим по построению и не синкается, а вот сама заметка приезжает —
+   * и приносит соль с собой. Поэтому пароль, заданный на телефоне, открывает
+   * заметку на десктопе без всякой передачи ключей.
+   */
+  private async vaultSalt(): Promise<Uint8Array | null> {
+    if (this.master) return this.master.salt;
     const vault = this.vault;
     if (!vault) return null;
-    const salt = this.crypto.randomSalt();
-    const key = await this.crypto.deriveMasterKey(password, salt);
-    const target = await encryptNoteFile(vault.storage, this.crypto, path, key, hint);
+
+    const stored = await readJson<{ salt: string }>(vault.storage, VAULT_KEY_PATH);
+    if (stored?.salt) {
+      try {
+        return fromBase64(stored.salt);
+      } catch {
+        /* Файл побит — не беда: соль всё равно лежит в каждом контейнере. */
+      }
+    }
+
+    for (const note of this.state.notes) {
+      if (!note.encrypted) continue;
+      const data = await vault.storage.read(note.path);
+      const header = data ? this.crypto.parseHeader(data) : null;
+      if (header) return header.salt;
+    }
+    return null;
+  }
+
+  private async rememberVaultSalt(salt: Uint8Array): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    /* Ошибка записи не фатальна: соль есть в каждом контейнере, файл — лишь
+       ускорение для случая «зашифрованных заметок ещё нет». */
+    await writeJsonAtomic(vault.storage, VAULT_KEY_PATH, { version: 1, salt: toBase64(salt) }).catch(
+      () => undefined,
+    );
+  }
+
+  /**
+   * Задать пароль хранилища — ОДИН раз, при первом шифровании (ТЗ §3.3).
+   *
+   * Дальше пароль не спрашивается ни при шифровании новой заметки, ни при
+   * шифровании существующей: спрашивают его только замок и смена пароля.
+   */
+  async setVaultPassword(password: string, enrollBiometrics = false): Promise<boolean> {
+    const vault = this.vault;
+    if (!vault) return false;
+    const salt = (await this.vaultSalt()) ?? this.crypto.randomSalt();
+    const material = await this.crypto.deriveMasterMaterial(password, salt);
+    this.master = await this.crypto.importMaster(material, salt);
+    await this.rememberVaultSalt(salt);
+    if (enrollBiometrics) await this.enrollBiometrics(material);
+    material.fill(0);
+    return true;
+  }
+
+  /**
+   * Ключевой материал — в платформенное хранилище (ТЗ §3.3: «биометрия
+   * открывает master key»). Туда уезжает материал, а НЕ пароль: пароль
+   * человек может использовать где-то ещё, а материал бесполезен вне этого
+   * vault'а. Побочная выгода — разблокировка биометрией не гоняет Argon2id и
+   * потому мгновенна.
+   */
+  private async enrollBiometrics(material: Uint8Array): Promise<boolean> {
+    const biometrics = this.host.platform.biometrics;
+    if (!biometrics) return false;
+    return biometrics
+      .enroll(VAULT_KEY_ID, material)
+      .then(() => true)
+      .catch(() => false);
+  }
+
+  /**
+   * Зашифровать существующую заметку. Пароль уже задан — вопросов нет.
+   *
+   * Путь проводится через `resolveSavePath` по той же причине, по какой это
+   * делает автосохранение: заметка переименовывает себя по заголовку через
+   * две секунды после набора (BEHAVIOR §2.2), а меню держит путь, взятый до
+   * переименования. Живой прогон ловит это как исключение «Нет такой
+   * заметки» ровно в тот момент, когда человек напечатал заголовок и сразу
+   * полез шифровать, — то есть в самый обычный.
+   */
+  async encryptNote(path: VaultPath, hint?: string): Promise<VaultPath | null> {
+    const vault = this.vault;
+    const master = this.master;
+    if (!vault || !master) return null;
+    const source = await this.resolveSavePath(path);
+    if ((await vault.storage.stat(source)) === null) return null;
+    const target = await encryptNoteFile(vault.storage, this.crypto, source, master, hint);
     await vault.rebuild();
     await this.refresh();
-    const body = (await decryptNoteFile(vault.storage, this.crypto, target, key)) ?? '';
-    this.putUnlocked(target, body, key);
-    if (this.state.route.name === 'note' && this.state.route.id === path) {
+    const body = (await decryptNoteFile(vault.storage, this.crypto, target, master)) ?? '';
+    const data = await vault.storage.read(target);
+    const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
+    if (keyId) this.putUnlocked(target, body, await this.crypto.deriveNoteKey(master, keyId));
+    /* Путь сменился — экран обязан пойти следом, иначе он держит файл,
+       которого больше нет (та же механика, что у переименования). */
+    this.noteMoved(source, target);
+    if (this.state.route.name === 'note' && (this.state.route.id === path || this.state.route.id === source)) {
       this.navigate({ name: 'note', id: target }, { replace: true });
     }
     return target;
@@ -1308,16 +1485,25 @@ export class AppController {
   /**
    * Разблокировка паролем. `null` — пароль не подошёл: точки возвращаются,
    * подпись «Пароль не подошёл», данные не удаляются никогда.
+   *
+   * Пароль здесь один на хранилище: Argon2id прогоняется один раз за сеанс, а
+   * ключ каждой следующей заметки выводится из master мгновенно.
    */
   async unlock(path: VaultPath, password: string): Promise<string | null> {
     const vault = this.vault;
     if (!vault) return null;
     if (this.unlockDelayLeftMs > 0) return null;
-    const header = await vault.storage.read(path);
-    const parsed = header ? this.crypto.parseHeader(header) : null;
-    if (!parsed) return null;
-    const key = await this.crypto.deriveMasterKey(password, parsed.salt);
-    const body = await decryptNoteFile(vault.storage, this.crypto, path, key);
+    const data = await vault.storage.read(path);
+    const header = data ? this.crypto.parseHeader(data) : null;
+    if (!header) return null;
+
+    /* Соль версии 2 — общая соль хранилища и лежит прямо в контейнере.
+       У версии 1 соль своя, поэтому master для сеанса выводится отдельно. */
+    const master =
+      header.version === LEGACY_CONTAINER_VERSION
+        ? await this.crypto.deriveMaster(password, (await this.vaultSalt()) ?? this.crypto.randomSalt())
+        : await this.crypto.deriveMaster(password, header.salt);
+    const body = await decryptNoteFile(vault.storage, this.crypto, path, master, password);
     if (body === null) {
       /* Счётчик и конец задержки уезжают в настройки СРАЗУ: перезапуск между
          попытками не должен их обнулять (SEC-024). */
@@ -1329,19 +1515,164 @@ export class AppController {
     const reset = this.guard.reset();
     this.patch({ failedAttempts: 0, lockedUntil: 0 });
     await this.saveUnlockGuard(reset);
-    this.putUnlocked(path, body, key);
+    this.master = master;
+    await this.rememberVaultSalt(master.salt);
+    await this.adoptUnlocked(path, body, master);
     this.host.platform.haptics?.impact('light');
     return body;
   }
 
-  /** Разблокировка биометрией. Отмена пользователем — не ошибка (BEHAVIOR §5.2). */
+  /**
+   * Открыть зашифрованную заметку при УЖЕ открытом хранилище — без пароля.
+   *
+   * Это и есть выигрыш иерархии для человека: пароль спрашивают один раз за
+   * сеанс, а не на каждую запертую заметку. `null` — хранилище заперто или
+   * заметка версии 1, которую ключ хранилища не открывает: тогда показывается
+   * замок, как и раньше.
+   */
+  async openEncrypted(path: VaultPath): Promise<string | null> {
+    const vault = this.vault;
+    const master = this.master;
+    if (!vault || !master) return null;
+    const body = await decryptNoteFile(vault.storage, this.crypto, path, master);
+    if (body === null) return null;
+    await this.adoptUnlocked(path, body, master);
+    return body;
+  }
+
+  /**
+   * Положить расшифрованную заметку в память и заодно перевести её на версию 2,
+   * если она была версии 1.
+   *
+   * Миграция ленивая и молчаливая: текст уже расшифрован, второй Argon2id не
+   * нужен, а если запись не удалась — файл остаётся версии 1 и продолжает
+   * открываться тем же паролем. Ни одного состояния, в котором заметка
+   * перестаёт открываться, здесь нет.
+   */
+  private async adoptUnlocked(path: VaultPath, body: string, master: MasterKey): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    await rewriteToCurrentVersion(vault.storage, this.crypto, path, master, body).catch(() => false);
+    const data = await vault.storage.read(path);
+    const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
+    if (!keyId) return;
+    this.putUnlocked(path, body, await this.crypto.deriveNoteKey(master, keyId));
+  }
+
+  /**
+   * Сменить пароль хранилища (ТЗ §3.3, единственное место, где он меняется).
+   *
+   * Ключ выводится из пароля, поэтому смена пароля означает перешифровку всех
+   * заметок. Дорого это только на вид: Argon2id гоняется дважды на всю
+   * операцию — для старого ключа и для нового, — а каждая заметка стоит одного
+   * AES-прохода.
+   *
+   * Обрыв на середине не ломает ничего: каждый контейнер несёт СВОЮ соль,
+   * поэтому недописанные заметки продолжают открываться старым паролем. Их
+   * пути возвращаются вызывающему, чтобы экран назвал их поимённо, а не
+   * промолчал.
+   */
+  async changeVaultPassword(
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<{ ok: boolean; changed: number; failed: VaultPath[] }> {
+    const vault = this.vault;
+    const salt = await this.vaultSalt();
+    if (!vault || !salt) return { ok: false, changed: 0, failed: [] };
+
+    const oldMaster = await this.crypto.deriveMaster(oldPassword, salt);
+    const paths = this.state.notes.filter((note) => note.encrypted).map((note) => note.path);
+
+    /* Проверка пароля до единой записи: иначе неверный старый пароль
+       превратил бы «не подошёл» в наполовину перешифрованное хранилище. */
+    const first = paths[0];
+    if (first !== undefined) {
+      const probe = await decryptNoteFile(vault.storage, this.crypto, first, oldMaster, oldPassword);
+      if (probe === null) {
+        const record = this.guard.registerFailure();
+        this.patch({ failedAttempts: record.failedAttempts, lockedUntil: record.lockedUntil });
+        await this.saveUnlockGuard(record);
+        return { ok: false, changed: 0, failed: [] };
+      }
+    }
+
+    const newSalt = this.crypto.randomSalt();
+    const material = await this.crypto.deriveMasterMaterial(newPassword, newSalt);
+    const newMaster = await this.crypto.importMaster(material, newSalt);
+
+    const failed: VaultPath[] = [];
+    let changed = 0;
+    for (const path of paths) {
+      const body = await decryptNoteFile(vault.storage, this.crypto, path, oldMaster, oldPassword);
+      if (body === null) {
+        failed.push(path);
+        continue;
+      }
+      const key = await this.crypto.deriveNoteKey(newMaster, this.crypto.randomKeyId());
+      const hint = (await vault.storage.read(path).then((data) => (data ? this.crypto.parseHeader(data)?.hint : undefined))) ?? undefined;
+      try {
+        await writeAtomic(vault.storage, path, await this.crypto.encrypt(body, key, hint));
+        changed += 1;
+      } catch {
+        failed.push(path);
+      }
+    }
+
+    this.master = newMaster;
+    await this.rememberVaultSalt(newSalt);
+    /* Открытые заметки закрываются: их ключи выведены из прежнего master. */
+    this.patch({ unlocked: {} });
+    if (this.host.platform.biometrics) await this.enrollBiometrics(material);
+    material.fill(0);
+    return { ok: true, changed, failed };
+  }
+
+  /**
+   * Разблокировка биометрией. Отмена пользователем — не ошибка (BEHAVIOR §5.2).
+   *
+   * Из платформенного хранилища приходит ключевой материал, а не пароль:
+   * Argon2id не запускается вовсе, поэтому заметка открывается мгновенно —
+   * ровно то, ради чего ТЗ §3.3 и требует «биометрия открывает master key».
+   */
   async unlockWithBiometrics(path: VaultPath): Promise<string | null> {
     const biometrics = this.host.platform.biometrics;
     const vault = this.vault;
     if (!biometrics || !vault) return null;
-    const secret = await biometrics.unlock(path).catch(() => null);
-    if (!secret) return null;
-    return this.unlock(path, new TextDecoder().decode(secret));
+    const material = await biometrics.unlock(VAULT_KEY_ID).catch(() => null);
+    if (!material) return null;
+    const salt = await this.vaultSalt();
+    if (!salt) return null;
+    const master = await this.crypto.importMaster(material, salt);
+    material.fill(0);
+    const body = await decryptNoteFile(vault.storage, this.crypto, path, master);
+    if (body === null) return null;
+    this.master = master;
+    await this.adoptUnlocked(path, body, master);
+    this.host.platform.haptics?.impact('light');
+    return body;
+  }
+
+  /** Включить или выключить биометрию для хранилища (раздел «Безопасность»). */
+  async setBiometricsEnabled(on: boolean, password?: string): Promise<boolean> {
+    const biometrics = this.host.platform.biometrics;
+    if (!biometrics) return false;
+    if (!on) {
+      await biometrics.remove(VAULT_KEY_ID).catch(() => undefined);
+      await this.host.prefs.set(PREF.biometrics, false);
+      return true;
+    }
+    const salt = await this.vaultSalt();
+    if (!salt || password === undefined) return false;
+    const material = await this.crypto.deriveMasterMaterial(password, salt);
+    const ok = await this.enrollBiometrics(material);
+    material.fill(0);
+    if (ok) await this.host.prefs.set(PREF.biometrics, true);
+    return ok;
+  }
+
+  async biometricsEnabled(): Promise<boolean> {
+    if (!this.host.platform.biometrics) return false;
+    return this.host.prefs.get<boolean>(PREF.biometrics, false);
   }
 
   private putUnlocked(path: VaultPath, body: string, key: CryptoKey): void {
@@ -1379,7 +1710,15 @@ export class AppController {
     if (Object.keys(unlocked).length === 0) this.host.platform.secureFlag(false);
   }
 
+  /**
+   * Замок закрывает ВСЁ, включая ключ хранилища.
+   *
+   * До иерархии ключей замок закрывал по заметке за раз, потому что и ключ был
+   * у каждой свой. Теперь ключ один: оставить его в памяти после автозамка
+   * значило бы, что запертая заметка открывается без пароля (BEHAVIOR §5.3).
+   */
   lockAll(): void {
+    this.master = null;
     this.patch({ unlocked: {} });
     this.host.platform.secureFlag(false);
   }
@@ -1387,6 +1726,16 @@ export class AppController {
   setAutoLockMinutes(minutes: number | null): void {
     this.autoLockMinutes = minutes;
     void this.host.prefs.set(PREF.autoLock, minutes);
+  }
+
+  /** «Шифровать новые заметки» — настройка, а не намерение: переживает запуск. */
+  async setEncryptNewNotes(on: boolean): Promise<void> {
+    this.encryptNewNotes = on;
+    await this.host.prefs.set(PREF.encryptNewNotes, on);
+  }
+
+  getEncryptNewNotes(): boolean {
+    return this.encryptNewNotes;
   }
 
   getAutoLockMinutes(): number | null {
@@ -1412,15 +1761,24 @@ export class AppController {
     }, 1000);
   }
 
-  /** Снятие шифрования — одно из ТРЁХ мест с диалогом подтверждения. */
+  /**
+   * Снятие шифрования — одно из ТРЁХ мест с диалогом подтверждения.
+   *
+   * Пароль спрашивается и здесь, даже если хранилище открыто: это операция,
+   * после которой заметка ложится на диск открытым текстом, и подтвердить её
+   * должен человек, а не открытый сеанс.
+   */
   async removeEncryption(path: VaultPath, password: string): Promise<VaultPath | null> {
     const vault = this.vault;
     if (!vault) return null;
     const header = await vault.storage.read(path);
     const parsed = header ? this.crypto.parseHeader(header) : null;
     if (!parsed) return null;
-    const key = await this.crypto.deriveMasterKey(password, parsed.salt);
-    const target = await decryptNoteToDisk(vault.storage, this.crypto, path, key);
+    const master =
+      parsed.version === LEGACY_CONTAINER_VERSION
+        ? await this.crypto.deriveMaster(password, (await this.vaultSalt()) ?? parsed.salt)
+        : await this.crypto.deriveMaster(password, parsed.salt);
+    const target = await decryptNoteToDisk(vault.storage, this.crypto, path, master, password);
     if (!target) return null;
     this.lockNote(path);
     await vault.rebuild();

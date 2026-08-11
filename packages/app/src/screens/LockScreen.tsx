@@ -41,13 +41,18 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
     return () => clearInterval(timer);
   }, [app]);
 
-  /* Биометрия предлагается автоматически, если она есть и включена. */
+  /* Биометрия предлагается автоматически, если она есть И включена
+     (BEHAVIOR §5.2). «Есть на устройстве» и «настроена для хранилища» — разные
+     вещи: без второй проверки лист предлагал бы палец там, где в keystore
+     ничего не лежит, и отмена выглядела бы отказом системы. */
   useEffect(() => {
     if (!biometrics) return;
-    void biometrics.isAvailable().then((available) => {
-      if (available) setBiometricsSheet(true);
-    });
-  }, [biometrics]);
+    void Promise.all([biometrics.isAvailable(), app.biometricsEnabled()]).then(
+      ([available, enabled]) => {
+        if (available && enabled) setBiometricsSheet(true);
+      },
+    );
+  }, [app, biometrics]);
 
   const submit = async (): Promise<void> => {
     const body = await app.unlock(path, password);
