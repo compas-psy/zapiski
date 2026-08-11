@@ -281,16 +281,13 @@ export const en: AppCatalog = {
       previewBody:
         'Calm text without extra shine. Size, line height and column width — everything changes at once.',
       theme: 'Theme',
-      themes: { system: 'System', simpas: 'SIMPAS', graphite: 'Graphite', ink: 'Ink' },
+      themes: { system: 'System', paper: 'Paper', graphite: 'Graphite', ink: 'Ink' },
       accent: 'Accent',
-      /* Six presets, DS-ALIGNMENT §3; terracotta is not among them. */
+      /* Three presets, tz/ZAPISKI_TZ_1_Design.md §1.6; Garnet is the base one. */
       accents: {
-        pine: 'Pine',
-        forest: 'Forest',
-        gold: 'Gold',
-        dusk: 'Dusk',
-        granite: 'Granite',
-        clay: 'Clay',
+        garnet: 'Garnet',
+        blueberry: 'Blueberry',
+        slate: 'Slate',
       },
       fontSize: 'Text size',
       fontSizeSmall: 'A',

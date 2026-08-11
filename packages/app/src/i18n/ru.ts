@@ -346,19 +346,16 @@ export const ru = {
       theme: 'Тема',
       themes: {
         system: 'Система',
-        simpas: 'СИМПАС',
+        paper: 'Бумага',
         graphite: 'Графит',
         ink: 'Чернила',
       },
       accent: 'Акцент',
-      /* Шесть пресетов DS-ALIGNMENT §3; терракоты в наборе нет. */
+      /* Три пресета tz/ZAPISKI_TZ_1_Design.md §1.6; Гранат — базовый. */
       accents: {
-        pine: 'Хвоя',
-        forest: 'Лес',
-        gold: 'Золото',
-        dusk: 'Сумерки',
-        granite: 'Гранит',
-        clay: 'Глина',
+        garnet: 'Гранат',
+        blueberry: 'Черника',
+        slate: 'Грифель',
       },
       fontSize: 'Размер текста',
       fontSizeSmall: 'А',

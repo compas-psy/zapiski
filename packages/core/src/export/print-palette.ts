@@ -1,7 +1,7 @@
 /**
  * СГЕНЕРИРОВАННЫЙ ФАЙЛ — не редактировать руками.
- * Источник: packages/ui/src/styles/tokens.css + снимок дизайн-системы СИМПАС
- * (styles/simpas/vendor/tokens/colors.css), тема «СИМПАС», акцент «Хвоя».
+ * Источник: packages/ui/src/styles/tokens.generated.css (из design/tokens.json),
+ * тема «Бумага», акцент «Гранат».
  * Обновить: node scripts/gen-print-palette.mjs
  *
  * Палитра для экспорта в HTML/PDF/DOCX. Экспортный документ покидает
@@ -14,14 +14,14 @@
  */
 
 export const PRINT_PALETTE = {
-  bg: '#F7F8F4',
-  text: '#142018',
-  textSecondary: '#5F6C64',
-  textTertiary: '#7E8A83',
-  surface: '#FFFFFF',
-  line: '#E4E9E3',
-  accent: '#1D4735',
-  accentSoft: '#E7F0EA',
+  bg: '#FBFAF7',
+  text: '#38342E',
+  textSecondary: '#726C60',
+  textTertiary: '#B6AFA2',
+  surface: '#F3F1EA',
+  line: '#EAE6DB',
+  accent: '#B5503C',
+  accentSoft: '#F6E7E2',
 } as const;
 
 /**
@@ -32,6 +32,6 @@ export const PRINT_PALETTE = {
  */
 export const PRINT_FONTS = {
   serif: '"Source Serif 4", Georgia, "Iowan Old Style", serif',
-  sans: 'Geist, "Segoe UI", system-ui, sans-serif',
-  mono: '"Geist Mono", ui-monospace, SFMono-Regular, monospace',
+  sans: '"Golos Text", "Segoe UI", system-ui, sans-serif',
+  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace',
 } as const;

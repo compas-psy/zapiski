@@ -56,16 +56,10 @@ export interface PreferencesStore {
 // Внешний вид (DESIGN_TOKENS §1, SCREENS §8 «Внешний вид», макет 4i)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** DS-ALIGNMENT §2: `paper` заменена на `simpas`, «альтернативной светлой» нет. */
-export type ThemeChoice = 'system' | 'simpas' | 'graphite' | 'ink';
-/** DS-ALIGNMENT §3: шесть пресетов, терракоты среди них нет. */
-export type AccentChoice =
-  | 'pine'
-  | 'forest'
-  | 'gold'
-  | 'dusk'
-  | 'granite'
-  | 'clay';
+/** tz/ZAPISKI_TZ_1_Design.md §1: «Бумага» — базовая светлая, «Графит» и «Чернила» — тёмные. */
+export type ThemeChoice = 'system' | 'paper' | 'graphite' | 'ink';
+/** §1.6: три акцента вместо шести. «Гранат» — базовый (Р5). */
+export type AccentChoice = 'garnet' | 'blueberry' | 'slate';
 
 export interface Appearance {
   theme: ThemeChoice;

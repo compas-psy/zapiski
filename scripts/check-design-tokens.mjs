@@ -1,16 +1,14 @@
 /**
- * Токены приложения обязаны совпадать с эталоном дизайна.
+ * Токены приложения обязаны совпадать с источником дизайна.
  *
- * README пакета дизайна: «Приоритет документов при конфликте: zapiski.css
- * (значения) > REBUILD.md > DS-ALIGNMENT.md > BEHAVIOR.md > SCREENS.md >
- * DESIGN_TOKENS.md». Значит, спор о любом цвете решается одним файлом — и
- * проверять это надо не глазами по макету, а сравнением вычисленных значений.
+ * Источник один — `design/tokens.json` (tz/ZAPISKI_TZ_3_Agents.md §6: «Код не
+ * читает макеты глазами и не подбирает цвета: он импортирует токены»). Спор о
+ * любом цвете решается этим файлом.
  *
  * Проверяется ВЫЧИСЛЕННОЕ значение в живом браузере, а не текст CSS: между
  * файлом и экраном стоят каскад, порядок импортов и промежуточные переменные,
- * и расхождение появляется именно там. Прежняя редакция токенов выводила
- * `--bg: var(--background)` из чужого файла — значение приходило со стороны и
- * менялось вместе с ним.
+ * и расхождение появляется именно там. Сравнение текста с текстом такой дефект
+ * пропускает — этим уже наступали.
  *
  * Запуск:
  *   pnpm --filter "@zapiski/web..." build
@@ -45,22 +43,17 @@ try {
 }
 const PORT = process.env.ZAPISKI_PORT ?? '4200';
 const URL_BASE = `http://127.0.0.1:${PORT}/`;
-/* Эталон лежит в репозитории: сторож не должен зависеть от каталога, который
-   существует только на одной машине. */
-const REF = fileURLToPath(new URL('../docs/design/zapiski.css', import.meta.url));
+const REF = fileURLToPath(new URL('../design/tokens.json', import.meta.url));
+const TOKENS = JSON.parse(readFileSync(REF, 'utf8'));
 
-/** Ожидаемые значения прямо из эталона: их же читает и сборка. */
+/** Ожидаемые значения прямо из источника: из него же собран и CSS сборки. */
 function expected(theme) {
-  const src = readFileSync(REF, 'utf8');
-  const selector =
-    theme === 'simpas'
-      ? ':root[data-theme="simpas"], :root:not([data-theme])'
-      : `:root[data-theme="${theme}"]`;
-  const at = src.indexOf(selector);
-  const body = src.slice(at, src.indexOf('}', at));
+  const group = TOKENS.color.theme[theme];
+  const status = TOKENS.color.status[theme === 'paper' ? 'light' : 'dark'];
   const out = {};
-  for (const [, name, value] of body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)) {
-    out[name] = value.trim();
+  for (const [name, token] of Object.entries({ ...group, ...status })) {
+    if (name.startsWith('$') || name === 'color-scheme') continue;
+    out[`--${name}`] = String(token.$value);
   }
   return out;
 }
@@ -97,7 +90,7 @@ const NAMES = [
 ];
 
 let bad = 0;
-for (const theme of ['simpas', 'graphite', 'ink']) {
+for (const theme of ['paper', 'graphite', 'ink']) {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
   const got = await page.evaluate((names) => {
     const style = getComputedStyle(document.documentElement);
@@ -110,18 +103,24 @@ for (const theme of ['simpas', 'graphite', 'ink']) {
   bad += wrong.length;
 }
 
-// Акцент в тёмных темах — приглушённый, светлый только для текста (REBUILD §1.11).
-for (const theme of ['graphite', 'ink']) {
+/* Акцент по умолчанию — гранат: в светлой теме базовый, в тёмных осветлённый
+   (tz/ZAPISKI_TZ_1_Design.md §1, Р5). */
+const GARNET = TOKENS.color.accent.garnet;
+for (const [theme, want] of [
+  ['paper', GARNET.light.accent.$value],
+  ['graphite', GARNET.dark.accent.$value],
+  ['ink', GARNET.dark.accent.$value],
+]) {
   await page.evaluate((t) => document.documentElement.setAttribute('data-theme', t), theme);
   const accent = await page.evaluate(() =>
     getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(),
   );
-  const ok = normalize(accent) === '#2e6b4a';
+  const ok = normalize(accent) === normalize(want);
   if (!ok) bad += 1;
-  console.log(`${theme}: --accent = ${accent} ${ok ? '' : '(эталон #2E6B4A)'}`);
+  console.log(`${theme}: --accent = ${accent} ${ok ? '' : `(источник ${want})`}`);
 }
 
 await browser.close();
 server?.kill();
-console.log(bad === 0 ? 'ТОКЕНЫ СОВПАДАЮТ С ЭТАЛОНОМ' : `РАСХОЖДЕНИЙ: ${bad}`);
+console.log(bad === 0 ? 'ТОКЕНЫ СОВПАДАЮТ С design/tokens.json' : `РАСХОЖДЕНИЙ: ${bad}`);
 process.exit(bad === 0 ? 0 : 1);

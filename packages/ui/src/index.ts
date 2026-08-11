@@ -1,10 +1,10 @@
 /**
  * @zapiski/ui — токены тем и библиотека компонентов ЗАПИСОК.
  *
- * Токены — алиасы поверх дизайн-системы СИМПАС, компоненты — временная
- * реализация её `Button`/`Badge`/`Card`/`Input`/`Separator`/`SegmentedControl`/
- * `Icon`/`ServiceMark` до открытия пакета `@simpas/design-system`.
- * Карта соответствия и план замены — packages/ui/DS-MAPPING.md.
+ * Токены собираются из `design/tokens.json` — единственного артефакта
+ * передачи «дизайн → код» (tz/ZAPISKI_TZ_3_Agents.md §6). Компоненты —
+ * `Button`/`Badge`/`Card`/`Input`/`Separator`/`SegmentedControl`/`Icon`/
+ * `ServiceMark` — построены на них и своих значений не заводят.
  *
  * Публичный API пакета — только этот файл (ARCHITECTURE.md §5).
  * Стили подключаются здесь же: смена темы работает без ререндера React.

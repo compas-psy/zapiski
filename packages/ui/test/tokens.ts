@@ -2,10 +2,10 @@
  * Мини-движок каскада: разбирает НАСТОЯЩИЕ файлы стилей и вычисляет значения
  * переменных для конкретной пары тема × акцент.
  *
- * Читается весь слой, а не один файл: с переходом на дизайн-систему
- * `tokens.css` стал слоем алиасов (`--bg: var(--background)`), и без снимка
- * СИМПАСА ни один алиас не разворачивается до литерала. Порядок тот же, что в
- * `styles/index.css`: слой системы → наши токены.
+ * Читается весь слой в том же порядке, что в `styles/index.css`: сначала
+ * `tokens.generated.css` (значения из design/tokens.json), затем `tokens.css`
+ * (производные и алиасы). Одного файла мало — половина ролей объявлена
+ * алиасом на другую роль, и без второго файла они не разворачиваются.
  *
  * Тесты обязаны проверять то, что реально уедет в сборку, а не копию значений
  * в TypeScript, — иначе проверка контраста измеряет саму себя.
@@ -17,10 +17,9 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 export const STYLES_DIR = resolve(here, '../src/styles');
 export const TOKENS_PATH = resolve(STYLES_DIR, 'tokens.css');
-/** Наш слой подключения системы: он же список того, что реально загружается. */
-export const SIMPAS_ENTRY_PATH = resolve(STYLES_DIR, 'simpas-offline.css');
-/** Точка входа самой дизайн-системы (в рантайме не используется — см. §CDN). */
-export const SIMPAS_VENDOR_ENTRY_PATH = resolve(STYLES_DIR, 'simpas/vendor/styles.css');
+export const GENERATED_TOKENS_PATH = resolve(STYLES_DIR, 'tokens.generated.css');
+/** Точка входа стилевого слоя: она же список того, что реально загружается. */
+export const STYLES_ENTRY_PATH = resolve(STYLES_DIR, 'index.css');
 
 export interface Rule {
   selectors: string[];
@@ -190,24 +189,23 @@ export function resolveVar(tokens: Record<string, string>, name: string, depth =
 }
 
 /**
- * Полный каскад пакета: слой СИМПАСА (в том порядке, в каком его импортирует
- * `simpas-offline.css`) и следом наш `tokens.css`. Список не захардкожен —
- * он читается из самого файла, поэтому тест не разойдётся со сборкой.
- * `fonts.css` пропускается: там только `@font-face`, переменных нет.
+ * Полный каскад пакета — в том порядке, в каком его импортирует
+ * `styles/index.css`. Список не захардкожен: он читается из самого файла,
+ * поэтому тест не разойдётся со сборкой, если в слой добавят файл.
+ * `fonts.css` пропускается — там только `@font-face`, переменных нет;
+ * `base.css` и `typography.css` тоже: они переменные потребляют, а не задают.
  */
+const NOT_TOKENS = ['fonts.css', 'base.css', 'typography.css'];
+
 export function loadTokenRules(): Rule[] {
   const rules: Rule[] = [];
   let order = 0;
-  const push = (path: string): void => {
-    for (const rule of parseRules(readFileSync(path, 'utf8'))) {
+  for (const relativePath of readImports(STYLES_ENTRY_PATH)) {
+    if (NOT_TOKENS.some((name) => relativePath.endsWith(name))) continue;
+    for (const rule of parseRules(readFileSync(resolve(STYLES_DIR, relativePath), 'utf8'))) {
       rules.push({ ...rule, order: order++ });
     }
-  };
-  for (const relativePath of readImports(SIMPAS_ENTRY_PATH)) {
-    if (relativePath.endsWith('fonts.css')) continue;
-    push(resolve(STYLES_DIR, relativePath));
   }
-  push(TOKENS_PATH);
   return rules;
 }
 

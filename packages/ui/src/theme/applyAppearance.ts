@@ -9,6 +9,8 @@ import {
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
   THEME_PREFERENCES,
+  migrateAccent,
+  migrateTheme,
   resolveTheme,
   type AppearanceState,
   type Theme,
@@ -25,9 +27,14 @@ export function parseAppearance(raw: unknown): AppearanceState {
     ? src['editor']
     : {}) as Record<string, unknown>;
 
+  /* Отменённые имена переносятся на нынешние ДО разбора: иначе выбор
+     человека молча превратился бы в значение по умолчанию (см. types.ts). */
+  const theme = migrateTheme(src['theme']);
+  const accent = migrateAccent(src['accent']);
+
   return {
-    theme: includes(THEME_PREFERENCES, src['theme']) ? src['theme'] : DEFAULT_APPEARANCE.theme,
-    accent: includes(ACCENTS, src['accent']) ? src['accent'] : DEFAULT_APPEARANCE.accent,
+    theme: includes(THEME_PREFERENCES, theme) ? theme : DEFAULT_APPEARANCE.theme,
+    accent: includes(ACCENTS, accent) ? accent : DEFAULT_APPEARANCE.accent,
     editor: {
       fontSize: includes(EDITOR_FONT_SIZES, editorSrc['fontSize'])
         ? editorSrc['fontSize']

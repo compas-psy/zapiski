@@ -66,19 +66,16 @@ import './Gallery.css';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'Системная' },
-  { value: 'simpas', label: 'СИМПАС' },
+  { value: 'paper', label: 'Бумага' },
   { value: 'graphite', label: 'Графит' },
   { value: 'ink', label: 'Чернила' },
 ];
 
-/* Шесть пресетов DS-ALIGNMENT §3. Терракоты в наборе нет. */
+/* Три пресета tz/ZAPISKI_TZ_1_Design.md §1.6. */
 const ACCENT_TITLES: Record<Accent, string> = {
-  pine: 'Хвоя',
-  forest: 'Лес',
-  gold: 'Золото',
-  dusk: 'Сумерки',
-  granite: 'Гранит',
-  clay: 'Глина',
+  garnet: 'Гранат',
+  blueberry: 'Черника',
+  slate: 'Грифель',
 };
 
 const SURFACE_TOKENS = [

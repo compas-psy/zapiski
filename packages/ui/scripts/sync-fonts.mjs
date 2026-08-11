@@ -22,19 +22,20 @@ const cssOut = resolve(pkgRoot, 'src/styles/fonts.css');
 
 /** Что вендорим. Подмножества: только латиница и кириллица (проект ru/en).
  *
- * DS-ALIGNMENT.md §6: интерфейс — Geist Sans, моно — Geist Mono.
- * ВАЖНО про имя пакета: у Vercel две публикации Geist. `@fontsource/geist-sans`
- * — старый снимок из репозитория Vercel (v1.0.1, 2023): подмножество ровно одно,
- * `latin`, кириллицы в файле нет. Для русского интерфейса он непригоден.
- * Кириллицу даёт публикация из Google Fonts — пакет `@fontsource/geist`
- * (семейство так и называется, `Geist`), подмножества latin / latin-ext /
- * cyrillic / cyrillic-ext. Берём её; `Geist Sans` остаётся в fallback-стеке
- * (`--font-sans`) на случай системной установки шрифта под этим именем.
+ * tz/ZAPISKI_TZ_1_Design.md §1, строка «Шрифты» — принято и не пересматривается:
+ * Golos Text (интерфейс и текст заметки), Source Serif 4 («бумажный» режим),
+ * JetBrains Mono (код, даты, raw). Geist, пришедший с чужой дизайн-системой,
+ * из набора убран вместе с ней.
+ *
+ * Golos Text — гуманистический гротеск с кириллицей как первым письмом, а не
+ * как довеском: у Geist кириллица есть только в публикации из Google Fonts, и
+ * это была отдельная ловушка. JetBrains Mono держит кириллицу в моноширинном —
+ * важно для raw-режима, где текст заметки набран моноширинным целиком.
  */
 const PLAN = [
-  { pkg: 'geist', family: 'Geist', weights: [400, 500, 600, 700], styles: ['normal'] },
+  { pkg: 'golos-text', family: 'Golos Text', weights: [400, 500, 600, 700], styles: ['normal'] },
   { pkg: 'source-serif-4', family: 'Source Serif 4', weights: [400, 600], styles: ['normal', 'italic'] },
-  { pkg: 'geist-mono', family: 'Geist Mono', weights: [400, 500], styles: ['normal'] },
+  { pkg: 'jetbrains-mono', family: 'JetBrains Mono', weights: [400, 500], styles: ['normal'] },
 ];
 const SUBSETS = ['latin', 'latin-ext', 'cyrillic', 'cyrillic-ext'];
 

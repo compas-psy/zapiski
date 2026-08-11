@@ -1,8 +1,10 @@
 /**
- * Контраст палитры СИМПАСА в наших темах.
+ * Контраст палитры «Бумага · Гранат» во всех трёх темах.
  *
- * Проверяется четыре группы пар — состав пересмотрен под DS-ALIGNMENT §4 и §11,
- * а не перенесён со старой палитры:
+ * tz/ZAPISKI_TZ_1_Design.md §2 требует это прямым текстом: «Обязательная
+ * проверка контраста: Гранат на „Бумаге“ и на „Чернилах“ — 4.5:1 для текста и
+ * 3:1 для интерактивных границ», и §5 распространяет требование на все темы.
+ * Проверяется четыре группы пар:
  *
  *   A. DoD ТЗ (порог 4.5:1, обычный текст)
  *      1. --text            на --bg
@@ -16,14 +18,15 @@
  *      проверяться отдельно: это ценник на paywall и текст ошибки.
  *
  *   C. Подпись на заливке главного действия (порог 4.5:1):
- *      --on-accent на --accent-fill. Появилась из-за «Золота»: фирменное
- *      #CC9E50 заливает, но подписывается тёмным форест-ink, а не белым.
+ *      --on-accent на --accent-fill. Заливка отделена от акцента-текста:
+ *      однажды затемнённый ради 4.5:1 акцент не обязан утаскивать за собой
+ *      кнопку.
  *
  *   D. Нетекстовые элементы (порог 3:1, WCAG 1.4.11) — индикаторы статуса на
  *      своих подложках и акцент как заливка/граница.
  *
- * Значения читаются из НАСТОЯЩИХ файлов: снимок дизайн-системы
- * (`src/styles/simpas/vendor/tokens/*.css`) + наш `src/styles/tokens.css`.
+ * Значения читаются из НАСТОЯЩИХ файлов: `src/styles/tokens.generated.css`
+ * (собран из `design/tokens.json`) + производные из `src/styles/tokens.css`.
  *
  * Известные отклонения НЕ подгоняются молча: они перечислены в
  * KNOWN_DEVIATIONS с точными числами и разобраны в packages/ui/CONTRAST.md.
@@ -42,8 +45,8 @@ import {
   type Rule,
 } from './tokens';
 
-const THEMES = ['simpas', 'graphite', 'ink'] as const;
-const ACCENTS = ['pine', 'forest', 'gold', 'dusk', 'granite', 'clay'] as const;
+const THEMES = ['paper', 'graphite', 'ink'] as const;
+const ACCENTS = ['garnet', 'blueberry', 'slate'] as const;
 const AA = 4.5;
 /** WCAG 1.4.11 — графические объекты и границы контролов. */
 const NON_TEXT = 3;
@@ -75,36 +78,16 @@ type PairId = (typeof TEXT_PAIRS)[number][0] | (typeof NON_TEXT_PAIRS)[number][0
 
 /**
  * Реестр принятых отклонений: тема · акцент · пара → измеренный контраст.
- * Источник правды для packages/ui/CONTRAST.md. Список перечитан заново
- * 2026-08-09 под палитру СИМПАСА — старый (пустой, от палитры «Бумаги») не
- * переносился: у новой палитры отклонения другие и их причины другие.
- *
- * Все четыре — значения САМОЙ дизайн-системы, менять их односторонне нельзя
- * (DS-ALIGNMENT §3 и §5 задают их дословно). Подгонять числа запрещено; они
- * вынесены владельцу системы вместе с правкой про золото.
+ * Источник правды для packages/ui/CONTRAST.md.
  */
-const KNOWN_DEVIATIONS: Record<string, number> = {
-  /* «Лес» #3B8F5A на кремовом. Тот же зелёный, что --success-500 и знак ШАГОВ. */
-  'simpas/forest/accent/bg': 3.74,
-  'simpas/forest/on-accent/accent-fill': 3.99,
-  /* «Глина» #A47864 (= --svc-svoi-bg) на кремовом. */
-  'simpas/clay/accent/bg': 3.61,
-  'simpas/clay/on-accent/accent-fill': 3.85,
-  /* §5 предписывает осветлять «Хвою» в тёмных темах ровно до --forest-500. */
-  'graphite/pine/accent/bg': 4.44,
-  /* Фирменное золото как заливка премиальной кнопки на кремовом фоне.
-     Подпись на самой заливке проходит (4.93), не проходит граница кнопки
-     относительно страницы. */
-  'simpas/gold/accent-fill/bg': 2.3,
-  /* Фирменное золото как индикатор на своей же подложке. Обе величины —
-     из снимка (--gold-500 / --amber-soft), это заливка бейджа, не текст. */
-  'simpas/pine/warning/warning-soft': 2.22,
-  'simpas/forest/warning/warning-soft': 2.22,
-  'simpas/gold/warning/warning-soft': 2.22,
-  'simpas/dusk/warning/warning-soft': 2.22,
-  'simpas/granite/warning/warning-soft': 2.22,
-  'simpas/clay/warning/warning-soft': 2.22,
-};
+const KNOWN_DEVIATIONS: Record<string, number> = {};
+
+/* Реестр пуст, и это не «ещё не заполнили», а результат: на палитре
+   «Бумага · Гранат» все девять сочетаний проходят оба порога. Прежние четыре
+   отклонения были свойствами чужой палитры — форест и фирменное золото на
+   кремовом, — и ушли вместе с ней. Если отклонение появится, оно пишется сюда
+   числом и разбирается в packages/ui/CONTRAST.md; подгонять значения под
+   порог, не назвав причину, нельзя. */
 
 const rules: Rule[] = loadTokenRules();
 
@@ -159,9 +142,9 @@ function check(
   ).toBeGreaterThanOrEqual(threshold);
 }
 
-describe('контраст 18 сочетаний тема × акцент', () => {
-  it('покрывает ровно 18 сочетаний', () => {
-    expect(combinations).toHaveLength(18);
+describe('контраст 9 сочетаний тема × акцент', () => {
+  it('покрывает ровно 9 сочетаний', () => {
+    expect(combinations).toHaveLength(9);
   });
 
   describe.each(combinations)('$theme × $accent', ({ theme, accent }) => {
@@ -185,13 +168,13 @@ describe('шкала текста — сторожевые значения', ()
    * правки. Числа — в CONTRAST.md.
    */
   const EXPECTED: Record<string, Record<string, number>> = {
-    simpas: { '--text-tertiary': 3.37, '--text-disabled': 2.17, '--text-ghost': 1.56 },
-    graphite: { '--text-tertiary': 4.51, '--text-disabled': 2.81, '--text-ghost': 1.84 },
-    ink: { '--text-tertiary': 4.71, '--text-disabled': 2.91, '--text-ghost': 1.89 },
+    paper: { '--text-tertiary': 2.09, '--text-disabled': 1.71, '--text-ghost': 1.42 },
+    graphite: { '--text-tertiary': 2.85, '--text-disabled': 1.99, '--text-ghost': 1.41 },
+    ink: { '--text-tertiary': 3.21, '--text-disabled': 2.2, '--text-ghost': 1.57 },
   };
 
   it.each(THEMES)('%s: третичный, неактивный и призрачный не сдвинулись', (theme) => {
-    const tokens = computeTokens(rules, { theme, accent: 'pine' });
+    const tokens = computeTokens(rules, { theme, accent: 'garnet' });
     const bg = parseColor(resolveVar(tokens, '--bg'));
     for (const [token, expected] of Object.entries(EXPECTED[theme]!)) {
       const ratio = round2(contrast(parseColor(resolveVar(tokens, token)), bg));
@@ -214,24 +197,35 @@ describe('реестр отклонений не протух', () => {
     }
   });
 
-  it('«Чернила» — истинный чёрный', () => {
-    const tokens = computeTokens(rules, { theme: 'ink', accent: 'pine' });
-    expect(resolveVar(tokens, '--bg').toUpperCase()).toBe('#000000');
+  it('«Чернила» — OLED-чёрный из ТЗ', () => {
+    const tokens = computeTokens(rules, { theme: 'ink', accent: 'garnet' });
+    expect(resolveVar(tokens, '--bg').toUpperCase()).toBe('#000008');
   });
 
-  it('«Хвоя» по умолчанию — форест дизайн-системы', () => {
-    const tokens = computeTokens(rules, { theme: 'simpas', accent: 'pine' });
-    expect(resolveVar(tokens, '--accent').toUpperCase()).toBe('#1D4735');
-    expect(resolveVar(tokens, '--bg').toUpperCase()).toBe('#F7F8F4');
+  it('«Бумага · Гранат» — ровно те значения, что в §2 мастер-ТЗ', () => {
+    /* Без этой проверки все пороги выше можно было бы удовлетворить любой
+       другой палитрой: контраст не знает, какого цвета продукт. */
+    const tokens = computeTokens(rules, { theme: 'paper', accent: 'garnet' });
+    expect(resolveVar(tokens, '--bg').toUpperCase()).toBe('#FBFAF7');
+    expect(resolveVar(tokens, '--surface').toUpperCase()).toBe('#F3F1EA');
+    expect(resolveVar(tokens, '--text').toUpperCase()).toBe('#38342E');
+    expect(resolveVar(tokens, '--text-secondary').toUpperCase()).toBe('#726C60');
+    expect(resolveVar(tokens, '--line').toUpperCase()).toBe('#EAE6DB');
+    expect(resolveVar(tokens, '--accent').toUpperCase()).toBe('#B5503C');
   });
 
-  it('золото заливает фирменным тоном, а подписывается тёмным', () => {
-    const tokens = computeTokens(rules, { theme: 'simpas', accent: 'gold' });
-    /* Фирменное золото — только заливка (§3, сноска ¹). */
-    expect(resolveVar(tokens, '--accent-fill').toUpperCase()).toBe('#CC9E50');
-    /* Как текст оно не используется: текстовая роль затемнена. */
-    expect(resolveVar(tokens, '--accent').toUpperCase()).toBe('#8F6B26');
-    expect(resolveVar(tokens, '--on-accent').toUpperCase()).toBe('#143D2F');
+  it('акцент по умолчанию — гранат, даже когда data-accent не выставлен', () => {
+    /* Первый кадр до гидратации рисуется без атрибутов: если бы правило
+       `:root:not([data-accent])` потерялось, продукт стартовал бы бесцветным. */
+    const tokens = computeTokens(rules, { theme: 'paper', accent: undefined as never });
+    expect(resolveVar(tokens, '--accent').toUpperCase()).toBe('#B5503C');
+  });
+
+  it('гранат в тёмных темах осветляется, а не остаётся заливкой с «Бумаги»', () => {
+    for (const theme of ['graphite', 'ink']) {
+      const tokens = computeTokens(rules, { theme, accent: 'garnet' });
+      expect(resolveVar(tokens, '--accent').toUpperCase()).toBe('#D0765B');
+    }
   });
 
   it('таблица измерений (для отчёта)', () => {
@@ -243,7 +237,7 @@ describe('реестр отклонений не протух', () => {
         ...Object.fromEntries(Object.entries(measured).map(([id, v]) => [id, round2(v)])),
       };
     });
-    expect(table).toHaveLength(18);
+    expect(table).toHaveLength(9);
     /* Печатается только при ZAPISKI_CONTRAST_TABLE=1; полный отчёт — в CONTRAST.md. */
     if (process.env['ZAPISKI_CONTRAST_TABLE']) console.table(table);
   });

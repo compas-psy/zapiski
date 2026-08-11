@@ -1,75 +1,64 @@
 # Шрифты — self-hosted, без CDN
 
-`DESIGN_TOKENS.md` §2: все гарнитуры поставляются в сборке (`.woff2`),
-**в рантайме нет ни одного обращения к CDN**. Файлы в этом каталоге — часть
-репозитория, а не результат загрузки при запуске.
-
-`DS-ALIGNMENT.md` §6 сменил семейства: Golos Text → **Geist**,
-JetBrains Mono → **Geist Mono**. Шкала размеров и весов из `DESIGN_TOKENS.md`
-§2 сохранена без изменений — поменялось только семейство.
-
-## Почему файлы вообще здесь, а не берутся из системы
-
-Снимок дизайн-системы подключает Geist так:
-
-```css
-/* src/styles/simpas/vendor/tokens/fonts.css — НЕ ПРАВИТЬ */
-@import url("https://fonts.googleapis.com/css2?family=Geist:…&display=swap");
-```
-
-Каталог `vendor/` — побайтовая копия системы, и правки в нём запрещены.
-Перекрыть `@import url(…)` каскадом нельзя: это директива загрузки, а не
-объявление — запрос к fonts.googleapis.com ушёл бы в любом случае. Поэтому наш
-`src/styles/simpas-offline.css` повторяет список импортов системы **без**
-`tokens/fonts.css`, а на его место ставит `../styles/fonts.css` из этого
-каталога. Сторож — `test/simpas.test.ts`.
+`tz/ZAPISKI_TZ_2_Engineering.md` §10 и local-first принцип продукта: все
+гарнитуры поставляются в сборке (`.woff2`), **в рантайме нет ни одного
+обращения к CDN**. Файлы в этом каталоге — часть репозитория, а не результат
+загрузки при запуске. В Tauri-сборке внешний CDN вообще недоступен, так что
+это не про приватность, а про то, будет ли текст виден.
 
 ## Что лежит здесь
 
+`tz/ZAPISKI_TZ_1_Design.md` §1, строка «Шрифты» — принято и не
+пересматривается:
+
 | Гарнитура | Роль | Пакет Fontsource | Начертания | Подмножества |
 | --- | --- | --- | --- | --- |
-| **Geist** | интерфейс и текст заметки | `@fontsource/geist` | 400, 500, 600, 700 | latin, latin-ext, cyrillic, cyrillic-ext |
-| **Source Serif 4** | режим чтения заметки, публичная страница | `@fontsource/source-serif-4` | 400, 600 + курсивы | latin, latin-ext, cyrillic, cyrillic-ext |
-| **Geist Mono** | даты, времена, табличные числа, код, raw | `@fontsource/geist-mono` | 400, 500 | latin, latin-ext, cyrillic, cyrillic-ext |
+| **Golos Text** | интерфейс и текст заметки | `@fontsource/golos-text` | 400, 500, 600, 700 | latin, latin-ext, cyrillic, cyrillic-ext |
+| **Source Serif 4** | «бумажный» режим чтения заметки | `@fontsource/source-serif-4` | 400, 600 + курсивы | latin, latin-ext, cyrillic, cyrillic-ext |
+| **JetBrains Mono** | код, raw-режим, даты и табличные числа | `@fontsource/jetbrains-mono` | 400, 500 | latin, latin-ext, cyrillic, cyrillic-ext |
 
 Всего 40 файлов `.woff2`. Каждый `@font-face` в `../styles/fonts.css` объявлен
 со своим `unicode-range`, поэтому браузер качает только реально нужные
 подмножества: для русского интерфейса это `cyrillic` + `latin`.
 
-### Важно про имя пакета Geist
+**Кириллица здесь не довесок.** Golos Text нарисован с кириллицей как первым
+письмом, JetBrains Mono держит её в моноширинном — это важно для raw-режима,
+где моноширинным набран весь текст заметки, а не только вставки кода. Прежний
+набор (Geist / Geist Mono), пришедший вместе с чужой дизайн-системой, убран
+вместе с ней: у Geist кириллица есть только в публикации из Google Fonts, и
+выбор не той публикации из двух одноимённых был отдельной ловушкой.
 
-У Vercel **две** публикации, и они не взаимозаменяемы:
+## Fallback-стек
 
-- `@fontsource/geist-sans` — старый снимок из репозитория Vercel (v1.0.1,
-  2023). Подмножество ровно одно, `latin`, **кириллицы в файле нет**. Для
-  русского интерфейса непригоден;
-- `@fontsource/geist` — публикация из Google Fonts (v5). Есть `cyrillic` и
-  `cyrillic-ext`. Берём её.
+Объявлен в `design/tokens.json`, группа `typography`:
 
-Семейство в Google Fonts называется просто `Geist` (не «Geist Sans»), поэтому
-`@font-face` объявлен как `'Geist'`. В `--font-sans` дизайн-системы первым
-стоит `"Geist"`, так что имена совпадают; `Geist Sans` можно оставить в
-fallback-стеке на случай системной установки под этим именем.
+```
+Golos Text     → Segoe UI → Noto Sans → Helvetica Neue → Arial → sans-serif
+Source Serif 4 → Noto Serif → Georgia → Times New Roman → serif
+JetBrains Mono → Cascadia Mono → Roboto Mono → Noto Sans Mono → ui-monospace
+```
 
-Курсива у Geist в нашем наборе нет — в вебе он синтезируется браузером. Для
-настоящего курсива в тексте заметки предусмотрен serif-режим.
+Segoe UI и Roboto покрывают кириллицу на Windows и Android, поэтому текст
+остаётся читаемым, даже если `.woff2` почему-то не загрузился.
+`font-display: swap` — текст виден сразу, без «невидимой» фазы.
+
+Курсива у Golos Text в нашем наборе нет — в вебе он синтезируется браузером.
+Для настоящего курсива в тексте заметки предусмотрен serif-режим.
 
 ## Лицензии
 
 Все три — **SIL Open Font License 1.1**, свободны для встраивания и
 коммерческого использования. Тексты лицензий лежат рядом:
 
-- `LICENSE-geist.txt`
-- `LICENSE-geist-mono.txt`
+- `LICENSE-golos-text.txt`
+- `LICENSE-jetbrains-mono.txt`
 - `LICENSE-source-serif-4.txt`
-
-Источник: <https://github.com/google/fonts>.
 
 ## Откуда взялись и как обновить
 
-Файлы вендорятся из пакетов [Fontsource](https://fontsource.org) (5.3.0),
-которые публикуют ровно те же `.woff2`, что и Google Fonts, но без обращения
-к их серверам.
+Файлы вендорятся из пакетов [Fontsource](https://fontsource.org), которые
+публикуют ровно те же `.woff2`, что и Google Fonts, но без обращения к их
+серверам.
 
 ```bash
 pnpm --filter @zapiski/ui up "@fontsource/*"
@@ -82,34 +71,14 @@ pnpm --filter @zapiski/ui fonts:sync   # копирует .woff2 и пересо
 Если когда-нибудь понадобится взять файлы напрямую (без npm), точные URL:
 
 ```
-https://cdn.jsdelivr.net/npm/@fontsource/geist@5.3.0/files/geist-<subset>-<weight>-normal.woff2
-https://cdn.jsdelivr.net/npm/@fontsource/geist-mono@5.3.0/files/geist-mono-<subset>-<weight>-normal.woff2
-https://cdn.jsdelivr.net/npm/@fontsource/source-serif-4@5.3.0/files/source-serif-4-<subset>-<weight>-<style>.woff2
+https://cdn.jsdelivr.net/npm/@fontsource/golos-text@5/files/golos-text-<subset>-<weight>-normal.woff2
+https://cdn.jsdelivr.net/npm/@fontsource/jetbrains-mono@5/files/jetbrains-mono-<subset>-<weight>-normal.woff2
+https://cdn.jsdelivr.net/npm/@fontsource/source-serif-4@5/files/source-serif-4-<subset>-<weight>-<style>.woff2
 ```
 
 где `<subset>` ∈ `latin | latin-ext | cyrillic | cyrillic-ext`,
 `<weight>` ∈ `400 | 500 | 600 | 700`, `<style>` ∈ `normal | italic`.
 Эти адреса нужны только для ручного обновления — приложение к ним не ходит.
-
-## Fallback-стек
-
-`--font-sans` и `--font-mono` объявляет сама дизайн-система
-(`simpas/vendor/tokens/typography.css`), мы их не переопределяем:
-
-```
-Geist       → -apple-system → BlinkMacSystemFont → Segoe UI → Roboto → Helvetica Neue → Arial → sans-serif
-Geist Mono  → ui-monospace → SFMono-Regular → Menlo → monospace
-```
-
-`--font-serif` — наш, продуктовое расширение поверх системы:
-
-```
-Source Serif 4 → Noto Serif → Georgia → Times New Roman → serif
-```
-
-Segoe UI и Roboto покрывают кириллицу на Windows и Android, поэтому текст
-остаётся читаемым, даже если `.woff2` почему-то не загрузился.
-`font-display: swap` — текст виден сразу, без «невидимой» фазы.
 
 ## Почему `sideEffects` в package.json перечисляет `./src/index.ts`
 

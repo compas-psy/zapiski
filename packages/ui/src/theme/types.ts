@@ -1,15 +1,14 @@
 /**
- * Модель темизации — DS-ALIGNMENT.md §2–§5.
+ * Модель темизации — tz/ZAPISKI_TZ_1_Design.md §1–§2.
  * Два независимых измерения (тема × акцент) + пользовательские настройки
  * редактора, которые работают как МНОЖИТЕЛИ над базовыми токенами.
  */
 
 /**
- * `simpas` — светлая тема дизайн-системы, базовая и единственная «дневная»
- * (DS-ALIGNMENT §2; прежняя `paper` удалена вместе со своей палитрой).
- * `graphite` и `ink` — наше расширение: у СИМПАСА тёмной темы нет (§5).
+ * `paper` — «Бумага», светлая и базовая; `graphite` — «Графит», обычная
+ * тёмная; `ink` — «Чернила», OLED. Состав и значения — §1 и §2 мастер-ТЗ.
  */
-export const THEMES = ['simpas', 'graphite', 'ink'] as const;
+export const THEMES = ['paper', 'graphite', 'ink'] as const;
 export type Theme = (typeof THEMES)[number];
 
 /** Что выбирает пользователь. По умолчанию — `system` (следует за ОС). */
@@ -17,13 +16,40 @@ export const THEME_PREFERENCES = ['system', ...THEMES] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 
 /**
- * Шесть пресетов акцента — DS-ALIGNMENT §3: Хвоя, Лес, Золото, Сумерки,
- * Гранит, Глина. Терракоты в наборе НЕТ: `--svc-zapiski-bg` — цвет
- * идентичности, а не интерфейса; предлагать пользователю красить в него
- * интерфейс нельзя.
+ * Три пресета акцента вместо шести (§1.6). Причина в самом ТЗ и она
+ * арифметическая: «3 темы × 6 акцентов = 18 комбинаций, которые пришлось бы
+ * регрессить на каждом релизе». Гранат — базовый, он же цвет иконки (Р5).
  */
-export const ACCENTS = ['pine', 'forest', 'gold', 'dusk', 'granite', 'clay'] as const;
+export const ACCENTS = ['garnet', 'blueberry', 'slate'] as const;
 export type Accent = (typeof ACCENTS)[number];
+
+/**
+ * Выбор, сохранённый предыдущей версией приложения.
+ *
+ * Отменённых имён восемь: тема `simpas` и шесть акцентов чужой дизайн-системы
+ * плюс `heather` из самой первой редакции. Без карты каждый из них попал бы в
+ * общий «не знаю — значит по умолчанию»: человек, однажды выбравший светлую
+ * тему руками, получил бы после обновления `system` и тёмный экран вечером.
+ * Поэтому тема переносится точно, а акцент — по ближайшему тону: серый в
+ * «Грифель», синеватый в «Чернику», остальное в базовый «Гранат».
+ */
+const LEGACY_THEMES: Record<string, ThemePreference> = { simpas: 'paper' };
+const LEGACY_ACCENTS: Record<string, Accent> = {
+  granite: 'slate',
+  clay: 'garnet',
+  dusk: 'blueberry',
+  heather: 'blueberry',
+  pine: 'garnet',
+  forest: 'garnet',
+  gold: 'garnet',
+};
+
+/** Отменённое имя → нынешнее. Незнакомое имя оставляем как есть: разберётся разбор. */
+export const migrateTheme = (value: unknown): unknown =>
+  typeof value === 'string' && value in LEGACY_THEMES ? LEGACY_THEMES[value] : value;
+
+export const migrateAccent = (value: unknown): unknown =>
+  typeof value === 'string' && value in LEGACY_ACCENTS ? LEGACY_ACCENTS[value] : value;
 
 /** Размер текста в редакторе — 5 ступеней (DESIGN_TOKENS.md §2). */
 export const EDITOR_FONT_SIZES = [14, 15, 16, 18, 20] as const;
@@ -69,16 +95,16 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
 
 export const DEFAULT_APPEARANCE: AppearanceState = {
   theme: 'system',
-  /** «Хвоя» — основное действие дизайн-системы (DS-ALIGNMENT §3). */
-  accent: 'pine',
+  /** «Гранат» — акцент по умолчанию во всех темах (Р5). */
+  accent: 'garnet',
   editor: DEFAULT_EDITOR_PREFERENCES,
 };
 
 /** Ключ в localStorage. Выбор пользователя переживает перезапуск. */
 export const APPEARANCE_STORAGE_KEY = 'zapiski.appearance';
 
-/** `system` → конкретная тема: светлая ОС → simpas, тёмная → graphite. */
+/** `system` → конкретная тема: светлая ОС → «Бумага», тёмная → «Графит». */
 export function resolveTheme(preference: ThemePreference, prefersDark: boolean): Theme {
   if (preference !== 'system') return preference;
-  return prefersDark ? 'graphite' : 'simpas';
+  return prefersDark ? 'graphite' : 'paper';
 }

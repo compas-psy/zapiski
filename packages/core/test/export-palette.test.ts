@@ -7,7 +7,7 @@
  * хотя DESIGN_TOKENS §2 требует `--accent-soft`.
  *
  * Этот тест делает расхождение невозможным: он перезапускает генератор и
- * сравнивает результат с тем, что лежит в репозитории. Правка tokens.css без
+ * сравнивает результат с тем, что лежит в репозитории. Правка токенов без
  * пересборки палитры роняет CI.
  */
 import { describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ import { PRINT_PALETTE } from '../src/export/print-palette.js';
 const ROOT = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 
 describe('палитра экспорта', () => {
-  it('синхронна с packages/ui/src/styles/tokens.css', () => {
+  it('синхронна с packages/ui/src/styles/tokens.generated.css', () => {
     // Генератор в режиме --check сам сравнивает файл с источником и падает
     // с ненулевым кодом при расхождении.
     expect(() =>
@@ -40,35 +40,22 @@ describe('палитра экспорта', () => {
     }
   });
 
-  it('берёт значения светлой темы СИМПАС, а не тёмной', () => {
+  it('берёт значения светлой темы «Бумага», а не тёмной', () => {
     // Регрессия: безусловный блок акцента легко перекрыть тёмным вариантом,
     // и тогда в печать уедет полупрозрачная rgba, непригодная для бумаги.
-    expect(PRINT_PALETTE.bg).toBe('#F7F8F4');
-    expect(PRINT_PALETTE.text).toBe('#142018');
-    expect(PRINT_PALETTE.accentSoft).toBe('#E7F0EA');
+    expect(PRINT_PALETTE.bg).toBe('#FBFAF7');
+    expect(PRINT_PALETTE.text).toBe('#38342E');
+    expect(PRINT_PALETTE.accentSoft).toBe('#F6E7E2');
   });
 
   it('подсветка ==текст== в экспорте равна --accent-soft акцента по умолчанию', () => {
-    // После перехода на дизайн-систему значение живёт в ДВУХ файлах: наш
-    // tokens.css объявляет алиас (`--accent-soft: var(--sage-…)`), а литерал
-    // лежит в снимке системы. Поэтому тест разворачивает ссылку, а не ищет
-    // hex там, где его больше нет.
-    const strip = (path: string) =>
-      readFileSync(resolve(ROOT, path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Источник один — design/tokens.json, и тест читает именно его, а не CSS:
+    // так проверяется вся цепочка «источник → генератор → палитра печати».
+    const tokens = JSON.parse(
+      readFileSync(resolve(ROOT, 'design/tokens.json'), 'utf8'),
+    ) as { color: { accent: { garnet: { light: { 'accent-soft': { $value: string } } } } } };
 
-    const tokens = strip('packages/ui/src/styles/tokens.css');
-    const system = strip('packages/ui/src/styles/simpas/vendor/tokens/colors.css');
-
-    // Светлая «Хвоя» — безусловный блок [data-accent='pine'].
-    const pine = tokens.slice(tokens.indexOf("[data-accent='pine']"));
-    const declared = /--accent-soft:\s*([^;]+);/.exec(pine)?.[1]?.trim();
-    expect(declared, 'в tokens.css не найден --accent-soft для «Хвои»').toBeTruthy();
-
-    const link = /^var\((--[\w-]+)\)$/.exec(declared!);
-    const literal = link
-      ? new RegExp(`${link[1]}:\\s*(#[0-9A-Fa-f]{6})`).exec(system)?.[1]
-      : declared;
-
-    expect(literal?.toUpperCase()).toBe(PRINT_PALETTE.accentSoft);
+    const soft = tokens.color.accent.garnet.light['accent-soft'].$value;
+    expect(soft.toUpperCase()).toBe(PRINT_PALETTE.accentSoft);
   });
 });

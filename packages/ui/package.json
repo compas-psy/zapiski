@@ -2,7 +2,7 @@
   "name": "@zapiski/ui",
   "version": "0.1.0",
   "private": true,
-  "description": "ЗАПИСКИ: токены поверх дизайн-системы СИМПАС (3 темы × 6 акцентов) и библиотека компонентов",
+  "description": "ЗАПИСКИ: токены из design/tokens.json (3 темы × 3 акцента) и библиотека компонентов",
   "license": "UNLICENSED",
   "type": "module",
   "main": "./src/index.ts",
@@ -24,6 +24,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "fonts:sync": "node scripts/sync-fonts.mjs",
+    "tokens:build": "node scripts/build-tokens.mjs",
+    "tokens:check": "node scripts/build-tokens.mjs --check",
     "gallery": "vite --open gallery.html",
     "gallery:build": "vite build"
   },
@@ -32,8 +34,6 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@fontsource/geist": "5.3.0",
-    "@fontsource/geist-mono": "5.3.0",
     "@fontsource/golos-text": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@fontsource/source-serif-4": "^5.3.0",

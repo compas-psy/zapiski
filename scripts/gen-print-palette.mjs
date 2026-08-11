@@ -9,15 +9,13 @@
  * хотя спецификация требует `--accent-soft`.
  *
  * Поэтому палитра не пишется, а выводится из токенов — из светлой темы
- * `simpas` и акцента по умолчанию `pine` («Хвоя»): BEHAVIOR §9 требует
- * экспортировать всегда в светлой теме, DS-ALIGNMENT §2–§3 задают, какая она.
+ * «Бумага» и базового акцента «Гранат»: BEHAVIOR §9 требует экспортировать
+ * всегда в светлой теме, tz/ZAPISKI_TZ_1_Design.md §1 задаёт, какая она.
  *
- * ВАЖНО про два файла. С переходом на дизайн-систему СИМПАС
- * `packages/ui/src/styles/tokens.css` стал слоем АЛИАСОВ: `--bg: var(--background)`,
- * `--accent: var(--primary)` и так далее. Литералы живут в снимке системы
- * (`packages/ui/src/styles/simpas/vendor/tokens/colors.css`). Поэтому генератор
- * читает оба файла и разворачивает цепочки `var(--…)` до литерала — иначе он
- * увидит `var(--background)` и решит, что палитра «не литеральная».
+ * Источник — `tokens.generated.css`, собранный из `design/tokens.json`. Там же
+ * лежат и литералы: слоя чужой дизайн-системы под ними больше нет, поэтому
+ * разворачивать `var(--…)` приходится только внутри наших собственных
+ * алиасов.
  *
  * Запуск: node scripts/gen-print-palette.mjs
  * Проверка синхронности: node scripts/gen-print-palette.mjs --check
@@ -29,15 +27,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const STYLES = resolve(ROOT, 'packages/ui/src/styles');
-const TOKENS = resolve(STYLES, 'tokens.css');
-/** Снимок дизайн-системы: здесь живут литералы, на которые ссылаются алиасы. */
-const SYSTEM = resolve(STYLES, 'simpas/vendor/tokens/colors.css');
-const SERVICES = resolve(STYLES, 'simpas/services.css');
+const TOKENS = resolve(STYLES, 'tokens.generated.css');
+/** Производные (алиасы вроде `--code-bg: var(--surface)`) — в соседнем файле. */
+const DERIVED = resolve(STYLES, 'tokens.css');
 const TARGET = resolve(ROOT, 'packages/core/src/export/print-palette.ts');
 
-/** Тема и акцент, в которых печатает экспорт (BEHAVIOR §9, DS-ALIGNMENT §2–§3). */
-const PRINT_THEME = 'simpas';
-const PRINT_ACCENT = 'pine';
+/** Тема и акцент, в которых печатает экспорт (BEHAVIOR §9, tz/1_Design §1). */
+const PRINT_THEME = 'paper';
+const PRINT_ACCENT = 'garnet';
 
 /** Какие токены нужны печати и под какими именами они лягут в TS. */
 const WANTED = {
@@ -82,14 +79,13 @@ function block(css, needles, forbidden = []) {
 // объявлению, из-за чего оно молча теряется.
 const strip = (path) => readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 
-const systemCss = strip(SYSTEM) + '\n' + strip(SERVICES);
-const tokensCss = strip(TOKENS);
+const tokensCss = strip(TOKENS) + '\n' + strip(DERIVED);
 
-/** Литералы и семантические алиасы самой системы — все в одном `:root`. */
-const system = block(systemCss, [':root']);
+/** Не зависящее от темы — типографика, отступы, знак сервиса. */
+const system = block(tokensCss, [':root'], ['data-theme', 'data-accent', 'data-density', 'data-typeface']);
 /** Тема даёт поверхности и текст, акцент — интерактивные цвета. */
 const theme = block(tokensCss, [`[data-theme=${PRINT_THEME}]`]);
-// Светлый акцент объявлен безусловным блоком `[data-accent='pine']`, а тёмный
+// Светлый акцент объявлен безусловным блоком `[data-accent='garnet']`, а тёмный
 // вариант — уточнённым через graphite/ink. Тёмные селекторы явно исключаем:
 // иначе они перезаписали бы светлые значения полупрозрачными rgba,
 // непригодными для печати.
@@ -129,8 +125,8 @@ for (const [key, token] of Object.entries(WANTED)) {
 
 const body = `/**
  * СГЕНЕРИРОВАННЫЙ ФАЙЛ — не редактировать руками.
- * Источник: packages/ui/src/styles/tokens.css + снимок дизайн-системы СИМПАС
- * (styles/simpas/vendor/tokens/colors.css), тема «СИМПАС», акцент «Хвоя».
+ * Источник: packages/ui/src/styles/tokens.generated.css (из design/tokens.json),
+ * тема «Бумага», акцент «Гранат».
  * Обновить: node scripts/gen-print-palette.mjs
  *
  * Палитра для экспорта в HTML/PDF/DOCX. Экспортный документ покидает
@@ -156,8 +152,8 @@ ${Object.entries(resolved)
  */
 export const PRINT_FONTS = {
   serif: '"Source Serif 4", Georgia, "Iowan Old Style", serif',
-  sans: 'Geist, "Segoe UI", system-ui, sans-serif',
-  mono: '"Geist Mono", ui-monospace, SFMono-Regular, monospace',
+  sans: '"Golos Text", "Segoe UI", system-ui, sans-serif',
+  mono: '"JetBrains Mono", ui-monospace, SFMono-Regular, monospace',
 } as const;
 `;
 

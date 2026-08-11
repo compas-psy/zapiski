@@ -215,8 +215,8 @@ describe('ThemeProvider', () => {
         <button type="button" onClick={() => setTheme('ink')}>
           Чернила
         </button>
-        <button type="button" onClick={() => setAccent('forest')}>
-          Лес
+        <button type="button" onClick={() => setAccent('blueberry')}>
+          Черника
         </button>
         <button type="button" onClick={() => setEditor({ fontSize: 20, compact: true })}>
           Крупно
@@ -225,16 +225,16 @@ describe('ThemeProvider', () => {
     );
   }
 
-  it('по умолчанию следует за системой: светлая ОС → simpas', () => {
+  it('по умолчанию следует за системой: светлая ОС → «Бумага»', () => {
     render(
       <ThemeProvider>
         <Harness />
       </ThemeProvider>,
     );
-    expect(screen.getByTestId('theme')).toHaveTextContent('simpas');
-    expect(document.documentElement.getAttribute('data-theme')).toBe('simpas');
-    /* «Хвоя» — основное действие дизайн-системы (DS-ALIGNMENT §3). */
-    expect(document.documentElement.getAttribute('data-accent')).toBe('pine');
+    expect(screen.getByTestId('theme')).toHaveTextContent('paper');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('paper');
+    /* «Гранат» — акцент по умолчанию во всех темах (Р5). */
+    expect(document.documentElement.getAttribute('data-accent')).toBe('garnet');
   });
 
   it('тёмная ОС → graphite; ink выбирается только вручную', () => {
@@ -255,8 +255,8 @@ describe('ThemeProvider', () => {
         <Harness />
       </ThemeProvider>,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Лес' }));
-    expect(document.documentElement.getAttribute('data-accent')).toBe('forest');
+    fireEvent.click(screen.getByRole('button', { name: 'Черника' }));
+    expect(document.documentElement.getAttribute('data-accent')).toBe('blueberry');
 
     fireEvent.click(screen.getByRole('button', { name: 'Крупно' }));
     const root = document.documentElement;

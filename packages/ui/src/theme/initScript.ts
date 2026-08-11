@@ -14,12 +14,15 @@ import { APPEARANCE_STORAGE_KEY } from './types';
  */
 export const themeInitScript = `(function(){try{
 var K=${JSON.stringify(APPEARANCE_STORAGE_KEY)};
-var T=["simpas","graphite","ink"],A=["pine","forest","gold","dusk","granite","clay"];
+var T=["paper","graphite","ink"],A=["garnet","blueberry","slate"];
+/* Отменённые имена — та же карта, что в types.ts: без неё выбранная руками
+   светлая тема стала бы «системной» и вечером открылась тёмной. */
+var LT={simpas:"paper"},LA={granite:"slate",dusk:"blueberry",heather:"blueberry"};
 var s={};try{s=JSON.parse(localStorage.getItem(K)||"{}")||{}}catch(e){s={}}
 var e=s.editor||{};
 var dark=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;
-var t=s.theme;if(T.indexOf(t)<0)t=dark?"graphite":"simpas";
-var a=A.indexOf(s.accent)<0?"pine":s.accent;
+var t=LT[s.theme]||s.theme;if(T.indexOf(t)<0)t=dark?"graphite":"paper";
+var a=LA[s.accent]||s.accent;if(A.indexOf(a)<0)a="garnet";
 var r=document.documentElement;
 r.setAttribute("data-theme",t);
 r.setAttribute("data-accent",a);

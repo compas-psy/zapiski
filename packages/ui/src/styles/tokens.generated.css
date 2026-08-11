@@ -1,0 +1,333 @@
+/* СГЕНЕРИРОВАНО packages/ui/scripts/build-tokens.mjs — НЕ РЕДАКТИРОВАТЬ.
+ *
+ * Источник: design/tokens.json. Правка здесь будет затёрта следующей
+ * генерацией, а до этого её поймает `build-tokens.mjs --check` в преflight.
+ */
+/* Типографика — tz/ZAPISKI_TZ_1_Design.md §2 */
+:root {
+  --font-sans: 'Golos Text', 'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;  /* Интерфейс и текст заметки. Segoe UI и Roboto держат кириллицу, если woff2 не доехал. */
+  --font-serif: 'Source Serif 4', 'Noto Serif', Georgia, 'Times New Roman', serif;  /* Только «бумажный» режим чтения заметки. В интерфейсной хромоте serif не появляется. */
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Roboto Mono', 'Noto Sans Mono', ui-monospace, monospace;  /* Код, raw-режим, даты и табличные числа. */
+  --fs-h1: 1.625rem;  /* 26 — заголовок заметки */
+  --lh-h1: 1.2;
+  --fw-h1: 700;
+  --tr-h1: -0.02em;
+  --fs-h1-mobile: 1.5rem;  /* 24 */
+  --lh-h1-mobile: 1.25;
+  --fs-h2: 1.1875rem;  /* 19 — подзаголовок */
+  --lh-h2: 1.35;
+  --fw-h2: 600;
+  --tr-h2: -0.01em;
+  --fs-body: 1rem;  /* 16 — текст заметки, обычная плотность */
+  --lh-body: 1.65;
+  --fs-body-serif: 1.0625rem;  /* 17 — бумажная плотность */
+  --lh-body-serif: 1.7;
+  --fs-body-compact: 0.90625rem;  /* 14.5 — компактная плотность */
+  --lh-body-compact: 1.5;
+  --fs-list-title: 0.9375rem;  /* 15 — заголовок строки списка */
+  --lh-list-title: 1.35;
+  --fw-list-title: 600;
+  --fs-list-snippet: 0.8125rem;  /* 13 — сниппет, 2 строки */
+  --lh-list-snippet: 1.45;
+  --fs-control: 0.9375rem;  /* 15 — кнопки, пункты меню */
+  --fs-control-sm: 0.90625rem;  /* 14.5 — кнопки в плотных панелях */
+  --fw-control: 600;
+  --fs-caption: 0.6875rem;  /* 11 CAPS — секционные подписи (§2: «подписи 11 caps») */
+  --fw-caption: 700;
+  --tr-caption: 0.09em;
+  --fs-xs: 0.6875rem;  /* 11 — бейдж статуса */
+  --fs-sm: 0.75rem;  /* 12 — тег, тултип, подпись ошибки */
+  --fs-sm-plus: 0.78125rem;  /* 12.5 — плашка-пояснение */
+  --fs-md: 0.8125rem;  /* 13 — вторичный текст */
+  --fs-lg: 1rem;  /* 16 — заголовок пустого состояния */
+  --fs-mono-xs: 0.65625rem;  /* 10.5 — метастрока */
+  --fs-mono-sm: 0.75rem;  /* 12 */
+  --fs-mono: 0.8125rem;  /* 13 — код, raw */
+  --lh-code: 1.7;
+}
+
+/* Отступы */
+:root {
+  --sp-4: 0.25rem;
+  --sp-8: 0.5rem;
+  --sp-12: 0.75rem;
+  --sp-16: 1rem;
+  --sp-20: 1.25rem;
+  --sp-24: 1.5rem;
+  --sp-32: 2rem;
+  --sp-40: 2.5rem;
+  --pad-row-block: 0.6875rem;  /* 11 — строка списка 11×16 */
+  --pad-row-inline: 1rem;
+  --pad-card-block: 1rem;  /* 16 — карточка 16×18 */
+  --pad-card-inline: 1.125rem;
+  --pad-screen: 1.5rem;  /* 24 — поля экрана на телефоне */
+  --pad-btn-block: 0.6875rem;  /* 11 — кнопка 11×22 */
+  --pad-btn-inline: 1.375rem;
+  --pad-field-block: 0.75rem;  /* 12 — поле 12×15 */
+  --pad-field-inline: 0.9375rem;
+}
+
+/* Радиусы */
+:root {
+  --r-xs: 6px;  /* чекбокс 18×18 */
+  --r-sm: 10px;  /* чипы-поля, мелкие кнопки, сегмент-контейнер */
+  --r-md: 12px;  /* плитки, плашки */
+  --r-field: 13px;  /* поля ввода */
+  --r-lg: 14px;  /* крупные поверхности */
+  --r-btn: 14px;  /* все кнопки одного уровня — высота 44, радиус 14 */
+  --r-card: 14px;  /* карточки настроек, опций, paywall */
+  --r-xl: 16px;  /* модалки */
+  --r-sheet: 16px;  /* bottom sheet: 16 16 0 0 */
+  --r-drawer: 22px;  /* drawer: 0 22 22 0 */
+  --r-full: 99px;  /* теги, аватары, поисковая пилюля */
+  --r-cell: 11px;  /* ячейки кода/пароля */
+  --r-inline-mark: 3px;
+  --r-block-mark: 8px;
+  --r-fab: 18px;
+  --r-swipe: 12px;
+}
+
+/* Метрики элементов */
+:root {
+  --tap-min: 44px;
+  --control-h: 44px;
+  --control-h-compact: 36px;
+  --row-h: 74px;
+  --row-h-compact: 58px;
+  --toolbar-h: 44px;
+  --toolbar-item: 34px;
+  --fab-size: 52px;
+  --drawer-w-mobile: 302px;
+  --drawer-w-desktop: 224px;
+  --modal-w-min: 480px;
+  --modal-w-max: 560px;
+  --modal-top: 78px;
+  --sheet-handle-w: 36px;
+  --sheet-handle-h: 4px;
+  --tree-indent: 14px;
+  --swipe-threshold: 96px;
+  --border-w: 1px;
+  --border-w-strong: 1.5px;
+  --focus-ring-w: 3px;
+  --icon-inline: 13px;
+  --icon-list: 15px;
+  --icon-toolbar: 19px;
+  --icon-header: 20px;
+  --icon-empty: 26px;
+  --icon-stroke: 1.75;  /* §2: иконки stroke 1.75 */
+}
+
+/* Motion */
+:root {
+  --dur-press: 120ms;
+  --dur-check: 160ms;
+  --dur-base: 200ms;
+  --dur-sheet: 250ms;
+  --dur-slow: 300ms;
+  --dur-shimmer: 1400ms;
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --motion-rise: 8px;  /* появление: fade + сдвиг снизу */
+  --press-scale: 0.97;
+}
+
+/* Слои */
+:root {
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-scrim: 50;
+  --z-overlay: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
+}
+
+/* Знак сервиса */
+:root {
+  --svc-zapiski-bg: #B5503C;
+  --svc-zapiski-fg: #FBF3E3;  /* Дерево внутри знака — цвет взят из самого zapiski.svg, чтобы подложка совпадала с ним пиксель в пиксель */
+}
+
+/* Тема «paper» */
+[data-theme='paper'],
+:root:not([data-theme]) {
+  color-scheme: light;
+  --bg: #FBFAF7;  /* §2: фон */
+  --surface: #F3F1EA;  /* §2: поверхность — панели, чипы */
+  --surface-alt: #F7F5EF;  /* сайдбар, тулбар — между фоном и поверхностью */
+  --surface-sunken: #EFEDE4;  /* «утопленное»: сегмент-контейнер, подложка поля поиска */
+  --line: #EAE6DB;  /* §2: линия */
+  --line-soft: #F0EDE4;  /* разделитель строк списка — тише границы */
+  --text: #38342E;  /* §2: текст */
+  --text-secondary: #726C60;  /* §2: вторичный — сниппеты и подписи, которые читают */
+  --text-tertiary: #B6AFA2;  /* даты, счётчики, плейсхолдеры — дублированы контекстом */
+  --text-disabled: #C8C1B4;  /* неактивные контролы (WCAG 1.4.3 выводит их из порога) */
+  --text-ghost: #D9D4C8;  /* разметка вне курсора и хвост расшифровки — декор, не текст */
+  --scrim: rgba(30, 26, 22, 0.32);
+  --field-bg: #FFFFFF;  /* поле ввода в светлой теме — белое, как в эталоне */
+  --segment-active-bg: #FFFFFF;
+  --on-accent: #FFFFFF;  /* подпись на заливке акцентом */
+}
+
+/* Тени темы «paper» */
+[data-theme='paper'],
+:root:not([data-theme]) {
+  --elev-search: 0 6px 22px rgba(56, 52, 46, 0.10);
+  --elev-segment: 0 1px 2px rgba(56, 52, 46, 0.10);
+}
+
+/* Тема «graphite» */
+[data-theme='graphite'] {
+  color-scheme: dark;
+  --bg: #232128;  /* §2: фон */
+  --surface: #2C2A28;  /* §2: поверхность */
+  --surface-alt: #2C2A28;
+  --surface-sunken: #302E2B;
+  --line: #393630;  /* §2: линия */
+  --line-soft: #2C2A28;
+  --text: #E9E5DC;  /* §2: текст */
+  --text-secondary: #98948A;  /* §2: вторичный */
+  --text-tertiary: #6E675C;
+  --text-disabled: #55504A;
+  --text-ghost: #3E3A34;
+  --scrim: rgba(0, 0, 0, 0.35);
+  --field-bg: #2C2A28;
+  --segment-active-bg: #393630;
+  --on-accent: #241511;  /* на осветлённой заливке подпись тёмная, а не белая */
+}
+
+/* Тени темы «graphite» */
+[data-theme='graphite'] {
+  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.30);
+  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.30);
+}
+
+/* Тема «ink» */
+[data-theme='ink'] {
+  color-scheme: dark;
+  --bg: #000008;  /* §2: фон OLED */
+  --surface: #151412;  /* §2: поверхность */
+  --surface-alt: #0D0C0B;
+  --surface-sunken: #1A1917;
+  --line: #26231E;  /* §2: линия */
+  --line-soft: #1A1917;
+  --text: #E9E5DC;  /* §2: текст */
+  --text-secondary: #8F887D;  /* §2: вторичный */
+  --text-tertiary: #635D54;
+  --text-disabled: #4A453D;
+  --text-ghost: #332F29;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --field-bg: #151412;
+  --segment-active-bg: #26231E;
+  --on-accent: #241511;
+}
+
+/* Тени темы «ink» */
+[data-theme='ink'] {
+  --elev-search: 0 6px 22px rgba(0, 0, 0, 0.45);
+  --elev-segment: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+/* Статусы — светлая тема */
+[data-theme='paper'],
+:root:not([data-theme]) {
+  --success: #5C8A6E;
+  --success-soft: #E7F0E8;
+  --success-text: #33684A;
+  --warning: #A87C2C;  /* Индикатор: 3.18:1 на своей подложке. Прежний #B08430 давал 2.87 и не проходил WCAG 1.4.11 */
+  --warning-soft: #F5EBD8;
+  --warning-text: #84601F;
+  --danger: #A85045;
+  --danger-soft: #F6E5E2;
+  --danger-text: #933B31;
+  --info: #4C6B94;
+  --info-soft: #E4EAF2;
+  --info-text: #3D577A;
+}
+
+/* Статусы — тёмные темы */
+[data-theme='graphite'],
+[data-theme='ink'] {
+  --success: #7FB894;
+  --success-soft: rgba(127, 184, 148, 0.16);
+  --success-text: #A9E0C0;
+  --warning: #D6B26A;
+  --warning-soft: rgba(214, 178, 106, 0.16);
+  --warning-text: #EBCE96;
+  --danger: #D08476;
+  --danger-soft: rgba(208, 132, 118, 0.16);
+  --danger-text: #F0AFA6;
+  --info: #7C9DC9;
+  --info-soft: rgba(124, 157, 201, 0.16);
+  --info-text: #B4CCEE;
+}
+
+/* Подсветка кода — светлая тема */
+[data-theme='paper'],
+:root:not([data-theme]) {
+  --code-keyword: #8E7BA3;
+  --code-string: #4E7A5F;
+  --code-number: #946C26;
+  --code-function: #4C6B94;
+}
+
+/* Подсветка кода — тёмные темы */
+[data-theme='graphite'],
+[data-theme='ink'] {
+  --code-keyword: #B7A2CC;
+  --code-string: #7FB894;
+  --code-number: #D6B26A;
+  --code-function: #7C9DC9;
+}
+
+/* Акцент «garnet» — светлая тема */
+[data-accent='garnet'],
+:root:not([data-accent]) {
+  --accent: #B5503C;
+  --accent-soft: #F6E7E2;
+  --accent-on-soft: #93412F;
+}
+
+/* Акцент «garnet» — тёмные темы */
+[data-theme='graphite'][data-accent='garnet'],
+[data-theme='graphite'] [data-accent='garnet'],
+[data-theme='ink'][data-accent='garnet'],
+[data-theme='ink'] [data-accent='garnet'],
+:root[data-theme='graphite']:not([data-accent]),
+:root[data-theme='ink']:not([data-accent]) {
+  --accent: #D0765B;
+  --accent-soft: rgba(208, 118, 91, 0.18);
+  --accent-on-soft: #F0B9A4;
+}
+
+/* Акцент «blueberry» — светлая тема */
+[data-accent='blueberry'] {
+  --accent: #4C6B94;
+  --accent-soft: #E4EAF2;
+  --accent-on-soft: #3D577A;
+}
+
+/* Акцент «blueberry» — тёмные темы */
+[data-theme='graphite'][data-accent='blueberry'],
+[data-theme='graphite'] [data-accent='blueberry'],
+[data-theme='ink'][data-accent='blueberry'],
+[data-theme='ink'] [data-accent='blueberry'] {
+  --accent: #7C9DC9;
+  --accent-soft: rgba(124, 157, 201, 0.18);
+  --accent-on-soft: #B4CBE6;
+}
+
+/* Акцент «slate» — светлая тема */
+[data-accent='slate'] {
+  --accent: #6B675F;
+  --accent-soft: #EDEBE6;
+  --accent-on-soft: #54514A;
+}
+
+/* Акцент «slate» — тёмные темы */
+[data-theme='graphite'][data-accent='slate'],
+[data-theme='graphite'] [data-accent='slate'],
+[data-theme='ink'][data-accent='slate'],
+[data-theme='ink'] [data-accent='slate'] {
+  --accent: #9B948A;
+  --accent-soft: rgba(155, 148, 138, 0.18);
+  --accent-on-soft: #CBC5BB;
+}
