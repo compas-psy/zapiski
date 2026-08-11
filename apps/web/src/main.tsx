@@ -8,7 +8,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App, type AppHost } from '@zapiski/app';
-import { API_PREFIX, resolveLocale } from '@zapiski/core';
+import { API_PREFIX } from '@zapiski/core';
 import { armAuthCapture, onAuthCallback, takeInitialAuthCallback } from './auth.js';
 import { createWebPlatform } from './platform.js';
 import { createWebPreferences } from './prefs.js';
@@ -47,8 +47,12 @@ if (!container) throw new Error('Не найден #root: разметка об�
 registerServiceWorker();
 syncThemeColor();
 
+/* Язык не передаём: первый кадр рисуется по-русски, а сохранённый выбор
+   поднимает `boot()` из настроек (ITERATION-1 §2). Прежде здесь стоял разбор
+   `navigator.languages`, и английский браузер открывал русский продукт
+   по-английски. */
 createRoot(container).render(
   <StrictMode>
-    <App host={host} locale={resolveLocale(navigator.languages ?? [navigator.language])} />
+    <App host={host} />
   </StrictMode>,
 );

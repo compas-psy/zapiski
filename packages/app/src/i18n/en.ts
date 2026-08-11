@@ -584,6 +584,25 @@ export const en: AppCatalog = {
     'NOVEMBER',
     'DECEMBER',
   ],
+  dayMonth: (day: number, month: number): string =>
+    `${day} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month] ?? ''}`,
+  dayMonthYear: (day: number, month: number, year: number): string =>
+    `${day} ${
+      [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December',
+      ][month] ?? ''
+    } ${year}`,
   relative: {
     justNow: 'just now',
     minutesAgo: (n: number): string => `${n} ${pl(n, 'minute', 'minutes')} ago`,

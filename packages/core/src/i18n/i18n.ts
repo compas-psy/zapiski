@@ -20,13 +20,18 @@ export function isLocale(value: string): value is Locale {
   return value === 'ru' || value === 'en';
 }
 
-/** Выбор языка по списку из ОС/браузера с откатом на русский. */
-export function resolveLocale(preferred: readonly string[]): Locale {
-  for (const item of preferred) {
-    const short = item.slice(0, 2).toLowerCase();
-    if (isLocale(short)) return short;
-  }
-  return DEFAULT_LOCALE;
+/**
+ * Язык интерфейса — русский, пока человек явно не выбрал другой
+ * (ITERATION-1 §2). По локали ОС язык НЕ выбирается, и это не упущение:
+ * продукт русскоязычный, а Windows с английской локалью — обычное дело в
+ * России. Прежнее правило «идти за ОС» открывало приложение на английском у
+ * людей, которые английского не спрашивали.
+ *
+ * Аргумент — сохранённый выбор из настроек, любого типа: значение приходит из
+ * хранилища предпочтений и доверия к нему нет.
+ */
+export function storedLocale(value: unknown): Locale {
+  return typeof value === 'string' && isLocale(value) ? value : DEFAULT_LOCALE;
 }
 
 export { ru, en };

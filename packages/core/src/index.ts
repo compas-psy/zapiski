@@ -210,4 +210,4 @@ export { exportArchive, exportNote, type ArchiveOptions, type ExportFormat } fro
 export { exportPdf, PDF_PAGE_SETUP, renderPdfSource } from './export/pdf.js';
 
 // ── i18n ───────────────────────────────────────────────────────────────────
-export { catalog, DEFAULT_LOCALE, en, isLocale, resolveLocale, ru, type Catalog, type Locale } from './i18n/i18n.js';
+export { catalog, DEFAULT_LOCALE, en, isLocale, ru, storedLocale, type Catalog, type Locale } from './i18n/i18n.js';

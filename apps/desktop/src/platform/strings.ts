@@ -13,7 +13,7 @@
  * а не дополняется: два источника правды для перевода хуже, чем один
  * неудобный.
  */
-import { DEFAULT_LOCALE, isLocale, type Locale } from '@zapiski/core';
+import { DEFAULT_LOCALE, storedLocale, type Locale } from '@zapiski/core';
 
 export interface PlatformStrings {
   tray: {
@@ -79,13 +79,11 @@ export function platformStrings(locale: Locale = DEFAULT_LOCALE): PlatformString
   return CATALOGS[locale] ?? CATALOGS[DEFAULT_LOCALE];
 }
 
-/** Язык оболочки: выбор пользователя, иначе язык системы, иначе русский. */
+/**
+ * Язык оболочки — выбор пользователя, иначе русский (ITERATION-1 §2).
+ * Строки трея и системного меню обязаны совпадать с языком окна, поэтому
+ * правило здесь то же, что в `storedLocale` ядра, и ключ настройки тот же.
+ */
 export function resolveShellLocale(stored: unknown): Locale {
-  if (typeof stored === 'string' && isLocale(stored)) return stored;
-  const preferred = typeof navigator === 'undefined' ? [] : [...navigator.languages];
-  for (const item of preferred) {
-    const short = item.slice(0, 2).toLowerCase();
-    if (isLocale(short)) return short;
-  }
-  return DEFAULT_LOCALE;
+  return storedLocale(stored);
 }

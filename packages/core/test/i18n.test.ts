@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { catalog, DEFAULT_LOCALE, en, isLocale, resolveLocale, ru } from '../src/i18n/i18n.js';
+import { catalog, DEFAULT_LOCALE, en, isLocale, ru, storedLocale } from '../src/i18n/i18n.js';
 
 const BEHAVIOR = fileURLToPath(new URL('../../../docs/spec/BEHAVIOR.md', import.meta.url));
 
@@ -107,9 +107,20 @@ describe('каталоги i18n', () => {
     expect(walk(en).sort()).toEqual(walk(ru).sort());
   });
 
-  it('выбор языка по списку из ОС', () => {
-    expect(resolveLocale(['en-GB', 'ru-RU'])).toBe('en');
-    expect(resolveLocale(['de-DE'])).toBe('ru');
+  /**
+   * Прежде язык выбирался по локали ОС, и Windows с английской системой
+   * открывал русский продукт по-английски. ITERATION-1 §2 назвал такой
+   * порядок неверным: русский по умолчанию, английский — только явным
+   * выбором в настройках.
+   */
+  it('язык — русский, пока человек не выбрал другой', () => {
+    expect(storedLocale('en')).toBe('en');
+    expect(storedLocale('ru')).toBe('ru');
+    expect(storedLocale(null)).toBe('ru');
+    expect(storedLocale('de')).toBe('ru');
+    /* Значение приходит из хранилища настроек — там может лежать что угодно. */
+    expect(storedLocale(42)).toBe('ru');
+    expect(storedLocale({ locale: 'en' })).toBe('ru');
     expect(isLocale('ru')).toBe(true);
     expect(isLocale('fr')).toBe(false);
   });

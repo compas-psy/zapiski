@@ -32,7 +32,21 @@ export function relativeTime(timestamp: number, strings: Strings, now = Date.now
   if (delta < HOUR) return strings.relative.minutesAgo(Math.floor(delta / MINUTE));
   if (delta < DAY) return strings.relative.hoursAgo(Math.floor(delta / HOUR));
   if (delta < 2 * DAY) return strings.relative.yesterday;
-  return shortDate(timestamp);
+  return noteDate(timestamp, strings, now);
+}
+
+/**
+ * Дата словами: «5 авг» в этом году, «5 августа 2025» в прошлые
+ * (ITERATION-1 §2). Здесь, а не `shortDate`, потому что это строка списка и
+ * статуса — её читают глазами. Цифровой формат остаётся в моно-метастроках,
+ * где важна одинаковая ширина.
+ */
+export function noteDate(timestamp: number, strings: Strings, now = Date.now()): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  return year === new Date(now).getFullYear()
+    ? strings.dayMonth(date.getDate(), date.getMonth())
+    : strings.dayMonthYear(date.getDate(), date.getMonth(), year);
 }
 
 /** Дата в моно-метастроке: 09.08.2026. */

@@ -31,6 +31,7 @@ import {
   readJson,
   rewriteToCurrentVersion,
   stemOf,
+  storedLocale,
   toBase64,
   UnlockGuard,
   writeAtomic,
@@ -385,6 +386,7 @@ export class AppController {
       onboarded,
       unlockGuard,
       encryptNewNotes,
+      savedLocale,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -394,9 +396,14 @@ export class AppController {
       this.host.prefs.get<boolean>(PREF.onboarded, false),
       this.host.prefs.get<unknown>(PREF.unlockGuard, null),
       this.host.prefs.get<boolean>(PREF.encryptNewNotes, false),
+      this.host.prefs.get<unknown>(PREF.locale, null),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
+    /* Язык: `setLocale` писал ключ, а читать его было некому — выбор не
+       переживал перезапуск (ITERATION-1 §2). Русский по умолчанию, английский
+       только явным выбором; локаль ОС не спрашиваем. */
+    this.patch({ locale: storedLocale(savedLocale) });
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
