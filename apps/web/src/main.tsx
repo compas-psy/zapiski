@@ -25,7 +25,7 @@ const host: AppHost = {
   prefs: createWebPreferences(),
   restoreVault,
 
-  /** Deep link в ДНЕВНИК и внешние ссылки — новой вкладкой. */
+  /** Внешние ссылки — новой вкладкой. */
   async openExternal(url: string): Promise<void> {
     window.open(url, '_blank', 'noopener,noreferrer');
   },

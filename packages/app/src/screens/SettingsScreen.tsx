@@ -296,8 +296,8 @@ function SyncSection(): ReactNode {
       );
       return;
     }
-    if (id === 'kompas') {
-      /* Облако СИМПАС: вошли — подключаем, не вошли — отправляем входить и
+    if (id === 'zapiski') {
+      /* Облако Записок: вошли — подключаем, не вошли — отправляем входить и
          возвращаемся сюда же (ТЗ §5.5, аккаунт нужен только для облака). */
       void app.connectCloud().then((connected) => {
         if (!connected) app.beginSignIn({ name: 'settings', section: 'sync' });
@@ -408,10 +408,10 @@ function SyncSection(): ReactNode {
 
       <div className="za-card za-card--static">
         <span className="za-row-between">
-          <span className="za-card__title">{copy.kompas}</span>
-          <Badge tone="warning">{copy.kompasBadge}</Badge>
+          <span className="za-card__title">{copy.cloud}</span>
+          <Badge tone="warning">{copy.cloudBadge}</Badge>
         </span>
-        <Button variant="text" size="compact" onClick={() => connect('kompas')}>
+        <Button variant="text" size="compact" onClick={() => connect('zapiski')}>
           {copy.connect}
         </Button>
       </div>

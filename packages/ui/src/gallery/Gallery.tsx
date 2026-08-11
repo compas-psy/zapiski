@@ -414,7 +414,7 @@ function TogglesSection(): ReactNode {
               checked={radio === 'pc'}
               onChange={() => setRadio('pc')}
             />
-            <Radio name="voice" label="В облаке СИМПАС" disabled />
+            <Radio name="voice" label="В Облаке Записок" disabled />
           </RadioGroup>
         </Panel>
         <Panel label="Сегментированный контрол">

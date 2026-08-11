@@ -18,7 +18,7 @@ import {
   takeAuthFromAddressBar,
   type AddressBar,
 } from '../src/lib/auth-callback.js';
-import { createKompasBackend, originOf } from '../src/state/cloud.js';
+import { createCloudBackend, originOf } from '../src/state/cloud.js';
 import { AuthError, SessionStore } from '../src/state/session.js';
 import { AppController } from '../src/state/store.js';
 import { strings } from '../src/i18n/index.js';
@@ -286,7 +286,7 @@ describe('клиент облака', () => {
     const host = createTestHost();
     const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
     await session.adopt({ magicToken: 'ottt' });
-    return createKompasBackend({
+    return createCloudBackend({
       cloudBaseUrl: host.cloudBaseUrl,
       session,
       fetch: handler,
@@ -358,7 +358,7 @@ describe('клиент облака', () => {
     const session = new SessionStore(host, { fetch: server });
     await session.adopt({ magicToken: 'ottt' });
 
-    const backend = createKompasBackend({
+    const backend = createCloudBackend({
       cloudBaseUrl: host.cloudBaseUrl,
       session,
       fetch: server,
@@ -407,7 +407,7 @@ describe('вход замыкается', () => {
     await app.completeSignIn({ magicToken: 'ottt' });
 
     expect(app.getState().account?.email).toBe('marina@ya.ru');
-    expect(app.getState().backendId).toBe('kompas');
+    expect(app.getState().backendId).toBe('zapiski');
     /* Возвращаемся к тому, ради чего входили, а не «куда-нибудь». */
     expect(app.getState().route).toEqual({ name: 'list' });
     expect(app.getState().authError).toBeNull();
@@ -418,7 +418,7 @@ describe('вход замыкается', () => {
     const app = await bootedApp({ initial: { magicToken: 'ottt' } });
     /* boot() уже спросил оболочку — ждём, пока обмен доедет. */
     await vi.waitFor(() => expect(app.getState().account?.email).toBe('marina@ya.ru'));
-    expect(app.getState().backendId).toBe('kompas');
+    expect(app.getState().backendId).toBe('zapiski');
     app.dispose();
   });
 
@@ -441,7 +441,7 @@ describe('вход замыкается', () => {
   it('выход из аккаунта отключает облако и не трогает заметки', async () => {
     const app = await bootedApp();
     await app.completeSignIn({ magicToken: 'ottt' });
-    expect(app.getState().backendId).toBe('kompas');
+    expect(app.getState().backendId).toBe('zapiski');
 
     await app.signOutCloud();
 

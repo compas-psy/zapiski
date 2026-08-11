@@ -1,7 +1,7 @@
 /**
- * Подключение облака СИМПАС как бэкенда синка.
+ * Подключение Облака Записок как бэкенда синка.
  *
- * `KompasCloudBackend` живёт в ядре и покрыт тестами на подставном `fetch` —
+ * `ZapiskiCloudBackend` живёт в ядре и покрыт тестами на подставном `fetch` —
  * переписывать его незачем. Не хватало двух вещей, и обе платформенные, то
  * есть по месту здесь:
  *
@@ -23,7 +23,7 @@
  */
 import {
   API_PREFIX,
-  KompasCloudBackend,
+  ZapiskiCloudBackend,
   VAULT_ENDPOINTS,
   type Locale,
   type WebSocketLike,
@@ -58,13 +58,13 @@ export function originOf(cloudBaseUrl: string): string {
   return cloudBaseUrl.replace(/\/+$/, '').replace(new RegExp(`${API_PREFIX}$`), '');
 }
 
-export function createKompasBackend(options: CloudBackendOptions): KompasCloudBackend {
+export function createCloudBackend(options: CloudBackendOptions): ZapiskiCloudBackend {
   const session = options.session;
   const origin = originOf(options.cloudBaseUrl);
   const raw = options.fetch ?? ((input: string, init?: RequestInit) => globalThis.fetch(input, init));
   const current = session.current();
 
-  return new KompasCloudBackend({
+  return new ZapiskiCloudBackend({
     baseUrl: origin,
     // Живой токен ставится на каждый запрос ниже; это значение — только
     // для первого кадра, пока `accessToken()` ещё не спросили.

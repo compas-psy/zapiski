@@ -106,11 +106,11 @@ describe('<Editor/>', () => {
 });
 
 describe('<Toolbar/>', () => {
-  it('первая строка — восемь элементов из BEHAVIOR §2.7', () => {
+  it('первая строка — семь элементов: BEHAVIOR §2.7 минус микрофон (Р4)', () => {
     const container = mount(<Toolbar view={null} />);
     const rows = container.querySelectorAll('.zpsk-toolbar-row');
     expect(rows.length).toBe(1);
-    expect(rows[0]?.querySelectorAll('button').length).toBe(8);
+    expect(rows[0]?.querySelectorAll('button').length).toBe(7);
   });
 
   it('«⋯» открывает вторую строку с семью элементами', () => {
@@ -133,23 +133,41 @@ describe('<Toolbar/>', () => {
     );
     expect(labels).toContain(ru.toolbar.bold);
     expect(labels).toContain(ru.toolbar.photo);
-    expect(labels).toContain(ru.toolbar.voice);
   });
 
-  it('фото и микрофон уходят наружу колбэками', () => {
+  /**
+   * Решение Р4 мастер-ТЗ: голос — P1, микрофон из тулбара v1 убран, потому что
+   * «пустая кнопка „скоро“ в самом частом месте интерфейса хуже её
+   * отсутствия». Сторожится составом первой строки целиком, а не отсутствием
+   * одной подписи: вернуть кнопку под другим именем так не выйдет.
+   */
+  it('в первой строке ровно семь кнопок ТЗ, микрофона среди них нет', () => {
+    const container = mount(<Toolbar view={null} />);
+    const first = container.querySelector('.zpsk-toolbar-row');
+    const labels = Array.from(first?.querySelectorAll('button') ?? []).map((b) =>
+      b.getAttribute('aria-label'),
+    );
+    expect(labels).toEqual([
+      ru.toolbar.heading,
+      ru.toolbar.bold,
+      ru.toolbar.italic,
+      ru.toolbar.bulletList,
+      ru.toolbar.task,
+      ru.toolbar.photo,
+      ru.toolbar.more,
+    ]);
+  });
+
+  it('фото уходит наружу колбэком', () => {
     const onPhoto = vi.fn();
-    const onVoice = vi.fn();
-    const container = mount(<Toolbar view={null} onPhoto={onPhoto} onVoice={onVoice} />);
-    const click = (label: string): void => {
-      const button = container.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
-      act(() => {
-        button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-      });
-    };
-    click(ru.toolbar.photo);
-    click(ru.toolbar.voice);
+    const container = mount(<Toolbar view={null} onPhoto={onPhoto} />);
+    const button = container.querySelector<HTMLButtonElement>(
+      `button[aria-label="${ru.toolbar.photo}"]`,
+    );
+    act(() => {
+      button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
     expect(onPhoto).toHaveBeenCalledOnce();
-    expect(onVoice).toHaveBeenCalledOnce();
   });
 
   it('«H» в тулбаре крутит уровень заголовка в живом редакторе', () => {

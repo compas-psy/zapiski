@@ -13,7 +13,7 @@ export interface OnboardingScreenProps {
   step: 1 | 2 | 3;
 }
 
-type StorageChoice = 'local' | 'own' | 'kompas';
+type StorageChoice = 'local' | 'own' | 'cloud';
 
 export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
   const app = useApp();
@@ -70,7 +70,7 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
           <Steps current={2} />
           <h1 className="za-h1">{strings.onboarding.step2.title}</h1>
 
-          {(['local', 'own', 'kompas'] as StorageChoice[]).map((option) => {
+          {(['local', 'own', 'cloud'] as StorageChoice[]).map((option) => {
             const copy = strings.onboarding.step2.options[option];
             return (
               <button
@@ -82,7 +82,7 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
               >
                 <span className="za-row-between">
                   <span className="za-card__title">{copy.title}</span>
-                  <Badge tone={option === 'kompas' ? 'warning' : 'success'}>{copy.badge}</Badge>
+                  <Badge tone={option === 'cloud' ? 'warning' : 'success'}>{copy.badge}</Badge>
                 </span>
                 <span className="za-card__text">{copy.text}</span>
               </button>
@@ -142,7 +142,7 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
         await app.openMemoryVault();
       }
 
-      if (choice === 'kompas') {
+      if (choice === 'cloud') {
         /* Вошли — и сразу к заметкам: экран входа не самоцель, а шаг к тому,
            ради чего входили (SCREENS §1, шаг 2). */
         app.beginSignIn({ name: 'list' });

@@ -290,15 +290,15 @@ export interface RemoteEntry {
   size: number;
 }
 
-/** Общий интерфейс для LocalFolder / WebDAV / ЯндексДиск / KompasCloud. */
+/** Общий интерфейс для LocalFolder / WebDAV / ЯндексДиск / ZapiskiCloud. */
 export interface SyncBackend {
-  readonly id: 'local' | 'webdav' | 'yandex' | 'kompas';
+  readonly id: 'local' | 'webdav' | 'yandex' | 'zapiski';
   readonly title: string;
   list(): Promise<RemoteEntry[]>;
   get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null>;
   put(path: VaultPath, data: Uint8Array, ifMatch?: string): Promise<{ etag: string }>;
   remove(path: VaultPath): Promise<void>;
-  /** Мгновенный синк там, где он есть (websocket у KompasCloud). */
+  /** Мгновенный синк там, где он есть (websocket у ZapiskiCloud). */
   subscribe?(onChange: (path: VaultPath) => void): () => void;
 }
 

@@ -3,8 +3,15 @@
  *
  * Высота 44, элементы 34×34, `space-between`, иконки 19, фон `--surface-alt`,
  * верхняя граница 1 px. Одна строка: H · B · I · список · чекбокс · фото ·
- * микрофон · «⋯». «H» — циклическое H1→H2→H3→обычный. «⋯» открывает вторую
- * строку: цитата, код, таблица, разделитель, ссылка, сноска, wiki-ссылка.
+ * «⋯». «H» — циклическое H1→H2→H3→обычный. «⋯» открывает вторую строку:
+ * цитата, код, таблица, разделитель, ссылка, сноска, wiki-ссылка.
+ *
+ * Микрофона здесь НЕТ — решение Р4 мастер-ТЗ: «Голос → Markdown = P1.
+ * Микрофон убирается из тулбара v1. Пустая кнопка „скоро“ в самом частом
+ * месте интерфейса хуже её отсутствия». Освободившееся место отдано «⋯»
+ * (tz/ZAPISKI_TZ_1_Design.md §1.4). Модель данных под голос при этом
+ * заложена заранее (`2_Engineering.md` §12) — задел архитектурный, а не
+ * кнопочный.
  *
  * Без выделения B/I вставляют парные маркеры и ставят курсор между ними —
  * это поведение живёт в `toggleWrap`, тулбар о нём не знает.
@@ -45,7 +52,6 @@ import {
   IconQuote,
   IconTable,
   IconTask,
-  IconVoice,
   IconWiki,
 } from './icons.js';
 
@@ -101,8 +107,6 @@ export interface ToolbarProps {
   view: EditorView | null;
   /** Вставка фото: выбор из галереи или камера (BEHAVIOR §2.6). */
   onPhoto?: () => void;
-  /** Голосовая запись (VOICE.md) — экран владеет процессом, тулбар только зовёт. */
-  onVoice?: () => void;
   strings?: EditorStrings;
   className?: string;
 }
@@ -141,7 +145,7 @@ function Button({
   );
 }
 
-export function Toolbar({ view, onPhoto, onVoice, strings = ru, className }: ToolbarProps): ReactElement {
+export function Toolbar({ view, onPhoto, strings = ru, className }: ToolbarProps): ReactElement {
   ensureStyles();
   const [more, setMore] = useState(false);
 
@@ -171,9 +175,6 @@ export function Toolbar({ view, onPhoto, onVoice, strings = ru, className }: Too
         </Button>
         <Button label={strings.toolbar.photo} onClick={() => onPhoto?.()}>
           <IconPhoto />
-        </Button>
-        <Button label={strings.toolbar.voice} onClick={() => onVoice?.()}>
-          <IconVoice />
         </Button>
         <Button label={strings.toolbar.more} pressed={more} onClick={() => setMore((v) => !v)}>
           <IconMore />

@@ -21,7 +21,7 @@ import { MemoryVaultStorage } from '../src/memory-storage.js';
 import { CrdtStore } from '../src/crdt/store.js';
 import { NoteDoc } from '../src/crdt/doc.js';
 import { VersionHistory } from '../src/sync/versions.js';
-import { KompasCloudBackend } from '../src/sync/kompas.js';
+import { ZapiskiCloudBackend } from '../src/sync/zapiski-cloud.js';
 import { utf8, fromUtf8 } from '../src/util/bytes.js';
 
 /** Облегчённый KDF: проверяется контракт формата, а не стойкость Argon2id. */
@@ -257,7 +257,7 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
    * технически не может расшифровать пользовательские данные». Письмо входа
    * говорит пользователю то же самое.
    *
-   * Между `Vault`/`SyncEngine` и `KompasCloudBackend` нет ни одного вызова
+   * Между `Vault`/`SyncEngine` и `ZapiskiCloudBackend` нет ни одного вызова
    * `CryptoProvider`: бэкенд отправляет байты файла как есть. Заметка,
    * которую пользователь не зашифровал сам паролем (а это поведение по
    * умолчанию), уезжает в облако открытым текстом — вместе с путём, в котором
@@ -265,7 +265,7 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
    */
   it('[ДЕФЕКТ] незашифрованная заметка уходит в облако как есть', async () => {
     const { sent, fetch: fetchImpl } = capture();
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       baseUrl: 'https://zapiski.test',
       token: 'токен',
       deviceId: 'device-1',
@@ -282,7 +282,7 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
 
   it.fails('[SEC-001] в облако не уходит ни байта открытого текста', async () => {
     const { sent, fetch: fetchImpl } = capture();
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       baseUrl: 'https://zapiski.test',
       token: 'токен',
       deviceId: 'device-1',

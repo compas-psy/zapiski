@@ -20,7 +20,7 @@ import { platformStrings, resolveShellLocale, type PlatformStrings } from './str
 import { NativeUpdater } from './updater';
 import { openVaultAt } from './vault';
 
-/** Боевой KompasCloud. В дев-режиме подменяется переменной окружения Vite. */
+/** Боевой ZapiskiCloud. В дев-режиме подменяется переменной окружения Vite. */
 // База ОБЯЗАНА включать префикс версии: приложение дописывает только путь
 // ручки (см. AppHost.cloudBaseUrl). Без `/api/v1` вход уходил в 404.
 const CLOUD_BASE_URL =

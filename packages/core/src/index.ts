@@ -166,7 +166,7 @@ export {
   type WebDAVOptions,
 } from './sync/webdav.js';
 export { YandexDiskBackend, type YandexDiskOptions } from './sync/yandex.js';
-export { KompasCloudBackend, type KompasCloudOptions, type WebSocketLike } from './sync/kompas.js';
+export { ZapiskiCloudBackend, type ZapiskiCloudOptions, type WebSocketLike } from './sync/zapiski-cloud.js';
 export {
   API_PREFIX,
   VAULT_ENDPOINTS,

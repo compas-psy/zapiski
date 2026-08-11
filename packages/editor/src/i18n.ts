@@ -35,7 +35,6 @@ export interface EditorStrings {
     bulletList: string;
     task: string;
     photo: string;
-    voice: string;
     more: string;
     quote: string;
     code: string;
@@ -71,7 +70,6 @@ export const ru: EditorStrings = {
     bulletList: 'Список',
     task: 'Чекбокс',
     photo: 'Фото',
-    voice: 'Микрофон',
     more: 'Ещё',
     quote: 'Цитата',
     code: 'Код',
@@ -107,7 +105,6 @@ export const en: EditorStrings = {
     bulletList: 'List',
     task: 'Checkbox',
     photo: 'Photo',
-    voice: 'Voice',
     more: 'More',
     quote: 'Quote',
     code: 'Code',

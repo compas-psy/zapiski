@@ -31,7 +31,7 @@ export interface AppHost {
   /** Настройки приложения вне vault'а: тема, акцент, язык, выбранный backend. */
   readonly prefs: PreferencesStore;
 
-  /** Открыть ссылку во внешнем браузере (deep link в ДНЕВНИК и т.п.). */
+  /** Открыть ссылку во внешнем браузере. */
   openExternal(url: string): Promise<void>;
 
   /**

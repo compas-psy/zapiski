@@ -108,7 +108,7 @@ describe('контракт протокола с @zapiski/core', () => {
     if (source === null) return;
 
     // list / get / put / remove / subscribe — минимум, который обязан
-    // реализовывать KompasCloud как SyncBackend.
+    // реализовывать ZapiskiCloud как SyncBackend.
     expect(source).toContain('interface SyncBackend');
     for (const method of ['list(', 'get(', 'put(', 'remove(', 'subscribe?(']) {
       expect(source).toContain(method);

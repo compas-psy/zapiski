@@ -1,5 +1,5 @@
 /**
- * `KompasCloudBackend` — облако СИМПАС по протоколу ADR-0003, эндпоинты
+ * `ZapiskiCloudBackend` — Облако Записок по протоколу ADR-0003, эндпоинты
  * `/api/v1/vault/*`. Типы запросов и ответов — из `sync/protocol.ts`, того же
  * файла, который импортирует сервер.
  *
@@ -22,7 +22,7 @@ import {
 } from './protocol.js';
 import { SyncError, type FetchLike } from './webdav.js';
 
-export interface KompasCloudOptions {
+export interface ZapiskiCloudOptions {
   /** Базовый адрес, по умолчанию — `https://zapiski.cmpas.ru` (ADR-0003 §1). */
   baseUrl?: string;
   /** Токен доступа: Яндекс ID или magic-link (ТЗ §5.5, паролей нет). */
@@ -39,9 +39,9 @@ export interface WebSocketLike {
   close(): void;
 }
 
-export class KompasCloudBackend implements SyncBackend {
-  readonly id = 'kompas' as const;
-  readonly title = 'Облако СИМПАС';
+export class ZapiskiCloudBackend implements SyncBackend {
+  readonly id = 'zapiski' as const;
+  readonly title = 'Облако Записок';
   private readonly baseUrl: string;
   private readonly token: string;
   private readonly deviceId: string;
@@ -49,7 +49,7 @@ export class KompasCloudBackend implements SyncBackend {
   private readonly locale: Locale;
   private readonly websocket: ((url: string) => WebSocketLike) | undefined;
 
-  constructor(options: KompasCloudOptions) {
+  constructor(options: ZapiskiCloudOptions) {
     this.baseUrl = (options.baseUrl ?? 'https://zapiski.cmpas.ru').replace(/\/+$/, '');
     this.token = options.token;
     this.deviceId = options.deviceId;

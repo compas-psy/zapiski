@@ -125,10 +125,29 @@ describe('до вложения можно дотянуться из редак�
     expect(opened).toHaveBeenCalled();
   });
 
-  it('микрофона в тулбаре нет, пока нет экрана записи', async () => {
+  /**
+   * Решение Р4: голос — P1, микрофон из тулбара v1 убран совсем, а не спрятан
+   * флагом. Проверяется состав первой строки целиком: список из ТЗ
+   * (`2_Engineering.md` §5) и ничего сверх него.
+   */
+  it('в тулбаре ровно кнопки ТЗ, микрофона среди них нет', async () => {
     await mountNote();
-    // ARCHITECTURE §2: нереализованное скрывается, а не висит пустышкой.
-    expect(screen.queryByRole('button', { name: ru.note.toolbar.voice })).toBeNull();
+    /* Именно в тулбаре, а не на экране: подпись «Ещё» есть и у меню заметки,
+       и поиск по всему экрану нашёл бы обе. */
+    const toolbar = screen.getAllByRole('toolbar')[0]!;
+    const labels = Array.from(toolbar.querySelectorAll('button')).map((button) =>
+      button.getAttribute('aria-label'),
+    );
+    const copy = ru.note.toolbar;
+    expect(labels).toEqual([
+      copy.heading,
+      copy.bold,
+      copy.italic,
+      copy.list,
+      copy.checkbox,
+      copy.image,
+      copy.more,
+    ]);
   });
 });
 

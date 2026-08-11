@@ -12,7 +12,7 @@ import { YandexOAuth } from './services/yandex.ts';
 import { pruneExpiredVersions } from './routes/versions.ts';
 
 /**
- * Точка входа KompasCloud.
+ * Точка входа ZapiskiCloud.
  *
  * ADR-0003 §2: слушаем порт 3100. Порты 3000 (КОМПАС.Дневник) и 25 (почта) на
  * этом хосте не трогаются — ни здесь, ни в конфигурации.

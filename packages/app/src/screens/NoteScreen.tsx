@@ -33,7 +33,6 @@ import {
   IconItalic,
   IconList,
   IconLock,
-  IconMic,
   IconButton,
   Tag,
 } from '@zapiski/ui';
@@ -387,7 +386,14 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     editorRef.current?.focus();
   }
 
-  /** Первая строка тулбара: H · B · I · список · чекбокс · фото · микрофон · ⋯ */
+  /**
+   * Первая строка тулбара: H · B · I · список · чекбокс · изображение · «⋯»
+   * (`2_Engineering.md` §5).
+   *
+   * Микрофона нет и скрытой кнопки под него тоже — решение Р4: «Голос →
+   * Markdown = P1, микрофон убирается из тулбара v1». Освободившееся место
+   * отдано «⋯» (`1_Design.md` §1.4).
+   */
   function mainToolbar(): Array<{
     id: string;
     icon: ReactNode;
@@ -402,11 +408,6 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       { id: 'list', icon: <IconList size={18} />, label: strings.note.toolbar.list, onSelect: runCommand('format.bulletList') },
       { id: 'task', icon: <IconCheckSquare size={18} />, label: strings.note.toolbar.checkbox, onSelect: runCommand('format.task') },
       { id: 'image', icon: <IconImage size={18} />, label: strings.note.toolbar.image, onSelect: () => imageInput.current?.click() },
-      /* Микрофон — ход 3 (VOICE.md); экрана записи ещё нет, поэтому кнопки нет
-         тоже. ARCHITECTURE §2: отсутствующая возможность СКРЫВАЕТСЯ, а не
-         висит нажимаемой пустышкой. Мёртвая кнопка врёт дважды — обещает
-         возможность и заставляет думать, что приложение сломалось. */
-      { id: 'mic', icon: <IconMic size={18} />, label: strings.note.toolbar.voice, onSelect: () => undefined, hidden: true },
       { id: 'more', icon: <span aria-hidden="true">⋯</span>, label: strings.note.toolbar.more, onSelect: () => setToolbarExtra(true) },
     ];
   }

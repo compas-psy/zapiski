@@ -24,7 +24,7 @@ const STATES: Array<Exclude<ScreenState, 'normal'>> = [
   'error',
   'locked',
 ];
-const BACKENDS: Array<SyncBackend['id'] | 'none'> = ['none', 'local', 'webdav', 'yandex', 'kompas'];
+const BACKENDS: Array<SyncBackend['id'] | 'none'> = ['none', 'local', 'webdav', 'yandex', 'zapiski'];
 
 export function DebugMenu(): ReactNode {
   const app = useApp();

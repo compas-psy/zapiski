@@ -36,8 +36,11 @@ describe('paywall — SCREENS §9, список запретов', () => {
 
   it('годовой тариф не предвыбран, а его выгода помечена явно', () => {
     mount(<PaywallScreen />);
-    const monthly = screen.getByRole('button', { name: new RegExp(ru.paywall.monthly) });
-    const yearly = screen.getByRole('button', { name: new RegExp(ru.paywall.yearly) });
+    /* Подписи тарифов содержат скобки и точки — в шаблон они идут
+       экранированными, иначе «1 790 ₽ (149 ₽/мес)» превращается в группу. */
+    const literal = (text: string): RegExp => new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const monthly = screen.getByRole('button', { name: literal(ru.paywall.monthly) });
+    const yearly = screen.getByRole('button', { name: literal(ru.paywall.yearly) });
     expect(monthly.getAttribute('aria-pressed')).toBe('true');
     expect(yearly.getAttribute('aria-pressed')).toBe('false');
     expect(within(yearly).getByText(ru.paywall.yearlyNote)).toBeTruthy();

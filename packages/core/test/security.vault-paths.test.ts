@@ -62,7 +62,7 @@ const text = (data: Uint8Array | null): string => (data ? new TextDecoder().deco
 
 /** Бэкенд, целиком управляемый противником: он назначает и пути, и байты. */
 class HostileBackend implements SyncBackend {
-  readonly id = 'kompas' as const;
+  readonly id = 'zapiski' as const;
   readonly title = 'Скомпрометированный сервер синка';
   constructor(private readonly payload: Record<string, string>) {}
   async list(): Promise<RemoteEntry[]> {

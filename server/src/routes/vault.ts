@@ -17,7 +17,7 @@ import { applyDelta, fits, lockUsage, quotaStatus } from '../services/quota.ts';
 import { getEntitlement } from '../services/subscription.ts';
 
 /**
- * E2E blob-синк (ТЗ §4.1, KompasCloud).
+ * E2E blob-синк (ТЗ §4.1, ZapiskiCloud).
  *
  * Сервер — «тупая труба» для зашифрованных чанков: он не знает, что внутри
  * байтов, и не пытается узнать. Всё, чем он управляет, — метаданные: путь,

@@ -26,9 +26,14 @@ export function PaywallScreen(): ReactNode {
     { label: copy.rows.editor, free: <Yes />, plus: <Yes /> },
     { label: copy.rows.crypto, free: <Yes />, plus: <Yes /> },
     { label: copy.rows.export, free: <Yes />, plus: <Yes /> },
+    { label: copy.rows.import, free: <Yes />, plus: <Yes /> },
     { label: copy.rows.ownStorage, free: <Yes />, plus: <Yes /> },
     { label: copy.rows.cloud, free: <No />, plus: copy.rows.cloudPlus },
+    { label: copy.rows.versions, free: copy.rows.versionsFree, plus: copy.rows.versionsPlus },
     { label: copy.rows.publish, free: <No />, plus: <Yes /> },
+    /* «Голос: на устройстве бесплатно, в облаке — по подписке» (мастер-ТЗ §5).
+       Строка про голос стоит в таблице заранее и честно: сама фича — P1, а
+       бесплатный столбец не пустой, поэтому обещанием тарифа она не является. */
     { label: copy.rows.voice, free: copy.rows.voiceFree, plus: <Yes /> },
   ];
 

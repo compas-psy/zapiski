@@ -51,7 +51,7 @@ import type {
   SettingsSection,
 } from '../contract.js';
 import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } from '../i18n/index.js';
-import { createKompasBackend } from './cloud.js';
+import { createCloudBackend } from './cloud.js';
 import { AuthError, SessionStore, type AuthErrorCode } from './session.js';
 
 /** Сортировка списка. Запоминается НА ПАПКУ, не глобально (BEHAVIOR §1.2). */
@@ -592,11 +592,11 @@ export class AppController {
     }
   }
 
-  /** Подключить облако СИМПАС как бэкенд синка. Без сессии — не подключать. */
+  /** Подключить Облако Записок как бэкенд синка. Без сессии — не подключать. */
   async connectCloud(): Promise<boolean> {
     if (this.session.current() === null) return false;
     this.attachBackend(
-      createKompasBackend({
+      createCloudBackend({
         cloudBaseUrl: this.host.cloudBaseUrl,
         session: this.session,
         locale: this.state.locale,
@@ -611,8 +611,8 @@ export class AppController {
   /**
    * Яндекс.Диск как бэкенд синка (ТЗ §4.1).
    *
-   * Токен здесь — от Диска, а не от входа: вход в аккаунт открывает облако
-   * СИМПАС, а доступ к чужому хранилищу — отдельное разрешение, которого наш
+   * Токен здесь — от Диска, а не от входа: вход в аккаунт открывает Облако
+   * Записок, а доступ к чужому хранилищу — отдельное разрешение, которого наш
    * OAuth не запрашивает (`server/src/services/yandex.ts`: только `login:*`).
    */
   async connectYandexDisk(token: string): Promise<boolean> {
@@ -624,7 +624,13 @@ export class AppController {
 
   /** Молчаливое восстановление бэкенда при старте: как было, так и осталось. */
   private async resumeCloud(): Promise<void> {
-    const stored = await this.host.prefs.get<SyncBackend['id'] | null>(PREF.backend, null);
+    const raw = await this.host.prefs.get<string | null>(PREF.backend, null);
+    /* Прежнее имя нашего облака в настройках устройства. Без переноса человек
+       с подключённым облаком получил бы после обновления «бэкенд неизвестен»
+       и молча отключённый синк — то есть худший из возможных исходов
+       переименования. */
+    const stored = (raw === 'kompas' ? 'zapiski' : raw) as SyncBackend['id'] | null;
+    if (stored !== raw && stored !== null) await this.host.prefs.set(PREF.backend, stored);
     if (stored === 'yandex') {
       const token = await this.host.prefs.get<string | null>(PREF.yandexToken, null);
       if (token !== null && token !== '') {
@@ -633,14 +639,14 @@ export class AppController {
       }
     }
     if (this.session.current() === null) return;
-    if (stored !== null && stored !== 'kompas') return;
+    if (stored !== null && stored !== 'zapiski') return;
     await this.connectCloud();
   }
 
   /** Выход из аккаунта — одно из ТРЁХ мест с диалогом подтверждения. */
   async signOutCloud(): Promise<void> {
     await this.session.signOut().catch(() => undefined);
-    if (this.state.backendId === 'kompas') this.attachBackend(null);
+    if (this.state.backendId === 'zapiski') this.attachBackend(null);
     this.setAccount(null);
     this.patch({ authError: null });
   }

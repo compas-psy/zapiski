@@ -57,7 +57,7 @@ export {
   type AuthErrorCode,
   type CloudSession,
 } from './state/session.js';
-export { createKompasBackend, originOf, type CloudBackendOptions } from './state/cloud.js';
+export { createCloudBackend, originOf, type CloudBackendOptions } from './state/cloud.js';
 export {
   AppProvider,
   layoutFor,

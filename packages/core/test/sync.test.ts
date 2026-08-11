@@ -9,7 +9,7 @@ import { Vault } from '../src/vault/vault.js';
 import { LocalFolderBackend, PreconditionFailed, etagOf } from '../src/sync/local-folder.js';
 import { WebDAVBackend, SyncError, parsePropfind, normalizeEtag } from '../src/sync/webdav.js';
 import { YandexDiskBackend } from '../src/sync/yandex.js';
-import { KompasCloudBackend } from '../src/sync/kompas.js';
+import { ZapiskiCloudBackend } from '../src/sync/zapiski-cloud.js';
 import { VAULT_ENDPOINTS, API_PREFIX } from '../src/sync/protocol.js';
 import { ChangeQueue } from '../src/sync/queue.js';
 import { VersionHistory, MAX_SNAPSHOTS } from '../src/sync/versions.js';
@@ -198,7 +198,7 @@ describe('YandexDiskBackend (ТЗ §4.1)', () => {
   });
 });
 
-describe('KompasCloudBackend (ADR-0003)', () => {
+describe('ZapiskiCloudBackend (ADR-0003)', () => {
   it('эндпоинты соответствуют протоколу /api/v1/vault/*', () => {
     expect(API_PREFIX).toBe('/api/v1');
     expect(VAULT_ENDPOINTS.list).toBe('/api/v1/vault/list');
@@ -208,7 +208,7 @@ describe('KompasCloudBackend (ADR-0003)', () => {
 
   it('list и put используют токен и заголовок устройства', async () => {
     const seen: string[] = [];
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       baseUrl: 'https://zapiski.cmpas.ru',
       token: 'jwt',
       deviceId: 'device-1',
@@ -228,7 +228,7 @@ describe('KompasCloudBackend (ADR-0003)', () => {
   });
 
   it('истёкшая подписка сообщается текстом из реестра', async () => {
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       token: 'jwt',
       deviceId: 'd',
       fetch: async () => new Response('', { status: 402 }),
@@ -238,7 +238,7 @@ describe('KompasCloudBackend (ADR-0003)', () => {
 
   it('push/pull CRDT-обновлений кодируются base64', async () => {
     const update = new Uint8Array([1, 2, 3, 4]);
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       token: 'jwt',
       deviceId: 'd',
       fetch: async (url, init) => {
@@ -258,7 +258,7 @@ describe('KompasCloudBackend (ADR-0003)', () => {
   it('websocket-подписка отдаёт изменившиеся пути (BEHAVIOR §6)', () => {
     const handlers: Array<(event: { data: unknown }) => void> = [];
     const state = { closed: false };
-    const backend = new KompasCloudBackend({
+    const backend = new ZapiskiCloudBackend({
       token: 'jwt',
       deviceId: 'd',
       fetch: async () => new Response(''),
