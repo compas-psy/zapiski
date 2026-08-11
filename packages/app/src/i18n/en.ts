@@ -305,7 +305,6 @@ export const en: AppCatalog = {
     editor: {
       typewriter: 'Keep the line centred (typewriter)',
       moveDone: 'Move finished items down',
-      rawByDefault: 'Show markup by default',
       spellcheck: 'Check spelling',
     },
     sync: {

@@ -37,6 +37,7 @@ import { autosave } from './save/autosave.js';
 import { typography, defaultTypography } from './typography.js';
 import type { TypographySettings } from './typography.js';
 import { zapiskiKeymap } from './commands/keymap.js';
+import { taskOrder } from './input/task-order.js';
 
 export interface ZapiskiEditorOptions {
   /** Всё, что редактор просит у приложения. По умолчанию — заглушки. */
@@ -45,6 +46,8 @@ export interface ZapiskiEditorOptions {
   strings?: EditorStrings;
   /** Настройки типографики пользователя. */
   typography?: TypographySettings;
+  /** «Переносить выполненные вниз» (ITERATION-1 §3). По умолчанию выключено. */
+  moveDoneToBottom?: boolean;
   /** Языки подсветки кода; по умолчанию курируемые ~20. */
   codeLanguages?: LanguageDescription[];
   /** Только чтение — например, витринная заметка или зашифрованная. */
@@ -59,6 +62,7 @@ export function zapiskiEditor(options: ZapiskiEditorOptions = {}): Extension[] {
 
     zapiskiBaseTheme,
     typography(options.typography ?? defaultTypography),
+    taskOrder(options.moveDoneToBottom ?? false),
 
     options.codeLanguages
       ? zapiskiMarkdown({ codeLanguages: options.codeLanguages })

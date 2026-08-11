@@ -22,6 +22,7 @@ import type { TypographySettings } from '../typography.js';
 import { setFocusMode } from '../focus/focus-mode.js';
 import { setRawMode } from '../live-preview/raw-mode.js';
 import { flushAutosave } from '../save/autosave.js';
+import { applyTaskOrder } from '../input/task-order.js';
 
 export interface EditorHandle {
   /** Живое представление CodeMirror — для палитры команд и тулбара. */
@@ -85,6 +86,10 @@ export interface EditorProps {
   focusMode?: boolean;
   /** Typewriter-скролл — опция, по умолчанию выключена. */
   typewriterScroll?: boolean;
+  /** «Переносить выполненные вниз» (ITERATION-1 §3). */
+  moveDoneToBottom?: boolean;
+  /** Проверка орфографии системой (ITERATION-1 §3). */
+  spellCheck?: boolean;
   /** Raw ↔ live-preview (Ctrl+E). */
   rawMode?: boolean;
 
@@ -154,6 +159,7 @@ export function Editor(props: EditorProps): React.ReactElement {
           runtime,
           ...(initial.strings ? { strings: initial.strings } : {}),
           typography: initial.typography ?? defaultTypography,
+          moveDoneToBottom: initial.moveDoneToBottom ?? false,
           ...(initial.codeLanguages ? { codeLanguages: initial.codeLanguages } : {}),
         }),
         readOnlyCompartment.of(EditorState.readOnly.of(initial.readOnly ?? false)),
@@ -223,6 +229,18 @@ export function Editor(props: EditorProps): React.ReactElement {
     const view = viewRef.current;
     if (view) applyTypography(view, props.typography ?? defaultTypography);
   }, [props.typography]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) applyTaskOrder(view, props.moveDoneToBottom ?? false);
+  }, [props.moveDoneToBottom]);
+
+  /* Проверка орфографии — атрибут на contenteditable, а не расширение: её
+     делает система, и включается она ровно так. */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.contentDOM.spellcheck = props.spellCheck ?? false;
+  }, [props.spellCheck]);
 
   useEffect(() => {
     const view = viewRef.current;

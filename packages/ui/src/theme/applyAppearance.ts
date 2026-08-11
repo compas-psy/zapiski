@@ -47,6 +47,9 @@ export function parseAppearance(raw: unknown): AppearanceState {
         : DEFAULT_EDITOR_PREFERENCES.columnWidth,
       typeface: editorSrc['typeface'] === 'serif' ? 'serif' : 'sans',
       compact: editorSrc['compact'] === true,
+      typewriter: editorSrc['typewriter'] === true,
+      moveDone: editorSrc['moveDone'] === true,
+      spellcheck: editorSrc['spellcheck'] === true,
     },
   };
 }

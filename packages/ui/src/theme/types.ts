@@ -77,6 +77,12 @@ export interface EditorPreferences {
   typeface: Typeface;
   /** Компактный режим: плотные строки списка + текст 14.5/1.5. */
   compact: boolean;
+  /** Строка набора держится по центру экрана (BEHAVIOR §2.8). */
+  typewriter: boolean;
+  /** Отмеченная задача уезжает вниз списка (ITERATION-1 §3). */
+  moveDone: boolean;
+  /** Проверка орфографии системой (ITERATION-1 §3). */
+  spellcheck: boolean;
 }
 
 export interface AppearanceState {
@@ -91,6 +97,11 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   columnWidth: 640,
   typeface: 'sans',
   compact: false,
+  typewriter: false,
+  /* Выключено осознанно: человек отмечает пункт и глазами держит соседние, а
+     прыжок строки сбивает чтение (BEHAVIOR §2.3). */
+  moveDone: false,
+  spellcheck: false,
 };
 
 export const DEFAULT_APPEARANCE: AppearanceState = {

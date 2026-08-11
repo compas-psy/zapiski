@@ -37,6 +37,7 @@ import {
   IconLock,
   IconButton,
   Tag,
+  useTheme,
 } from '@zapiski/ui';
 import {
   IconCode,
@@ -64,6 +65,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const state = useAppState();
   const strings = useStrings();
   const layout = useLayout();
+  const theme = useTheme();
   const editorRef = useRef<EditorHandle>(null);
   /**
    * Скрытый выбор файла для кнопки «фото» (BEHAVIOR §2.6).
@@ -168,6 +170,39 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
 
   /* Файл целиком — то, что уходит на диск и во всё, что считает по тексту. */
   const body = useMemo(() => joinTitle(title, editorBody), [title, editorBody]);
+
+  /**
+   * Настройки типографики → редактор (ITERATION-1 §3).
+   *
+   * Дефект, о котором писал пользователь: «изменение ширины редактора не
+   * работает». Ширина была лишь самым заметным симптомом. Проп `typography`
+   * не передавался НИГДЕ, и редактор всегда жил на `defaultTypography` —
+   * 16 px, 1.65, колонка 640, sans, не компактный. То есть мёртвыми были
+   * разом пять настроек: кегль, интерлиньяж, ширина колонки, шрифт и
+   * компактный режим.
+   *
+   * Обманывало то, что снаружи всё выглядело подключённым: `applyAppearance`
+   * честно писал `--editor-measure` и `--editor-font-scale` на корень, и
+   * обёртка колонки их слушалась. Но текст рисует CodeMirror, а он берёт
+   * ширину из своей переменной `--z-col`, которую задаёт ровно этот проп.
+   * Менялась рамка вокруг пустоты, а сам текст стоял на месте.
+   */
+  const typography = useMemo(
+    () => ({
+      size: theme.editor.fontSize,
+      lineHeight: theme.editor.lineHeight,
+      column: theme.editor.columnWidth,
+      family: theme.editor.typeface,
+      compact: theme.editor.compact,
+    }),
+    [
+      theme.editor.fontSize,
+      theme.editor.lineHeight,
+      theme.editor.columnWidth,
+      theme.editor.typeface,
+      theme.editor.compact,
+    ],
+  );
 
   /**
    * Автосохранение заголовка. У тела оно живёт внутри редактора (debounce
@@ -278,6 +313,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
             <Editor
               ref={editorRef}
               value={editorBody}
+              typography={typography}
+              typewriterScroll={theme.editor.typewriter}
+              moveDoneToBottom={theme.editor.moveDone}
+              spellCheck={theme.editor.spellcheck}
               rawMode={state.rawMode}
               focusMode={state.focusMode}
               onChange={(next) => {

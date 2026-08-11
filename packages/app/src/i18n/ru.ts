@@ -378,7 +378,6 @@ export const ru = {
     editor: {
       typewriter: 'Держать строку по центру (typewriter)',
       moveDone: 'Переносить выполненные вниз',
-      rawByDefault: 'Показывать разметку по умолчанию',
       spellcheck: 'Проверять орфографию',
     },
     sync: {

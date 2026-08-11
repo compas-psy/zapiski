@@ -12,6 +12,7 @@
 // ── React ────────────────────────────────────────────────────────────────────
 export { Editor } from './react/Editor.js';
 export type { EditorProps, EditorHandle } from './react/Editor.js';
+export { applyTaskOrder, moveDoneToBottom, reorderTasks, taskOrder } from './input/task-order.js';
 export { Toolbar } from './react/Toolbar.js';
 export type { ToolbarProps } from './react/Toolbar.js';
 

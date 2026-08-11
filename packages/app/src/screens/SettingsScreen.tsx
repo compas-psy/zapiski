@@ -217,11 +217,23 @@ function AppearanceSection(): ReactNode {
   );
 }
 
+/**
+ * Настройки редактора.
+ *
+ * Все три тумблера держали состояние в `useState` и не доходили ни до
+ * настроек, ни до редактора: щелчок двигал переключатель и не делал больше
+ * ничего (ITERATION-1 §3). Теперь они живут в предпочтениях редактора рядом с
+ * кеглем и шириной колонки — там же, где переживают перезапуск, и оттуда же
+ * попадают в CodeMirror мгновенно, без «Применить».
+ *
+ * Четвёртый тумблер, «Показывать разметку по умолчанию», убран. В списке §3
+ * его нет, а §8 отдаёт разметку режиму редактора: в простом её не видно
+ * никогда, в профессиональном она проявляется у курсора. Отдельная настройка
+ * поверх режима означала бы два переключателя об одном и том же.
+ */
 function EditorSection(): ReactNode {
   const strings = useStrings();
-  const [typewriter, setTypewriter] = useState(false);
-  const [moveDone, setMoveDone] = useState(false);
-  const [rawDefault, setRawDefault] = useState(false);
+  const theme = useTheme();
   const copy = strings.settings.editor;
 
   return (
@@ -230,23 +242,23 @@ function EditorSection(): ReactNode {
       <div className="za-field-row">
         <Switch
           label={copy.typewriter}
-          checked={typewriter}
-          onChange={(event) => setTypewriter(event.target.checked)}
+          checked={theme.editor.typewriter}
+          onChange={(event) => theme.setEditor({ typewriter: event.target.checked })}
         />
       </div>
       {/* «Переносить выполненные вниз» — выключено по умолчанию (BEHAVIOR §2.3). */}
       <div className="za-field-row">
         <Switch
           label={copy.moveDone}
-          checked={moveDone}
-          onChange={(event) => setMoveDone(event.target.checked)}
+          checked={theme.editor.moveDone}
+          onChange={(event) => theme.setEditor({ moveDone: event.target.checked })}
         />
       </div>
       <div className="za-field-row">
         <Switch
-          label={copy.rawByDefault}
-          checked={rawDefault}
-          onChange={(event) => setRawDefault(event.target.checked)}
+          label={copy.spellcheck}
+          checked={theme.editor.spellcheck}
+          onChange={(event) => theme.setEditor({ spellcheck: event.target.checked })}
         />
       </div>
     </>

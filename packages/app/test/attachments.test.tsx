@@ -11,73 +11,79 @@
  * Здесь проверяется весь путь: файл → `attachments/` → разметка в тексте, и
  * отдельно — что до этого пути можно дотянуться из интерфейса.
  */
-import { render, screen } from '@testing-library/react';
-import { ToastProvider } from '@zapiski/ui';
-import { describe, expect, it, vi } from 'vitest';
-import { AppProvider } from '../src/state/context.js';
-import { AppController } from '../src/state/store.js';
-import { NoteScreen } from '../src/screens/NoteScreen.js';
-import { SettingsScreen } from '../src/screens/SettingsScreen.js';
-import { strings } from '../src/i18n/index.js';
-import { createTestHost } from './host.js';
+import { render, screen } from "@testing-library/react";
+import { ThemeProvider, ToastProvider } from "@zapiski/ui";
+import { describe, expect, it, vi } from "vitest";
+import { AppProvider } from "../src/state/context.js";
+import { AppController } from "../src/state/store.js";
+import { NoteScreen } from "../src/screens/NoteScreen.js";
+import { SettingsScreen } from "../src/screens/SettingsScreen.js";
+import { strings } from "../src/i18n/index.js";
+import { createTestHost } from "./host.js";
 
-const ru = strings('ru');
+const ru = strings("ru");
 
 /** PNG размером 1×1 — настоящие байты, а не заглушка. */
 const PNG = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
-  0x89,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
+  0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06,
+  0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89,
 ]);
 
-const png = (name = 'снимок.png'): File =>
-  new File([PNG as BlobPart], name, { type: 'image/png' });
+const png = (name = "снимок.png"): File =>
+  new File([PNG as BlobPart], name, { type: "image/png" });
 
-async function boot(files: Record<string, string> = {}): Promise<AppController> {
+async function boot(
+  files: Record<string, string> = {},
+): Promise<AppController> {
   const host = createTestHost({ files, prefs: { onboarded: true } });
   const app = new AppController(host);
   await app.boot();
   return app;
 }
 
-describe('вложение изображения', () => {
-  it('файл копируется в attachments/ и возвращает готовую разметку', async () => {
+describe("вложение изображения", () => {
+  it("файл копируется в attachments/ и возвращает готовую разметку", async () => {
     const app = await boot();
 
     const result = await app.attachImage(png());
 
     expect(result).not.toBeNull();
-    expect(result!.path).toMatch(/^attachments\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/);
+    expect(result!.path).toMatch(
+      /^attachments\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/,
+    );
     // Восклицательный знак — это картинка, а не просто файл (BEHAVIOR §2.6).
     expect(result!.markdown).toBe(`![](${result!.path})`);
     expect(await app.vaultRef!.storage.read(result!.path)).not.toBeNull();
   });
 
-  it('одинаковые файлы не плодят копии — имя строится от хеша', async () => {
+  it("одинаковые файлы не плодят копии — имя строится от хеша", async () => {
     const app = await boot();
 
-    const first = await app.attachImage(png('раз.png'));
-    const second = await app.attachImage(png('два.png'));
+    const first = await app.attachImage(png("раз.png"));
+    const second = await app.attachImage(png("два.png"));
 
     expect(second!.path).toBe(first!.path);
   });
 
-  it('расширение берётся из имени: на Android тип файла бывает пустым', async () => {
+  it("расширение берётся из имени: на Android тип файла бывает пустым", async () => {
     const app = await boot();
-    const noType = new File([PNG as BlobPart], 'скан.jpg', { type: '' });
+    const noType = new File([PNG as BlobPart], "скан.jpg", { type: "" });
 
     const result = await app.attachImage(noType);
 
-    expect(result!.path.endsWith('.jpg')).toBe(true);
+    expect(result!.path.endsWith(".jpg")).toBe(true);
   });
 
-  it('сбой копирования поднимает строку реестра, а не молчит', async () => {
+  it("сбой копирования поднимает строку реестра, а не молчит", async () => {
     const toasts: string[] = [];
     const host = createTestHost({ prefs: { onboarded: true } });
     const app = new AppController(host);
     app.setToastSink((toast) => toasts.push(toast.message));
     await app.boot();
-    vi.spyOn(app.vaultRef!, 'addAttachment').mockRejectedValue(new Error('диск'));
+    vi.spyOn(app.vaultRef!, "addAttachment").mockRejectedValue(
+      new Error("диск"),
+    );
 
     expect(await app.attachImage(png())).toBeNull();
     expect(toasts).toContain(ru.errors.imageInsertFailed);
@@ -88,41 +94,44 @@ describe('вложение изображения', () => {
  * Сторож достижимости. Тот же класс, что убил папки и меню: возможность есть,
  * а нажать нечего.
  */
-describe('до вложения можно дотянуться из редактора', () => {
+describe("до вложения можно дотянуться из редактора", () => {
   async function mountNote(): Promise<void> {
     /* Тулбар — только mobile (SCREENS §4), а в jsdom окно по умолчанию
        десктопной ширины. Без этого проверялся бы экран, которого на телефоне
        нет. */
     window.innerWidth = 390;
     const host = createTestHost({
-      files: { 'Заметка.md': '# Заметка\n\nтекст\n' },
+      files: { "Заметка.md": "# Заметка\n\nтекст\n" },
       prefs: { onboarded: true },
     });
     const app = new AppController(host);
     await app.boot();
     render(
-      <ToastProvider>
-        <AppProvider host={host} controller={app}>
-          <NoteScreen path="Заметка.md" />
-        </AppProvider>
-      </ToastProvider>,
+      <ThemeProvider persist={false}>
+        <ToastProvider>
+          <AppProvider host={host} controller={app}>
+            <NoteScreen path="Заметка.md" />
+          </AppProvider>
+        </ToastProvider>
+      </ThemeProvider>,
     );
     /* Чтение заметки асинхронно: без этого экран остаётся скелетоном.
        Ждём именно поле заголовка: с ITERATION-1 §1 текстовых полей на экране
        два — название и тело, — и безымянный `textbox` стал неоднозначным. */
-    await screen.findByRole('textbox', { name: 'Название заметки' });
+    await screen.findByRole("textbox", { name: "Название заметки" });
   }
 
-  it('кнопка «фото» открывает системный выбор файла', async () => {
+  it("кнопка «фото» открывает системный выбор файла", async () => {
     await mountNote();
-    const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+    const input =
+      document.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).not.toBeNull();
     // Галерея И камера: на Android этот accept открывает оба источника.
-    expect(input!.accept).toBe('image/*');
+    expect(input!.accept).toBe("image/*");
 
     const opened = vi.fn();
     input!.click = opened;
-    screen.getByRole('button', { name: ru.note.toolbar.image }).click();
+    screen.getByRole("button", { name: ru.note.toolbar.image }).click();
 
     expect(opened).toHaveBeenCalled();
   });
@@ -132,13 +141,13 @@ describe('до вложения можно дотянуться из редак�
    * флагом. Проверяется состав первой строки целиком: список из ТЗ
    * (`2_Engineering.md` §5) и ничего сверх него.
    */
-  it('в тулбаре ровно кнопки ТЗ, микрофона среди них нет', async () => {
+  it("в тулбаре ровно кнопки ТЗ, микрофона среди них нет", async () => {
     await mountNote();
     /* Именно в тулбаре, а не на экране: подпись «Ещё» есть и у меню заметки,
        и поиск по всему экрану нашёл бы обе. */
-    const toolbar = screen.getAllByRole('toolbar')[0]!;
-    const labels = Array.from(toolbar.querySelectorAll('button')).map((button) =>
-      button.getAttribute('aria-label'),
+    const toolbar = screen.getAllByRole("toolbar")[0]!;
+    const labels = Array.from(toolbar.querySelectorAll("button")).map(
+      (button) => button.getAttribute("aria-label"),
     );
     const copy = ru.note.toolbar;
     expect(labels).toEqual([
@@ -160,45 +169,53 @@ describe('до вложения можно дотянуться из редак�
  * «История» имела пустой обработчик. Плашка стояла всегда и сообщала
  * заведомую неправду.
  */
-describe('плашка конфликтов говорит правду', () => {
-  async function mountSync(files: Record<string, string>): Promise<AppController> {
+describe("плашка конфликтов говорит правду", () => {
+  async function mountSync(
+    files: Record<string, string>,
+  ): Promise<AppController> {
     window.innerWidth = 1280;
     const host = createTestHost({ files, prefs: { onboarded: true } });
     const app = new AppController(host);
     await app.boot();
     render(
-      <ToastProvider>
-        <AppProvider host={host} controller={app}>
-          <SettingsScreen section="sync" />
-        </AppProvider>
-      </ToastProvider>,
+      <ThemeProvider persist={false}>
+        <ToastProvider>
+          <AppProvider host={host} controller={app}>
+            <SettingsScreen section="sync" />
+          </AppProvider>
+        </ToastProvider>
+      </ThemeProvider>,
     );
     return app;
   }
 
-  it('без конфликтов плашки нет вовсе', async () => {
-    await mountSync({ 'Заметка.md': '# Заметка\n' });
-    expect(screen.queryByRole('button', { name: ru.settings.sync.historyLink })).toBeNull();
+  it("без конфликтов плашки нет вовсе", async () => {
+    await mountSync({ "Заметка.md": "# Заметка\n" });
+    expect(
+      screen.queryByRole("button", { name: ru.settings.sync.historyLink }),
+    ).toBeNull();
     expect(screen.queryByText(ru.settings.sync.conflictsMonth(0))).toBeNull();
   });
 
-  it('копия от синка считается, и счётчик показывает её', async () => {
+  it("копия от синка считается, и счётчик показывает её", async () => {
     // Так копию называет `SyncEngine.conflictPathFor`.
     await mountSync({
-      'Заметка.md': '# Заметка\n',
-      'Заметка (конфликт, устройство Samsung).md': '# Заметка\n\nдругая версия\n',
+      "Заметка.md": "# Заметка\n",
+      "Заметка (конфликт, устройство Samsung).md":
+        "# Заметка\n\nдругая версия\n",
     });
     expect(screen.getByText(ru.settings.sync.conflictsMonth(1))).toBeTruthy();
   });
 
-  it('«История» ведёт в историю версий конфликтной заметки', async () => {
+  it("«История» ведёт в историю версий конфликтной заметки", async () => {
     const app = await mountSync({
-      'Заметка.md': '# Заметка\n',
-      'Заметка (конфликт, устройство Samsung).md': '# Заметка\n\nдругая версия\n',
+      "Заметка.md": "# Заметка\n",
+      "Заметка (конфликт, устройство Samsung).md":
+        "# Заметка\n\nдругая версия\n",
     });
-    screen.getByRole('button', { name: ru.settings.sync.historyLink }).click();
+    screen.getByRole("button", { name: ru.settings.sync.historyLink }).click();
     const route = app.getState().route;
-    expect(route.name).toBe('versions');
+    expect(route.name).toBe("versions");
     /*
       Проверяется НЕ ТОЛЬКО имя маршрута, но и то, что в него передано.
       Прежняя редакция теста обрывалась на имени — и пропустила, что ссылка
@@ -206,8 +223,8 @@ describe('плашка конфликтов говорит правду', () => 
       `noteId: VaultPath` и зовёт `vault.read(noteId)`. Экран открывался
       пустым: заметки по такому «пути» на диске нет.
     */
-    expect(route.name === 'versions' && route.noteId).toBe(
-      'Заметка (конфликт, устройство Samsung).md',
+    expect(route.name === "versions" && route.noteId).toBe(
+      "Заметка (конфликт, устройство Samsung).md",
     );
   });
 });

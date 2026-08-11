@@ -13,6 +13,7 @@ import type { Command } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { editorRuntime } from '../runtime.js';
+import { reorderTasks } from '../input/task-order.js';
 
 /** Элемент списка-задачи: маркер списка, затем `[ ]` / `[x]`. */
 const TASK_LINE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
@@ -37,6 +38,11 @@ export function toggleTaskAt(view: EditorView, pos: number): boolean {
     changes: { from: at, to: at + 1, insert: checked ? ' ' : 'x' },
     scrollIntoView: false,
   });
+  /* Перестановка — отдельной транзакцией и только если настройка включена
+     (ITERATION-1 §3). Отдельной, чтобы отмена возвращала сначала порядок, а
+     потом галочку: одним шагом человек бы не понял, что именно откатилось. */
+  const reorder = reorderTasks(view.state, view.state.doc.lineAt(at).number);
+  if (reorder) view.dispatch({ changes: reorder, scrollIntoView: false });
   view.state.facet(editorRuntime).haptic('light');
   return true;
 }
