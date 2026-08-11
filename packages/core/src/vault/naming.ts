@@ -56,3 +56,39 @@ export function attachmentName(date: string, hash: string, extension: string): s
   const ext = extension.startsWith('.') ? extension : extension === '' ? '' : `.${extension}`;
   return `${date}_${hash}${ext.toLowerCase()}`;
 }
+
+/**
+ * Как называть вложения (ITERATION-1 §5).
+ *
+ * Три правила, и у каждого своя цена. «Дата и хеш» — умолчание: имя
+ * повторяемо, одинаковые файлы не плодят копий, и в имени нет ничего
+ * личного. «Исходное имя» читаемо, но приносит в хранилище чужие пробелы,
+ * кириллицу и — главное — вероятность совпадения. «Дата и исходное имя» —
+ * компромисс: читаемо и почти всегда уникально.
+ */
+export type AttachmentNaming = 'hash' | 'original' | 'date-original';
+
+/**
+ * Имя вложения по выбранному правилу.
+ *
+ * `original` пропускается через `safeFileName`: имя приходит из системного
+ * диалога и может содержать что угодно, вплоть до слэшей и `..`.
+ */
+export function attachmentFileName(
+  naming: AttachmentNaming,
+  date: string,
+  hash: string,
+  originalName: string,
+  extension: string,
+): string {
+  if (naming === 'hash') return attachmentName(date, hash, extension);
+
+  const ext = extension.startsWith('.') ? extension : extension === '' ? '' : `.${extension}`;
+  const stem = safeFileName(stripExtension(originalName)) || hash;
+  return naming === 'original' ? `${stem}${ext.toLowerCase()}` : `${date}_${stem}${ext.toLowerCase()}`;
+}
+
+function stripExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}

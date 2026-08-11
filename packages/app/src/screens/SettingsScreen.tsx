@@ -28,8 +28,13 @@ import {
   type EditorColumnWidth,
   type ThemePreference,
 } from '@zapiski/ui';
-import { LocalFolderBackend, WebDAVBackend, type SyncBackend } from '@zapiski/core';
-import type { SettingsSection } from '../contract.js';
+import {
+  LocalFolderBackend,
+  WebDAVBackend,
+  type AttachmentNaming,
+  type SyncBackend,
+} from '@zapiski/core';
+import type { AttachmentPlacement, SettingsSection } from '../contract.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { Section } from '../components/ScreenStates.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -39,6 +44,7 @@ import { clockTime, formatBytes } from '../lib/format.js';
 const SECTIONS: SettingsSection[] = [
   'appearance',
   'editor',
+  'attachments',
   'sync',
   'security',
   'transfer',
@@ -87,6 +93,7 @@ export function SettingsScreen({ section }: SettingsScreenProps): ReactNode {
           <div className="za-page za-stack">
             {section === 'appearance' ? <AppearanceSection /> : null}
             {section === 'editor' ? <EditorSection /> : null}
+            {section === 'attachments' ? <AttachmentsSection /> : null}
             {section === 'sync' ? <SyncSection /> : null}
             {section === 'security' ? <SecuritySection /> : null}
             {section === 'transfer' ? <TransferSection /> : null}
@@ -213,6 +220,81 @@ function AppearanceSection(): ReactNode {
       <Button variant="text" iconStart={<IconBug size={16} />} onClick={() => app.toggleDebug(true)}>
         {strings.settings.debugMenu}
       </Button>
+    </>
+  );
+}
+
+
+/**
+ * Вложения (ITERATION-1 §5).
+ *
+ * «Картинки не вставляются в редактор и непонятно, где хранятся; это не
+ * настраивается никак» — из письма пользователя. Вставка на самом деле
+ * работала, а вот куда именно ложится файл, узнать было неоткуда: правило было
+ * зашито в ядро и нигде не показано.
+ *
+ * Поэтому внизу раздела — фактический путь моноширинным. Настройка без
+ * показанного результата остаётся обещанием: человек выбирает «своя папка» и
+ * не видит, что получилось.
+ */
+function AttachmentsSection(): ReactNode {
+  const app = useApp();
+  const strings = useStrings();
+  const copy = strings.attachments;
+  const [folder, setFolder] = useState(app.attachmentFolderValue());
+  const [orphans, setOrphans] = useState<number | null>(null);
+  const placement = app.attachmentPlacementValue();
+
+  return (
+    <>
+      <Section>{copy.folder}</Section>
+      <SegmentedControl<AttachmentPlacement>
+        label={copy.folder}
+        value={placement}
+        onChange={(value) => void app.setAttachmentPlacement(value)}
+        options={[
+          { value: 'shared', label: copy.placement.shared },
+          { value: 'beside', label: copy.placement.beside },
+          { value: 'custom', label: copy.placement.custom },
+        ]}
+      />
+
+      {/* Поле пути появляется только у «своей папки»: в остальных случаях
+          вводить нечего, а отключённое поле — тот же неработающий контрол. */}
+      {placement === 'custom' ? (
+        <TextField
+          label={copy.customLabel}
+          placeholder={copy.customHint}
+          value={folder}
+          onChange={(event) => setFolder(event.target.value)}
+          onBlur={() => void app.setAttachmentFolder(folder)}
+        />
+      ) : null}
+
+      <Section>{copy.naming}</Section>
+      <SegmentedControl<AttachmentNaming>
+        label={copy.naming}
+        value={app.attachmentNamingValue()}
+        onChange={(value) => void app.setAttachmentNaming(value)}
+        options={[
+          { value: 'hash', label: copy.namingValues.hash },
+          { value: 'original', label: copy.namingValues.original },
+          { value: 'date-original', label: copy.namingValues['date-original'] },
+        ]}
+      />
+
+      <Section>{copy.actualPath}</Section>
+      <p className="za-tertiary-mono">{app.attachmentPathHint()}</p>
+
+      <Button
+        variant="secondary"
+        onClick={() => void app.vaultRef?.orphanAttachments().then((list) => setOrphans(list.length))}
+      >
+        {copy.findOrphans}
+      </Button>
+      {orphans !== null ? (
+        <p className="za-muted">{strings.settings.storage.orphansFound(orphans)}</p>
+      ) : null}
     </>
   );
 }

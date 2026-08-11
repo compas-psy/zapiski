@@ -26,7 +26,12 @@ import {
 } from '../util/path.js';
 import { escapeRegExp, isoDate } from '../util/text.js';
 import { readJson, readText, writeAtomic, writeJsonAtomic, writeTextAtomic } from './atomic.js';
-import { attachmentName, safeFileName, uniqueNotePath } from './naming.js';
+import {
+  attachmentFileName,
+  safeFileName,
+  uniqueNotePath,
+  type AttachmentNaming,
+} from './naming.js';
 import { commitRename, recoverRename, rewriteWikiLinks, wikiTargetFor, type RenameResult } from './rename.js';
 
 /**
@@ -93,6 +98,27 @@ export interface CreateNoteInput {
   body?: string;
   folder?: VaultPath;
 }
+
+/** Куда и под каким именем класть вложение (ITERATION-1 §5). */
+export interface AddAttachmentOptions {
+  /** Папка. Пусто — общая `attachments/` в корне хранилища. */
+  folder?: VaultPath;
+  naming?: AttachmentNaming;
+  /** Имя, под которым файл пришёл из системы, — для правил `original`. */
+  originalName?: string;
+}
+
+/** Расширения, при которых вложение вставляется картинкой, а не карточкой. */
+const IMAGE_ATTACHMENT = /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic)$/i;
+
+const extOf = (name: string): string => {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot) : '';
+};
+const stripExt = (name: string): string => {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+};
 
 export interface FolderNode {
   path: VaultPath;
@@ -845,14 +871,43 @@ export class Vault {
    * Копирует файл в `attachments/` под именем `ГГГГ-ММ-ДД_хеш.ext` и возвращает
    * относительный путь — единая конвенция на всех платформах.
    */
-  async addAttachment(data: Uint8Array, extension: string): Promise<{ path: VaultPath; markdown: string }> {
-    const name = attachmentName(isoDate(this.now()), shortHash(data), extension);
-    const path = joinPath(ATTACHMENTS_DIR, name);
-    await this.storage.mkdir(ATTACHMENTS_DIR);
+  async addAttachment(
+    data: Uint8Array,
+    extension: string,
+    options: AddAttachmentOptions = {},
+  ): Promise<{ path: VaultPath; markdown: string }> {
+    /* Куда класть — настройка (ITERATION-1 §5). «Рядом с заметкой» означает
+       папку самой заметки, а не подпапку в ней: подпапка на каждую заметку
+       превращает хранилище в дерево из одного файла в каждом узле. */
+    /* `undefined` — правило не задано, значит общая папка. Пустая строка —
+       это КОРЕНЬ хранилища, и он законное значение: заметка в корне, у
+       которой вложения кладутся «рядом», кладёт их именно туда. Смешать эти
+       два случая означало бы, что «рядом с заметкой» для корневой заметки
+       молча превращается в `attachments/`. */
+    const folder = options.folder === undefined ? ATTACHMENTS_DIR : normalizePath(options.folder);
+
+    const name = attachmentFileName(
+      options.naming ?? 'hash',
+      isoDate(this.now()),
+      shortHash(data),
+      options.originalName ?? '',
+      extension,
+    );
+    const path = joinPath(folder, name);
+    await this.storage.mkdir(folder);
+
+    /* Файл с таким именем уже лежит. При имени от хеша это тот же файл —
+       перезаписывать нечего. При имени от исходного это может быть ЧУЖОЙ файл,
+       и затирать его нельзя: подбираем свободное имя. */
     const existing = await this.storage.stat(path);
-    if (!existing) await writeAtomic(this.storage, path, data);
-    const isImage = /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic)$/i.test(name);
-    return { path, markdown: `${isImage ? '!' : ''}[](${path})` };
+    const target =
+      existing && options.naming && options.naming !== 'hash'
+        ? uniqueNotePath(folder, stripExt(name), extOf(name), (candidate) => this.exists(candidate))
+        : path;
+    if (!existing || target !== path) await writeAtomic(this.storage, target, data);
+
+    const isImage = IMAGE_ATTACHMENT.test(target);
+    return { path: target, markdown: `${isImage ? '!' : ''}[](${target})` };
   }
 
   /** Вложения, на которые никто не ссылается (Настройки → Хранилище). */

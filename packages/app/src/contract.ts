@@ -92,6 +92,8 @@ export type Route =
 export type SettingsSection =
   | 'appearance'
   | 'editor'
+  /** Куда и под каким именем ложатся вложения (ITERATION-1 §5). */
+  | 'attachments'
   | 'sync'
   | 'security'
   | 'transfer'
@@ -263,3 +265,12 @@ export interface AppHost {
   /** Возвраты в уже запущенное приложение. Возвращает отписку. */
   onAuthCallback?(handler: (callback: AuthCallback) => void): () => void;
 }
+
+/**
+ * Куда класть вложения (ITERATION-1 §5).
+ *
+ * `shared` — общая `attachments/` в корне хранилища, умолчание: файл всегда
+ * там, где его ищут. `beside` — папка самой заметки: удобно, когда заметки
+ * разложены по темам и переносятся целыми папками. `custom` — свой путь.
+ */
+export type AttachmentPlacement = 'shared' | 'beside' | 'custom';

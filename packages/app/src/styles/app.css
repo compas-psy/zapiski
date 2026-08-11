@@ -1254,3 +1254,12 @@
   order: 2;
   border-block-start: var(--border-w) solid var(--line);
 }
+
+/* Зона перетаскивания файла (ITERATION-1 §5): рамка 1.5 акцентом и мягкая
+   заливка. Видно, куда именно уронят файл, — без этого перетаскивание
+   выглядит как «ничего не происходит», пока файл не отпущен. */
+.za-editor__surface--drop {
+  outline: 1.5px solid var(--accent);
+  outline-offset: -2px;
+  background-color: var(--accent-soft);
+}

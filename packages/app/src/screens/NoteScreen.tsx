@@ -58,6 +58,19 @@ import { InfoPanel } from './InfoPanel.js';
 import { NoteMenu } from './NoteMenu.js';
 import { relativeTime } from '../lib/format.js';
 
+/**
+ * Что предлагать в системном выборе файла (ITERATION-1 §5).
+ *
+ * `image/*` на Android открывает и галерею, и камеру — поэтому отдельного
+ * пункта «камера» нет: система спрашивает сама и делает это лучше нас.
+ * `audio/*` там же предлагает диктофон.
+ */
+const ACCEPT: Record<'image' | 'file' | 'audio', string> = {
+  image: 'image/*',
+  audio: 'audio/*',
+  file: '*/*',
+};
+
 export interface NoteScreenProps {
   path: VaultPath;
 }
@@ -79,6 +92,14 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
    * заводить его ради этого пришлось бы трижды.
    */
   const imageInput = useRef<HTMLInputElement>(null);
+  /**
+   * Что именно выбирают сейчас: изображение, файл или аудио (ITERATION-1 §5).
+   * Input один на все три — у него меняется `accept`: три скрытых поля вместо
+   * одного не дают ничего, кроме трёх мест, где можно забыть обработчик.
+   */
+  const [attachKind, setAttachKind] = useState<'image' | 'file' | 'audio'>('image');
+  /** Файл висит над областью текста — подсветка зоны (ITERATION-1 §5). */
+  const [dragOver, setDragOver] = useState(false);
   /* Предыдущий путь — чтобы отличить «открыли другую заметку» от
      «эта же заметка переехала». Разница принципиальна: во втором случае
      перечитывать с диска нельзя, см. эффект ниже. */
@@ -233,7 +254,33 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     return (
       <div className="za-editor">
         <NoteHeader />
-        <div className="za-editor__surface">
+        <div
+          className={`za-editor__surface${dragOver ? ' za-editor__surface--drop' : ''}`}
+          /* Перетаскивание файла в область текста — третий способ вставки
+             (ITERATION-1 §5). Зона подсвечивается рамкой и фоном, чтобы было
+             видно, куда именно уронят файл. */
+          onDragOver={(event) => {
+            if (!event.dataTransfer.types.includes('Files')) return;
+            event.preventDefault();
+            setDragOver(true);
+          }}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setDragOver(false);
+          }}
+          onDrop={(event) => {
+            const dropped = Array.from(event.dataTransfer.files);
+            if (dropped.length === 0) return;
+            event.preventDefault();
+            setDragOver(false);
+            /* По одному и по порядку: параллельная запись нескольких файлов в
+               одну папку даёт гонку за именем. */
+            void dropped.reduce(
+              (chain, file) => chain.then(() => attachAndInsert(file)),
+              Promise.resolve(),
+            );
+          }}
+        >
           <LockScreen
             path={path}
             title={meta?.title ?? stemOf(path)}
@@ -409,7 +456,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         <input
           ref={imageInput}
           type="file"
-          accept="image/*"
+          accept={ACCEPT[attachKind]}
           className="z-visually-hidden"
           tabIndex={-1}
           onChange={(event) => {
@@ -436,7 +483,11 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               view={editorRef.current?.view ?? null}
               strings={editorStrings}
               onAttach={(kind) => {
-                if (kind === 'image') imageInput.current?.click();
+                setAttachKind(kind);
+                /* `accept` ставится до открытия диалога: изменение атрибута
+                   после `click()` система уже не увидит. */
+                if (imageInput.current) imageInput.current.accept = ACCEPT[kind];
+                imageInput.current?.click();
               }}
             />
           </div>
@@ -515,7 +566,9 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
    * удалось. Здесь остаётся только не вставлять ссылку на файл, которого нет.
    */
   async function attachAndInsert(file: File): Promise<void> {
-    const result = await app.attachImage(file);
+    /* Путь заметки нужен правилу «рядом с заметкой» (ITERATION-1 §5): где
+       лежит сама заметка, знает экран, а не контроллер. */
+    const result = await app.attachImage(file, path);
     if (!result) return;
     const view = editorRef.current?.view;
     if (view) insertImageCommand(result.markdown)(view);

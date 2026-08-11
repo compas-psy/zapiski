@@ -174,6 +174,27 @@ export const en: AppCatalog = {
     close: 'Close window',
   },
 
+  attachments: {
+    title: 'Attachments',
+    folder: 'Attachment folder',
+    placement: {
+      shared: 'Shared, at the root',
+      beside: 'Next to the note',
+      custom: 'A folder of your own',
+    },
+    besideHint: 'the note folder',
+    customLabel: 'Folder path',
+    customHint: 'For example, files',
+    naming: 'File names',
+    namingValues: {
+      hash: 'Date and hash',
+      original: 'Original name',
+      'date-original': 'Date and original name',
+    },
+    actualPath: 'Files go here',
+    findOrphans: 'Find unused attachments',
+  },
+
   library: {
     label: 'Library',
     all: 'All notes',
@@ -277,6 +298,7 @@ export const en: AppCatalog = {
     sections: {
       appearance: 'Appearance',
       editor: 'Editor',
+      attachments: 'Attachments',
       sync: 'Sync',
       security: 'Security',
       transfer: 'Export and import',

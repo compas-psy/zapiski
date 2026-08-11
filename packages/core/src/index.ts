@@ -103,12 +103,19 @@ export {
   RENAME_DELAY_MS,
   TRASH_TTL_DAYS,
   Vault,
+  type AddAttachmentOptions,
   type CreateNoteInput,
   type FolderNode,
   type TrashEntry,
   type VaultOptions,
 } from './vault/vault.js';
-export { attachmentName, safeFileName, uniqueNotePath } from './vault/naming.js';
+export {
+  attachmentFileName,
+  attachmentName,
+  safeFileName,
+  uniqueNotePath,
+  type AttachmentNaming,
+} from './vault/naming.js';
 export { ensureDir, readJson, readText, writeAtomic, writeJsonAtomic, writeTextAtomic } from './vault/atomic.js';
 export {
   commitRename,

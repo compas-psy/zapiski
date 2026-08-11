@@ -187,6 +187,28 @@ export const ru = {
     close: 'Закрыть окно',
   },
 
+  // ── Вложения (ITERATION-1 §5) ─────────────────────────────────────────────
+  attachments: {
+    title: 'Вложения',
+    folder: 'Папка вложений',
+    placement: {
+      shared: 'Общая в корне',
+      beside: 'Рядом с заметкой',
+      custom: 'Своя папка',
+    },
+    besideHint: 'папка заметки',
+    customLabel: 'Путь к папке',
+    customHint: 'Например, файлы',
+    naming: 'Имена файлов',
+    namingValues: {
+      hash: 'Дата и хеш',
+      original: 'Исходное имя',
+      'date-original': 'Дата и исходное имя',
+    },
+    actualPath: 'Файлы попадают сюда',
+    findOrphans: 'Найти неиспользуемые вложения',
+  },
+
   library: {
     label: 'Библиотека',
     all: 'Все заметки',
@@ -346,6 +368,7 @@ export const ru = {
     sections: {
       appearance: 'Внешний вид',
       editor: 'Редактор',
+      attachments: 'Вложения',
       sync: 'Синхронизация',
       security: 'Безопасность',
       transfer: 'Экспорт и импорт',

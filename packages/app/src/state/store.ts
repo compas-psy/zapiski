@@ -30,6 +30,7 @@ import {
   passwordHint,
   readJson,
   rewriteToCurrentVersion,
+  ATTACHMENTS_DIR,
   stemOf,
   storedLocale,
   toBase64,
@@ -37,6 +38,8 @@ import {
   writeAtomic,
   writeJsonAtomic,
   type FolderNode,
+  type AddAttachmentOptions,
+  type AttachmentNaming,
   type MasterKey,
   type Note,
   type NoteMeta,
@@ -54,6 +57,7 @@ import {
   type VersionSnapshot,
 } from '@zapiski/core';
 import type {
+  AttachmentPlacement,
   AppHost,
   AuthCallback,
   DebugOverrides,
@@ -256,6 +260,9 @@ const MIME: Record<'md' | 'html' | 'docx', string> = {
 /** Ключи в `PreferencesStore` (настройки вне vault'а). */
 const PREF = {
   locale: 'locale',
+  attachmentPlacement: 'attachments.placement',
+  attachmentNaming: 'attachments.naming',
+  attachmentFolder: 'attachments.folder',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -314,6 +321,9 @@ export class AppController {
   private master: MasterKey | null = null;
   /** «Шифровать новые заметки» — читается при старте вместе с автозамком. */
   private encryptNewNotes = false;
+  private attachmentPlacement: AttachmentPlacement = 'shared';
+  private attachmentNaming: AttachmentNaming = 'hash';
+  private attachmentFolder = '';
   /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
@@ -387,6 +397,9 @@ export class AppController {
       unlockGuard,
       encryptNewNotes,
       savedLocale,
+      savedPlacement,
+      savedNaming,
+      savedFolder,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -397,6 +410,9 @@ export class AppController {
       this.host.prefs.get<unknown>(PREF.unlockGuard, null),
       this.host.prefs.get<boolean>(PREF.encryptNewNotes, false),
       this.host.prefs.get<unknown>(PREF.locale, null),
+      this.host.prefs.get<unknown>(PREF.attachmentPlacement, null),
+      this.host.prefs.get<unknown>(PREF.attachmentNaming, null),
+      this.host.prefs.get<string>(PREF.attachmentFolder, ''),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -404,6 +420,15 @@ export class AppController {
        переживал перезапуск (ITERATION-1 §2). Русский по умолчанию, английский
        только явным выбором; локаль ОС не спрашиваем. */
     this.patch({ locale: storedLocale(savedLocale) });
+    /* Вложения: правило размещения и имени (ITERATION-1 §5). Мусор в ключе
+       откатывается к умолчанию, а не роняет загрузку. */
+    if (savedPlacement === 'beside' || savedPlacement === 'custom' || savedPlacement === 'shared') {
+      this.attachmentPlacement = savedPlacement;
+    }
+    if (savedNaming === 'original' || savedNaming === 'date-original' || savedNaming === 'hash') {
+      this.attachmentNaming = savedNaming;
+    }
+    this.attachmentFolder = savedFolder;
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -866,22 +891,84 @@ export class AppController {
    * готовую разметку, которую собрало ядро, — там учтено, картинка это или
    * файл. Возврат чего-то одного заставил бы второго собирать строку вслепую.
    */
-  async attachImage(file: File): Promise<{ path: string; markdown: string } | null> {
+  async attachImage(file: File, nearNote?: VaultPath): Promise<{ path: string; markdown: string } | null> {
     const vault = this.vault;
     if (!vault) return null;
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       /* Расширение берём из имени файла: тип из `File.type` на Android бывает
-         пустым, а имя есть всегда. */
+         пустым, а имя есть всегда. Умолчание `png` — только для картинки из
+         буфера, у которой имени нет вовсе. */
       const dot = file.name.lastIndexOf('.');
       const extension = dot > 0 ? file.name.slice(dot + 1) : 'png';
-      const result = await vault.addAttachment(bytes, extension);
+
+      /* Куда класть — настройка (ITERATION-1 §5). «Рядом с заметкой» знает
+         только вызывающий: путь заметки живёт на экране, а не в контроллере. */
+      const options: AddAttachmentOptions = { naming: this.attachmentNaming };
+      if (this.attachmentPlacement === 'beside' && nearNote) {
+        options.folder = nearNote.includes('/') ? nearNote.slice(0, nearNote.lastIndexOf('/')) : '';
+      } else if (this.attachmentPlacement === 'custom' && this.attachmentFolder !== '') {
+        options.folder = this.attachmentFolder;
+      }
+      if (file.name !== '') options.originalName = file.name;
+
+      const result = await vault.addAttachment(bytes, extension, options);
       await this.refresh();
       return result;
     } catch {
       this.toast({ message: this.strings.errors.imageInsertFailed });
       return null;
     }
+  }
+
+  // ── Настройки вложений (ITERATION-1 §5) ────────────────────────────────────
+  //
+  // «Картинки не вставляются и непонятно, где хранятся; это не настраивается
+  // никак» — из письма пользователя. Вставка работала, а вот куда именно
+  // ложится файл, узнать было неоткуда: правило было зашито в ядро.
+
+  /** Куда класть вложения: общая папка, рядом с заметкой или своя. */
+  attachmentPlacementValue(): AttachmentPlacement {
+    return this.attachmentPlacement;
+  }
+
+  async setAttachmentPlacement(value: AttachmentPlacement): Promise<void> {
+    this.attachmentPlacement = value;
+    await this.host.prefs.set(PREF.attachmentPlacement, value);
+    this.patch({});
+  }
+
+  attachmentNamingValue(): AttachmentNaming {
+    return this.attachmentNaming;
+  }
+
+  async setAttachmentNaming(value: AttachmentNaming): Promise<void> {
+    this.attachmentNaming = value;
+    await this.host.prefs.set(PREF.attachmentNaming, value);
+    this.patch({});
+  }
+
+  attachmentFolderValue(): string {
+    return this.attachmentFolder;
+  }
+
+  async setAttachmentFolder(value: string): Promise<void> {
+    this.attachmentFolder = value.trim();
+    await this.host.prefs.set(PREF.attachmentFolder, this.attachmentFolder);
+    this.patch({});
+  }
+
+  /**
+   * Фактический путь, куда сейчас попадёт вложение, — то, что показывается
+   * моноширинным внизу раздела настроек. Без него настройка остаётся
+   * обещанием: человек выбирает «своя папка» и не видит, что получилось.
+   */
+  attachmentPathHint(): string {
+    if (this.attachmentPlacement === 'beside') return this.strings.attachments.besideHint;
+    if (this.attachmentPlacement === 'custom') {
+      return this.attachmentFolder === '' ? ATTACHMENTS_DIR : this.attachmentFolder;
+    }
+    return ATTACHMENTS_DIR;
   }
 
   // ── Папки (BEHAVIOR, дерево папок) ─────────────────────────────────────────
