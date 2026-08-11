@@ -39,7 +39,7 @@ function makeIndex(): InvertedIndex {
     note({
       id: '1',
       path: 'Практика/Супервизия.md',
-      body: '# Супервизия\n\nРазбор случая с коллегой. #практика/супервизия\n\n![](attachments/2026-08-01_aaa.png)',
+      body: '# Конспект вебинара\n\nПодробный разбор главы с коллегой. #практика/супервизия\n\n![](attachments/2026-08-01_aaa.png)',
       updatedAt: BASE,
     }),
     note({
@@ -51,7 +51,7 @@ function makeIndex(): InvertedIndex {
     note({
       id: '3',
       path: 'Личное/Заметка о встрече.md',
-      body: '# Заметка о встрече\n\nВстретились и обсудили разбор случая, потом ещё раз разбор.\n\n[договор](files/dogovor.docx)',
+      body: '# Заметка о встрече\n\nВстретились и обсудили разбор главы, потом ещё раз разбор.\n\n[договор](files/dogovor.docx)',
       updatedAt: BASE + 2 * DAY,
     }),
     note({
@@ -159,8 +159,8 @@ describe('поиск', () => {
 
   it('точная фраза в кавычках', () => {
     const index = makeIndex();
-    expect(makeIds(index.search(parseQuery('"разбор случая"'))).sort()).toEqual(['1', '3']);
-    expect(makeIds(index.search(parseQuery('"случая разбор"')))).toEqual([]);
+    expect(makeIds(index.search(parseQuery('"разбор главы"'))).sort()).toEqual(['1', '3']);
+    expect(makeIds(index.search(parseQuery('"главы разбор"')))).toEqual([]);
   });
 
   it('исключение -слово', () => {

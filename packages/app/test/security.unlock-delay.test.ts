@@ -29,7 +29,7 @@ const GUARD_KEY = 'security.unlockGuard';
 const SLOW = 60_000;
 
 const PASSWORD = 'верный пароль';
-const FILES = { 'Секрет.md': '# Секрет\n\nСеанс с клиентом К.\n' };
+const FILES = { 'Секрет.md': '# Секрет\n\nЛичная запись, не для чужих глаз.\n' };
 
 async function start(host: AppHost): Promise<AppController> {
   const app = new AppController(host);

@@ -29,7 +29,11 @@ const provider = new WebCryptoProvider({
   argon2: { memorySize: 1024, iterations: 1, parallelism: 1 },
 });
 
-const SECRET = '# Дневник\n\nСеанс с клиентом К., диагноз и телефон 79990000000.\n';
+/* Демо-данные неклинические — `0_Master.md` §7 и DoD: «Ни одного клинического
+   демо-данного в коде, фикстурах, тестах и скриншотах». Для проверки утечки
+   важна не клиника, а узнаваемая приватная строка и телефон: если открытый
+   текст где-то остался, тест найдёт его по ним. */
+const SECRET = '# Дневник\n\nЛичное: тревога перед защитой проекта и телефон 79990000000.\n';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Контейнер и KDF: то, что уже сделано правильно, — закрепляем
@@ -200,7 +204,7 @@ describe('SEC-003: следы открытого текста после шиф�
         }
         const data = await storage.read(entry.path);
         if (data === null) continue;
-        if (fromUtf8(data).includes('Сеанс с клиентом')) found.push(entry.path);
+        if (fromUtf8(data).includes('тревога перед защитой')) found.push(entry.path);
       }
     };
     await walk('');
@@ -272,12 +276,12 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
       fetch: fetchImpl as never,
     });
 
-    await backend.put('Практика/Клиент К.md', utf8(SECRET));
+    await backend.put('Личное/Дневник 12 марта.md', utf8(SECRET));
 
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.body).toContain('Сеанс с клиентом');
-    // И путь, в котором лежат имя клиента и название папки, — в URL запроса.
-    expect(decodeURIComponent(sent[0]!.url)).toContain('Клиент К.md');
+    expect(sent[0]!.body).toContain('тревога перед защитой');
+    // И путь, в котором лежат заголовок заметки и имя папки, — в URL запроса.
+    expect(decodeURIComponent(sent[0]!.url)).toContain('Дневник 12 марта.md');
   });
 
   it.fails('[SEC-001] в облако не уходит ни байта открытого текста', async () => {
@@ -289,8 +293,8 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
       fetch: fetchImpl as never,
     });
 
-    await backend.put('Практика/Клиент К.md', utf8(SECRET));
-    expect(sent[0]!.body).not.toContain('Сеанс с клиентом');
+    await backend.put('Личное/Дневник 12 марта.md', utf8(SECRET));
+    expect(sent[0]!.body).not.toContain('тревога перед защитой');
   });
 });
 

@@ -15,7 +15,7 @@ import { catalog } from '../src/i18n/i18n.js';
 /** Быстрые параметры KDF для тестов; продакшен-значения — в ARGON2_PARAMS. */
 const provider = new WebCryptoProvider({ argon2: { memorySize: 1024, iterations: 1, parallelism: 1 } });
 
-const PLAIN = '# Дневник\n\nОчень личный текст про КОМПАС и супервизию.\n';
+const PLAIN = '# Дневник\n\nОчень личный текст: планы на осень и одна честная мысль о себе.\n';
 
 describe('параметры KDF', () => {
   it('по умолчанию — второй рекомендованный набор RFC 9106', () => {

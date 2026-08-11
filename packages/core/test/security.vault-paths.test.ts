@@ -222,7 +222,7 @@ describe('SEC-023: что именно синк соглашается поло�
     await syncFrom(
       storage,
       {
-        'Практика/Клиент К.md': '# Клиент К\n',
+        'Практика/Конспект вебинара.md': '# Конспект вебинара\n',
         'Дневник.md.enc': 'ZPSK…',
         'attachments/2026-08-08_1a2b3c.png': 'PNG',
         'attachments/Договор.pdf': '%PDF',
@@ -230,7 +230,7 @@ describe('SEC-023: что именно синк соглашается поло�
       { syncCrdt: true },
     );
     const paths = storage.paths();
-    expect(paths).toContain('Практика/Клиент К.md');
+    expect(paths).toContain('Практика/Конспект вебинара.md');
     expect(paths).toContain('Дневник.md.enc');
     expect(paths).toContain('attachments/2026-08-08_1a2b3c.png');
     expect(paths).toContain('attachments/Договор.pdf');
