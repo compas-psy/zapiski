@@ -23,6 +23,7 @@ export const en: Catalog = {
     conflictMerged: 'Versions merged · History',
     conflictEncrypted: 'The note changed on two devices. Both versions are kept',
     imageInsertFailed: 'Could not insert the image · Retry',
+    encryptFailed: 'Could not encrypt the note · Retry',
     subscriptionExpired: 'The subscription has ended. Your notes are here, syncing via Zapiski Cloud is paused',
     importPartial: (imported: number, skipped: number): string => `Imported ${imported} · Skipped ${skipped} — show`,
     linksUpdated: (count: number): string => `Links updated: ${count}`,

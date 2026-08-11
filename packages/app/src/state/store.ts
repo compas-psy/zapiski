@@ -609,6 +609,14 @@ export class AppController {
     }
   }
 
+  /**
+   * Умеет ли сервер вход через Яндекс. Экран входа прячет кнопку, если нет:
+   * без client_id она уводила в браузер на голый JSON `404`.
+   */
+  async yandexAvailable(): Promise<boolean> {
+    return this.session.yandexAvailable();
+  }
+
   /** Яндекс ID — основной путь входа. Открывается системным браузером. */
   async startYandexSignIn(): Promise<void> {
     this.patch({ authError: null });

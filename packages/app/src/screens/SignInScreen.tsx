@@ -32,6 +32,23 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
   const [stage, setStage] = useState<Stage>(initialStage);
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
+  /**
+   * Умеет ли сервер вход через Яндекс. `null` — ещё не спросили.
+   *
+   * Кнопка показывалась всегда и по нажатию уводила в системный браузер, где
+   * без настроенного client_id лежал голый JSON `404 yandex_not_configured`.
+   * Человек возвращался ни с чем и без единого слова о причине — ровно то, на
+   * что жаловался пользователь.
+   *
+   * До ответа кнопка рисуется: сервер отвечает за миллисекунды, и мигание
+   * кнопкой на каждом открытии экрана хуже, чем краткая её жизнь в редком
+   * случае, когда Яндекс не настроен.
+   */
+  const [yandexReady, setYandexReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void app.yandexAvailable().then(setYandexReady);
+  }, [app]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -92,24 +109,28 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
           </>
         ) : (
           <>
-            <Button
-              variant="outline"
-              fullWidth
-              iconStart={
-                <img
-                  className="za-yandex-logo"
-                  src="/assets/yandex-logo.png"
-                  alt=""
-                  width={20}
-                  height={20}
-                />
-              }
-              onClick={() => void app.startYandexSignIn()}
-            >
-              {strings.signIn.yandex}
-            </Button>
+            {yandexReady !== false ? (
+              <>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  iconStart={
+                    <img
+                      className="za-yandex-logo"
+                      src="/assets/yandex-logo.png"
+                      alt=""
+                      width={20}
+                      height={20}
+                    />
+                  }
+                  onClick={() => void app.startYandexSignIn()}
+                >
+                  {strings.signIn.yandex}
+                </Button>
 
-            <div className="za-divider-text">{strings.signIn.divider}</div>
+                <div className="za-divider-text">{strings.signIn.divider}</div>
+              </>
+            ) : null}
 
             <TextField
               type="email"

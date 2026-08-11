@@ -57,16 +57,38 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
   /* Три деления, приглушённые цвета, без «слабый/плохой» (BEHAVIOR §5.1). */
   const strength = strengthOf(password);
 
+  /**
+   * Шифрование заметки.
+   *
+   * `try/finally` здесь не перестраховка, а починка сообщённого дефекта: в
+   * Windows лист «зависал после ввода пароля». Ловить было нечем — при отказе
+   * `setBusy(false)` просто не выполнялся, и кнопка крутилась вечно, пока
+   * человек не закрывал приложение.
+   *
+   * Отказ был настоящий: Argon2id считается в WebAssembly, а CSP оболочки
+   * запрещала его инстанцировать. Причина устранена, но вечное вращение
+   * кнопки — отдельный дефект, и он чинится здесь: что бы ни случилось,
+   * человек получает строку и возможность повторить.
+   */
   const submit = async (): Promise<void> => {
     setBusy(true);
-    /* Пароль задаётся только в первый раз; дальше шифрование молчит. */
-    if (needsPassword) await app.setVaultPassword(password, Boolean(biometrics) && useBiometrics);
-    await app.encryptNote(path, hint || undefined);
-    setBusy(false);
-    setPassword('');
-    setRepeat('');
-    setHint('');
-    onClose();
+    try {
+      /* Пароль задаётся только в первый раз; дальше шифрование молчит. */
+      if (needsPassword) await app.setVaultPassword(password, Boolean(biometrics) && useBiometrics);
+      const target = await app.encryptNote(path, hint || undefined);
+      if (target === null) {
+        app.toast({ message: strings.errors.encryptFailed });
+        return;
+      }
+      setPassword('');
+      setRepeat('');
+      setHint('');
+      onClose();
+    } catch {
+      app.toast({ message: strings.errors.encryptFailed });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

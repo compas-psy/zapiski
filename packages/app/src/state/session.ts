@@ -160,6 +160,26 @@ export class SessionStore {
   }
 
   /**
+   * Умеет ли сервер вход через Яндекс.
+   *
+   * Спрашивается затем, чтобы не показывать кнопку, ведущую в тупик: без
+   * client_id сервер отвечает 404, а человек к этому моменту уже в системном
+   * браузере и видит голый JSON. Недоступность сети — не повод прятать
+   * кнопку: за ней всё равно откроется браузер, и разбираться с оффлайном
+   * будет он, поэтому здесь `true`.
+   */
+  async yandexAvailable(): Promise<boolean> {
+    try {
+      const response = await this.send(`${this.base}/auth/methods`, { method: 'GET' });
+      if (!response.ok) return false;
+      const body = (await response.json()) as { yandex?: unknown };
+      return body.yandex === true;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
    * Замкнуть вход по тому, что принесла оболочка.
    *
    * `magicToken` обменивается здесь и только здесь: `device_id` знает

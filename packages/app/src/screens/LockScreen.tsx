@@ -26,6 +26,15 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
   const [hint, setHint] = useState<string | null>(null);
   const [delayLeft, setDelayLeft] = useState(0);
   const [biometricsSheet, setBiometricsSheet] = useState(false);
+  /**
+   * Готова ли биометрия именно для этого хранилища.
+   *
+   * Наличие порта означает лишь, что Windows Hello (или Android Keystore)
+   * настроен на машине. Ключ хранилища при этом мог туда и не попасть — тогда
+   * кнопка «палец» вела бы прямиком в отказ системы, и человек читал бы его
+   * как поломку. `null` — ещё не спросили, кнопку не рисуем.
+   */
+  const [biometricsReady, setBiometricsReady] = useState<boolean | null>(null);
 
   const biometrics = app.host.platform.biometrics;
 
@@ -49,6 +58,7 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
     if (!biometrics) return;
     void Promise.all([biometrics.isAvailable(), app.biometricsEnabled()]).then(
       ([available, enabled]) => {
+        setBiometricsReady(available && enabled);
         if (available && enabled) setBiometricsSheet(true);
       },
     );
@@ -114,8 +124,9 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
         {strings.crypto.unlock}
       </Button>
 
-      {/* Возможности нет на платформе — элемент скрыт, а не выключен. */}
-      {biometrics ? (
+      {/* Возможности нет на платформе или ключа нет в keystore — элемент
+          скрыт, а не выключен (BEHAVIOR §5.1). */}
+      {biometrics && biometricsReady === true ? (
         <Button variant="text" onClick={() => void tryBiometrics()}>
           {strings.crypto.useBiometrics}
         </Button>
