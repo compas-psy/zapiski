@@ -12,6 +12,7 @@ import { pickVaultDirectory } from './vault-storage.js';
 export function createWebPlatform(): PlatformCapabilities {
   return {
     kind: 'web',
+    version: __ZAPISKI_VERSION__,
 
     /** WebAuthn-PRF, если браузер и устройство умеют; иначе тумблера нет. */
     biometrics: createWebAuthnBiometrics(),

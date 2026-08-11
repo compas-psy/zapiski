@@ -44,6 +44,7 @@ const SECTIONS: SettingsSection[] = [
   'storage',
   'account',
   'plus',
+  'about',
 ];
 
 export interface SettingsScreenProps {
@@ -91,6 +92,7 @@ export function SettingsScreen({ section }: SettingsScreenProps): ReactNode {
             {section === 'storage' ? <StorageSection /> : null}
             {section === 'account' ? <AccountSection /> : null}
             {section === 'plus' ? <PlusSection /> : null}
+            {section === 'about' ? <AboutSection /> : null}
           </div>
         </div>
       </div>
@@ -745,6 +747,51 @@ function PlusSection(): ReactNode {
     <>
       <p className="za-muted">{strings.paywall.subtitle}</p>
       <Button onClick={() => app.navigate({ name: 'paywall' })}>{strings.paywall.trial}</Button>
+    </>
+  );
+}
+
+/**
+ * «О приложении» — единственное место интерфейса, где по Р1 законно стоит имя
+ * издателя: «ЗАПИСКИ» — продукт, «СИМПАС» — юрлицо в сторе, счетах и юр.
+ * текстах. Раздел требует `1_Design.md` §3.2 (И6): «о приложении (с указанием
+ * издателя СИМПАС и лицензий)».
+ *
+ * Версия приходит от оболочки, а не из package.json приложения: у веба,
+ * установщика Windows и apk свои номера, и человек в письме поддержке назовёт
+ * тот, что стоит у него.
+ */
+function AboutSection(): ReactNode {
+  const app = useApp();
+  const copy = useStrings().settings.about;
+
+  return (
+    <>
+      <div className="za-info__row">
+        <span>{copy.product}</span>
+        <span className="za-info__value">{copy.productName}</span>
+      </div>
+      <div className="za-info__row">
+        <span>{copy.publisher}</span>
+        <span className="za-info__value">{copy.publisherName}</span>
+      </div>
+      <div className="za-info__row">
+        <span>{copy.version}</span>
+        {/* Моноширинным, как все технические значения: номер сборки читают
+            и переписывают в письмо, а не просматривают. */}
+        <span className="za-info__value za-info__value--mono">{app.host.platform.version}</span>
+      </div>
+
+      <p className="za-muted">{copy.licenses}</p>
+      <ul className="za-list-plain">
+        {copy.licenseItems.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+
+      <Button variant="text" size="compact" onClick={() => void app.host.openExternal(copy.siteUrl)}>
+        {copy.site}
+      </Button>
     </>
   );
 }

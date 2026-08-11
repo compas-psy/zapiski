@@ -273,6 +273,7 @@ export const en: AppCatalog = {
       storage: 'Storage',
       account: 'Account',
       plus: 'ZAPISKI+',
+      about: 'About',
     },
     appearance: {
       previewTitle: 'How it looks',
@@ -326,6 +327,22 @@ export const en: AppCatalog = {
       conflictsMonth: (count: number): string =>
         `Conflicts this month: ${count} — merged automatically, both versions are in history`,
       historyLink: 'History',
+    },
+    about: {
+      product: 'Application',
+      productName: 'ZAPISKI',
+      publisher: 'Publisher',
+      publisherName: 'SIMPAS',
+      version: 'Version',
+      licenses: 'Open-source components this application is built from:',
+      licenseItems: [
+        'Golos Text, JetBrains Mono, Source Serif 4 — SIL Open Font License 1.1',
+        'CodeMirror 6 — MIT',
+        'React — MIT',
+        'Tauri — MIT / Apache-2.0',
+      ],
+      site: 'Application website',
+      siteUrl: 'https://zapiski.pro',
     },
     security: {
       encryptDefault: 'Encrypt new notes',

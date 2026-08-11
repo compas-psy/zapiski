@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 
 /**
@@ -22,8 +24,19 @@ import react from '@vitejs/plugin-react';
 // (`tauri android dev --host`). На эмуляторе и в CI переменной нет.
 const devHost = process.env['TAURI_DEV_HOST'];
 
+const here = (relative: string): string => fileURLToPath(new URL(relative, import.meta.url));
+
 export default defineConfig({
   plugins: [react()],
+  /* Версия сборки — в «О приложении» (1_Design.md §3.2, И6). Читается из
+     package.json оболочки: у веба, установщика и apk свои номера, и подставить
+     сюда версию монорепозитория значило бы показать не ту, что установлена. */
+  define: {
+    __ZAPISKI_VERSION__: JSON.stringify(
+      (JSON.parse(readFileSync(here('./package.json'), 'utf8')) as { version: string }).version,
+    ),
+  },
+
 
   // Vite «съедает» вывод, а нам нужны сообщения cargo при `tauri android dev`.
   clearScreen: false,

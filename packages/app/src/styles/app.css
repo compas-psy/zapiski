@@ -583,6 +583,25 @@
   color: var(--text);
   text-align: end;
 }
+/* Технические значения — моноширинным: номер сборки переписывают в письмо
+   поддержке, а не просматривают (SCREENS §8, «О приложении»). */
+.za-info__value--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono);
+}
+
+/* Список лицензий: перечисление без маркеров-точек, разделитель — воздух. */
+.za-list-plain {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+
 .za-info__path {
   inline-size: 100%;
   padding: var(--sp-8);

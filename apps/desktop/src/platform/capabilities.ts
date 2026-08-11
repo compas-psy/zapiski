@@ -30,6 +30,7 @@ export interface CapabilitiesDeps {
 export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities {
   return {
     kind: 'windows',
+    version: __ZAPISKI_VERSION__,
 
     biometrics: deps.biometrics,
 

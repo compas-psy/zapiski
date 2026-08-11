@@ -340,6 +340,7 @@ export const ru = {
       storage: 'Хранилище',
       account: 'Аккаунт',
       plus: 'ЗАПИСКИ+',
+      about: 'О приложении',
     },
     appearance: {
       previewTitle: 'Как это выглядит',
@@ -400,6 +401,26 @@ export const ru = {
       conflictsMonth: (count: number): string =>
         `Конфликтов за месяц: ${count} — ${count === 1 ? 'объединён' : 'объединены'} автоматически, обе версии в истории`,
       historyLink: 'История',
+    },
+    about: {
+      /* Единственное место интерфейса, где по Р1 законно стоит имя издателя:
+         продукт — ЗАПИСКИ, СИМПАС — юрлицо в сторе, счетах и юр. текстах. */
+      product: 'Приложение',
+      productName: 'ЗАПИСКИ',
+      publisher: 'Издатель',
+      publisherName: 'СИМПАС',
+      version: 'Версия',
+      licenses: 'Свободные компоненты, из которых собрано приложение:',
+      licenseItems: [
+        'Golos Text, JetBrains Mono, Source Serif 4 — SIL Open Font License 1.1',
+        'CodeMirror 6 — MIT',
+        'React — MIT',
+        'Tauri — MIT / Apache-2.0',
+      ],
+      site: 'Сайт приложения',
+      /* Домен пока плейсхолдер: финальный не выбран, это открытый флаг
+         мастер-ТЗ, а не решение кода (0_Master.md, «Открытые флаги»). */
+      siteUrl: 'https://zapiski.pro',
     },
     security: {
       encryptDefault: 'Шифровать новые заметки',

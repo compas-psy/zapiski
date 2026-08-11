@@ -174,6 +174,13 @@ export interface VaultFolderPicker {
 export interface PlatformCapabilities {
   /** `web` | `windows` | `android` — только для телеметрии и мелких различий. */
   readonly kind: 'web' | 'windows' | 'android';
+  /**
+   * Версия сборки — та, что видит человек в «О приложении» и называет в
+   * письме поддержке. Приходит от оболочки, потому что версий три: у веба,
+   * установщика Windows и apk свои номера, и подставлять сюда версию пакета
+   * значило бы показывать не то, что установлено.
+   */
+  readonly version: string;
   readonly biometrics: BiometricProvider | null;
   readonly haptics: HapticProvider | null;
   readonly globalHotkey: GlobalHotkeyProvider | null;

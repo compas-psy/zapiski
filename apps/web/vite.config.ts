@@ -5,6 +5,7 @@
  * в `/var/www/zapiski.cmpas.ru`, API — на том же домене по пути `/api/v1`.
  * Поэтому `base` — корень домена: никаких префиксов пути в ссылках на ассеты.
  */
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { build as esbuild } from 'esbuild';
 import react from '@vitejs/plugin-react';
@@ -72,6 +73,15 @@ export default defineConfig(async () => ({
   /* Сборка едет в корень домена. */
   base: '/',
   plugins: [react(), themeInitPlugin(await readThemeInitScript())],
+
+  /* Версия сборки — в «О приложении» (1_Design.md §3.2, И6). Читается из
+     package.json оболочки: у веба, установщика и apk свои номера, и подставить
+     сюда версию монорепозитория значило бы показать не ту, что установлена. */
+  define: {
+    __ZAPISKI_VERSION__: JSON.stringify(
+      (JSON.parse(readFileSync(here('./package.json'), 'utf8')) as { version: string }).version,
+    ),
+  },
   resolve: {
     /* Пакеты воркспейса резолвятся в исходники: публичный API всё равно
        берётся только через `src/index.ts` (ARCHITECTURE §5). */

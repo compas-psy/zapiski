@@ -61,6 +61,7 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
 
   return {
     kind: 'android',
+    version: __ZAPISKI_VERSION__,
     biometrics: createBiometrics(),
     haptics: createHaptics(),
     globalHotkey: null,

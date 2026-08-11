@@ -42,6 +42,7 @@ export function createTestHost(options: TestHostOptions = {}): AppHost & {
 
   const platform: PlatformCapabilities = {
     kind: 'web',
+    version: '0.0.0-test',
     biometrics: null,
     haptics: null,
     globalHotkey: null,
