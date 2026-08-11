@@ -48,6 +48,7 @@ import type { EditorState, Range } from '@codemirror/state';
 import { Decoration } from '@codemirror/view';
 import type { DecorationSet } from '@codemirror/view';
 import { syntaxTree } from '@codemirror/language';
+import { hidesMarkup } from './editor-mode.js';
 import type { SyntaxNodeRef } from '@lezer/common';
 import { editorRuntime } from '../runtime.js';
 import type { EditorRuntime } from '../runtime.js';
@@ -202,7 +203,11 @@ class LivePreviewBuilder {
    */
   private fade(from: number, to: number, active: boolean, extra?: string): void {
     if (to <= from) return;
-    if (active) {
+    /* Простой режим: разметка не проявляется ни в одном состоянии, включая
+       курсор внутри узла (ITERATION-1 §8). Гасится здесь, в единственном
+       месте, где решается «показать или схлопнуть», — иначе правило пришлось
+       бы повторять у каждого типа узла и однажды забыть. */
+    if (active && !hidesMarkup(this.state)) {
       this.out.push(markDeco(syntaxClass(extra)).range(from, to));
       return;
     }

@@ -310,6 +310,10 @@ export const en: AppCatalog = {
       compact: 'Compact mode',
     },
     editor: {
+      mode: 'Editor mode',
+      modeValues: { simple: 'Simple', pro: 'Professional' },
+      modeHint:
+        'In simple mode Markdown syntax stays hidden: use the panel or keyboard shortcuts',
       typewriter: 'Keep the line centred (typewriter)',
       moveDone: 'Move finished items down',
       spellcheck: 'Check spelling',

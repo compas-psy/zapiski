@@ -21,6 +21,14 @@ export {
   type ListStyle,
 } from './commands/block-state.js';
 export { insertCallout, insertCollapsible, insertSmall } from './commands/blocks.js';
+export {
+  editorMode,
+  editorModeField,
+  editorModeOf,
+  hidesMarkup,
+  setEditorMode,
+  type EditorMode,
+} from './live-preview/editor-mode.js';
 export { applyTaskOrder, moveDoneToBottom, reorderTasks, taskOrder } from './input/task-order.js';
 export { Toolbar } from './react/Toolbar.js';
 export type { ToolbarProps } from './react/Toolbar.js';

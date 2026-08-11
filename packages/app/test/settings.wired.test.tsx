@@ -44,6 +44,7 @@ async function mountWith(editor: Partial<EditorPreferences>) {
           typewriter: false,
           moveDone: false,
           spellcheck: false,
+          mode: 'simple' as const,
           ...editor,
         },
       }}

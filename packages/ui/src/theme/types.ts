@@ -83,6 +83,11 @@ export interface EditorPreferences {
   moveDone: boolean;
   /** Проверка орфографии системой (ITERATION-1 §3). */
   spellcheck: boolean;
+  /**
+   * Режим редактора (ITERATION-1 §8): `simple` — разметка не видна никогда,
+   * `pro` — проявляется у курсора, доступен raw и wiki-ссылки.
+   */
+  mode: 'simple' | 'pro';
 }
 
 export interface AppearanceState {
@@ -102,6 +107,10 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
      прыжок строки сбивает чтение (BEHAVIOR §2.3). */
   moveDone: false,
   spellcheck: false,
+  /* Простой — умолчание для новых людей (§8). При первом запуске ничего не
+     спрашиваем: вопрос про режим человеку, который ещё не написал ни строчки,
+     ответить нечем. */
+  mode: 'simple',
 };
 
 export const DEFAULT_APPEARANCE: AppearanceState = {

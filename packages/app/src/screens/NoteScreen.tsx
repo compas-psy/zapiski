@@ -323,7 +323,11 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               typewriterScroll={theme.editor.typewriter}
               moveDoneToBottom={theme.editor.moveDone}
               spellCheck={theme.editor.spellcheck}
-              rawMode={state.rawMode}
+              mode={theme.editor.mode}
+              /* Raw — принадлежность профессионального режима (§8): в простом
+                 разметки нет ни в одном состоянии, и «показать её сырой» там
+                 означало бы дверь в то, чего человек не выбирал. */
+              rawMode={theme.editor.mode === 'pro' && state.rawMode}
               focusMode={state.focusMode}
               onChange={(next) => {
                 setEditorBody(next);

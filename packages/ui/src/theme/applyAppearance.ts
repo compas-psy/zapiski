@@ -50,6 +50,7 @@ export function parseAppearance(raw: unknown): AppearanceState {
       typewriter: editorSrc['typewriter'] === true,
       moveDone: editorSrc['moveDone'] === true,
       spellcheck: editorSrc['spellcheck'] === true,
+      mode: editorSrc['mode'] === 'pro' ? 'pro' : 'simple',
     },
   };
 }

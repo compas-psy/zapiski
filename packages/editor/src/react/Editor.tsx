@@ -21,6 +21,7 @@ import { applyTypography, defaultTypography } from '../typography.js';
 import type { TypographySettings } from '../typography.js';
 import { setFocusMode } from '../focus/focus-mode.js';
 import { setRawMode } from '../live-preview/raw-mode.js';
+import { setEditorMode, type EditorMode } from '../live-preview/editor-mode.js';
 import { flushAutosave } from '../save/autosave.js';
 import { applyTaskOrder } from '../input/task-order.js';
 
@@ -90,6 +91,11 @@ export interface EditorProps {
   moveDoneToBottom?: boolean;
   /** Проверка орфографии системой (ITERATION-1 §3). */
   spellCheck?: boolean;
+  /**
+   * Режим показа разметки (ITERATION-1 §8): `simple` — не видна никогда,
+   * `pro` — проявляется у курсора. Файл не меняется ни в том, ни в другом.
+   */
+  mode?: EditorMode;
   /** Raw ↔ live-preview (Ctrl+E). */
   rawMode?: boolean;
 
@@ -160,6 +166,7 @@ export function Editor(props: EditorProps): React.ReactElement {
           ...(initial.strings ? { strings: initial.strings } : {}),
           typography: initial.typography ?? defaultTypography,
           moveDoneToBottom: initial.moveDoneToBottom ?? false,
+          mode: initial.mode ?? 'pro',
           ...(initial.codeLanguages ? { codeLanguages: initial.codeLanguages } : {}),
         }),
         readOnlyCompartment.of(EditorState.readOnly.of(initial.readOnly ?? false)),
@@ -198,6 +205,7 @@ export function Editor(props: EditorProps): React.ReactElement {
       });
     }
     if (initial.rawMode) view.dispatch({ effects: setRawMode.of(true) });
+    if (initial.mode) view.dispatch({ effects: setEditorMode.of(initial.mode) });
 
     if (initial.autoFocus) view.focus();
 
@@ -234,6 +242,13 @@ export function Editor(props: EditorProps): React.ReactElement {
     const view = viewRef.current;
     if (view) applyTaskOrder(view, props.moveDoneToBottom ?? false);
   }, [props.moveDoneToBottom]);
+
+  /* Смена режима — эффект над готовым состоянием: мгновенно, без потери
+     истории отмены и позиции курсора (ITERATION-1 §8). */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view) view.dispatch({ effects: setEditorMode.of(props.mode ?? 'pro') });
+  }, [props.mode]);
 
   /* Проверка орфографии — атрибут на contenteditable, а не расширение: её
      делает система, и включается она ровно так. */

@@ -238,6 +238,21 @@ function EditorSection(): ReactNode {
 
   return (
     <>
+      {/* Режим редактора (ITERATION-1 §8). Первым в разделе: он определяет,
+          что человек вообще видит в тексте, а остальные настройки — детали
+          поверх этого выбора. */}
+      <Section>{copy.mode}</Section>
+      <SegmentedControl<'simple' | 'pro'>
+        label={copy.mode}
+        value={theme.editor.mode}
+        onChange={(value) => theme.setEditor({ mode: value })}
+        options={[
+          { value: 'simple', label: copy.modeValues.simple },
+          { value: 'pro', label: copy.modeValues.pro },
+        ]}
+      />
+      <p className="za-muted">{copy.modeHint}</p>
+
       {/* Typewriter-скролл — опция, по умолчанию выключена (BEHAVIOR §2.8). */}
       <div className="za-field-row">
         <Switch
