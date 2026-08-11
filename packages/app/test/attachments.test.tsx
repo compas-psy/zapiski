@@ -11,7 +11,7 @@
  * Здесь проверяется весь путь: файл → `attachments/` → разметка в тексте, и
  * отдельно — что до этого пути можно дотянуться из интерфейса.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider, ToastProvider } from "@zapiski/ui";
 import { describe, expect, it, vi } from "vitest";
 import { AppProvider } from "../src/state/context.js";
@@ -20,6 +20,13 @@ import { NoteScreen } from "../src/screens/NoteScreen.js";
 import { SettingsScreen } from "../src/screens/SettingsScreen.js";
 import { strings } from "../src/i18n/index.js";
 import { createTestHost } from "./host.js";
+import { ru as editorRu } from "@zapiski/editor";
+
+/** Нажатие кнопки панели: она слушает mousedown, а не click. */
+function press(element: Element): void {
+  fireEvent.mouseDown(element);
+  fireEvent.mouseUp(element);
+}
 
 const ru = strings("ru");
 
@@ -121,7 +128,7 @@ describe("до вложения можно дотянуться из редак�
     await screen.findByRole("textbox", { name: "Название заметки" });
   }
 
-  it("кнопка «фото» открывает системный выбор файла", async () => {
+  it("пункт «Изображение» открывает системный выбор файла", async () => {
     await mountNote();
     const input =
       document.querySelector<HTMLInputElement>('input[type="file"]');
@@ -131,34 +138,41 @@ describe("до вложения можно дотянуться из редак�
 
     const opened = vi.fn();
     input!.click = opened;
-    screen.getByRole("button", { name: ru.note.toolbar.image }).click();
+
+    /* Вложение теперь живёт в меню панели (ITERATION-1 §4), а не отдельной
+       кнопкой «фото». Кнопки панели работают по mousedown: click браузер
+       обрабатывает уже после того, как фокус ушёл бы из текста. */
+    press(screen.getByRole("button", { name: editorRu.panel.attachment }));
+    press(await screen.findByText(editorRu.panel.attachments.image));
 
     expect(opened).toHaveBeenCalled();
   });
 
   /**
-   * Решение Р4: голос — P1, микрофон из тулбара v1 убран совсем, а не спрятан
-   * флагом. Проверяется состав первой строки целиком: список из ТЗ
-   * (`2_Engineering.md` §5) и ничего сверх него.
+   * Решение Р4: голос — P1, микрофон из панели v1 убран совсем, а не спрятан
+   * флагом. Проверяется состав панели целиком: то, что в ней объявлено §4, и
+   * ничего сверх того.
    */
-  it("в тулбаре ровно кнопки ТЗ, микрофона среди них нет", async () => {
+  it("в панели нет микрофона, а кнопки без обработчика не рисуются", async () => {
     await mountNote();
-    /* Именно в тулбаре, а не на экране: подпись «Ещё» есть и у меню заметки,
-       и поиск по всему экрану нашёл бы обе. */
-    const toolbar = screen.getAllByRole("toolbar")[0]!;
-    const labels = Array.from(toolbar.querySelectorAll("button")).map(
-      (button) => button.getAttribute("aria-label"),
+    const panel = screen.getAllByRole("toolbar")[0]!;
+    const labels = Array.from(panel.querySelectorAll("button")).map((button) =>
+      button.getAttribute("aria-label"),
     );
-    const copy = ru.note.toolbar;
+    const copy = editorRu.panel;
     expect(labels).toEqual([
-      copy.heading,
-      copy.bold,
-      copy.italic,
-      copy.list,
-      copy.checkbox,
-      copy.image,
-      copy.more,
+      copy.undo,
+      copy.redo,
+      copy.blockStyle,
+      copy.weight,
+      copy.lists,
+      copy.table,
+      copy.attachment,
     ]);
+    /* Формулы и эмодзи в этой сборке нет — и кнопок тоже: элемент, который
+       есть и не работает, хуже отсутствующего (§4). */
+    expect(labels).not.toContain(copy.formula);
+    expect(labels).not.toContain(copy.emoji);
   });
 });
 

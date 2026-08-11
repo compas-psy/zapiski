@@ -20,7 +20,9 @@ import {
 import {
   Editor,
   editorCommands,
+  FormatPanel,
   insertImage as insertImageCommand,
+  ru as editorStrings,
   toolbarCommands,
   type EditorHandle,
 } from '@zapiski/editor';
@@ -415,12 +417,25 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
           }}
         />
 
-        {/* Тулбар над клавиатурой — только mobile (SCREENS §4). */}
-        {isMobile && !state.focusMode ? (
-          <EditorToolbar
-            label={strings.note.toolbar.label}
-            items={toolbarExtra ? extraToolbar() : mainToolbar()}
-          />
+        {/*
+          Панель форматирования (ITERATION-1 §4). На десктопе — пилюля под
+          шапкой редактора, на мобильном — прижата к верхней кромке клавиатуры
+          и заменяет прежний тулбар высотой 44.
+
+          Прежний тулбар был рядом плоских кнопок в две строки: что применено
+          к тексту под курсором, по нему понять было нельзя, и половина
+          форматирования в него просто не влезала.
+        */}
+        {!state.focusMode ? (
+          <div className={isMobile ? 'za-editor__panel za-editor__panel--keyboard' : 'za-editor__panel'}>
+            <FormatPanel
+              view={editorRef.current?.view ?? null}
+              strings={editorStrings}
+              onAttach={(kind) => {
+                if (kind === 'image') imageInput.current?.click();
+              }}
+            />
+          </div>
         ) : null}
 
         {/* Статус-строка: «изменено только что · N слов · автосохранение — всегда» */}

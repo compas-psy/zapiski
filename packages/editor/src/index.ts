@@ -12,6 +12,15 @@
 // ── React ────────────────────────────────────────────────────────────────────
 export { Editor } from './react/Editor.js';
 export type { EditorProps, EditorHandle } from './react/Editor.js';
+export { FormatPanel, type FormatPanelProps } from './react/FormatPanel.js';
+export {
+  blockStyleAt,
+  inlineActiveAt,
+  listStyleAt,
+  type BlockStyle,
+  type ListStyle,
+} from './commands/block-state.js';
+export { insertCallout, insertCollapsible, insertSmall } from './commands/blocks.js';
 export { applyTaskOrder, moveDoneToBottom, reorderTasks, taskOrder } from './input/task-order.js';
 export { Toolbar } from './react/Toolbar.js';
 export type { ToolbarProps } from './react/Toolbar.js';

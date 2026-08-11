@@ -48,6 +48,46 @@ export interface EditorStrings {
     /** Плейсхолдер пустой заметки (SCREENS §1, шаг 3). */
     placeholder: string;
   };
+  /**
+   * Панель форматирования (ITERATION-1 §4) — плавающие пилюли с меню.
+   * Хоткеи держатся рядом со своим пунктом: в меню они печатаются справа
+   * моноширинным, и разносить подпись и сочетание по разным местам значит
+   * рано или поздно их рассинхронизировать.
+   */
+  panel: {
+    label: string;
+    undo: string;
+    redo: string;
+    blockStyle: string;
+    styles: Record<
+      'text' | 'heading' | 'quote' | 'callout' | 'code' | 'small' | 'divider',
+      string
+    >;
+    headingLevel(level: number): string;
+    back: string;
+    weight: string;
+    weights: Record<'bold' | 'italic' | 'strike' | 'highlight' | 'mono', string>;
+    lists: string;
+    listKinds: Record<'none' | 'bullet' | 'ordered' | 'task' | 'details', string>;
+    table: string;
+    link: string;
+    linkText: string;
+    linkUrl: string;
+    insert: string;
+    cancel: string;
+    attachment: string;
+    attachments: Record<'image' | 'file' | 'audio', string>;
+    formula: string;
+    formulaPlaceholder: string;
+    formulaBlock: string;
+    formulaBroken: string;
+    done: string;
+    emoji: string;
+    hotkeys: Record<
+      'bold' | 'italic' | 'text' | 'quote' | 'code' | 'bullet' | 'ordered' | 'task',
+      string
+    >;
+  };
 }
 
 export const ru: EditorStrings = {
@@ -83,6 +123,63 @@ export const ru: EditorStrings = {
     placeholder:
       'Просто пишите. Первая строка станет заголовком, #тег — тегом, а сохранится всё само',
   },
+  panel: {
+    label: 'Форматирование',
+    undo: 'Отменить',
+    redo: 'Повторить',
+    blockStyle: 'Стиль абзаца',
+    styles: {
+      text: 'Текст',
+      heading: 'Заголовок',
+      quote: 'Цитата',
+      callout: 'Выноска',
+      code: 'Код',
+      small: 'Мелкий текст',
+      divider: 'Разделитель',
+    },
+    headingLevel: (level: number): string => `Заголовок ${level}`,
+    back: 'Назад',
+    weight: 'Начертание',
+    weights: {
+      bold: 'Жирный',
+      italic: 'Курсив',
+      strike: 'Зачёркнутый',
+      highlight: 'Подсветка',
+      mono: 'Моноширинный',
+    },
+    lists: 'Списки',
+    listKinds: {
+      none: 'Без списка',
+      bullet: 'Список с маркерами',
+      ordered: 'Список с номерами',
+      task: 'Чек-лист',
+      details: 'Сворачиваемый блок',
+    },
+    table: 'Таблица',
+    link: 'Ссылка',
+    linkText: 'Текст',
+    linkUrl: 'Адрес',
+    insert: 'Вставить',
+    cancel: 'Отмена',
+    attachment: 'Вложение',
+    attachments: { image: 'Изображение', file: 'Файл', audio: 'Аудиозапись' },
+    formula: 'Формула',
+    formulaPlaceholder: 'Формула LaTeX',
+    formulaBlock: 'Отдельной строкой',
+    formulaBroken: 'Не удалось разобрать формулу',
+    done: 'Готово',
+    emoji: 'Эмодзи',
+    hotkeys: {
+      bold: 'Ctrl+B',
+      italic: 'Ctrl+I',
+      text: 'Ctrl+0',
+      quote: 'Ctrl+Shift+Q',
+      code: 'Ctrl+Shift+C',
+      bullet: 'Ctrl+Shift+L',
+      ordered: 'Ctrl+Shift+O',
+      task: 'Ctrl+Shift+K',
+    },
+  },
 };
 
 export const en: EditorStrings = {
@@ -116,6 +213,63 @@ export const en: EditorStrings = {
   },
   editor: {
     placeholder: 'Just write. The first line becomes the title, #tag becomes a tag, saving is automatic',
+  },
+  panel: {
+    label: 'Formatting',
+    undo: 'Undo',
+    redo: 'Redo',
+    blockStyle: 'Paragraph style',
+    styles: {
+      text: 'Text',
+      heading: 'Heading',
+      quote: 'Quote',
+      callout: 'Callout',
+      code: 'Code',
+      small: 'Small text',
+      divider: 'Divider',
+    },
+    headingLevel: (level: number): string => `Heading ${level}`,
+    back: 'Back',
+    weight: 'Weight',
+    weights: {
+      bold: 'Bold',
+      italic: 'Italic',
+      strike: 'Strikethrough',
+      highlight: 'Highlight',
+      mono: 'Monospace',
+    },
+    lists: 'Lists',
+    listKinds: {
+      none: 'No list',
+      bullet: 'Bulleted list',
+      ordered: 'Numbered list',
+      task: 'Checklist',
+      details: 'Collapsible block',
+    },
+    table: 'Table',
+    link: 'Link',
+    linkText: 'Text',
+    linkUrl: 'Address',
+    insert: 'Insert',
+    cancel: 'Cancel',
+    attachment: 'Attachment',
+    attachments: { image: 'Image', file: 'File', audio: 'Audio recording' },
+    formula: 'Formula',
+    formulaPlaceholder: 'LaTeX formula',
+    formulaBlock: 'On its own line',
+    formulaBroken: 'Could not parse the formula',
+    done: 'Done',
+    emoji: 'Emoji',
+    hotkeys: {
+      bold: 'Ctrl+B',
+      italic: 'Ctrl+I',
+      text: 'Ctrl+0',
+      quote: 'Ctrl+Shift+Q',
+      code: 'Ctrl+Shift+C',
+      bullet: 'Ctrl+Shift+L',
+      ordered: 'Ctrl+Shift+O',
+      task: 'Ctrl+Shift+K',
+    },
   },
 };
 
