@@ -1,5 +1,5 @@
 /**
- * Размеры элементов против эталона дизайна — замером в живом браузере.
+ * Размеры элементов против источника токенов — замером в живом браузере.
  *
  * ЗАЧЕМ ОТДЕЛЬНО ОТ `check-design-tokens.mjs`. Тот сверяет ЗНАЧЕНИЯ переменных.
  * Но переменная может быть правильной, а к элементу приложена не та: кнопка
@@ -22,7 +22,8 @@
  *   node scripts/check-measurements.mjs
  */
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const CHROME =
   process.env.ZAPISKI_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -105,8 +106,19 @@ await page.waitForTimeout(500);
 const problems = [];
 const check = (name, got, want) => {
   if (Math.abs(got - want) <= 0.5) return;
-  problems.push(`${name}: ${Math.round(got * 10) / 10}, эталон ${want}`);
+  problems.push(`${name}: ${Math.round(got * 10) / 10}, источник ${want}`);
 };
+
+/**
+ * Ожидаемые радиусы берутся из `design/tokens.json`, а не из чисел в этом
+ * файле. Иначе сторож сравнивает экран со своей же копией значений и молчит
+ * ровно в тот момент, когда шкала радиусов меняется, — а она уже менялась,
+ * когда мастер-ТЗ §2 вернуло шкалу 10 / 12 / 14.
+ */
+const TOKENS = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../design/tokens.json', import.meta.url)), 'utf8'),
+);
+const px = (name) => Number.parseFloat(TOKENS.radius[name].$value);
 
 const measured = await page.evaluate(() => {
   const read = (selector) => {
@@ -138,12 +150,12 @@ const measured = await page.evaluate(() => {
 
 if (!measured.button) problems.push('на экране не нашлось ни одной обычной кнопки');
 else {
-  check('кнопка · высота', measured.button.height, 44);
-  check('кнопка · радиус', measured.button.radius, 14);
+  check('кнопка · высота', measured.button.height, Number.parseFloat(TOKENS.size['control-h'].$value));
+  check('кнопка · радиус', measured.button.radius, px('r-btn'));
 }
-if (measured.field) check('поле · радиус', measured.field.radius, 12);
-if (measured.modal) check('модалка · радиус', measured.modal.radius, 24);
-if (measured.nav) check('пункт навигации · радиус', measured.nav.radius, 10);
+if (measured.field) check('поле · радиус', measured.field.radius, px('r-field'));
+if (measured.modal) check('модалка · радиус', measured.modal.radius, px('r-xl'));
+if (measured.nav) check('пункт навигации · радиус', measured.nav.radius, px('r-sm'));
 
 /* Разнобой между кнопками одного уровня — отдельный пункт чек-листа. */
 const allButtons = [...seen, ...measured.buttons];
@@ -156,7 +168,7 @@ await browser.close();
 server?.kill();
 
 if (problems.length === 0) {
-  console.log(`размеры: совпадают с эталоном (кнопок проверено ${allButtons.length})`);
+  console.log(`размеры: совпадают с design/tokens.json (кнопок проверено ${allButtons.length})`);
   process.exit(0);
 }
 console.error('размеры: РАСХОЖДЕНИЯ');
