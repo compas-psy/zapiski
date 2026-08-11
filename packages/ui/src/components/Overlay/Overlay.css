@@ -58,7 +58,9 @@
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  padding: var(--modal-top) var(--sp-16) var(--sp-16);
+  /* Тот же счёт, что у ящика: слой фиксированный и врезок оболочки не видит. */
+  padding: max(var(--modal-top), env(safe-area-inset-top)) var(--sp-16)
+    max(var(--sp-16), env(safe-area-inset-bottom));
   overflow-y: auto;
   pointer-events: none;
 }
@@ -110,6 +112,12 @@
 }
 
 /* ── Drawer: 302 (mobile) / 224 (desktop), радиус 0 22 22 0 ─────────────── */
+/* `position: fixed` считает от окна, а не от оболочки приложения, поэтому
+   врезки с `.za-app` сюда не доходят: ящик рисуется от кромки до кромки. Без
+   собственных отступов его первый пункт уезжал под часы, а последний —
+   «Настройки» — под жестовую полосу. Экран настроек на телефоне из-за этого
+   и был недостижим: единственная ведущая в него кнопка лежала под системной
+   панелью. */
 .z-drawer {
   position: fixed;
   inset-block: 0;
@@ -119,7 +127,8 @@
   inline-size: var(--drawer-w-mobile);
   max-inline-size: 88vw;
   overflow-y: auto;
-  padding: var(--sp-16);
+  padding: max(var(--sp-16), env(safe-area-inset-top)) var(--sp-16)
+    max(var(--sp-16), env(safe-area-inset-bottom));
   border-start-end-radius: var(--r-drawer);
   border-end-end-radius: var(--r-drawer);
   background-color: var(--surface-alt);
@@ -149,7 +158,9 @@
 .z-toast-layer {
   position: fixed;
   inset-inline: 0;
-  inset-block-end: var(--sp-16);
+  /* Тост с «Отменить» обязан быть доступен пальцу: под жестовой полосой его
+     не нажать, а отмена удаления живёт ровно шесть секунд. */
+  inset-block-end: max(var(--sp-16), env(safe-area-inset-bottom));
   z-index: var(--z-toast);
   display: flex;
   justify-content: center;

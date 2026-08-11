@@ -74,6 +74,19 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     marginInline: 'auto',
     padding: 'var(--z-pad-y) var(--z-pad-x) 40vh var(--z-pad-x)',
     caretColor: 'var(--accent)',
+    /*
+     * Рамка вокруг текста на Android.
+     *
+     * Гасить контур на `.cm-editor.cm-focused` недостаточно: фокус получает
+     * `.cm-content` — это он `contenteditable`, — и Android WebView рисует
+     * системный контур именно вокруг него. На десктопе его не видно, потому
+     * что там фокус приходит с клавиатуры и рисуется наше кольцо.
+     *
+     * Подсветка нажатия убрана по той же причине: в тексте она выглядит
+     * прямоугольной заливкой на пол-абзаца, а не «нажатием».
+     */
+    outline: 'none',
+    WebkitTapHighlightColor: 'transparent',
   },
   // Raw-режим (Ctrl+E): сырой markdown моноширинным, без единой декорации.
   '.cm-content.cm-z-raw': { fontFamily: fontFamily.mono, fontSize: '0.9em' },

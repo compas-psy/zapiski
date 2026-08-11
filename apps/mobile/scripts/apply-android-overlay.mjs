@@ -276,7 +276,13 @@ export function patchManifest(source) {
   //    решения — `packages/app/src/lib/keyboard.ts`; нужны обе.
   manifest = setMainActivitySoftInput(manifest);
 
-  // 6. Наши компоненты — перед </application>.
+  // 6. Рисуем под вырезом — иначе система не сообщает WebView о врезках, и
+  //    `env(safe-area-inset-top)` в CSS остаётся нулём при том, что окно
+  //    занимает верх экрана. Вторая половина решения — отступы в
+  //    `packages/app/src/styles/app.css`; нужны обе.
+  manifest = setMainActivityCutoutMode(manifest);
+
+  // 7. Наши компоненты — перед </application>.
   manifest = insertBefore(
     manifest,
     /<\/application>/,
@@ -291,19 +297,44 @@ function escapeRegExp(value) {
 }
 
 /**
- * `android:windowSoftInputMode="adjustResize"` на активность Tauri.
+ * Атрибут на активность Tauri.
  *
  * Правится существующий тег, а не добавляется свой: активность генерирует
- * шаблон Tauri, и вторая с тем же именем — это ошибка сборки.
+ * шаблон Tauri, и вторая с тем же именем — это ошибка сборки. Повторный вызов
+ * ничего не меняет: если атрибут уже стоит, тег возвращается как есть.
  */
-export function setMainActivitySoftInput(manifest) {
+export function setMainActivityAttribute(manifest, name, value) {
   return manifest.replace(
     /<activity\b[^>]*android:name="\.MainActivity"[^>]*?\s*(\/?)>/,
     (whole, selfClosing) => {
-      if (whole.includes('android:windowSoftInputMode')) return whole;
+      if (whole.includes(`${name}=`)) return whole;
       const head = whole.slice(0, whole.length - (selfClosing ? 2 : 1)).trimEnd();
-      return `${head}\n            android:windowSoftInputMode="adjustResize"${selfClosing ? ' />' : '>'}`;
+      return `${head}\n            ${name}="${value}"${selfClosing ? ' />' : '>'}`;
     },
+  );
+}
+
+/** `android:windowSoftInputMode="adjustResize"` — клавиатура ужимает окно. */
+export function setMainActivitySoftInput(manifest) {
+  return setMainActivityAttribute(manifest, 'android:windowSoftInputMode', 'adjustResize');
+}
+
+/**
+ * `android:windowLayoutInDisplayCutoutMode="shortEdges"` — рисуем под вырезом.
+ *
+ * Без этого атрибута `env(safe-area-inset-top)` в WebView всегда ноль, и
+ * никакие отступы в CSS не спасают: система просто не сообщает вырез. При этом
+ * окно всё равно занимало верх экрана, и шапка «Все заметки» вставала вплотную
+ * к часам и значку батареи — это видно на любом скриншоте с телефона.
+ *
+ * `shortEdges`, а не `always`: в альбомной ориентации `always` пустил бы текст
+ * под боковой вырез, и первая буква строки оказалась бы под ним.
+ */
+export function setMainActivityCutoutMode(manifest) {
+  return setMainActivityAttribute(
+    manifest,
+    'android:windowLayoutInDisplayCutoutMode',
+    'shortEdges',
   );
 }
 
@@ -448,6 +479,7 @@ const EXPECTATIONS = [
   ['приёмник тапов', 'android:name=".ZapiskiWidgetReceiver"'],
   ['сохранена активность Tauri', 'android:name=".MainActivity"'],
   ['клавиатура ужимает окно', 'android:windowSoftInputMode="adjustResize"'],
+  ['рисуем под вырезом', 'android:windowLayoutInDisplayCutoutMode="shortEdges"'],
   ['сохранён LAUNCHER', 'android.intent.category.LAUNCHER'],
 ];
 
