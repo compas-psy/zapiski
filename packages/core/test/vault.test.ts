@@ -61,10 +61,18 @@ describe('vault: чтение и запись', () => {
     expect(text).toContain('updated:');
   });
 
-  it('заголовок — первая непустая строка, даже без решётки', async () => {
-    const { vault } = await makeVault({ 'note.md': 'Просто первая строка\n\nдальше текст' });
+  /**
+   * Заметка из чужого vault'а без H1: заголовка у неё нет, и придумывать его
+   * из первой строки нельзя (ITERATION-1 §1). Список назовёт её «Без
+   * названия» — и это честнее обрывка текста.
+   */
+  it('файл без H1 остаётся без заголовка, текст не трогается', async () => {
+    const text = 'Просто первая строка\n\nдальше текст';
+    const { vault, storage } = await makeVault({ 'note.md': text });
     await vault.open();
-    expect((await vault.read('note.md'))?.title).toBe('Просто первая строка');
+    const note = await vault.read('note.md');
+    expect(note?.title).toBe('Без названия');
+    expect(storage.snapshot()['note.md']).toBe(text);
   });
 
   it('атомарная запись не оставляет временных файлов', async () => {

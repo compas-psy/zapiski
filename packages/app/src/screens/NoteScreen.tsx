@@ -10,6 +10,8 @@ import {
   countWords,
   extractTags,
   isEncryptedPath,
+  joinTitle,
+  splitTitle,
   stemOf,
   type Note,
   type NoteMeta,
@@ -78,7 +80,16 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
      перечитывать с диска нельзя, см. эффект ниже. */
   const previousPath = useRef<VaultPath | null>(null);
   const [note, setNote] = useState<Note | null>(null);
-  const [body, setBody] = useState('');
+  /**
+   * Заголовок и тело — раздельно (ITERATION-1 §1). В файле они по-прежнему
+   * одна строка `# Название` и всё остальное; разделение живёт только в
+   * представлении. Держать их отдельными состояниями, а не резать текст на
+   * каждый ввод, важно для курсора: пересборка значения редактора сбрасывала
+   * бы позицию.
+   */
+  const [title, setTitle] = useState('');
+  const [editorBody, setEditorBody] = useState('');
+  const titleInput = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [backlinksOpen, setBacklinksOpen] = useState(true);
@@ -117,7 +128,9 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       const text =
         isEncryptedPath(path) && !app.unlockedNote(path) ? await app.openEncrypted(path) : null;
       if (cancelled) return;
-      setBody(text ?? loaded?.body ?? '');
+      const split = splitTitle(text ?? loaded?.body ?? '');
+      setTitle(split.title);
+      setEditorBody(split.body);
       setLoading(false);
     });
     return () => {
@@ -153,6 +166,23 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     return vault.index.backlinks(meta.id);
   }, [app, meta, state.notes]);
 
+  /* Файл целиком — то, что уходит на диск и во всё, что считает по тексту. */
+  const body = useMemo(() => joinTitle(title, editorBody), [title, editorBody]);
+
+  /**
+   * Автосохранение заголовка. У тела оно живёт внутри редактора (debounce
+   * 500 мс + blur), а поле заголовка — обычный `<input>`, и без этого набранное
+   * название держалось бы до первого blur. Человек, напечатавший заголовок и
+   * закрывший приложение, потерял бы его — и заодно не сработало бы
+   * переименование файла по заголовку (BEHAVIOR §2.2).
+   */
+  useEffect(() => {
+    if (loading) return;
+    const timer = setTimeout(() => void app.save(path, joinTitle(title, editorBody)), 500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]);
+
   const tags = useMemo(() => (encrypted ? [] : extractTags(body)), [body, encrypted]);
   const words = useMemo(() => countWords(body), [body]);
   const crumb = path.includes('/') ? path.slice(0, path.lastIndexOf('/')).split('/').join(' / ') : '';
@@ -170,7 +200,11 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
           <LockScreen
             path={path}
             title={meta?.title ?? stemOf(path)}
-            onUnlocked={(text) => setBody(text)}
+            onUnlocked={(text) => {
+              const split = splitTitle(text);
+              setTitle(split.title);
+              setEditorBody(split.body);
+            }}
           />
         </div>
       </div>
@@ -213,20 +247,52 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               </div>
             ) : null}
 
+            {/* Заголовок — отдельное поле, всегда видимое, до тела (§1).
+                Разметка внутри не работает: `**` останется звёздочками. */}
+            {!state.focusMode ? (
+              <input
+                ref={titleInput}
+                className="za-editor__title"
+                type="text"
+                value={title}
+                placeholder={strings.note.titlePlaceholder}
+                aria-label={strings.note.titlePlaceholder}
+                spellCheck={false}
+                /* Новая заметка: курсор сразу в названии, а не в теле. */
+                autoFocus={body === ''}
+                onChange={(event) => {
+                  setTitle(event.target.value);
+                  if (encrypted) app.touchLock(path);
+                }}
+                onBlur={() => void app.save(path, joinTitle(title, editorBody))}
+                onKeyDown={(event) => {
+                  /* Enter не переносит строку — уводит курсор в начало тела. */
+                  if (event.key === 'Enter' || (event.key === 'Tab' && !event.shiftKey)) {
+                    event.preventDefault();
+                    editorRef.current?.focusStart();
+                  }
+                }}
+              />
+            ) : null}
+
             <Editor
               ref={editorRef}
-              value={body}
+              value={editorBody}
               rawMode={state.rawMode}
               focusMode={state.focusMode}
-              /* Новая заметка: клавиатура сразу, курсор в конце заголовка. */
-              autoFocus={body === ''}
-              cursorAtTitleEnd={body === ''}
               onChange={(next) => {
-                setBody(next);
+                setEditorBody(next);
                 if (encrypted) app.touchLock(path);
               }}
               /* Автосохранение: debounce 500 мс + blur. Кнопки нет нигде. */
-              onSave={(next) => void app.save(path, next)}
+              onSave={(next) => void app.save(path, joinTitle(title, next))}
+              /* Backspace в начале пустого тела поднимает курсор в название
+                 (§1). Возвращаем true — значит редактор ничего не удаляет. */
+              onBackspaceAtStart={() => {
+                if (title !== '') return false;
+                titleInput.current?.focus();
+                return true;
+              }}
               /* Картинка из буфера — второй путь к вложению (BEHAVIOR §2.6).
                  Редактор ждал этот колбэк с самого начала, а никто его не
                  передавал: вставка картинки молча ничего не делала. */

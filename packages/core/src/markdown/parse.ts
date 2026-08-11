@@ -8,6 +8,7 @@
  */
 import { countWords, truncate } from '../util/text.js';
 import { splitFrontmatter, type Frontmatter } from './frontmatter.js';
+import { splitTitle } from './title.js';
 
 export interface WikiLinkRef {
   /** Цель ссылки без якоря и алиаса: `Проекты/Идея`. */
@@ -50,20 +51,15 @@ export interface ParsedNote {
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic)$/i;
 
 /**
- * Заголовок = первая строка файла (BEHAVIOR §2.2). Если она начинается
- * с `# ` — это H1 и заголовок; если нет — первая непустая строка становится
- * заголовком в списке, оставаясь в тексте обычным абзацем.
+ * Заголовок = первая строка файла в виде `# Название` (ITERATION-1 §1).
+ *
+ * Прежде заголовком становилась любая первая непустая строка, и в списке
+ * оказывался случайный обрывок: заметка, начатая с `###`, называлась «###».
+ * Теперь строка, не являющаяся H1, остаётся телом, а заголовок пуст — это
+ * законное состояние, и список показывает такую заметку как «Без названия».
  */
 export function extractTitle(body: string): string {
-  for (const rawLine of body.split('\n')) {
-    const line = rawLine.trim();
-    if (line === '') continue;
-    if (line === '---') continue;
-    const heading = /^#{1,6}\s+(.*)$/.exec(line);
-    const title = heading ? (heading[1] as string).trim() : line;
-    return stripInline(title).trim();
-  }
-  return '';
+  return stripInline(splitTitle(body).title).trim();
 }
 
 /** Снимает инлайн-разметку, сохраняя текст: для заголовков и сниппета. */
@@ -234,15 +230,13 @@ export function parseNote(text: string): ParsedNote {
   const links = extractLinks(body);
   const title = extractTitle(body);
 
-  // Сниппет — тело без строки заголовка, без разметки, ~200 знаков (contract.ts).
-  const head = stripMarkdown(body.slice(0, SNIPPET_SOURCE_LENGTH));
-  const headLines = head.split('\n');
-  const titleLineIndex = headLines.findIndex((line) => line.trim() !== '');
-  const rest = headLines
-    .slice(titleLineIndex + 1)
-    .join(' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  /* Сниппет — тело без заголовка, без разметки, ~200 знаков (contract.ts).
+     Заголовок отрезается разбором, а не «пропустим первую непустую строку»:
+     у заметки без H1 первая строка принадлежит телу, и выбрасывать её значило
+     бы терять начало текста ровно там, где заголовка и нет (§1). */
+  const withoutTitle = splitTitle(body).body;
+  const head = stripMarkdown(withoutTitle.slice(0, SNIPPET_SOURCE_LENGTH));
+  const rest = head.split('\n').join(' ').replace(/\s+/g, ' ').trim();
   const snippet = truncate(rest, 200);
 
   const images = links.filter((l) => l.image || isImageUrl(l.url));

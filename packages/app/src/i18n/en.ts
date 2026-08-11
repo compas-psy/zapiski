@@ -133,7 +133,8 @@ export const en: AppCatalog = {
     statusChanged: 'edited just now',
     statusAutosave: 'autosave — always',
     statusWords: (count: number): string => `${count} ${pl(count, 'word', 'words')}`,
-    placeholder: 'Just write. The first line becomes the title',
+    titlePlaceholder: 'Note title',
+    placeholder: 'Just write',
     toolbar: {
       label: 'Formatting',
       heading: 'Heading',

@@ -100,7 +100,11 @@ export function NoteRow({
       >
         <span className="za-row__body">
           <span className="za-row__head">
-            <span className="za-row__title">{note.title || strings.notes.untitled}</span>
+            <span
+              className={`za-row__title${note.untitled ? ' za-row__title--untitled' : ''}`}
+            >
+              {note.title || strings.notes.untitled}
+            </span>
             <span className="za-row__marks">
               {note.pinned ? <IconPin size={13} aria-label={strings.list.markPinned} /> : null}
               {note.hasFile || note.hasImage ? (

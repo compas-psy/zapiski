@@ -144,7 +144,8 @@ export const ru = {
     statusChanged: 'изменено только что',
     statusAutosave: 'автосохранение — всегда',
     statusWords: (count: number): string => `${count} ${plural(count, 'слово', 'слова', 'слов')}`,
-    placeholder: 'Просто пишите. Первая строка станет заголовком',
+    titlePlaceholder: 'Название заметки',
+    placeholder: 'Просто пишите',
     toolbar: {
       label: 'Форматирование',
       heading: 'Заголовок',

@@ -8,7 +8,7 @@
   --font-sans: 'Golos Text', 'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;  /* Интерфейс и текст заметки. Segoe UI и Roboto держат кириллицу, если woff2 не доехал. */
   --font-serif: 'Source Serif 4', 'Noto Serif', Georgia, 'Times New Roman', serif;  /* Только «бумажный» режим чтения заметки. В интерфейсной хромоте serif не появляется. */
   --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'Roboto Mono', 'Noto Sans Mono', ui-monospace, monospace;  /* Код, raw-режим, даты и табличные числа. */
-  --fs-h1: 1.625rem;  /* 26 — заголовок заметки */
+  --fs-h1: 1.875rem;  /* 30 — заголовок заметки (ITERATION-1 §1; было 26) */
   --lh-h1: 1.2;
   --fw-h1: 700;
   --tr-h1: -0.02em;

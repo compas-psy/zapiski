@@ -9,8 +9,8 @@
 
 import { useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, Ref } from 'react';
-import { Compartment, EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
+import { Compartment, EditorState, Prec } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
 import type { LanguageDescription } from '@codemirror/language';
 
 import { zapiskiEditor } from '../setup.js';
@@ -29,6 +29,12 @@ export interface EditorHandle {
   /** Немедленно сохранить (навигация назад, сворачивание приложения). */
   save(): void;
   focus(): void;
+  /**
+   * Фокус с курсором в самом начале текста. Нужен полю заголовка
+   * (ITERATION-1 §1): Enter и Tab из заголовка ведут в начало тела, а не
+   * куда придётся.
+   */
+  focusStart(): void;
 }
 
 export interface EditorProps {
@@ -68,8 +74,13 @@ export interface EditorProps {
   readOnly?: boolean;
   /** Поднять клавиатуру сразу — только для НОВОЙ заметки (BEHAVIOR §0). */
   autoFocus?: boolean;
-  /** Поставить курсор в конец заголовка при открытии (BEHAVIOR §0). */
-  cursorAtTitleEnd?: boolean;
+  /**
+   * Backspace в самом начале текста. Вернуть `true` — значит «я обработал»,
+   * и редактор ничего не удаляет: курсор ушёл в поле заголовка
+   * (ITERATION-1 §1). Решает приложение, потому что только оно знает, пуст
+   * заголовок или нет.
+   */
+  onBackspaceAtStart?: () => boolean;
   /** Режим фокуса (BEHAVIOR §2.8). */
   focusMode?: boolean;
   /** Typewriter-скролл — опция, по умолчанию выключена. */
@@ -103,6 +114,12 @@ export function Editor(props: EditorProps): React.ReactElement {
       },
       focus() {
         viewRef.current?.focus();
+      },
+      focusStart() {
+        const view = viewRef.current;
+        if (!view) return;
+        view.dispatch({ selection: { anchor: 0 } });
+        view.focus();
       },
     }),
     [],
@@ -140,6 +157,20 @@ export function Editor(props: EditorProps): React.ReactElement {
           ...(initial.codeLanguages ? { codeLanguages: initial.codeLanguages } : {}),
         }),
         readOnlyCompartment.of(EditorState.readOnly.of(initial.readOnly ?? false)),
+        /* Выше остальных keymap'ов: иначе Backspace успеет удалить символ
+           раньше, чем мы решим поднять курсор в заголовок. */
+        Prec.highest(
+          keymap.of([
+            {
+              key: 'Backspace',
+              run: (view) => {
+                const { main } = view.state.selection;
+                if (!main.empty || main.from !== 0) return false;
+                return propsRef.current.onBackspaceAtStart?.() ?? false;
+              },
+            },
+          ]),
+        ),
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return;
           const text = update.state.doc.toString();
@@ -162,10 +193,6 @@ export function Editor(props: EditorProps): React.ReactElement {
     }
     if (initial.rawMode) view.dispatch({ effects: setRawMode.of(true) });
 
-    if (initial.cursorAtTitleEnd) {
-      const firstLine = view.state.doc.line(1);
-      view.dispatch({ selection: { anchor: firstLine.to } });
-    }
     if (initial.autoFocus) view.focus();
 
     return () => {

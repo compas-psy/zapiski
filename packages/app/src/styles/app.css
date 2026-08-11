@@ -252,6 +252,11 @@
   line-height: var(--lh-list-title);
   color: var(--text);
 }
+/* «Без названия» — не заголовок, а его отсутствие, и печатается приглушённым
+   (ITERATION-1 §1). Прежде здесь стоял обрывок первой строки текста. */
+.za-row__title--untitled {
+  color: var(--text-tertiary);
+}
 .za-row__marks {
   display: inline-flex;
   align-items: center;
@@ -491,6 +496,40 @@
     padding: var(--editor-pad-block) var(--editor-pad-inline);
   }
 }
+/* Заголовок заметки — отдельное поле, всегда видимое (ITERATION-1 §1).
+   Поле, а не первая строка текста: человек должен видеть, где кончается
+   название и начинается заметка. Рамки и подложки нет намеренно — иначе оно
+   читалось бы как форма, а это по-прежнему письмо. */
+.za-editor__title {
+  display: block;
+  inline-size: 100%;
+  box-sizing: border-box;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: inherit;
+  font-size: var(--fs-h1-mobile);
+  line-height: var(--lh-h1-mobile);
+  font-weight: var(--fw-h1);
+  letter-spacing: var(--tr-h1);
+  padding-block-end: var(--sp-8);
+}
+.za-editor__title::placeholder {
+  color: var(--text-tertiary);
+}
+/* Своего кольца у поля нет: фокус виден курсором, а второе кольцо на экране
+   нарушило бы правило «одно кольцо фокуса» (REBUILD). */
+.za-editor__title:focus {
+  outline: none;
+}
+@media (min-width: 900px) {
+  .za-editor__title {
+    font-size: var(--fs-h1);
+    line-height: var(--lh-h1);
+  }
+}
+
 .za-editor__tags {
   display: flex;
   flex-wrap: wrap;

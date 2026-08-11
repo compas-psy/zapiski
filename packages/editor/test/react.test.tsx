@@ -25,6 +25,16 @@ function mount(node: React.ReactNode): HTMLElement {
   return host;
 }
 
+/**
+ * Backspace через настоящее событие клавиатуры, а не вызовом команды: проверять
+ * надо именно keymap — что наш обработчик стоит выше штатного удаления.
+ */
+function backspace(view: { contentDOM: HTMLElement } | null | undefined): void {
+  view?.contentDOM.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
+  );
+}
+
 afterEach(() => {
   act(() => {
     root?.unmount();
@@ -73,10 +83,46 @@ describe('<Editor/>', () => {
     expect(onSave).toHaveBeenCalledWith('текст.');
   });
 
-  it('cursorAtTitleEnd ставит курсор в конец первой строки', () => {
+  /**
+   * `cursorAtTitleEnd` был нужен, пока заголовок жил первой строкой текста.
+   * ITERATION-1 §1 вынес его в отдельное поле, и редактор теперь получает
+   * только тело — ставить курсор «в конец заголовка» стало некуда. Взамен
+   * `focusStart` уводит курсор в начало тела: это Enter и Tab из поля
+   * заголовка.
+   */
+  it('focusStart ставит курсор в начало тела', () => {
     const ref = createRef<EditorHandle>();
-    mount(<Editor value={'# Заголовок\n\nтело'} cursorAtTitleEnd ref={ref} />);
-    expect(ref.current?.view?.state.selection.main.head).toBe(11);
+    mount(<Editor value={'первая строка\n\nвторая'} ref={ref} />);
+    act(() => {
+      ref.current?.focusStart();
+    });
+    expect(ref.current?.view?.state.selection.main.head).toBe(0);
+  });
+
+  it('Backspace в начале тела отдаётся приложению, а не удаляет символ', () => {
+    const ref = createRef<EditorHandle>();
+    let asked = 0;
+    mount(
+      <Editor
+        value={'тело'}
+        ref={ref}
+        onBackspaceAtStart={() => {
+          asked += 1;
+          return true;
+        }}
+      />,
+    );
+    const view = ref.current?.view;
+    act(() => {
+      view?.dispatch({ selection: { anchor: 0 } });
+    });
+    act(() => {
+      backspace(view);
+    });
+    expect(asked).toBe(1);
+    /* Текст цел: приложение сказало «обработал», подниматься курсору в
+       заголовок, а не съедать первый символ. */
+    expect(view?.state.doc.toString()).toBe('тело');
   });
 
   it('режим фокуса и raw-режим управляются пропсами', () => {

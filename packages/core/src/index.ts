@@ -94,6 +94,7 @@ export {
   type WikiLinkRef,
 } from './markdown/parse.js';
 export { Frontmatter, joinFrontmatter, splitFrontmatter, type SplitDocument } from './markdown/frontmatter.js';
+export { joinTitle, splitTitle, type NoteTitleSplit } from './markdown/title.js';
 export { inlineToText, parseBlocks, parseInline, type Block, type Inline, type ListItem } from './markdown/ast.js';
 
 // ── Vault ──────────────────────────────────────────────────────────────────

@@ -437,7 +437,11 @@ export class Vault {
     const archived = fm?.getBoolean('archived') ?? service.archived;
     const fmTags = fm ? fm.getList('tags').map((tag) => tag.replace(/^#/, '')) : [];
     const tags = [...new Set([...fmTags, ...parsed.tags])];
-    const title = parsed.title === '' ? (fm?.getString('title') ?? this.strings.notes.untitled) : parsed.title;
+    const fromFrontmatter = parsed.title === '' ? fm?.getString('title') : undefined;
+    const title = parsed.title || fromFrontmatter || this.strings.notes.untitled;
+    /* Заголовка нет ни в тексте, ни в frontmatter — список назовёт заметку
+       «Без названия» приглушённым цветом (ITERATION-1 §1). */
+    const untitled = parsed.title === '' && !fromFrontmatter;
 
     // Идентификатор из frontmatter'а имеет приоритет — так заметка не теряет
     // себя при переносе между устройствами (ТЗ §3.2).
@@ -462,6 +466,7 @@ export class Vault {
       body: text,
     };
     if (service.pinOrder !== undefined) note.pinOrder = service.pinOrder;
+    if (untitled) note.untitled = true;
     return note;
   }
 
