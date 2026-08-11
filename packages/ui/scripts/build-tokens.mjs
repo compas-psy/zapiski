@@ -121,6 +121,8 @@ function build(tokens) {
     block(':root', tokens.motion, 'Motion'),
     block(':root', tokens.layer, 'Слои'),
     block(':root', tokens.color.brand, 'Знак сервиса'),
+    /* Кнопки окна одинаковы во всех темах — поэтому :root, а не тема. */
+    block(':root', tokens.color.window, 'Кнопки своей строки заголовка'),
   );
 
   for (const [theme, group] of Object.entries(tokens.color.theme)) {

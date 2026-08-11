@@ -37,6 +37,7 @@ export type {
   UpdaterProvider,
   VaultEntry,
   VaultFolderPicker,
+  WindowControls,
   VaultLocation,
   VaultLocationInfo,
   VaultPath,

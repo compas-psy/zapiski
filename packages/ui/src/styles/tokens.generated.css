@@ -146,6 +146,12 @@
   --svc-zapiski-fg: #FBF3E3;  /* Дерево внутри знака — цвет взят из самого zapiski.svg, чтобы подложка совпадала с ним пиксель в пиксель */
 }
 
+/* Кнопки своей строки заголовка */
+:root {
+  --close-bg: #C42B1C;
+  --close-fg: #FFFFFF;
+}
+
 /* Тема «paper» */
 [data-theme='paper'],
 :root:not([data-theme]) {

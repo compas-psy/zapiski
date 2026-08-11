@@ -167,6 +167,13 @@ export const en: AppCatalog = {
     },
   },
 
+  window: {
+    minimize: 'Minimize',
+    maximize: 'Maximize',
+    restore: 'Restore down',
+    close: 'Close window',
+  },
+
   library: {
     label: 'Library',
     all: 'All notes',

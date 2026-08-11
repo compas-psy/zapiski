@@ -74,6 +74,66 @@
   color: var(--text);
 }
 
+/* ── Своя строка заголовка окна (ITERATION-1 §6) ─────────────────────────
+   Окно безрамочное, полосу рисуем мы. Знака и вордмарка здесь нет: они живут
+   в сайдбаре, а до этой правки название приложения показывалось дважды —
+   в системной строке и в интерфейсе.
+
+   Фон тот же, что у сайдбара, чтобы верх окна читался одной плоскостью. */
+.za-titlebar {
+  display: flex;
+  align-items: stretch;
+  flex: none;
+  block-size: 40px;
+  background-color: var(--surface-alt);
+  border-block-end: var(--border-w) solid var(--line);
+  /* Полоса не выделяется: двойной клик по ней разворачивает окно, а не
+     выделяет текст соседних элементов. */
+  user-select: none;
+}
+.za-titlebar__space {
+  flex: 1;
+}
+.za-titlebar__controls {
+  display: flex;
+  flex: none;
+}
+/* 46×32 — размер системных кнопок Windows. Совпадение здесь важнее нашей
+   сетки: рядом с кнопками соседних окон другой размер читается как ошибка. */
+.za-titlebar__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 46px;
+  block-size: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.za-titlebar__button:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-w) var(--focus-ring);
+}
+/* Наведение — только там, где есть указатель: на тач-экране `:hover`
+   прилипает после нажатия и остаётся, пока не тронут что-то другое. Полоса
+   живёт лишь на десктопе, но правило общее и проверяется сторожем. */
+@media (hover: hover) {
+  .za-titlebar__button:hover {
+    background-color: var(--surface-sunken);
+    color: var(--text);
+  }
+  /* Закрытие — единственная кнопка со своим цветом, и он системный: человек
+     узнаёт её раньше, чем прочитает. */
+  .za-titlebar__button--close:hover {
+    background-color: var(--close-bg);
+    color: var(--close-fg);
+  }
+}
+
 /* ── Каркас: три панели (SCREENS «Каркас») ───────────────────────────────── */
 
 .za-frame {

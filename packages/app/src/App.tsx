@@ -6,34 +6,47 @@
  * ниже, — каркас из SCREENS «Каркас»: четыре раскладки по брейкпоинтам
  * 600 / 900 / 1200, маршрутизация, оверлеи и карта хоткеев BEHAVIOR §7.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { SharedPayload, VaultPath } from '@zapiski/core';
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { SharedPayload, VaultPath } from "@zapiski/core";
 /* `@zapiski/ui` подключает токены и стили компонентов сам (side effect). */
-import { Button, Drawer, IconPen, ThemeProvider, ToastProvider } from '@zapiski/ui';
-import './styles/app.css';
-import type { AppHost, Layout } from './contract.js';
-import type { Locale } from './i18n/index.js';
-import { AppProvider, useApp, useAppState, useLayout, useStrings } from './state/context.js';
-import { useKeyboardInset } from './lib/keyboard.js';
-import type { AppController } from './state/store.js';
-import { flushActiveEditor } from './state/active-editor.js';
-import { IconBug } from './components/icons.js';
-import { EmptyBlock } from './components/ScreenStates.js';
-import { CommandPalette } from './screens/CommandPalette.js';
-import { DebugMenu } from './screens/DebugMenu.js';
-import { LibraryPanel } from './screens/LibraryPanel.js';
-import { NoteListScreen } from './screens/NoteListScreen.js';
-import { NoteScreen } from './screens/NoteScreen.js';
-import { OnboardingScreen } from './screens/OnboardingScreen.js';
-import { SearchScreen } from './screens/SearchScreen.js';
-import { SettingsScreen } from './screens/SettingsScreen.js';
-import { SignInScreen } from './screens/SignInScreen.js';
-import { PaywallScreen } from './screens/PaywallScreen.js';
-import { ImportScreen } from './screens/ImportScreen.js';
-import { ArchiveScreen } from './screens/ArchiveScreen.js';
-import { TrashScreen } from './screens/TrashScreen.js';
-import { VersionsScreen } from './screens/VersionsScreen.js';
-import { ShareSheet } from './screens/ShareSheet.js';
+import {
+  Button,
+  Drawer,
+  IconPen,
+  ThemeProvider,
+  ToastProvider,
+} from "@zapiski/ui";
+import "./styles/app.css";
+import type { AppHost, Layout } from "./contract.js";
+import type { Locale } from "./i18n/index.js";
+import {
+  AppProvider,
+  useApp,
+  useAppState,
+  useLayout,
+  useStrings,
+} from "./state/context.js";
+import { useKeyboardInset } from "./lib/keyboard.js";
+import type { AppController } from "./state/store.js";
+import { flushActiveEditor } from "./state/active-editor.js";
+import { IconBug } from "./components/icons.js";
+import { EmptyBlock } from "./components/ScreenStates.js";
+import { CommandPalette } from "./screens/CommandPalette.js";
+import { DebugMenu } from "./screens/DebugMenu.js";
+import { LibraryPanel } from "./screens/LibraryPanel.js";
+import { NoteListScreen } from "./screens/NoteListScreen.js";
+import { NoteScreen } from "./screens/NoteScreen.js";
+import { OnboardingScreen } from "./screens/OnboardingScreen.js";
+import { TitleBar } from "./components/TitleBar.js";
+import { SearchScreen } from "./screens/SearchScreen.js";
+import { SettingsScreen } from "./screens/SettingsScreen.js";
+import { SignInScreen } from "./screens/SignInScreen.js";
+import { PaywallScreen } from "./screens/PaywallScreen.js";
+import { ImportScreen } from "./screens/ImportScreen.js";
+import { ArchiveScreen } from "./screens/ArchiveScreen.js";
+import { TrashScreen } from "./screens/TrashScreen.js";
+import { VersionsScreen } from "./screens/VersionsScreen.js";
+import { ShareSheet } from "./screens/ShareSheet.js";
 
 export interface AppProps {
   host: AppHost;
@@ -62,15 +75,20 @@ export function App({ host, locale }: AppProps): ReactNode {
 function useSideBySide(layout: Layout): boolean {
   const [landscape, setLandscape] = useState(false);
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia('(orientation: landscape)');
+    if (
+      typeof window === "undefined" ||
+      typeof window.matchMedia !== "function"
+    )
+      return;
+    const query = window.matchMedia("(orientation: landscape)");
     setLandscape(query.matches);
-    const handler = (event: MediaQueryListEvent): void => setLandscape(event.matches);
-    query.addEventListener('change', handler);
-    return () => query.removeEventListener('change', handler);
+    const handler = (event: MediaQueryListEvent): void =>
+      setLandscape(event.matches);
+    query.addEventListener("change", handler);
+    return () => query.removeEventListener("change", handler);
   }, []);
-  if (layout === 'dual' || layout === 'triple') return true;
-  return layout === 'compact' && landscape;
+  if (layout === "dual" || layout === "triple") return true;
+  return layout === "compact" && landscape;
 }
 
 function AppShell(): ReactNode {
@@ -87,7 +105,7 @@ function AppShell(): ReactNode {
   const [lastNote, setLastNote] = useState<VaultPath | null>(null);
 
   useEffect(() => {
-    if (state.route.name === 'note') setLastNote(state.route.id);
+    if (state.route.name === "note") setLastNote(state.route.id);
   }, [state.route]);
 
   /* Share-target: ОС передала контент — лист поверх, приложение не открываем. */
@@ -104,7 +122,7 @@ function AppShell(): ReactNode {
   useEffect(() => {
     const hotkey = app.host.platform.globalHotkey;
     if (!hotkey) return;
-    const accelerator = 'Ctrl+Alt+N';
+    const accelerator = "Ctrl+Alt+N";
     void hotkey.register(accelerator, () => void app.createNote());
     return () => void hotkey.unregister(accelerator);
   }, [app]);
@@ -112,13 +130,13 @@ function AppShell(): ReactNode {
   /* Карта хоткеев оболочки (BEHAVIOR §7). Команды текста — в редакторе:
      если он их уже обработал, событие приходит с defaultPrevented. */
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return;
       const mod = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
-      if (key === 'escape') {
+      if (key === "escape") {
         if (state.paletteOpen) app.togglePalette(false);
         else if (state.focusMode) app.toggleFocusMode(false);
         else if (state.libraryOpen) app.toggleLibrary(false);
@@ -127,55 +145,66 @@ function AppShell(): ReactNode {
       if (!mod) return;
 
       const handled = (): void => event.preventDefault();
-      if (key === 'n' && event.shiftKey) {
+      if (key === "n" && event.shiftKey) {
         handled();
         void app.createNote(state.folder ?? undefined);
-      } else if (key === 'n') {
+      } else if (key === "n") {
         handled();
         void app.createNote();
-      } else if (key === 'k' || (key === 'p' && !event.shiftKey)) {
+      } else if (key === "k" || (key === "p" && !event.shiftKey)) {
         handled();
         app.togglePalette();
-      } else if (key === 's' && event.shiftKey) {
+      } else if (key === "s" && event.shiftKey) {
         handled();
-        app.navigate({ name: 'search' });
-      } else if (key === '\\') {
+        app.navigate({ name: "search" });
+      } else if (key === "\\") {
         handled();
         app.toggleLibrary();
-      } else if (key === ',') {
+      } else if (key === ",") {
         handled();
         app.openSettings();
-      } else if (key === 'f' && event.shiftKey) {
+      } else if (key === "f" && event.shiftKey) {
         handled();
         app.toggleFocusMode();
-      } else if (key === 'e' && event.shiftKey) {
+      } else if (key === "e" && event.shiftKey) {
         handled();
-        app.navigate({ name: 'settings', section: 'transfer' });
-      } else if (key === 'e') {
+        app.navigate({ name: "settings", section: "transfer" });
+      } else if (key === "e") {
         handled();
         app.toggleRawMode();
-      } else if (key === 'p' && event.shiftKey) {
+      } else if (key === "p" && event.shiftKey) {
         handled();
-        const path = state.route.name === 'note' ? state.route.id : null;
-        const note = path ? state.notes.find((item) => item.path === path) : undefined;
+        const path = state.route.name === "note" ? state.route.id : null;
+        const note = path
+          ? state.notes.find((item) => item.path === path)
+          : undefined;
         if (note) void app.setPinned(note.path, !note.pinned);
       }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [app, state.focusMode, state.folder, state.libraryOpen, state.notes, state.paletteOpen, state.route]);
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    app,
+    state.focusMode,
+    state.folder,
+    state.libraryOpen,
+    state.notes,
+    state.paletteOpen,
+    state.route,
+  ]);
 
   /* Сворачивание вкладки — принудительное сохранение (BEHAVIOR §0). */
   useEffect(() => {
-    if (typeof document === 'undefined') return;
+    if (typeof document === "undefined") return;
     const onHidden = (): void => {
-      if (document.visibilityState === 'hidden') flushActiveEditor();
+      if (document.visibilityState === "hidden") flushActiveEditor();
     };
-    document.addEventListener('visibilitychange', onHidden);
-    return () => document.removeEventListener('visibilitychange', onHidden);
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
   }, []);
 
-  const notePath = state.route.name === 'note' ? state.route.id : sideBySide ? lastNote : null;
+  const notePath =
+    state.route.name === "note" ? state.route.id : sideBySide ? lastNote : null;
   /**
    * Ключ — «какая заметка», а не «какой у неё сейчас путь».
    *
@@ -204,7 +233,7 @@ function AppShell(): ReactNode {
         }}
       />
       {/* Библиотека — выезжающая панель везде, кроме трёхпанельной раскладки. */}
-      {layout !== 'triple' ? (
+      {layout !== "triple" ? (
         <Drawer
           open={state.libraryOpen}
           onClose={() => app.toggleLibrary(false)}
@@ -231,20 +260,20 @@ function AppShell(): ReactNode {
   /* Экраны вне каркаса: занимают окно целиком на всех раскладках. */
   const solo = ((): ReactNode => {
     switch (state.route.name) {
-      case 'onboarding':
+      case "onboarding":
         return <OnboardingScreen step={state.route.step} />;
-      case 'signin':
+      case "signin":
         return <SignInScreen />;
-      case 'import':
+      case "import":
         return <ImportScreen />;
-      case 'paywall':
+      case "paywall":
         return <PaywallScreen />;
-      case 'settings':
+      case "settings":
         return <SettingsScreen section={state.route.section} />;
-      case 'versions':
+      case "versions":
         return <VersionsScreen noteId={state.route.noteId} />;
       /* Поиск полноэкранный (SCREENS §6) — в том числе на desktop. */
-      case 'search':
+      case "search":
         return <SearchScreen />;
       default:
         return null;
@@ -254,6 +283,7 @@ function AppShell(): ReactNode {
   if (solo !== null) {
     return (
       <div className="za-app">
+        <TitleBar />
         {solo}
         {overlays}
       </div>
@@ -262,12 +292,14 @@ function AppShell(): ReactNode {
 
   const listPane = ((): ReactNode => {
     switch (state.route.name) {
-      case 'archive':
+      case "archive":
         return <ArchiveScreen />;
-      case 'trash':
+      case "trash":
         return <TrashScreen />;
       default:
-        return <NoteListScreen embedded={sideBySide} compactRows={sideBySide} />;
+        return (
+          <NoteListScreen embedded={sideBySide} compactRows={sideBySide} />
+        );
     }
   })();
 
@@ -286,7 +318,11 @@ function AppShell(): ReactNode {
             title={strings.notePane.title}
             description={strings.notePane.subtitle}
             icon={<IconPen size={24} />}
-            action={<Button onClick={() => void app.createNote()}>{strings.list.newNote}</Button>}
+            action={
+              <Button onClick={() => void app.createNote()}>
+                {strings.list.newNote}
+              </Button>
+            }
           />
         </div>
       </div>
@@ -296,6 +332,7 @@ function AppShell(): ReactNode {
   if (state.focusMode && notePath !== null) {
     return (
       <div className="za-app">
+        <TitleBar />
         <div className="za-frame za-frame--focus">
           <div className="za-pane">{notePane}</div>
         </div>
@@ -308,8 +345,11 @@ function AppShell(): ReactNode {
   if (!sideBySide) {
     return (
       <div className="za-app">
+        <TitleBar />
         <div className="za-frame">
-          <div className="za-pane">{state.route.name === 'note' ? notePane : listPane}</div>
+          <div className="za-pane">
+            {state.route.name === "note" ? notePane : listPane}
+          </div>
         </div>
         {overlays}
       </div>
@@ -318,9 +358,10 @@ function AppShell(): ReactNode {
 
   return (
     <div className="za-app">
+      <TitleBar />
       <div className={`za-frame za-frame--${layout}`}>
         {/* ≥1200: библиотека — постоянная панель 224, а не оверлей. */}
-        {layout === 'triple' ? (
+        {layout === "triple" ? (
           <div className="za-pane za-pane--library">
             <LibraryPanel />
           </div>
@@ -345,7 +386,7 @@ function useNoteKey(app: AppController, path: VaultPath | null): string {
   const key = useRef(0);
   const previous = useRef<VaultPath | null>(null);
   if (path !== previous.current) {
-    if (!app.movedFrom(previous.current, path ?? '')) key.current += 1;
+    if (!app.movedFrom(previous.current, path ?? "")) key.current += 1;
     previous.current = path;
   }
   return `note-${key.current}`;

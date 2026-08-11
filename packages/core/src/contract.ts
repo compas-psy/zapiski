@@ -205,6 +205,29 @@ export interface PlatformCapabilities {
    * (BEHAVIOR §5.1).
    */
   readonly vaultFolders?: VaultFolderPicker | null;
+  /**
+   * Управление окном — только там, где строку заголовка рисуем мы сами
+   * (ITERATION-1 §6). `null` у веба и Android: у первого окна нет, у второго
+   * его ведёт система. Экран проверяет наличие порта и без него полосу не
+   * рисует вовсе — по тому же правилу §5.1.
+   */
+  readonly window?: WindowControls | null;
+}
+
+/**
+ * Кнопки своей строки заголовка. Держатся портом, а не вызовом Tauri из
+ * экрана: `packages/app` не знает, в какой оболочке он запущен, и знать не
+ * должен (ARCHITECTURE §1).
+ */
+export interface WindowControls {
+  minimize(): Promise<void>;
+  /** Развернуть ↔ вернуть прежний размер. Двойной клик по полосе делает то же. */
+  toggleMaximize(): Promise<void>;
+  close(): Promise<void>;
+  /** Развёрнуто ли окно сейчас — от этого зависит иконка средней кнопки. */
+  isMaximized(): Promise<boolean>;
+  /** Подписка на смену размера: окно разворачивают и мышью за край экрана. */
+  onMaximizeChange(handler: (maximized: boolean) => void): () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

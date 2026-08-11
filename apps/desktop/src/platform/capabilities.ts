@@ -18,6 +18,7 @@ import type {
 import { SHELL_PREF, type NativePreferences } from './prefs';
 import type { PlatformStrings } from './strings';
 import { openVaultAt } from './vault';
+import { createWindowControls } from './window';
 
 export interface CapabilitiesDeps {
   prefs: NativePreferences;
@@ -97,5 +98,8 @@ export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities
       await deps.prefs.set(SHELL_PREF.vaultPath, picked);
       return storage;
     },
+
+    /* Своя строка заголовка (ITERATION-1 §6): окно безрамочное, кнопки наши. */
+    window: createWindowControls(),
   };
 }
