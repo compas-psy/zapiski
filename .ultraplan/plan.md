@@ -1,38 +1,44 @@
-# Implementation Plan: довести ЗАПИСКИ до соответствия ТЗ
+# Implementation Plan: §3.3 — иерархия ключей «пароль → master → per-note»
 
 ## Context
-Поведенческое ТЗ не менялось — новое в пакете только `REBUILD.md` и `zapiski.css`; закрываем непокрытые старые требования и расхождение геометрии.
+Сейчас у каждой заметки свой пароль и свой Argon2 при каждой разблокировке; §9 отложен, тумблер «Шифровать новые заметки» мёртв, `deriveNoteKey` написан и не вызывается.
 
 ## Changes
 
-### Геометрия по эталону (REBUILD §3: «кнопки высотой 44 и радиусом 14»)
-- **File**: `packages/ui/src/styles/tokens.css:141`, `packages/ui/src/components/Button/Button.css`
-- **Change**: завести `--r-btn: 14px` и дать его кнопке вместо `--r-lg` (сейчас 16). НЕ трогать `--r-md`: он `var(--radius-md)` из системы СИМПАС, правка задела бы чипы и плашки.
-- **Reuses**: сторож `scripts/check-design-tokens.mjs` — образец сверки с эталоном
+### Контейнер v2 и провайдер
+- **File**: `packages/core/src/crypto/container.ts:24` — `CONTAINER_VERSION = 2`, во флаги бит 1, после nonce 16 байт `keyId`. v1 декодируется как раньше.
+- **File**: `packages/core/src/contract.ts:268` — в `CryptoProvider`: `deriveMasterMaterial(password, salt)` (сырые байты — для биометрии), `importMaster(material, salt)`, `deriveNoteKey(master, keyId)`. `deriveMasterKey` остаётся путём чтения v1.
+- **File**: `packages/core/src/crypto/provider.ts:78` — переписать существующий `deriveNoteKey` под `(master, keyId)`; **Reuses**: HKDF-ветка оттуда же, `saltOf` WeakMap `provider.ts:49`.
+- **Ключ заметки привязан к `keyId` из заголовка, а не к пути или id заметки** — переименование не расшифровывается заново.
 
-### Ссылка «История» с плашки конфликтов ведёт в пустоту
-- **File**: `packages/app/src/screens/SettingsScreen.tsx:436`
-- **Change**: передавать `conflicted[0].path`, а не `.id` — `VersionsScreen` принимает `VaultPath` и зовёт `vault.read(noteId)`
-- **Reuses**: как в `packages/app/src/screens/InfoPanel.tsx:83`
+### Файловый слой
+- **File**: `packages/core/src/crypto/notes.ts:28` — `encryptNoteFile(…, master, hint)` генерит `keyId`, пишет v2; `decryptNoteFile` ветвится по версии контейнера; новый `rewriteToV2` для ленивой миграции.
+- **File**: `packages/core/src/crypto/notes.ts` — новый `createEncryptedNote(storage, provider, path, master, body)`: пишет сразу `.md.enc`, минуя `.md`.
 
-### Сторож отрисованных размеров
-- **File**: `scripts/check-measurements.mjs` (новый)
-- **Change**: мерить в браузере кнопку 44/14, поле 44, строку списка 74/58, сайдбар 224/302, колонку 640; включить в `scripts/preflight.sh:56`
+### Приложение
+- **File**: `packages/app/src/state/store.ts:1312` — `unlock` → разблокировка ХРАНИЛИЩА: соль (память → `.zapiski/crypto.json` → любой контейнер → новая), Argon2 один раз за сеанс, master в приватном поле контроллера. **Reuses**: `guard` `store.ts:1324`, `putUnlocked` `store.ts:1347`.
+- **File**: `packages/app/src/state/store.ts:1288` — `encryptNote(path)` без пароля, когда master есть; `setVaultPassword(password, hint)` для первой установки.
+- **File**: `packages/app/src/state/store.ts:1338` — биометрия по `keyId = 'vault'`, отдаёт master-материал (Argon2 не запускается).
+- **File**: `packages/app/src/state/store.ts:951` — `createNote`: при `security.encryptNewNotes` и живом master — через `createEncryptedNote`; при запертом хранилище — сначала экран разблокировки.
+- **File**: `packages/app/src/state/store.ts:1382` `lockAll` — обнуляет master вместе с `unlocked`.
 
-### Достижимость по BEHAVIOR §7 и §13
-- **File**: `packages/app/src/App.tsx:120-160`, `packages/app/src/screens/CommandPalette.tsx`
-- **Change**: закрыть находки аудитов (идут) — каждый хоткей работает И перечислен в палитре (критерий §13.8)
+### Экраны
+- **File**: `packages/app/src/screens/EncryptSheet.tsx:39` — два режима: «задать пароль хранилища» (первый раз) и «зашифровать» (полей нет).
+- **File**: `packages/app/src/screens/LockScreen.tsx:65` — биометрия по `'vault'`.
+- **File**: `packages/app/src/screens/SettingsScreen.tsx:457` — оба мёртвых тумблера («Шифровать новые заметки», «Разблокировать биометрией») на реальные преф и enroll.
 
 ## Implementation Sequence
-1. `SettingsScreen.tsx:436` — `.id` → `.path`, тест на переход в историю
-2. `tokens.css` — радиусы по ролям; `scripts/check-measurements.mjs`; в преflight
-3. Находки аудитов BEHAVIOR/SCREENS — по тяжести для пользователя, каждая с тестом достижимости
-4. Живой прогон семи путей в браузере: онбординг · набор · папки · шифрование туда-обратно · поиск · экспорт-импорт · корзина
+1. `container.ts` + `provider.ts` + `contract.ts` — формат и ключи, тесты в `packages/core/test/crypto.test.ts` (v2 round-trip, ключи двух заметок различаются, v1 читается).
+2. `crypto/notes.ts` — запись v2, ветвление по версии, `createEncryptedNote`, ленивая миграция.
+3. `store.ts` — master в сеансе, биометрия к нему, `createNote`, `lockAll`; новый `packages/app/test/crypto.vault-key.test.ts`.
+4. Экраны и оба тумблера; `packages/app/test/security.unlock-delay.test.ts` перечитать (счётчик глобальный — остаётся).
+5. `scripts/walkthrough.mjs` — путь «шифрование туда-обратно»: задать пароль → замок → разблокировать → вторая заметка открывается без пароля.
 
 ## Edge Cases & Risks
-- **Критерий §13.3 против указания заказчика**: ТЗ требует «разметка проявляется без единого сдвига layout», я сделал схлопывание. Сдвиг теперь только при входе курсора в узел, при обычном наборе его нет. Нужно ваше слово; возврат — одна строка.
-- **Слой `.zp-*` не подключаю**: 95 классов плоского CSS против 9 наших компонентов в 45 файлах; поведение (фокус, состояния, доступность) в плоском CSS не выражено. Приводим значения, классы оставляем.
-- Правка радиусов трогает все кнопки — ловится сторожем размеров, а не глазами.
+- **Плейнтекст на диске**: шифрование новой заметки через `vault.create()` положило бы `.md` до `.md.enc`. Поэтому шаг 2 даёт `createEncryptedNote`, а не «создать и зашифровать».
+- **Две соли на двух устройствах**: разблокировка всегда идёт от соли ИЗ контейнера, поэтому расхождение не ломает открытие; сходятся при первом же синке.
+- **Автозамок теперь закрывает всё разом** (master один) — это и требует BEHAVIOR §5.3.
+- **v1 после миграции**: файл переписывается, синк увидит правку — продукт не выпущен, потерять нечего.
 
 ## Verification
-`bash scripts/preflight.sh --dirty && node scripts/check-measurements.mjs`
+`bash scripts/preflight.sh --dirty && node scripts/walkthrough.mjs`
