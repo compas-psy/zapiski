@@ -25,47 +25,13 @@
  * возвращает 0: он не должен ронять CI там, где его нельзя выполнить. Но
  * молчать о пропуске тоже нельзя, поэтому пропуск печатается явно.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import { extname, join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Типы, которые нужны собранному PWA. Остальное отдаём как поток байтов. */
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.webmanifest': 'application/manifest+json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.woff2': 'font/woff2',
-};
-
-/**
- * Статика собранного PWA. Любой неизвестный путь отдаёт `index.html`:
- * приложение одностраничное, и маршруты разбирает оно само.
- */
-function spawnStatic(root, port) {
-  const http = createServer((request, response) => {
-    const path = (request.url ?? '/').split('?')[0];
-    let file = join(root, path === '/' ? 'index.html' : path.slice(1));
-    if (!existsSync(file) || file.endsWith('/')) file = join(root, 'index.html');
-    try {
-      response.writeHead(200, {
-        'content-type': MIME[extname(file)] ?? 'application/octet-stream',
-      });
-      response.end(readFileSync(file));
-    } catch {
-      response.writeHead(404).end();
-    }
-  });
-  http.listen(Number(port), '127.0.0.1');
-  return { kill: () => http.close() };
-}
+import { serveDist } from './static-server.mjs';
 
 const PORT = process.env.ZAPISKI_PORT ?? '4173';
-const URL_BASE = process.env.ZAPISKI_URL ?? `http://127.0.0.1:${PORT}/`;
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
 
 /**
@@ -146,29 +112,17 @@ try {
  * Иначе прогон падает по забытому серверу, а не по продукту, — и это худший
  * вид ложной тревоги: он приучает не верить сторожу.
  */
-let server = null;
-async function alive() {
-  try {
-    await fetch(URL_BASE, { signal: AbortSignal.timeout(1500) });
-    return true;
-  } catch {
-    return false;
-  }
-}
-if (!(await alive())) {
-  if (!existsSync(DIST)) skip(`нет собранной статики ${DIST} (pnpm --filter "@zapiski/web..." build)`);
-  /* Свой сервер на `node:http`, а не `npx serve`: `npx` тянет пакет из сети, и
-     без сети прогон снова молча пропускался бы — притом именно там, где он
-     нужнее всего. */
-  server = spawnStatic(DIST, PORT);
-  for (let attempt = 0; attempt < 40 && !(await alive()); attempt += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  if (!(await alive())) {
-    server.kill();
-    skip('не удалось поднять статику');
-  }
-}
+/* Статика — общим модулем. Он же проверяет, что по адресу отдаётся ИМЕННО
+   наша страница: прежде здесь стояло «кто-то ответил — значит сервер есть», и
+   забытый на том же порту чужой процесс (отдававший 404) уводил весь прогон в
+   таймаут поиска кнопки «Начать». Причина при этом выглядела как поломка
+   продукта. */
+const served = await serveDist(DIST, PORT).catch((error) => {
+  skip(error.message);
+  return null;
+});
+const server = served;
+const URL_BASE = served.url;
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU' });
@@ -217,7 +171,7 @@ check(editorReady, 'после онбординга не открылся ред
 if (!editorReady) {
   console.log(problems.map((p) => `  · ${p}`).join('\n'));
   await browser.close();
-  server?.kill();
+  server.close();
   process.exit(1);
 }
 
@@ -499,7 +453,7 @@ for (const [name, viewport] of [
 }
 
 await browser.close();
-server?.kill();
+server.close();
 
 for (const error of errors) problems.push(error);
 if (problems.length > 0) {

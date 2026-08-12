@@ -11,7 +11,7 @@
  *   pnpm --filter "@zapiski/web..." build
  *   node scripts/check-focus-ring.mjs
  */
-import { spawn } from 'node:child_process';
+import { serveDist } from './static-server.mjs';
 import { chromium } from 'playwright-core';
 import { existsSync } from 'node:fs';
 
@@ -22,10 +22,13 @@ if (!existsSync(CHROME)) {
   process.exit(0);
 }
 const PORT = process.env.ZAPISKI_PORT ?? '4202'; const URL_BASE = `http://127.0.0.1:${PORT}/`;
-const alive = async () => { try { await fetch(URL_BASE, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; } };
-let server = null;
-if (!(await alive())) { server = spawn('npx', ['--yes','serve','-s','apps/web/dist','-l',PORT], {stdio:'ignore'});
-  for (let i=0;i<40 && !(await alive());i+=1) await new Promise(r=>setTimeout(r,500)); }
+/* Свой сервер вместо `npx serve`: без сети и с внятным падением, когда
+   отдавать нечего. Пустая страница прежде давала «колец 0» — отчёт о дефекте,
+   которого нет. */
+const server = await serveDist('apps/web/dist', PORT).catch((error) => {
+  console.error(`фокус: ПРОВЕРИТЬ НЕ УДАЛОСЬ — ${error.message}`);
+  process.exit(1);
+});
 const browser = await chromium.launch({ executablePath: CHROME, args:['--no-sandbox'] });
 const page = await browser.newPage({ viewport:{width:1280,height:820}, locale:'ru-RU' });
 await page.goto(URL_BASE, { waitUntil:'networkidle' });
@@ -58,7 +61,7 @@ const drawn = rings.filter(
 );
 for (const e of drawn) console.log(`кольцо на ${e.tag}.${e.cls}: shadow ${e.shadow}`);
 await browser.close();
-server?.kill();
+server.close();
 
 if (drawn.length === 1) {
   console.log('фокус: одно кольцо — как требует REBUILD §1.5');

@@ -31,6 +31,7 @@ import {
   limitShift,
   offset,
   shift,
+  size,
   useFloating,
 } from '@floating-ui/react-dom';
 import { EditorView } from '@codemirror/view';
@@ -205,9 +206,10 @@ const styles = new StyleModule({
   },
   '.zp-panel__menu': {
     minWidth: '232px',
-    /* Длинное меню на низком экране обязано прокручиваться внутри себя, а не
-       уезжать за кромку: высоту слоя ограничивает Floating UI. */
-    maxHeight: '80vh',
+    /* Длинное меню на низком экране прокручивается внутри себя, а не уезжает
+       за кромку. Значение ставит `size()` из Floating UI по доступному месту;
+       фолбэк — на случай, если слой почему-то отрисовался до первого счёта. */
+    maxHeight: 'var(--zp-menu-max, 60vh)',
     overflowY: 'auto',
     padding: '6px',
     borderRadius: 'var(--r-card)',
@@ -1067,7 +1069,25 @@ function MenuButton({
   const { refs, floatingStyles, placement } = useFloating({
     placement: menuPlacement,
     strategy: 'fixed',
-    middleware: [offset(8), flip({ padding: 8 }), shift({ padding: 8, limiter: limitShift() })],
+    middleware: [
+      offset(8),
+      flip({ padding: 8 }),
+      shift({ padding: 8, limiter: limitShift() }),
+      /* Высота — по РЕАЛЬНОМУ просвету, а не по доле экрана.
+         Стоит после `flip()` и с тем же `padding`: тогда сначала выбирается
+         сторона, а потом меню сжимается под то, что там осталось. С `80vh`,
+         которое стояло тут раньше, на телефоне выходила ложь: панель прижата
+         к клавиатуре, вверх остаётся куда меньше восьмидесяти процентов. */
+      size({
+        padding: 8,
+        apply({ availableHeight, elements }) {
+          elements.floating.style.setProperty(
+            '--zp-menu-max',
+            `${Math.max(120, availableHeight)}px`,
+          );
+        },
+      }),
+    ],
     whileElementsMounted: autoUpdate,
   });
 

@@ -14,7 +14,7 @@
  *   pnpm --filter "@zapiski/web..." build
  *   node scripts/check-design-tokens.mjs
  */
-import { spawn } from 'node:child_process';
+import { serveDist } from './static-server.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -58,14 +58,14 @@ function expected(theme) {
   return out;
 }
 
-const alive = async () => {
-  try { await fetch(URL_BASE, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; }
-};
-let server = null;
-if (!(await alive())) {
-  server = spawn('npx', ['--yes', 'serve', '-s', 'apps/web/dist', '-l', PORT], { stdio: 'ignore' });
-  for (let i = 0; i < 40 && !(await alive()); i += 1) await new Promise((r) => setTimeout(r, 500));
-}
+/* Свой сервер вместо `npx serve`: он не ходит в сеть и, главное, падает с
+   внятным текстом, когда отдавать нечего. Прежде ненаступивший сервер давал
+   пустую страницу, и проверка рапортовала «51 расхождение токенов» — то есть
+   врала о причине. */
+const server = await serveDist('apps/web/dist', PORT).catch((error) => {
+  console.error(`токены: ПРОВЕРИТЬ НЕ УДАЛОСЬ — ${error.message}`);
+  process.exit(1);
+});
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1200, height: 800 }, locale: 'ru-RU' });
@@ -121,6 +121,6 @@ for (const [theme, want] of [
 }
 
 await browser.close();
-server?.kill();
+server.close();
 console.log(bad === 0 ? 'ТОКЕНЫ СОВПАДАЮТ С design/tokens.json' : `РАСХОЖДЕНИЙ: ${bad}`);
 process.exit(bad === 0 ? 0 : 1);
