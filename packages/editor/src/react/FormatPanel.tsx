@@ -24,6 +24,15 @@
  *     `preventDefault`, а не по `click`.
  */
 import { useEffect, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  autoUpdate,
+  flip,
+  limitShift,
+  offset,
+  shift,
+  useFloating,
+} from '@floating-ui/react-dom';
 import { EditorView } from '@codemirror/view';
 import { redo, undo } from '@codemirror/commands';
 import { StyleModule } from 'style-mod';
@@ -160,24 +169,52 @@ const styles = new StyleModule({
     backgroundColor: 'var(--line)',
   },
 
+  /* ── Слой меню ───────────────────────────────────────────────────────────
+     Меню рисуется ПОРТАЛОМ в `document.body`, а не внутри панели, и позицию
+     ему считает Floating UI.
+
+     Почему так, а не `position: absolute` у якоря, как было. У самой панели
+     стоит `overflow-x: auto` (ради узкого экрана), и по CSS вторая ось при
+     этом тоже вычисляется в `auto` — панель стала скролл-контейнером и
+     обрезала меню по своей высоте 46 px, тогда как верх меню начинался на
+     48-й. Меню не было видно НИ ОДНИМ пикселем: в DOM оно есть, на экране
+     нет. Сверху добавлялся второй клип — `overflow: hidden` у `.za-editor` —
+     и стекинг-контекст от `position: sticky` у обёртки панели, из-за которого
+     `z-index` меню действовал только внутри неё.
+
+     Портал снимает все три разом, и его же документация Floating UI называет
+     самым надёжным способом против обрезания. */
+  '.zp-panel__layer': {
+    position: 'fixed',
+    zIndex: 'var(--z-overlay)',
+    /* Появление 160 мс: fade + 6 px со стороны кнопки (§4). Направление зависит
+       от того, куда меню в итоге раскрылось. */
+    animation: 'zp-panel-in 160ms var(--ease-out, ease)',
+  },
+  '.zp-panel__layer[data-side="top"]': {
+    animationName: 'zp-panel-in-up',
+    transformOrigin: 'bottom left',
+  },
+  '@keyframes zp-panel-in': {
+    from: { opacity: '0', transform: 'translateY(6px)' },
+    to: { opacity: '1', transform: 'translateY(0)' },
+  },
+  '@keyframes zp-panel-in-up': {
+    from: { opacity: '0', transform: 'translateY(-6px)' },
+    to: { opacity: '1', transform: 'translateY(0)' },
+  },
   '.zp-panel__menu': {
-    position: 'absolute',
-    top: 'calc(100% + 8px)',
-    left: '0',
-    zIndex: '20',
     minWidth: '232px',
+    /* Длинное меню на низком экране обязано прокручиваться внутри себя, а не
+       уезжать за кромку: высоту слоя ограничивает Floating UI. */
+    maxHeight: '80vh',
+    overflowY: 'auto',
     padding: '6px',
     borderRadius: 'var(--r-card)',
     backgroundColor: 'var(--surface)',
     border: '1px solid var(--line)',
     boxShadow: 'var(--shadow-pop)',
-    /* Появление 160 мс: fade + 6 px снизу, точка роста — у кнопки (§4). */
     transformOrigin: 'top left',
-    animation: 'zp-panel-in 160ms var(--ease-out, ease)',
-  },
-  '@keyframes zp-panel-in': {
-    from: { opacity: '0', transform: 'translateY(6px)' },
-    to: { opacity: '1', transform: 'translateY(0)' },
   },
   '.zp-panel__item': {
     display: 'flex',
@@ -256,9 +293,6 @@ const styles = new StyleModule({
     gridTemplateColumns: 'repeat(8, 1fr)',
     gap: '2px',
     minWidth: '0',
-    right: '0',
-    left: 'auto',
-    transformOrigin: 'top right',
   },
   '.zp-panel__emoji': {
     width: '34px',
@@ -416,7 +450,13 @@ export function FormatPanel({
   useEffect(() => {
     if (open === null) return;
     const onDown = (event: PointerEvent): void => {
-      if (!root.current?.contains(event.target as Node)) setOpen(null);
+      const target = event.target as Element | null;
+      /* Меню теперь живёт порталом в `document.body`, то есть ВНЕ поддерева
+         панели: проверять только `root` значило бы закрывать меню от нажатия
+         внутри него самого. */
+      const inside =
+        root.current?.contains(target as Node) || target?.closest?.('.zp-panel__layer');
+      if (!inside) setOpen(null);
     };
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
@@ -852,6 +892,9 @@ export function FormatPanel({
         <MenuButton
           label={copy.emoji}
           expanded={open === 'emoji'}
+          /* Палитра у правого края панели: прижимаем вправо, иначе `shift()`
+             будет каждый раз оттаскивать её от кнопки. */
+          menuPlacement="bottom-end"
           onPress={
             onEmoji
               ? () => {
@@ -972,6 +1015,8 @@ function PanelButton({ label, onPress, active, children }: ButtonProps): ReactEl
 interface MenuButtonProps extends ButtonProps {
   expanded: boolean;
   menu: ReactNode;
+  /** Куда прижимать меню. Палитре эмодзи — вправо: она у правого края панели. */
+  menuPlacement?: 'bottom-start' | 'bottom-end';
   /** Долгое нажатие / правый клик — для кнопок с действием и меню сразу. */
   onLongPress?: () => void;
 }
@@ -983,6 +1028,7 @@ function MenuButton({
   expanded,
   active,
   menu,
+  menuPlacement = 'bottom-start',
   children,
 }: MenuButtonProps): ReactElement {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1009,10 +1055,27 @@ function MenuButton({
     return !consumed.current;
   };
 
+  /**
+   * Позиция меню — готовым решением, а не своей арифметикой.
+   *
+   * `offset(8)` — зазор из §4; `flip()` перекидывает меню вверх, когда снизу
+   * не помещается (на телефоне панель прижата к клавиатуре, и вниз места нет
+   * вовсе); `shift()` прижимает к вьюпорту, чтобы крайняя кнопка не увела
+   * меню за кромку; `autoUpdate` пересчитывает при прокрутке и resize.
+   * Порядок middleware обязателен именно такой.
+   */
+  const { refs, floatingStyles, placement } = useFloating({
+    placement: menuPlacement,
+    strategy: 'fixed',
+    middleware: [offset(8), flip({ padding: 8 }), shift({ padding: 8, limiter: limitShift() })],
+    whileElementsMounted: autoUpdate,
+  });
+
   return (
     <span className="zp-panel__anchor">
       <button
         type="button"
+        ref={refs.setReference}
         /* Кнопка подсвечена, пока её меню открыто (§4, правило 2), и пока
            курсор стоит внутри того, что она применяет (§4, «Поведение»). */
         className={`zp-panel__btn${expanded || active ? ' zp-panel__btn--active' : ''}`}
@@ -1046,7 +1109,19 @@ function MenuButton({
       >
         {children}
       </button>
-      {menu}
+      {menu !== null && menu !== undefined && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              ref={refs.setFloating}
+              className="zp-panel__layer"
+              data-side={placement.startsWith('top') ? 'top' : 'bottom'}
+              style={floatingStyles}
+            >
+              {menu}
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }

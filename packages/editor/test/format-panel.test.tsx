@@ -108,8 +108,21 @@ function button(container: HTMLElement, label: string): HTMLElement {
   return found as HTMLElement;
 }
 
-function items(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+/**
+ * Пункты меню ищутся во ВСЁМ документе, а не внутри контейнера панели.
+ *
+ * Меню рисуется порталом в `document.body`: внутри панели его держать нельзя —
+ * у той `overflow-x: auto`, и она обрезала выпадашку по своей высоте так, что
+ * от меню не оставалось ни одного видимого пикселя. Аргумент `container`
+ * сохранён нарочно: он делает вызовы читаемыми и не даёт забыть, что панель
+ * должна быть смонтирована.
+ */
+function menuLayer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.zp-panel__layer');
+}
+
+function items(_container: HTMLElement): HTMLElement[] {
+  return Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'));
 }
 
 function itemByText(container: HTMLElement, text: string): HTMLElement {
@@ -119,8 +132,8 @@ function itemByText(container: HTMLElement, text: string): HTMLElement {
 }
 
 /** Кнопка диалога по надписи — у неё нет роли `menuitem`. */
-function itemByLabel(container: HTMLElement, text: string): HTMLElement {
-  const found = Array.from(container.querySelectorAll('button')).find(
+function itemByLabel(_container: HTMLElement, text: string): HTMLElement {
+  const found = Array.from(document.querySelectorAll('button')).find(
     (node) => node.textContent === text,
   );
   expect(found, `кнопки «${text}» нет`).toBeTruthy();
@@ -195,7 +208,7 @@ describe('меню помечает текущий вариант', () => {
     press(button(container, copy.blockStyle));
     press(itemByText(container, copy.styles.heading));
 
-    expect(container.querySelectorAll('.zp-panel__menu').length).toBe(1);
+    expect(document.querySelectorAll('.zp-panel__menu').length).toBe(1);
     expect(itemByText(container, copy.back)).toBeTruthy();
     expect(items(container).some((item) => item.textContent?.includes(copy.styles.quote))).toBe(
       false,
@@ -266,12 +279,13 @@ describe('кнопка отражает текст под курсором', () 
 
 describe('ссылка вставляется диалогом «Текст» + «Адрес»', () => {
   /** Поле диалога по его подписи. */
-  function field(container: HTMLElement, label: string): HTMLInputElement {
-    const found = Array.from(container.querySelectorAll('label')).find(
+  /* Диалог, как и меню, живёт порталом в `document.body` — ищем там. */
+  function field(_container: HTMLElement, label: string): HTMLInputElement {
+    const found = Array.from(document.querySelectorAll('label')).find(
       (node) => node.textContent === label,
     );
     expect(found, `поля «${label}» нет`).toBeTruthy();
-    const input = container.querySelector<HTMLInputElement>(`#${found!.htmlFor}`);
+    const input = document.querySelector<HTMLInputElement>(`#${found!.htmlFor}`);
     expect(input, `поле «${label}» ни к чему не привязано`).not.toBeNull();
     return input as HTMLInputElement;
   }
@@ -335,7 +349,7 @@ describe('эмодзи вставляется в текст', () => {
        на эмодзи в UI она не нарушает. */
     const container = mount('мысль|');
     press(button(container, copy.emoji));
-    const star = container.querySelector<HTMLElement>('button[aria-label="⭐"]');
+    const star = document.querySelector<HTMLElement>('button[aria-label="⭐"]');
     expect(star, 'палитра не открылась').not.toBeNull();
     press(star as HTMLElement);
     expect(view?.state.doc.toString()).toBe('мысль⭐');
@@ -535,7 +549,7 @@ describe('таблица правится из панели', () => {
   it('выравнивание помечено и применяется', () => {
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
     press(button(container, copy.table));
-    const centre = container.querySelector<HTMLElement>(
+    const centre = document.querySelector<HTMLElement>(
       `[aria-label="${copy.tableMenu.aligns.center}"]`,
     );
     expect(centre, 'кнопки выравнивания нет').not.toBeNull();
@@ -559,5 +573,75 @@ describe('таблица правится из панели', () => {
     press(button(container, copy.table));
     press(itemByText(container, copy.tableMenu.removeRow));
     expect(view?.state.doc.toString()).toBe(before);
+  });
+});
+
+/**
+ * Меню не должно жить внутри панели — она его обрезает.
+ *
+ * Это тот самый дефект, который прошёл мимо тысячи модульных тестов: у панели
+ * стоит `overflow-x: auto`, и по CSS вторая ось при этом тоже вычисляется в
+ * `auto`. Панель становится скролл-контейнером высотой 46 px, а меню начиналось
+ * на 48-й — то есть не было видно НИ ОДНИМ пикселем. В DOM оно при этом
+ * присутствовало, и все проверки «пункт есть» проходили.
+ *
+ * happy-dom раскладку не считает и обрезания не воспроизводит, поэтому здесь
+ * сторожится не видимость, а её ПРЕДУСЛОВИЕ: меню вынесено из поддерева
+ * панели. Саму видимость проверяет браузерный прогон `scripts/walkthrough.mjs`.
+ */
+describe('меню вынесено из обрезающего контейнера', () => {
+  it('слой меню лежит в body, а не внутри панели', () => {
+    const container = mount('текст|');
+    press(button(container, copy.blockStyle));
+
+    const layer = menuLayer();
+    expect(layer, 'слоя меню нет').not.toBeNull();
+    expect(container.contains(layer as Node), 'меню внутри панели — её обрежет').toBe(false);
+    expect(layer?.parentElement).toBe(document.body);
+  });
+
+  it('пункты меню лежат внутри слоя', () => {
+    const container = mount('текст|');
+    press(button(container, copy.blockStyle));
+    const layer = menuLayer() as HTMLElement;
+    for (const item of items(container)) {
+      expect(layer.contains(item)).toBe(true);
+    }
+  });
+
+  it('закрытое меню слоя не оставляет', () => {
+    /* Иначе поверх текста висел бы невидимый прямоугольник, перехватывающий
+       нажатия. */
+    const container = mount('текст|');
+    press(button(container, copy.blockStyle));
+    expect(menuLayer()).not.toBeNull();
+    press(button(container, copy.blockStyle));
+    expect(menuLayer()).toBeNull();
+  });
+
+  it('нажатие внутри меню его не закрывает', () => {
+    /* Обработчик «нажали мимо» смотрит на поддерево панели, а меню теперь вне
+       него: без учёта слоя меню закрывалось бы от нажатия по себе самому. */
+    const container = mount('текст|');
+    press(button(container, copy.blockStyle));
+    const layer = menuLayer() as HTMLElement;
+
+    act(() => {
+      layer.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    });
+    expect(menuLayer(), 'меню закрылось от нажатия внутри себя').not.toBeNull();
+  });
+
+  it('нажатие вне панели и вне меню закрывает', () => {
+    const container = mount('текст|');
+    press(button(container, copy.blockStyle));
+    expect(menuLayer()).not.toBeNull();
+
+    act(() => {
+      document.body.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, cancelable: true }),
+      );
+    });
+    expect(menuLayer()).toBeNull();
   });
 });
