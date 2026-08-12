@@ -19,7 +19,16 @@ import { EditorView } from '@codemirror/view';
 import { fontFamily } from './tokens.js';
 
 /** Множители кегля заголовков относительно базового размера (DESIGN_TOKENS §2). */
-const HEADING = [
+/**
+ * Шкала заголовков — ЕДИНСТВЕННЫЙ источник кеглей H1…H6.
+ *
+ * Экспортируется затем, что подменю заголовков в панели форматирования обязано
+ * набирать каждый пункт РЕАЛЬНЫМ кеглем (§4: «человек видит результат, а не
+ * читает название»). Пока панель считала кегли сама, она ссылалась на токены
+ * `--fs-h3`/`--fw-h3`, которых не существует, — и три пункта из шести молча
+ * набирались как попало.
+ */
+export const HEADING = [
   { size: '1.875', weight: '700', tracking: '-0.02em', lh: '1.2' }, // H1 30/16
   { size: '1.1875', weight: '600', tracking: '-0.01em', lh: '1.35' }, // H2 19/16
   { size: '1.0625', weight: '600', tracking: '-0.01em', lh: '1.4' }, // H3 17/16
@@ -69,6 +78,10 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     lineHeight: 'inherit',
     overflowX: 'hidden',
   },
+  /* Скроллпорт CodeMirror тоже фокусируем — и тоже получал системное кольцо.
+     Гасим только мышиный и тач-фокус: клавиатурный (`:focus-visible`) обязан
+     остаться видимым. */
+  '.cm-scroller:focus:not(:focus-visible)': { outline: 'none' },
   '.cm-content': {
     maxWidth: 'var(--z-col)',
     marginInline: 'auto',
@@ -378,7 +391,7 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    color: 'var(--text-primary)',
+    color: 'var(--text)',
   },
   '.cm-z-file__size': {
     flex: '0 0 auto',

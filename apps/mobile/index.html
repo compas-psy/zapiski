@@ -9,7 +9,14 @@
       системного шрифта до 200%, а user-scalable=no ломает эту гарантию.
     -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light dark" />
+    <!--
+      `color-scheme` здесь НЕ объявляем: он ставится из темы приложения
+      (`packages/ui/src/styles/tokens.css`, привязка к `data-theme`). Пока тут
+      стоял `content="light dark"`, системные элементы WebView — кольцо фокуса
+      и полосы прокрутки — следовали схеме системы, а не продукта, и в тёмной
+      системе вокруг области текста появлялось светлое кольцо: та самая
+      «непонятная белая рамка вокруг редактора» из отзыва.
+    -->
     <title>ЗАПИСКИ</title>
     <style>
       /*

@@ -30,6 +30,7 @@ import { StyleModule } from 'style-mod';
 import { StateEffect } from '@codemirror/state';
 
 import { ru, type EditorStrings } from '../i18n.js';
+import { HEADING } from '../theme/base-theme.js';
 import {
   blockStyleAt,
   inlineActiveAt,
@@ -70,6 +71,30 @@ import {
    Всё в токенах: §4 говорит «панель наша», и ни одного литерала цвета здесь
    быть не может. Числа — из §4 дословно: контейнер 44, кнопка 36, радиус 10,
    иконка 19, разделитель 20, зазор между группами 10. */
+/**
+ * Кегли пунктов H1…H6 в подменю заголовков.
+ *
+ * §4: «Каждый пункт набран своим РЕАЛЬНЫМ кеглем и весом — пользователь видит
+ * результат, а не читает название». Значит, источник у превью и у текста
+ * обязан быть один; им и служит `HEADING` из темы редактора.
+ *
+ * База — `--fs-body` (16), а не `--z-fs`: последний объявлен внутри
+ * `.cm-editor`, а меню живёт вне него, и множитель просто не посчитался бы.
+ */
+function headingSamples(): Record<string, Record<string, string>> {
+  const out: Record<string, Record<string, string>> = {};
+  HEADING.forEach((h, index) => {
+    out[`.zp-panel__item--h${index + 1}`] = {
+      /* Крупным пунктам высота строки 40 мала — иначе H1 обрежется. */
+      ...(index < 3 ? { height: 'auto', paddingBlock: '6px' } : {}),
+      fontSize: `calc(var(--fs-body) * ${h.size})`,
+      fontWeight: h.weight,
+      letterSpacing: h.tracking,
+    };
+  });
+  return out;
+}
+
 const styles = new StyleModule({
   '.zp-panel': {
     display: 'flex',
@@ -97,7 +122,7 @@ const styles = new StyleModule({
     borderRadius: 'var(--r-full)',
     backgroundColor: 'var(--surface)',
     border: '1px solid var(--line)',
-    boxShadow: 'var(--shadow-card, var(--elev-search))',
+    boxShadow: 'var(--shadow-card)',
   },
   '.zp-panel__anchor': { position: 'relative', display: 'inline-flex' },
   '.zp-panel__btn': {
@@ -114,7 +139,7 @@ const styles = new StyleModule({
     color: 'inherit',
     cursor: 'pointer',
     WebkitTapHighlightColor: 'transparent',
-    transition: 'transform var(--dur-fast, 120ms) var(--ease-out, ease)',
+    transition: 'transform var(--dur-press) var(--ease-out, ease)',
   },
   '.zp-panel__btn:active': { transform: 'scale(.97)' },
   '.zp-panel__btn--active': {
@@ -145,7 +170,7 @@ const styles = new StyleModule({
     borderRadius: 'var(--r-card)',
     backgroundColor: 'var(--surface)',
     border: '1px solid var(--line)',
-    boxShadow: 'var(--shadow-pop, var(--elev-modal))',
+    boxShadow: 'var(--shadow-pop)',
     /* Появление 160 мс: fade + 6 px снизу, точка роста — у кнопки (§4). */
     transformOrigin: 'top left',
     animation: 'zp-panel-in 160ms var(--ease-out, ease)',
@@ -166,7 +191,7 @@ const styles = new StyleModule({
     background: 'transparent',
     color: 'var(--text)',
     font: 'inherit',
-    fontSize: 'var(--fs-md, 15px)',
+    fontSize: 'var(--fs-md)',
     textAlign: 'start',
     cursor: 'pointer',
   },
@@ -188,6 +213,7 @@ const styles = new StyleModule({
     color: 'var(--text-secondary)',
     minWidth: '18px',
   },
+  '.zp-panel__glyph': { flex: 'none', color: 'var(--text-secondary)' },
   '.zp-panel__check': { color: 'var(--accent)', fontSize: '16px' },
   /* Удаление — своим цветом и последним пунктом за хайрлайном (§4). */
   '.zp-panel__item--danger': {
@@ -263,7 +289,7 @@ const styles = new StyleModule({
     backgroundColor: 'var(--surface-sunken)',
     color: 'var(--text)',
     font: 'inherit',
-    fontSize: 'var(--fs-md, 15px)',
+    fontSize: 'var(--fs-md)',
   },
   '.zp-panel__input:focus-visible': {
     outline: '2px solid var(--focus-ring, var(--accent))',
@@ -291,12 +317,11 @@ const styles = new StyleModule({
   /* Пункты подменю набраны реальными кеглями H1…H6 — человек видит результат,
      а не читает название (§4). Высота строки при этом растёт вместе с кеглем,
      поэтому фиксированная высота 40 здесь снимается. */
-  '.zp-panel__item--h1': { height: 'auto', fontSize: 'var(--fs-h1)', fontWeight: 'var(--fw-h1)' },
-  '.zp-panel__item--h2': { height: 'auto', fontSize: 'var(--fs-h2)', fontWeight: 'var(--fw-h2)' },
-  '.zp-panel__item--h3': { height: 'auto', fontSize: 'var(--fs-h3)', fontWeight: 'var(--fw-h3)' },
-  '.zp-panel__item--h4': { fontSize: 'var(--fs-lg, 17px)', fontWeight: '600' },
-  '.zp-panel__item--h5': { fontSize: 'var(--fs-md, 15px)', fontWeight: '600' },
-  '.zp-panel__item--h6': { fontSize: 'var(--fs-sm, 13px)', fontWeight: '600' },
+  /* Кегли берутся из ТОЙ ЖЕ шкалы, по которой редактор рисует заголовки, —
+     иначе превью обещает одно, а текст получается другой. Раньше здесь стояли
+     свои значения, причём три из шести ссылались на несуществующие токены
+     `--fs-h3`/`--fw-h3` и молча набирались как попало. */
+  ...headingSamples(),
 });
 
 let mounted = false;
@@ -490,35 +515,41 @@ export function FormatPanel({
               <Menu>
                 <MenuItem
                   label={copy.styles.heading}
+                  glyph="heading"
                   submenu
                   checked={style.startsWith('h')}
                   onPress={() => setOpen('heading')}
                 />
                 <MenuItem
                   label={copy.styles.text}
+                  glyph="text"
                   hotkey={copy.hotkeys.text}
                   checked={style === 'text'}
                   onPress={run(setHeading(0))}
                 />
                 <MenuItem
                   label={copy.styles.quote}
+                  glyph="quote"
                   hotkey={copy.hotkeys.quote}
                   checked={style === 'quote'}
                   onPress={run(toggleQuote)}
                 />
                 <MenuItem
                   label={copy.styles.callout}
+                  glyph="callout"
                   checked={style === 'callout'}
                   onPress={run(insertCallout)}
                 />
                 <MenuItem
                   label={copy.styles.code}
+                  glyph="code"
                   hotkey={copy.hotkeys.code}
                   checked={style === 'code'}
                   onPress={run(insertCodeBlock)}
                 />
                 <MenuItem
                   label={copy.styles.small}
+                  glyph="small"
                   checked={style === 'small'}
                   onPress={run(insertSmall)}
                 />
@@ -561,28 +592,33 @@ export function FormatPanel({
               <Menu>
                 <MenuItem
                   label={copy.weights.bold}
+                  glyph="bold"
                   hotkey={copy.hotkeys.bold}
                   checked={inline.bold}
                   onPress={run(toggleBold)}
                 />
                 <MenuItem
                   label={copy.weights.italic}
+                  glyph="italic"
                   hotkey={copy.hotkeys.italic}
                   checked={inline.italic}
                   onPress={run(toggleItalic)}
                 />
                 <MenuItem
                   label={copy.weights.strike}
+                  glyph="strike"
                   checked={inline.strike}
                   onPress={run(toggleStrike)}
                 />
                 <MenuItem
                   label={copy.weights.highlight}
+                  glyph="highlight"
                   checked={inline.highlight}
                   onPress={run(toggleHighlight)}
                 />
                 <MenuItem
                   label={copy.weights.mono}
+                  glyph="mono"
                   checked={inline.code}
                   onPress={run(toggleInlineCode)}
                 />
@@ -604,29 +640,34 @@ export function FormatPanel({
               <Menu>
                 <MenuItem
                   label={copy.listKinds.none}
+                  glyph="listNone"
                   checked={list === 'none'}
                   onPress={run(clearList)}
                 />
                 <MenuItem
                   label={copy.listKinds.bullet}
+                  glyph="listBullet"
                   hotkey={copy.hotkeys.bullet}
                   checked={list === 'bullet'}
                   onPress={run(toggleBulletList)}
                 />
                 <MenuItem
                   label={copy.listKinds.ordered}
+                  glyph="listOrdered"
                   hotkey={copy.hotkeys.ordered}
                   checked={list === 'ordered'}
                   onPress={run(toggleOrderedList)}
                 />
                 <MenuItem
                   label={copy.listKinds.task}
+                  glyph="listTask"
                   hotkey={copy.hotkeys.task}
                   checked={list === 'task'}
                   onPress={run(toggleTaskList)}
                 />
                 <MenuItem
                   label={copy.listKinds.details}
+                  glyph="listDetails"
                   checked={list === 'details'}
                   onPress={run(insertCollapsible)}
                 />
@@ -683,14 +724,17 @@ export function FormatPanel({
                 <MenuLabel separated>{copy.tableMenu.row}</MenuLabel>
                 <MenuItem
                   label={copy.tableMenu.insertAbove}
+                  glyph="rowAbove"
                   onPress={() => applyTable(insertRow(table, 'above'))}
                 />
                 <MenuItem
                   label={copy.tableMenu.insertBelow}
+                  glyph="rowBelow"
                   onPress={() => applyTable(insertRow(table, 'below'))}
                 />
                 <MenuItem
                   label={copy.tableMenu.removeRow}
+                  glyph="remove"
                   danger
                   onPress={() => removeWithUndo(removeRow(table), copy.tableMenu.rowRemoved)}
                 />
@@ -698,19 +742,23 @@ export function FormatPanel({
                 <MenuLabel separated>{copy.tableMenu.column}</MenuLabel>
                 <MenuItem
                   label={copy.tableMenu.insertLeft}
+                  glyph="colLeft"
                   onPress={() => applyTable(insertColumn(table, 'left'))}
                 />
                 <MenuItem
                   label={copy.tableMenu.insertRight}
+                  glyph="colRight"
                   onPress={() => applyTable(insertColumn(table, 'right'))}
                 />
                 <MenuItem
                   label={copy.tableMenu.headerRow}
+                  glyph="header"
                   checked={table.header}
                   onPress={() => applyTable(toggleHeader(table))}
                 />
                 <MenuItem
                   label={copy.tableMenu.removeColumn}
+                  glyph="remove"
                   danger
                   onPress={() => removeWithUndo(removeColumn(table), copy.tableMenu.columnRemoved)}
                 />
@@ -766,6 +814,7 @@ export function FormatPanel({
                       <MenuItem
                         key={kind}
                         label={copy.attachments[kind]}
+                        glyph={kind}
                         onPress={() => {
                           setOpen(null);
                           onAttach(kind);
@@ -1134,6 +1183,8 @@ function LinkDialog({
 interface MenuItemProps {
   label: string;
   onPress: () => void;
+  /** Глиф 18 слева (§4). Без него строка меню — голый список. */
+  glyph?: MenuGlyphName;
   /** Текущий вариант помечен галочкой (§4, правило 1). */
   checked?: boolean;
   hotkey?: string;
@@ -1154,6 +1205,7 @@ interface MenuItemProps {
 function MenuItem({
   label,
   onPress,
+  glyph,
   checked,
   hotkey,
   submenu,
@@ -1184,6 +1236,7 @@ function MenuItem({
     >
       {back ? <span className="zp-panel__chevron">←</span> : null}
       {index ? <span className="zp-panel__index">{index}</span> : null}
+      {glyph ? <MenuGlyph name={glyph} /> : null}
       <span className="zp-panel__label">{label}</span>
       {hotkey ? <span className="zp-panel__hotkey">{hotkey}</span> : null}
       {submenu ? <span className="zp-panel__chevron">›</span> : null}
@@ -1193,6 +1246,91 @@ function MenuItem({
         </span>
       ) : null}
     </button>
+  );
+}
+
+/* ── Глифы строк меню: 18, stroke 1.6 ─────────────────────────────────────
+   §4 дословно: «Строка меню: иконка 18 + название + хоткей моно 11 справа».
+   Иконок не было вовсе, и меню читалось голым списком — одна из причин, по
+   которой панель «выглядит не как в ТЗ». Набор нарочно скупой: по одному
+   узнаваемому знаку на пункт, тем же языком, что и кнопки панели. */
+const MENU_ICON = {
+  width: 18,
+  height: 18,
+  viewBox: '0 0 24 24',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.6,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+  'aria-hidden': true,
+} as const;
+
+/** Что нарисовать в строке меню. Ключ — смысл пункта, а не форма знака. */
+export type MenuGlyphName =
+  | 'heading'
+  | 'text'
+  | 'quote'
+  | 'callout'
+  | 'code'
+  | 'small'
+  | 'divider'
+  | 'bold'
+  | 'italic'
+  | 'strike'
+  | 'highlight'
+  | 'mono'
+  | 'listNone'
+  | 'listBullet'
+  | 'listOrdered'
+  | 'listTask'
+  | 'listDetails'
+  | 'image'
+  | 'file'
+  | 'audio'
+  | 'rowAbove'
+  | 'rowBelow'
+  | 'colLeft'
+  | 'colRight'
+  | 'header'
+  | 'remove';
+
+const GLYPH: Record<MenuGlyphName, string[]> = {
+  heading: ['M6 5v14M14 5v14M6 12h8', 'M18 9v10'],
+  text: ['M5 7h14M5 12h11M5 17h13'],
+  quote: ['M5 5v14', 'M10 9h9M10 14h6'],
+  callout: ['M4 6h16v12H4z', 'M8 10h8M8 14h5'],
+  code: ['M9 8l-4 4 4 4M15 8l4 4-4 4'],
+  small: ['M8 9h9M8 14h6'],
+  divider: ['M4 12h16'],
+  bold: ['M8 5h5a3.5 3.5 0 010 7H8zM8 12h6a3.5 3.5 0 010 7H8z'],
+  italic: ['M10 5h7M7 19h7M14 5l-4 14'],
+  strike: ['M7 12h10', 'M8 7h8M8 17h8'],
+  highlight: ['M5 16h14v3H5z', 'M8 13l4-8 4 8'],
+  mono: ['M4 6h16v12H4z', 'M9 10l-2 2 2 2M15 10l2 2-2 2'],
+  listNone: ['M7 7h12M7 12h12M7 17h12'],
+  listBullet: ['M9 7h10M9 12h10M9 17h10', 'M5 7h.01M5 12h.01M5 17h.01'],
+  listOrdered: ['M9 7h10M9 12h10M9 17h10', 'M4 6l1-.5V9M4 12h2l-2 3h2M4 16h2v2H4v2h2'],
+  listTask: ['M9 7h10M9 17h10', 'M4 5h4v4H4z', 'M4.5 14.5l1.5 1.5L9 13'],
+  listDetails: ['M6 8l4 4-4 4', 'M13 12h6M13 7h6'],
+  image: ['M4 5h16v14H4z', 'M8 11a1.4 1.4 0 100-2.8 1.4 1.4 0 000 2.8', 'M4 16l5-4 4 3 3-2 4 3'],
+  file: ['M14 4H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V9z', 'M14 4v5h5'],
+  audio: ['M12 4v12', 'M9 8v4M15 8v4', 'M8 19h8'],
+  rowAbove: ['M4 12h16M4 17h16', 'M12 4v5M9.5 6.5L12 4l2.5 2.5'],
+  rowBelow: ['M4 7h16M4 12h16', 'M12 20v-5M9.5 17.5L12 20l2.5-2.5'],
+  colLeft: ['M12 4v16M17 4v16', 'M4 12h5M6.5 9.5L4 12l2.5 2.5'],
+  colRight: ['M7 4v16M12 4v16', 'M20 12h-5M17.5 9.5L20 12l-2.5 2.5'],
+  header: ['M4 5h16v5H4z', 'M4 10v9M20 10v9M4 19h16', 'M12 10v9'],
+  remove: ['M6 8h12', 'M9 8V5h6v3', 'M8 8l1 12h6l1-12'],
+};
+
+function MenuGlyph({ name }: { name: MenuGlyphName }): ReactElement {
+  return (
+    <svg {...MENU_ICON} className="zp-panel__glyph">
+      {GLYPH[name].map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
   );
 }
 

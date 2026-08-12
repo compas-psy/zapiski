@@ -66,3 +66,58 @@ describe('цвета только через var(--*)', () => {
     expect(REQUIRED_FONT_TOKENS.length).toBe(3);
   });
 });
+
+/**
+ * Каждый токен, на который ссылается пакет, обязан существовать.
+ *
+ * Дефект, ради которого написан этот блок: панель форматирования просила
+ * `--shadow-card` и `--shadow-pop`, которых не было НИ В ОДНОМ файле токенов.
+ * Оба стояли с фолбэками — `var(--shadow-card, var(--elev-search))` — и потому
+ * не ломались, а молча подставляли чужие тени: пилюле досталась тень поисковой
+ * строки, выпадающему меню — тень полноэкранной модалки `0 24px 60px`.
+ * Заказчик увидел это как «неправильные тени», и никакой тест возразить не мог.
+ *
+ * Мораль шире теней: фолбэк в `var()` превращает опечатку и пропущенный токен
+ * в тихое «работает не так». Поэтому сторожатся оба условия — токен есть, и
+ * фолбэка при нём нет.
+ */
+describe('токены, которые просит пакет, существуют', () => {
+  const UI_STYLES = join(SRC, '..', '..', 'ui', 'src', 'styles');
+  const declared = new Set<string>();
+  for (const file of ['tokens.generated.css', 'tokens.css']) {
+    const css = readFileSync(join(UI_STYLES, file), 'utf8');
+    for (const match of css.matchAll(/(--[a-z0-9-]+)\s*:/gi)) declared.add(match[1] as string);
+  }
+
+  /** Переменные редактора: он объявляет их сам в собственной теме. */
+  const OWN = /^--(z|cm|editor)-/;
+
+  it('каталог токенов вообще прочитался', () => {
+    /* Сторож без предмета бесполезен: при сломанном разборе проверки ниже
+       прошли бы «успешно», ничего не проверив. */
+    expect(declared.size).toBeGreaterThan(50);
+  });
+
+  it('ни одной ссылки на несуществующий токен', () => {
+    const missing: string[] = [];
+    for (const file of sources(SRC)) {
+      const text = readFileSync(file, 'utf8');
+      for (const match of text.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)) {
+        const name = match[1] as string;
+        if (OWN.test(name) || declared.has(name)) continue;
+        missing.push(`${relative(SRC, file)}: ${name}`);
+      }
+    }
+    expect(missing, missing.join('\n')).toEqual([]);
+  });
+
+  it('у теней панели нет фолбэков, прячущих подмену', () => {
+    const panel = readFileSync(join(SRC, 'react', 'FormatPanel.tsx'), 'utf8');
+    for (const token of ['--shadow-card', '--shadow-pop']) {
+      expect(panel).toContain(`var(${token})`);
+      expect(panel, `${token} снова с фолбэком`).not.toMatch(
+        new RegExp(`var\\(${token},`),
+      );
+    }
+  });
+});
