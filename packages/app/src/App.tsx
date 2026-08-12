@@ -31,6 +31,7 @@ import type { AppController } from "./state/store.js";
 import { flushActiveEditor } from "./state/active-editor.js";
 import { IconBug } from "./components/icons.js";
 import { EmptyBlock } from "./components/ScreenStates.js";
+import { ScreenBoundary } from "./components/ScreenBoundary.js";
 import { CommandPalette } from "./screens/CommandPalette.js";
 import { DebugMenu } from "./screens/DebugMenu.js";
 import { LibraryPanel } from "./screens/LibraryPanel.js";
@@ -46,6 +47,7 @@ import { ImportScreen } from "./screens/ImportScreen.js";
 import { ArchiveScreen } from "./screens/ArchiveScreen.js";
 import { TrashScreen } from "./screens/TrashScreen.js";
 import { VersionsScreen } from "./screens/VersionsScreen.js";
+import { HelpScreen } from "./screens/HelpScreen.js";
 import { ShareSheet } from "./screens/ShareSheet.js";
 
 export interface AppProps {
@@ -272,6 +274,13 @@ function AppShell(): ReactNode {
         return <SettingsScreen section={state.route.section} />;
       case "versions":
         return <VersionsScreen noteId={state.route.noteId} />;
+      /* Справка — полноэкранная, как настройки: у неё своя шапка с «Назад».
+         Экран был написан и покрыт тестом, но НИКУДА не подключён — ни импорта,
+         ни `case`. Маршрут переключался, `solo` возвращал `null`, и на месте
+         справки оставался список заметок. Тест был зелёный, потому что
+         монтировал экран напрямую: дорогу к экрану он проверить не мог. */
+      case "help":
+        return <HelpScreen />;
       /* Поиск полноэкранный (SCREENS §6) — в том числе на desktop. */
       case "search":
         return <SearchScreen />;
@@ -280,33 +289,46 @@ function AppShell(): ReactNode {
     }
   })();
 
+  /* Ключ сброса границы: уход с упавшего экрана обязан её «расколдовать». */
+  const routeKey = `${state.route.name}:${"id" in state.route ? state.route.id : ""}`;
+
   if (solo !== null) {
     return (
       <div className="za-app">
         <TitleBar />
-        {solo}
+        <ScreenBoundary strings={strings} resetKey={routeKey}>
+          {solo}
+        </ScreenBoundary>
         {overlays}
       </div>
     );
   }
 
-  const listPane = ((): ReactNode => {
-    switch (state.route.name) {
-      case "archive":
-        return <ArchiveScreen />;
-      case "trash":
-        return <TrashScreen />;
-      default:
-        return (
-          <NoteListScreen embedded={sideBySide} compactRows={sideBySide} />
-        );
-    }
-  })();
+  /* Границы стоят вокруг СОДЕРЖИМОГО панелей, а не вокруг всего окна: упавший
+     экран не должен уносить с собой навигацию, иначе человек остаётся в тупике
+     без единой кнопки. */
+  const listPane = (
+    <ScreenBoundary strings={strings} resetKey={routeKey}>
+      {((): ReactNode => {
+        switch (state.route.name) {
+          case "archive":
+            return <ArchiveScreen />;
+          case "trash":
+            return <TrashScreen />;
+          default:
+            return (
+              <NoteListScreen embedded={sideBySide} compactRows={sideBySide} />
+            );
+        }
+      })()}
+    </ScreenBoundary>
+  );
 
-  const notePane =
-    notePath !== null ? (
-      <NoteScreen key={noteKey} path={notePath} />
-    ) : (
+  const notePane = (
+    <ScreenBoundary strings={strings} resetKey={routeKey}>
+      {notePath !== null ? (
+        <NoteScreen key={noteKey} path={notePath} />
+      ) : (
       /*
         REBUILD §1.9: без выбранной заметки здесь было белое поле на 70%
         ширины без единого элемента. Теперь пустое состояние по образцу `1n`:
@@ -326,7 +348,9 @@ function AppShell(): ReactNode {
           />
         </div>
       </div>
-    );
+      )}
+    </ScreenBoundary>
+  );
 
   /* Режим фокуса: хром скрыт полностью, остаётся только редактор (SCREENS §4). */
   if (state.focusMode && notePath !== null) {

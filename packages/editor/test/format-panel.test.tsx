@@ -87,11 +87,18 @@ afterEach(() => {
   view = null;
 });
 
-/** Нажатие так, как его делает человек: mousedown, не click. */
+/**
+ * Нажатие так, как его делает человек: `pointerdown`/`pointerup`, не click.
+ *
+ * Именно pointer, а не mouse: панель слушает единый поток событий для мыши,
+ * пера и пальца. Прежняя пара `mouse*` + `touch*` давала на касании ДВА
+ * срабатывания — меню открывалось и тут же закрывалось само, — и тест,
+ * шедший мышью, этого увидеть не мог в принципе.
+ */
 function press(element: Element): void {
   act(() => {
-    element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-    element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
   });
 }
 
@@ -337,13 +344,32 @@ describe('эмодзи вставляется в текст', () => {
 
 describe('панель не уводит фокус из текста', () => {
   it('нажатие отменяет событие по умолчанию', () => {
-    /* Это и есть механизм: `preventDefault` на mousedown не даёт браузеру
+    /* Это и есть механизм: `preventDefault` на `pointerdown` не даёт браузеру
        перевести фокус на кнопку. Без него на Android схлопывается клавиатура,
-       а курсор уезжает с той позиции, к которой применяли формат. */
+       а курсор уезжает с той позиции, к которой применяли формат.
+
+       Проверяется именно pointer: в пассивном `touchstart`, на котором панель
+       держалась раньше, `preventDefault` не работает вовсе — то есть на
+       телефоне обещание не выполнялось, а тест этого не видел. */
     const container = mount('текст|');
-    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    const event = new PointerEvent('pointerdown', { bubbles: true, cancelable: true });
     button(container, copy.undo).dispatchEvent(event);
     expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('одно касание — одно действие, а не два', () => {
+    /* Прежняя пара `mouse*` + `touch*` давала на касании ДВА `onPress`: одно
+       нажатие «Отменить» откатывало два шага, а меню открывалось и тут же
+       закрывалось. Здесь это сторожится напрямую. */
+    const container = mount('раз два три|');
+    const target = view as EditorView;
+    act(() => {
+      target.dispatch({ changes: { from: target.state.doc.length, insert: ' четыре' } });
+    });
+    expect(target.state.doc.toString()).toBe('раз два три четыре');
+
+    press(button(container, copy.undo));
+    expect(target.state.doc.toString()).toBe('раз два три');
   });
 
   it('после команды курсор возвращается в редактор', () => {

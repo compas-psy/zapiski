@@ -22,10 +22,10 @@ import { strings } from "../src/i18n/index.js";
 import { createTestHost } from "./host.js";
 import { ru as editorRu } from "@zapiski/editor";
 
-/** Нажатие кнопки панели: она слушает mousedown, а не click. */
+/** Нажатие кнопки панели: она слушает pointerdown, а не click. */
 function press(element: Element): void {
-  fireEvent.mouseDown(element);
-  fireEvent.mouseUp(element);
+  fireEvent.pointerDown(element);
+  fireEvent.pointerUp(element);
 }
 
 const ru = strings("ru");

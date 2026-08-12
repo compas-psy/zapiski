@@ -28,10 +28,10 @@ const TABLE = ['| Дело   | Срок |', '| ------ | ---- |', '| созвон
   '\n',
 );
 
-/** Нажатие кнопки панели: она слушает mousedown, а не click. */
+/** Нажатие кнопки панели: она слушает pointerdown, а не click. */
 function press(element: Element): void {
-  fireEvent.mouseDown(element);
-  fireEvent.mouseUp(element);
+  fireEvent.pointerDown(element);
+  fireEvent.pointerUp(element);
 }
 
 /** Заметка с таблицей и курсором в строке «созвон». */

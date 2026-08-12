@@ -1354,3 +1354,48 @@
     transition: none;
   }
 }
+
+/* ── Упавший экран (граница ошибки) ───────────────────────────────────────
+   Спокойная плашка вместо белого окна. Раньше границ не было ни одной, и
+   любая ошибка внутри экрана гасила приложение целиком; на телефоне, где
+   консоли нет, это неотличимо от «кнопка не работает». */
+.za-crash {
+  display: grid;
+  gap: var(--sp-8);
+  align-content: center;
+  justify-items: start;
+  block-size: 100%;
+  padding: var(--sp-24);
+  max-inline-size: 34rem;
+  margin-inline: auto;
+}
+.za-crash__title {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+.za-crash__hint {
+  margin: 0;
+  color: var(--text-secondary);
+}
+.za-crash__retry {
+  margin-block-start: var(--sp-8);
+  min-block-size: 44px;
+  padding-inline: var(--sp-16);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-full);
+  background-color: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.za-crash__retry:focus-visible {
+  outline: var(--focus-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .za-crash__retry:hover {
+    background-color: var(--surface-alt);
+  }
+}

@@ -165,7 +165,7 @@ describe('<Toolbar/>', () => {
       `button[aria-label="${ru.toolbar.more}"]`,
     );
     act(() => {
-      more?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      more?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
     const rows = container.querySelectorAll('.zpsk-toolbar-row');
     expect(rows.length).toBe(2);
@@ -211,7 +211,7 @@ describe('<Toolbar/>', () => {
       `button[aria-label="${ru.toolbar.photo}"]`,
     );
     act(() => {
-      button?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      button?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
     expect(onPhoto).toHaveBeenCalledOnce();
   });
@@ -235,7 +235,7 @@ describe('<Toolbar/>', () => {
       `button[aria-label="${ru.toolbar.heading}"]`,
     );
     act(() => {
-      heading?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      heading?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     });
     expect(view?.state.doc.toString()).toBe('# Текст');
     act(() => {

@@ -390,7 +390,25 @@ export class AppController {
 
   // ── Запуск ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Идущая загрузка. Второй вызов `boot()` не начинает новую, а дожидается
+   * первой.
+   *
+   * Защиты не было вовсе, а звать `boot()` дважды приложение умеет: провайдер
+   * зовёт его на монтировании, а оболочка может перезагрузить страницу. Два
+   * наложившихся прогона гонятся за `this.vault` и заводят по своему набору
+   * таймеров в `openVault` — причём таймеры проигравшего никто не остановит.
+   */
+  private bootRun: Promise<void> | null = null;
+
   async boot(): Promise<void> {
+    this.bootRun ??= this.bootOnce().finally(() => {
+      this.bootRun = null;
+    });
+    return this.bootRun;
+  }
+
+  private async bootOnce(): Promise<void> {
     const [
       sortByFolder,
       recentQueries,
@@ -1127,7 +1145,14 @@ export class AppController {
    */
   async createNote(folder?: string, title?: string): Promise<VaultPath | null> {
     const vault = this.vault;
-    if (!vault) return null;
+    /* Молчаливый отказ хуже любой ошибки: человек жмёт «плюс», ничего не
+       происходит, и он делает вывод, что приложение сломано целиком. Так и
+       было описано в отзыве — «невозможно создать новую». Хранилища нет ровно
+       в одном случае: папка недоступна, — про это и говорим словами реестра. */
+    if (!vault) {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return null;
+    }
 
     const master = this.master;
     if (this.encryptNewNotes && master) {

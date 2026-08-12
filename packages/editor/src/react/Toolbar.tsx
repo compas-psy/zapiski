@@ -129,13 +129,12 @@ function Button({
       aria-label={label}
       title={label}
       {...(pressed === undefined ? {} : { 'aria-pressed': pressed })}
-      // mousedown/touchstart вместо click: иначе редактор теряет фокус и
-      // на Android схлопывается клавиатура.
-      onMouseDown={(event) => {
-        event.preventDefault();
-        onClick();
-      }}
-      onTouchStart={(event) => {
+      // `pointerdown` вместо click: иначе редактор теряет фокус и на Android
+      // схлопывается клавиатура. Именно `pointer`, а не пара `mouse` + `touch`:
+      // React вешает `touchstart` пассивно, там `preventDefault` не работает, и
+      // браузер досылает совместимостные события мыши — на одно касание
+      // обработчик срабатывал дважды.
+      onPointerDown={(event) => {
         event.preventDefault();
         onClick();
       }}

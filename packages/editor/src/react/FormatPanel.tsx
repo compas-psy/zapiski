@@ -385,14 +385,16 @@ export function FormatPanel({
     return () => document.removeEventListener('keydown', onKey);
   }, [view, open]);
 
-  /* Клик мимо панели закрывает меню — иначе оно висит поверх текста. */
+  /* Нажатие мимо панели закрывает меню — иначе оно висит поверх текста.
+     `pointerdown`, а не `mousedown`: на тач-устройстве до совместимостного
+     `mousedown` дело доходит не всегда, и закрытие работало через раз. */
   useEffect(() => {
     if (open === null) return;
-    const onDown = (event: MouseEvent): void => {
+    const onDown = (event: PointerEvent): void => {
       if (!root.current?.contains(event.target as Node)) setOpen(null);
     };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
   }, [open]);
 
   /* Таблица под курсором: от неё зависит и поведение кнопки, и состав меню. */
@@ -668,11 +670,7 @@ export function FormatPanel({
                       className={`zp-panel__align${
                         table.aligns[table.column] === align ? ' zp-panel__align--on' : ''
                       }`}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        applyTable(alignColumn(table, align));
-                      }}
-                      onTouchStart={(event) => {
+                      onPointerDown={(event) => {
                         event.preventDefault();
                         applyTable(alignColumn(table, align));
                       }}
@@ -823,11 +821,7 @@ export function FormatPanel({
                     role="menuitem"
                     className="zp-panel__emoji"
                     aria-label={symbol}
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      insertText(symbol);
-                    }}
-                    onTouchStart={(event) => {
+                    onPointerDown={(event) => {
                       event.preventDefault();
                       insertText(symbol);
                     }}
@@ -894,6 +888,20 @@ interface ButtonProps {
  * `mousedown` с `preventDefault` вместо `click`: иначе редактор теряет фокус,
  * на Android схлопывается клавиатура, а курсор уезжает с той позиции, к
  * которой человек применял формат.
+ *
+ * ── Почему `pointerdown`, а не пара `mousedown` + `touchstart` ─────────────
+ *
+ * Пара была ошибкой, и дорогой. React регистрирует `touchstart` на корне как
+ * ПАССИВНЫЙ слушатель, поэтому `preventDefault()` внутри `onTouchStart` не
+ * делает ничего: браузер спокойно досылает совместимостные `mousedown` и
+ * `mouseup`. На одно касание пальцем `onPress` вызывался ДВАЖДЫ — одно
+ * нажатие «Отменить» откатывало два шага, а меню открывалось и тут же
+ * закрывалось само собой. Ровно это заказчик и увидел: «при клике на кнопки
+ * не открываются контекстные меню» — одинаково на телефоне и на планшете.
+ *
+ * `pointerdown` — один поток для мыши, пера и пальца, без дублей; и здесь
+ * `preventDefault()` работает, то есть обещание «панель не уводит фокус из
+ * текста» наконец выполняется и на Android.
  */
 function PanelButton({ label, onPress, active, children }: ButtonProps): ReactElement {
   return (
@@ -902,11 +910,7 @@ function PanelButton({ label, onPress, active, children }: ButtonProps): ReactEl
       className={`zp-panel__btn${active ? ' zp-panel__btn--active' : ''}`}
       aria-label={label}
       title={label}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        onPress();
-      }}
-      onTouchStart={(event) => {
+      onPointerDown={(event) => {
         event.preventDefault();
         onPress();
       }}
@@ -968,20 +972,23 @@ function MenuButton({
         title={label}
         aria-expanded={expanded}
         aria-haspopup="menu"
-        onMouseDown={(event) => {
+        /* Один поток на мышь, перо и палец. Прежняя пара `mouse*` + `touch*`
+           давала на касании ДВА `onPress` — меню открывалось и тут же
+           закрывалось само, — потому что `preventDefault` в пассивном
+           `touchstart` не подавляет совместимостные события мыши. */
+        onPointerDown={(event) => {
           event.preventDefault();
           start();
         }}
-        onMouseUp={() => {
+        onPointerUp={() => {
           if (finish()) onPress();
         }}
-        onMouseLeave={() => finish()}
-        onTouchStart={(event) => {
-          event.preventDefault();
-          start();
-        }}
-        onTouchEnd={() => {
-          if (finish()) onPress();
+        /* Палец уехал с кнопки — отменяем и долгое нажатие, и обычное.
+           `pointercancel` присылает система, когда жест перехватила прокрутка. */
+        onPointerLeave={() => finish()}
+        onPointerCancel={() => {
+          consumed.current = true;
+          finish();
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -1170,11 +1177,7 @@ function MenuItem({
       ]
         .filter(Boolean)
         .join(' ')}
-      onMouseDown={(event) => {
-        event.preventDefault();
-        onPress();
-      }}
-      onTouchStart={(event) => {
+      onPointerDown={(event) => {
         event.preventDefault();
         onPress();
       }}

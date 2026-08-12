@@ -23,6 +23,9 @@ export const en: AppCatalog = {
     skip: 'Skip',
     loading: 'Loading',
     untitled: 'Untitled',
+    crashed: 'Something broke on this screen',
+    crashedHint: 'The rest of the app still works. Your notes are safe — they live in files.',
+    crashedRetry: 'Try again',
   },
 
   onboarding: {
