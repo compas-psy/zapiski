@@ -14,9 +14,10 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { history } from '@codemirror/commands';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { FormatPanel } from '../src/react/FormatPanel.js';
+import { FormatPanel, type FormatPanelProps } from '../src/react/FormatPanel.js';
 import { ru } from '../src/i18n.js';
 
 let root: Root | null = null;
@@ -37,7 +38,14 @@ function makeView(text: string): EditorView {
   const parent = document.createElement('div');
   document.body.appendChild(parent);
   return new EditorView({
-    state: EditorState.create({ doc, selection: { anchor: pos < 0 ? 0 : pos } }),
+    /* История нужна ровно затем, зачем она есть в сборке: панель обещает
+       отмену удаления, и проверять это на состоянии без истории значило бы
+       проверять заглушку. */
+    state: EditorState.create({
+      doc,
+      selection: { anchor: pos < 0 ? 0 : pos },
+      extensions: history(),
+    }),
     parent,
   });
 }
@@ -54,18 +62,18 @@ function makeSelection(text: string): EditorView {
   const parent = document.createElement('div');
   document.body.appendChild(parent);
   return new EditorView({
-    state: EditorState.create({ doc, selection: { anchor: from, head: to } }),
+    state: EditorState.create({ doc, selection: { anchor: from, head: to }, extensions: history() }),
     parent,
   });
 }
 
-function mount(text: string): HTMLElement {
+function mount(text: string, props: Partial<FormatPanelProps> = {}): HTMLElement {
   view = text.includes('«') ? makeSelection(text) : makeView(text);
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
   act(() => {
-    root?.render(<FormatPanel view={view} />);
+    root?.render(<FormatPanel view={view} {...props} />);
   });
   return host;
 }
@@ -426,6 +434,76 @@ describe('таблица правится из панели', () => {
     press(itemByText(container, copy.tableMenu.removeColumn));
     expect(view?.state.doc.toString()).not.toContain('Срок');
     expect(view?.state.doc.toString()).toContain('созвон');
+  });
+
+  /* §4: «Удаление строки и столбца — ОО: тост „Строка удалена · Отменить“».
+     Тосты рисует приложение — в редакторе их нет и не должно быть, — поэтому
+     панель отдаёт наружу сообщение и способ откатиться. Без обработчика
+     удаление всё равно откатывается по Ctrl+Z. */
+  describe('удаление предлагает отмену', () => {
+    /** Последнее объявленное отменяемое действие. */
+    function undoable(): { calls: Array<[string, () => void]> } {
+      return { calls: [] };
+    }
+
+    it('удаление строки сообщает, что именно удалено', () => {
+      const box = undoable();
+      const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
+        onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
+      });
+      press(button(container, copy.table));
+      press(itemByText(container, copy.tableMenu.removeRow));
+
+      expect(box.calls.map(([message]) => message)).toEqual([copy.tableMenu.rowRemoved]);
+    });
+
+    it('«Отменить» возвращает строку на место', () => {
+      const box = undoable();
+      const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
+        onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
+      });
+      press(button(container, copy.table));
+      press(itemByText(container, copy.tableMenu.removeRow));
+      expect(view?.state.doc.toString()).not.toContain('созвон');
+
+      act(() => box.calls[0]?.[1]());
+      expect(view?.state.doc.toString()).toContain('созвон');
+    });
+
+    it('у столбца своё сообщение — иначе оно врёт про удалённое', () => {
+      const box = undoable();
+      const container = mount(TABLE.replace('Срок', 'Ср¦ок'), {
+        onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
+      });
+      press(button(container, copy.table));
+      press(itemByText(container, copy.tableMenu.removeColumn));
+      expect(box.calls[0]?.[0]).toBe(copy.tableMenu.columnRemoved);
+    });
+
+    it('запрещённое удаление молчит: отменять нечего', () => {
+      /* Шапку удалить нельзя — таблица без неё распадается на строки с
+         палками. Тост «Строка удалена» после ничего не сделавшего нажатия
+         был бы прямой ложью. */
+      const box = undoable();
+      const container = mount(TABLE.replace('Дело', 'Де¦ло'), {
+        onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
+      });
+      press(button(container, copy.table));
+      press(itemByText(container, copy.tableMenu.removeRow));
+      expect(box.calls).toEqual([]);
+      expect(view?.state.doc.toString()).toContain('Дело');
+    });
+
+    it('вставка строки тоста не поднимает', () => {
+      /* ОО — про деструктив. Тост на каждое действие панели был бы шумом. */
+      const box = undoable();
+      const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
+        onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
+      });
+      press(button(container, copy.table));
+      press(itemByText(container, copy.tableMenu.insertBelow));
+      expect(box.calls).toEqual([]);
+    });
   });
 
   it('выравнивание помечено и применяется', () => {

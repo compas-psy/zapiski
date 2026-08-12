@@ -98,6 +98,8 @@ export interface EditorStrings {
       insertRight: string;
       removeRow: string;
       removeColumn: string;
+      rowRemoved: string;
+      columnRemoved: string;
       headerRow: string;
     };
   };
@@ -203,6 +205,8 @@ export const ru: EditorStrings = {
       insertRight: 'Вставить справа',
       removeRow: 'Удалить строку',
       removeColumn: 'Удалить столбец',
+      rowRemoved: 'Строка удалена',
+      columnRemoved: 'Столбец удалён',
       headerRow: 'Строка заголовка',
     },
   },
@@ -307,6 +311,8 @@ export const en: EditorStrings = {
       insertRight: 'Insert right',
       removeRow: 'Delete row',
       removeColumn: 'Delete column',
+      rowRemoved: 'Row deleted',
+      columnRemoved: 'Column deleted',
       headerRow: 'Header row',
     },
   },

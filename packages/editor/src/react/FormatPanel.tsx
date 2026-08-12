@@ -318,6 +318,13 @@ export interface FormatPanelProps {
   onFormula?: () => void;
   /** Палитра эмодзи. */
   onEmoji?: () => void;
+  /**
+   * Отменяемое действие (§4: «Удаление строки и столбца — ОО: тост „Строка
+   * удалена · Отменить“»). Тосты рисует приложение — в редакторе их нет и не
+   * должно быть: он не знает ни про слои поверх экрана, ни про очередь
+   * сообщений. Без обработчика удаление просто откатывается по Ctrl+Z.
+   */
+  onUndoable?: (message: string, undo: () => void) => void;
   className?: string;
 }
 
@@ -340,6 +347,7 @@ export function FormatPanel({
   onLink,
   onFormula,
   onEmoji,
+  onUndoable,
   className,
 }: FormatPanelProps): ReactElement {
   ensureStyles();
@@ -400,6 +408,24 @@ export function FormatPanel({
     view.dispatch({ changes: tableChange(view.state, table, next), userEvent: 'input.format' });
     setOpen(null);
     view.focus();
+  };
+
+  /**
+   * Удаление строки или столбца с тостом «Отменить» (§4).
+   *
+   * Отменяет обычная отмена редактора: удаление — одна транзакция, и
+   * `undo` возвращает таблицу как была вместе с позицией курсора. Тост
+   * поэтому не хранит никакого снимка — хранить его значило бы завести
+   * второй механизм отмены рядом с настоящим.
+   */
+  const removeWithUndo = (next: ReturnType<typeof tableAt>, message: string): void => {
+    if (!view || !table || !next) return;
+    applyTable(next);
+    const target = view;
+    onUndoable?.(message, () => {
+      undo(target);
+      target.focus();
+    });
   };
 
   const style: BlockStyle = view ? blockStyleAt(view.state) : 'text';
@@ -668,7 +694,7 @@ export function FormatPanel({
                 <MenuItem
                   label={copy.tableMenu.removeRow}
                   danger
-                  onPress={() => applyTable(removeRow(table))}
+                  onPress={() => removeWithUndo(removeRow(table), copy.tableMenu.rowRemoved)}
                 />
 
                 <MenuLabel separated>{copy.tableMenu.column}</MenuLabel>
@@ -688,7 +714,7 @@ export function FormatPanel({
                 <MenuItem
                   label={copy.tableMenu.removeColumn}
                   danger
-                  onPress={() => applyTable(removeColumn(table))}
+                  onPress={() => removeWithUndo(removeColumn(table), copy.tableMenu.columnRemoved)}
                 />
               </Menu>
             ) : null

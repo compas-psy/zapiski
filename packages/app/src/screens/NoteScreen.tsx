@@ -84,7 +84,27 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const strings = useStrings();
   const layout = useLayout();
   const theme = useTheme();
-  const editorRef = useRef<EditorHandle>(null);
+  const editorRef = useRef<EditorHandle | null>(null);
+  /**
+   * Тот же редактор, но в состоянии, — и это не дубль ради удобства.
+   *
+   * Представление CodeMirror живёт не весь срок экрана: любой перезаход в
+   * хранилище поднимает флаг «загружаюсь», экран уходит в скелетон, и редактор
+   * пересоздаётся. Ссылка в ref об этом не сообщает никому: панель
+   * форматирования продолжала держать представление, которого уже нет, а
+   * палитра команд — разрушенное. Со стороны это выглядело как «кнопки панели
+   * не работают», причём избирательно: меню правки таблицы не открывалось
+   * вовсе, потому что ему нужно ЖИВОЕ состояние, а не просто обработчик.
+   */
+  const [editorHandle, setEditorHandle] = useState<EditorHandle | null>(null);
+  const attachEditor = useCallback((value: EditorHandle | null) => {
+    editorRef.current = value;
+    setEditorHandle(value);
+  }, []);
+  /* Представление появляется в эффекте самого редактора, то есть ПОСЛЕ того,
+     как сюда пришла ссылка. Поэтому панель получает его отдельным состоянием:
+     иначе первый рендер отдал бы ей `null` навсегда. */
+  const [panelView, setPanelView] = useState<EditorHandle['view']>(null);
   /**
    * Скрытый выбор файла для кнопки «фото» (BEHAVIOR §2.6).
    *
@@ -189,11 +209,14 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   }, [app, path]);
 
   /* Палитра команд и хоткеи оболочки выполняют команды над этим представлением
-     (`editorCommands`, а не копией списка). */
+     (`editorCommands`, а не копией списка). Зависимость — сам редактор, а не
+     путь: пересоздали редактор, значит прежний разрушен, и держать его
+     означало бы выполнять команды в пустоту. */
   useEffect(() => {
-    setActiveEditor(editorRef.current);
+    setActiveEditor(editorHandle);
+    setPanelView(editorHandle?.view ?? null);
     return () => setActiveEditor(null);
-  }, [path, loading]);
+  }, [editorHandle]);
 
   /* Навигация «назад» и закрытие — принудительное сохранение (BEHAVIOR §0). */
   const flush = useCallback(() => editorRef.current?.save(), []);
@@ -387,7 +410,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
             ) : null}
 
             <Editor
-              ref={editorRef}
+              ref={attachEditor}
               value={editorBody}
               typography={typography}
               typewriterScroll={theme.editor.typewriter}
@@ -533,8 +556,19 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         {!state.focusMode ? (
           <div className={isMobile ? 'za-editor__panel za-editor__panel--keyboard' : 'za-editor__panel'}>
             <FormatPanel
-              view={editorRef.current?.view ?? null}
+              view={panelView}
               strings={editorStrings}
+              /* Удаление строки и столбца таблицы — ОО (§4): тост «Строка
+                 удалена · Отменить». Отменяет обычная отмена редактора: сам
+                 тост ничего не хранит, иначе рядом с настоящей историей
+                 завёлся бы второй механизм отката. */
+              onUndoable={(message, undoAction) =>
+                app.toast({
+                  message,
+                  actionLabel: strings.actions.undo,
+                  onAction: undoAction,
+                })
+              }
               onAttach={(kind) => {
                 setAttachKind(kind);
                 /* `accept` ставится до открытия диалога: изменение атрибута
