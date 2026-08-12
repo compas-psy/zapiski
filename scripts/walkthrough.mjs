@@ -25,22 +25,113 @@
  * возвращает 0: он не должен ронять CI там, где его нельзя выполнить. Но
  * молчать о пропуске тоже нельзя, поэтому пропуск печатается явно.
  */
-import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** Типы, которые нужны собранному PWA. Остальное отдаём как поток байтов. */
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+};
+
+/**
+ * Статика собранного PWA. Любой неизвестный путь отдаёт `index.html`:
+ * приложение одностраничное, и маршруты разбирает оно само.
+ */
+function spawnStatic(root, port) {
+  const http = createServer((request, response) => {
+    const path = (request.url ?? '/').split('?')[0];
+    let file = join(root, path === '/' ? 'index.html' : path.slice(1));
+    if (!existsSync(file) || file.endsWith('/')) file = join(root, 'index.html');
+    try {
+      response.writeHead(200, {
+        'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+      });
+      response.end(readFileSync(file));
+    } catch {
+      response.writeHead(404).end();
+    }
+  });
+  http.listen(Number(port), '127.0.0.1');
+  return { kill: () => http.close() };
+}
 
 const PORT = process.env.ZAPISKI_PORT ?? '4173';
 const URL_BASE = process.env.ZAPISKI_URL ?? `http://127.0.0.1:${PORT}/`;
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
-const CHROME =
-  process.env.ZAPISKI_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+
+/**
+ * Где искать браузер.
+ *
+ * Жёсткий путь тут был бы ошибкой: у разработчика, в песочнице и на раннере CI
+ * браузер лежит в трёх разных местах, а со `--strict` ненайденный браузер
+ * роняет выкладку. Поэтому список кандидатов, а `ZAPISKI_CHROME` — последнее
+ * слово, если ни один не подошёл.
+ */
+function findChrome() {
+  /* Заданный вручную путь тоже проверяется: иначе опечатка в переменной даёт
+     не понятное сообщение, а стек из глубины Playwright. */
+  if (process.env.ZAPISKI_CHROME) {
+    return existsSync(process.env.ZAPISKI_CHROME) ? process.env.ZAPISKI_CHROME : null;
+  }
+
+  /* Браузеры Playwright: версия в имени каталога меняется от обновления к
+     обновлению, поэтому каталог перебирается, а не прописывается. */
+  const pool = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
+  if (existsSync(pool)) {
+    for (const entry of readdirSync(pool).sort().reverse()) {
+      for (const tail of ['chrome-linux/chrome', 'chrome-linux/headless_shell']) {
+        const candidate = join(pool, entry, tail);
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+  }
+
+  /* Системные сборки — то, что есть на раннерах GitHub. */
+  for (const candidate of [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/microsoft-edge',
+  ]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+const CHROME = findChrome();
+
+/**
+ * Строгий режим: пропуск считается падением.
+ *
+ * Так и надо в CI. Прогон умеет «пропуститься» при любой нехватке — нет
+ * браузера, нет статики, не поднялся сервер, — и раньше возвращал при этом
+ * НОЛЬ. В CI это выдавало бы зелёный свет, ничего не проверив: худший вид
+ * сторожа, потому что он приучает себе верить.
+ */
+const STRICT = process.argv.includes('--strict') || process.env.ZAPISKI_WALKTHROUGH_STRICT === '1';
 
 function skip(reason) {
+  if (STRICT) {
+    console.error(`walkthrough: ПРОВАЛЕН (строгий режим) — ${reason}`);
+    process.exit(1);
+  }
   console.log(`walkthrough: ПРОПУЩЕН — ${reason}`);
   process.exit(0);
 }
 
-if (!existsSync(CHROME)) skip(`нет браузера по пути ${CHROME}`);
+if (CHROME === null) {
+  skip('браузер не найден — поставьте Chromium или задайте ZAPISKI_CHROME');
+}
 
 let chromium;
 try {
@@ -66,7 +157,10 @@ async function alive() {
 }
 if (!(await alive())) {
   if (!existsSync(DIST)) skip(`нет собранной статики ${DIST} (pnpm --filter "@zapiski/web..." build)`);
-  server = spawn('npx', ['--yes', 'serve', '-s', DIST, '-l', String(PORT)], { stdio: 'ignore' });
+  /* Свой сервер на `node:http`, а не `npx serve`: `npx` тянет пакет из сети, и
+     без сети прогон снова молча пропускался бы — притом именно там, где он
+     нужнее всего. */
+  server = spawnStatic(DIST, PORT);
   for (let attempt = 0; attempt < 40 && !(await alive()); attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -128,15 +222,29 @@ if (!editorReady) {
 }
 
 // ── Набор текста: заметка одна, фокус на месте, текст копится ──────────────
+//
+// Название набирается в СВОЁ поле, а не первой строкой текста: с ITERATION-1 §1
+// заголовок — отдельный ввод, и у новой заметки фокус стоит в нём. Прогон был
+// написан до этой правки и с тех пор не запускался ни разу — он честно
+// сообщал, что «фокус ушёл из редактора», хотя ушёл он туда, куда и должен.
 const state = async () => ({
   text: await page.$eval('.cm-content', (n) => n.innerText),
   rows: await page.locator('.za-row').count(),
   focused: await page.evaluate(() => document.activeElement?.className ?? ''),
 });
 
+const title = page.locator('.za-editor__title');
+check((await title.count()) > 0, 'поля названия заметки нет (ITERATION-1 §1)');
+if (await title.count()) {
+  await title.click();
+  await page.keyboard.type('Привет!', { delay: 20 });
+  await page.waitForTimeout(1400);
+}
+
+// Дальше — тело заметки: Enter из названия уводит курсор в начало текста (§1).
+await page.locator('.cm-content').click();
 const chunks = [
-  '# Привет!',
-  '\nЯ хотел бы ветром стать и над землей лететь',
+  'Я хотел бы ветром стать и над землей лететь',
   '\nА кто ты?',
 ];
 for (const [index, chunk] of chunks.entries()) {
@@ -295,6 +403,101 @@ if (canCreateFolder) {
   }
 }
 
+// ── Меню панели: ВИДНО ли его на экране ────────────────────────────────────
+//
+// Тот самый класс отказов, который прошёл мимо тысячи модульных тестов. У
+// панели стоит `overflow-x: auto`, и по CSS вторая ось при этом тоже
+// вычисляется в `auto`: панель стала скролл-контейнером высотой 46 px, а меню
+// начиналось на 48-й — то есть не было видно ни одним пикселем. В DOM оно при
+// этом присутствовало, и все проверки «пункт есть» проходили.
+//
+// Поэтому проверяется не наличие, а прямоугольник: непустой, внутри вьюпорта и
+// не перекрытый. И на двух вьюпортах с ТАЧЕМ: заказчик смотрел телефон и
+// планшет, а прежний единственный вьюпорт был 1440×900 с мышью.
+for (const [name, viewport] of [
+  ['телефон', { width: 390, height: 844 }],
+  ['планшет', { width: 1024, height: 768 }],
+]) {
+  const touch = await browser.newContext({ viewport, hasTouch: true, locale: 'ru-RU' });
+  const screen = await touch.newPage();
+  await screen.goto(URL_BASE, { waitUntil: 'networkidle' });
+  await screen.waitForTimeout(600);
+
+  /* Контекст свой, хранилище чистое — значит снова онбординг. Проходим его
+     теми же двумя нажатиями и оказываемся в новой заметке. */
+  for (const name of [/Начать|Start/, /Дальше|Next/]) {
+    const button = screen.getByRole('button', { name }).first();
+    if (await button.count()) {
+      await button.click();
+      await screen.waitForTimeout(500);
+    }
+  }
+  await screen.waitForTimeout(900);
+  if ((await screen.locator('.cm-content').count()) === 0) {
+    const row = screen.locator('.za-row').first();
+    if (await row.count()) {
+      await row.click();
+      await screen.waitForTimeout(700);
+    }
+  }
+  if ((await screen.locator('.cm-content').count()) === 0) {
+    check(false, `${name}: редактор не открылся, панель проверять не на чем`);
+    await touch.close();
+    continue;
+  }
+
+  const style = screen.locator('button[aria-label="Стиль абзаца"]').first();
+  if ((await style.count()) === 0) {
+    check(false, `${name}: кнопки «Стиль абзаца» на экране нет`);
+    await touch.close();
+    continue;
+  }
+
+  /* ОДНО касание. Пара `mousedown` + `touchstart` давала два срабатывания:
+     меню открывалось и тут же закрывалось само. */
+  await style.tap();
+  await screen.waitForTimeout(400);
+
+  const layer = screen.locator('.zp-panel__layer');
+  if ((await layer.count()) === 0) {
+    check(false, `${name}: одно касание не открыло меню (или сразу закрыло)`);
+    await touch.close();
+    continue;
+  }
+
+  const box = await layer.boundingBox();
+  check(
+    Boolean(box) && box.width > 40 && box.height > 40,
+    `${name}: меню есть в DOM, но на экране его нет`,
+    `прямоугольник ${JSON.stringify(box)}`,
+  );
+  if (box) {
+    check(
+      box.x >= -1 &&
+        box.y >= -1 &&
+        box.x + box.width <= viewport.width + 1 &&
+        box.y + box.height <= viewport.height + 1,
+      `${name}: меню вылезло за край экрана`,
+      `${JSON.stringify(box)} при ${viewport.width}×${viewport.height}`,
+    );
+  }
+
+  /* Не перекрыто ли: точка в центре пункта обязана принадлежать меню. */
+  const item = screen.locator('.zp-panel__layer [role="menuitem"]').first();
+  const itemBox = (await item.count()) ? await item.boundingBox() : null;
+  if (itemBox) {
+    const mine = await screen.evaluate(
+      ([x, y]) => Boolean(document.elementFromPoint(x, y)?.closest('.zp-panel__layer')),
+      [itemBox.x + itemBox.width / 2, itemBox.y + itemBox.height / 2],
+    );
+    check(mine, `${name}: центр пункта меню перекрыт чем-то другим`);
+  } else {
+    check(false, `${name}: в открытом меню нет ни одного пункта`);
+  }
+
+  await touch.close();
+}
+
 await browser.close();
 server?.kill();
 
@@ -305,5 +508,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  'walkthrough: пройден — онбординг, набор текста, одна заметка, фокус на месте, папки, шифрование',
+  'walkthrough: пройден — онбординг, набор текста, одна заметка, фокус на месте, папки, ' +
+    'шифрование, меню панели видно на телефоне и планшете',
 );
