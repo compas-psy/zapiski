@@ -449,6 +449,73 @@ for (const [name, viewport] of [
     check(false, `${name}: в открытом меню нет ни одного пункта`);
   }
 
+  /* ── Библиотека: её пункты обязаны нажиматься ────────────────────────────
+     У `--z-drawer` стояло 40 при `--z-scrim` 50 — выдвижная библиотека лежала
+     под собственным затемнением, и оно съедало каждое нажатие. Архив, Корзина,
+     Настройки и Справка на телефоне не открывались вовсе, причём панель была
+     прекрасно видна (затемнение полупрозрачное) — со стороны «жму, и ничего».
+     На ширине от 900 px библиотека рисуется постоянной колонкой без скрима,
+     поэтому на планшете и десктопе всё работало. Проверяется поэтому обоими
+     вьюпортами и по существу: попадание указателя, а не наличие в дереве. */
+  for (const target of ['Архив', 'Корзина', 'Настройки', 'Справка']) {
+    await screen.reload({ waitUntil: 'networkidle' });
+    await screen.waitForTimeout(800);
+
+    /* Из заметки — назад к списку: библиотека открывается только оттуда. */
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await screen.locator('.za-header__title').count()) break;
+      const back = screen.getByRole('button', { name: /^Назад$|^Back$/ }).first();
+      if ((await back.count()) === 0) break;
+      await back.click();
+      await screen.waitForTimeout(600);
+    }
+
+    const opener = screen.getByRole('button', { name: /Открыть библиотеку|Open library/i }).first();
+    /* На широком экране библиотека уже на экране колонкой — кнопки нет, и это
+       не отказ. Отказ — если её нет и панель при этом не видна. */
+    if (await opener.count()) {
+      await opener.tap();
+      await screen.waitForTimeout(500);
+    }
+
+    const item = screen.locator('.za-nav__item', { hasText: new RegExp(target, 'i') }).first();
+    if ((await item.count()) === 0) {
+      check(false, `${name}: в библиотеке нет пункта «${target}»`);
+      continue;
+    }
+
+    const itemRect = await item.boundingBox();
+    if (itemRect) {
+      const reachable = await screen.evaluate(
+        ([x, y]) => {
+          const top = document.elementFromPoint(x, y);
+          return { ours: Boolean(top?.closest('.za-nav__item')), got: top?.className ?? '' };
+        },
+        [itemRect.x + itemRect.width / 2, itemRect.y + itemRect.height / 2],
+      );
+      check(
+        reachable.ours,
+        `${name}: пункт «${target}» перекрыт и нажатие до него не дойдёт`,
+        `в этой точке лежит «${reachable.got}»`,
+      );
+    }
+
+    const before = await screen.locator('body').innerText();
+    /* Короткий таймаут и проглоченный отказ — сознательно. Когда пункт
+       перекрыт, `tap()` ждёт 30 секунд и падает стеком Playwright, унося с
+       собой ВЕСЬ отчёт: причина «перекрыт» уже записана выше, а вместо неё
+       читателю достаётся «TimeoutError». Пусть нажатие просто не состоится —
+       следующая проверка скажет об этом по-русски. */
+    await item.tap({ timeout: 4000 }).catch(() => undefined);
+    await screen.waitForTimeout(900);
+    const after = await screen.locator('body').innerText();
+    check(
+      before !== after,
+      `${name}: «${target}» нажат, а экран не изменился`,
+      'ровно то, что заказчик описал как «при клике ничего не происходит»',
+    );
+  }
+
   await touch.close();
 }
 
@@ -463,5 +530,6 @@ if (problems.length > 0) {
 }
 console.log(
   'walkthrough: пройден — онбординг, набор текста, одна заметка, фокус на месте, папки, ' +
-    'шифрование, меню панели видно на телефоне и планшете',
+    'шифрование, меню панели видно на телефоне и планшете, библиотека нажимается и ведёт ' +
+    'в Архив, Корзину, Настройки и Справку',
 );

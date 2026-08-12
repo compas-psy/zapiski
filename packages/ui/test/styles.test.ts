@@ -184,3 +184,59 @@ describe('наведение не прилипает на тач', () => {
     expect(unguardedHovers('@media (hover: hover) {\n.x:hover { color: red; }\n}')).toHaveLength(0);
   });
 });
+
+/**
+ * Слои: содержимое оверлея обязано лежать ВЫШЕ затемнения.
+ *
+ * Дефект, ради которого написан этот блок. У `--z-drawer` стояло 40, а у
+ * `--z-scrim` — 50. Выдвижная библиотека оказывалась под собственным
+ * затемнением, и оно перехватывало каждое нажатие: Архив, Корзина, Настройки
+ * и Справка на телефоне не открывались вообще. Панель при этом прекрасно
+ * видна — затемнение полупрозрачное, — поэтому со стороны это выглядело как
+ * «жму, и ничего не происходит».
+ *
+ * Почему не поймали раньше. На ширине от 900 px библиотека рисуется
+ * постоянной колонкой, без Drawer и без скрима, — на планшете и на десктопе
+ * всё работало. А в happy-dom нет ни слоёв, ни попадания указателя, поэтому
+ * модульные тесты компонентов молчали: Drawer исправно появлялся в дереве.
+ */
+describe('слои: затемнение не перекрывает то, что само подсвечивает', () => {
+  const layerValue = (name: string): number => {
+    const css = readFileSync(resolve(STYLES_DIR, 'tokens.generated.css'), 'utf8');
+    const found = new RegExp(`--${name}:\\s*(\\d+)`).exec(css);
+    expect(found, `в токенах нет --${name}`).not.toBeNull();
+    return Number((found as RegExpExecArray)[1]);
+  };
+
+  /** Класс → токен слоя, как записано в Overlay.css. */
+  const layerOf = (selector: string): string => {
+    const css = readFileSync(
+      resolve(STYLES_DIR, '../components/Overlay/Overlay.css'),
+      'utf8',
+    );
+    const block = new RegExp(`\\${selector}\\s*\\{([^}]*)\\}`).exec(css);
+    expect(block, `в Overlay.css нет правила ${selector}`).not.toBeNull();
+    const layer = /z-index:\s*var\(--([a-z-]+)\)/.exec((block as RegExpExecArray)[1] as string);
+    expect(layer, `у ${selector} нет z-index из токена`).not.toBeNull();
+    return (layer as RegExpExecArray)[1] as string;
+  };
+
+  const scrim = layerValue(layerOf('.z-scrim'));
+
+  /* Всё, что Drawer/Sheet/Modal показывают ВМЕСТЕ со скримом. Список ручной:
+     важно не «какие есть классы», а «какие рисуются поверх затемнения». */
+  for (const selector of ['.z-drawer', '.z-sheet', '.z-modal-layer']) {
+    it(`${selector} лежит выше затемнения`, () => {
+      const value = layerValue(layerOf(selector));
+      expect(
+        value,
+        `${selector} на слое ${value}, затемнение на ${scrim} — нажатия не дойдут`,
+      ).toBeGreaterThan(scrim);
+    });
+  }
+
+  it('модалка остаётся выше выдвижной библиотеки', () => {
+    // Иначе диалог, открытый из библиотеки, окажется под ней.
+    expect(layerValue(layerOf('.z-modal-layer'))).toBeGreaterThan(layerValue(layerOf('.z-drawer')));
+  });
+});
