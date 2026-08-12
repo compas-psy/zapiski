@@ -377,6 +377,22 @@ export class AppController {
     this.toastSink(toast);
   }
 
+  /**
+   * Записать настройку и не потерять отказ.
+   *
+   * Раньше половина вызовов выглядела как `void this.host.prefs.set(...)`.
+   * Отказ записи при этом становился unhandled rejection: переключатель
+   * срабатывал, интерфейс показывал новое значение, а на диск не ложилось
+   * ничего — и человек узнавал об этом при следующем запуске, когда настройка
+   * возвращалась к прежней. Молчаливая потеря выбора запрещена (BEHAVIOR §0:
+   * об отказе говорим вслух), поэтому здесь тост, а не тишина.
+   */
+  protected persistPref<T>(key: string, value: T): void {
+    void this.host.prefs.set(key, value).catch(() => {
+      this.toast({ message: this.strings.errors.settingNotSaved });
+    });
+  }
+
   private undoable(operation: UndoableToast): void {
     this.toast({
       message: operation.message,
@@ -852,7 +868,7 @@ export class AppController {
   openNote(path: VaultPath): void {
     const lastOpened = [path, ...this.state.lastOpened.filter((item) => item !== path)].slice(0, 5);
     this.patch({ lastOpened });
-    void this.host.prefs.set(PREF.lastOpened, lastOpened);
+    this.persistPref(PREF.lastOpened, lastOpened);
     this.navigate({ name: 'note', id: path });
   }
 
@@ -1235,7 +1251,7 @@ export class AppController {
          показать в «недавних» строку, которая никуда не открывается. */
       const lastOpened = this.state.lastOpened.map((item) => (item === from ? to : item));
       this.patch({ lastOpened });
-      void this.host.prefs.set(PREF.lastOpened, lastOpened);
+      this.persistPref(PREF.lastOpened, lastOpened);
     }
   }
 
@@ -1439,7 +1455,7 @@ export class AppController {
       ...this.state.recentQueries.filter((item) => item !== trimmed),
     ].slice(0, 8);
     this.patch({ recentQueries });
-    void this.host.prefs.set(PREF.recent, recentQueries);
+    this.persistPref(PREF.recent, recentQueries);
   }
 
   // ── Сортировка (BEHAVIOR §1.2 — на папку) ──────────────────────────────────
@@ -1451,7 +1467,7 @@ export class AppController {
   setSortMode(folder: string | null, mode: SortMode): void {
     const sortByFolder = { ...this.state.sortByFolder, [folder ?? '']: mode };
     this.patch({ sortByFolder });
-    void this.host.prefs.set(PREF.sort, sortByFolder);
+    this.persistPref(PREF.sort, sortByFolder);
   }
 
   // ── Шифрование (BEHAVIOR §5) ───────────────────────────────────────────────
@@ -1873,7 +1889,7 @@ export class AppController {
 
   setAutoLockMinutes(minutes: number | null): void {
     this.autoLockMinutes = minutes;
-    void this.host.prefs.set(PREF.autoLock, minutes);
+    this.persistPref(PREF.autoLock, minutes);
   }
 
   /** «Шифровать новые заметки» — настройка, а не намерение: переживает запуск. */
@@ -1940,7 +1956,7 @@ export class AppController {
     this.backend = backend;
     this.engine = backend && this.vault ? new SyncEngine(this.vault, backend) : null;
     this.patch({ backendId: backend?.id ?? null });
-    void this.host.prefs.set(PREF.backend, backend?.id ?? null);
+    this.persistPref(PREF.backend, backend?.id ?? null);
     if (this.engine) void this.syncNow();
   }
 
@@ -2041,7 +2057,7 @@ export class AppController {
 
   setAccount(account: AccountState | null): void {
     this.patch({ account });
-    void this.host.prefs.set(PREF.account, account);
+    this.persistPref(PREF.account, account);
   }
 
   // ── Отладочное меню (приёмочный критерий №10) ──────────────────────────────
@@ -2069,7 +2085,7 @@ export class AppController {
 
   setLocale(locale: Locale): void {
     this.patch({ locale });
-    void this.host.prefs.set(PREF.locale, locale);
+    this.persistPref(PREF.locale, locale);
   }
 }
 

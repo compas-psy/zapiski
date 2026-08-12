@@ -11,6 +11,10 @@ import { createRoot } from 'react-dom/client';
 import { App } from '@zapiski/app';
 import { applyAppearance, readStoredAppearance } from '@zapiski/ui';
 
+/* Порядок важен: раньше эти правила стояли инлайном в <head>, то есть ДО
+   ссылки на стили приложения, и уступали ей при равной специфичности. Импорт
+   первым сохраняет тот же порядок каскада. */
+import './shell.css';
 import '@zapiski/app/styles.css';
 
 import { createHost } from './host';

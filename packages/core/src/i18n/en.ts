@@ -11,6 +11,7 @@ export const en: Catalog = {
     syncFailed: 'Could not sync · Retry',
     noSpace: 'The device is out of space. The note is kept in memory — free some space to write it to disk',
     folderUnavailable: 'The folder is unavailable. It may have been moved — please point to its new location',
+    settingNotSaved: 'Could not save the setting — it will revert on restart',
     webdavAuth: 'The server did not accept the login or password',
     webdavUnreachable: 'The server is not responding · Retry',
     yandexTokenExpired: 'Please sign in to Yandex.Disk again',

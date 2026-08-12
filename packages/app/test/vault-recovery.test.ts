@@ -67,3 +67,35 @@ describe('повторная загрузка не запускается два
     expect(app.vaultRef).not.toBeNull();
   });
 });
+
+describe('настройка не легла на диск', () => {
+  it('отказ записи слышен, а не теряется', async () => {
+    /* Раньше это писалось как `void this.host.prefs.set(...)`: отказ
+       становился unhandled rejection, переключатель показывал новое значение,
+       а на диск не ложилось ничего. Человек узнавал об этом при следующем
+       запуске — настройка возвращалась к прежней сама. */
+    const host = createTestHost({ prefs: { onboarded: true } });
+    /* Отказ точечный: `boot()` сам пишет настройки, и «ломать всё» значило бы
+       проверять запуск, а не запись настройки. */
+    const honest = host.prefs.set.bind(host.prefs);
+    host.prefs.set = async (key, value) => {
+      if (key === 'security.autoLockMinutes') throw new Error('диск не отвечает');
+      await honest(key, value);
+    };
+
+    const app = new AppController(host);
+    const toasts: string[] = [];
+    app.setToastSink((toast) => toasts.push(toast.message));
+    await app.boot();
+
+    /* Настройка выбрана нарочно не языковая: `setLocale` успевает переключить
+       язык раньше, чем отказ вернётся, и тост приходит уже по-английски —
+       верное поведение, но проверять им русскую строку нельзя. */
+    app.setAutoLockMinutes(5);
+    /* Тост приходит из отклонённого промиса записи — ждём, пока очередь
+       задач его донесёт. */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(toasts).toContain(ru.errors.settingNotSaved);
+  });
+});
