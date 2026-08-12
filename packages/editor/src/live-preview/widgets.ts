@@ -52,9 +52,21 @@ export class TaskBoxWidget extends WidgetType {
     return host;
   }
 
-  /** Клик по квадрату обрабатываем сами — курсор при этом не двигается. */
+  /**
+   * `false`, а не `true`, — и это не мелочь.
+   *
+   * CodeMirror при `true` вообще не пропускает событие в свой конвейер:
+   * `eventBelongsToEditor` идёт от цели вверх и на первом же виджете с
+   * «игнорировать» возвращает `false`. Значит, до `domEventHandlers` дело не
+   * доходит — а тап по квадрату разбирает как раз наш обработчик
+   * (`markupInteractions`). С `true` квадрат молча не нажимался: на телефоне
+   * он и есть основная цель, отмечать задачу было нечем.
+   *
+   * Курсор при этом не прыгает: обработчик зовёт `preventDefault` и
+   * возвращает `true`, то есть своей обработки CodeMirror не делает.
+   */
   override ignoreEvent(): boolean {
-    return true;
+    return false;
   }
 }
 
@@ -63,12 +75,18 @@ export class ImageWidget extends WidgetType {
   constructor(
     readonly src: string,
     readonly alt: string,
+    /**
+     * Путь, как он написан в тексте. Нужен для тапа: полноэкранный просмотр
+     * открывает приложение, а оно знает про вложения по пути, а не по
+     * `blob:`-адресу, который живёт только внутри кэша (ITERATION-1 §5).
+     */
+    readonly path = '',
   ) {
     super();
   }
 
   override eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.alt === this.alt;
+    return other.src === this.src && other.alt === this.alt && other.path === this.path;
   }
 
   override toDOM(): HTMLElement {
@@ -80,6 +98,7 @@ export class ImageWidget extends WidgetType {
     img.className = 'cm-z-image';
     img.src = this.src;
     img.alt = this.alt;
+    if (this.path !== '') img.dataset['zSrc'] = this.path;
     img.loading = 'lazy';
     img.draggable = false;
     // Ошибка загрузки не блокирует ввод (ARCHITECTURE §3.9): показываем
@@ -97,6 +116,160 @@ export class ImageWidget extends WidgetType {
 
   override get estimatedHeight(): number {
     return -1;
+  }
+
+  /** Тап уходит в `markupInteractions` — см. объяснение у `TaskBoxWidget`. */
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
+
+/**
+ * Карточка файла (ITERATION-1 §5).
+ *
+ * До этого документ, вставленный в заметку, оставался голой ссылкой
+ * `[](attachments/договор.pdf)` — то есть выглядел как опечатка. Карточка
+ * говорит три вещи, которых не хватало: что это файл, какого он типа и
+ * сколько весит.
+ *
+ * Размер приходит снаружи: сам виджет в хранилище не ходит — он живёт внутри
+ * пересчёта декораций, а тот обязан укладываться в кадр.
+ */
+export class FileWidget extends WidgetType {
+  constructor(
+    /** Путь, как он написан в тексте: его и открывает оболочка. */
+    readonly path: string,
+    readonly name: string,
+    /** Человекочитаемый объём или пустая строка, если ещё не известен. */
+    readonly size: string,
+    readonly onOpen: (path: string) => void,
+  ) {
+    super();
+  }
+
+  override eq(other: FileWidget): boolean {
+    return other.path === this.path && other.name === this.name && other.size === this.size;
+  }
+
+  override toDOM(): HTMLElement {
+    const card = document.createElement('span');
+    card.className = 'cm-z-file';
+    card.dataset['zSrc'] = this.path;
+
+    const icon = document.createElementNS(SVG_NS, 'svg');
+    icon.setAttribute('viewBox', '0 0 24 24');
+    icon.setAttribute('class', 'cm-z-file__icon');
+    icon.setAttribute('aria-hidden', 'true');
+    const sheet = document.createElementNS(SVG_NS, 'path');
+    sheet.setAttribute('d', 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z');
+    const fold = document.createElementNS(SVG_NS, 'path');
+    fold.setAttribute('d', 'M14 3v5h5');
+    icon.append(sheet, fold);
+
+    const name = document.createElement('span');
+    name.className = 'cm-z-file__name';
+    name.textContent = this.name;
+
+    card.append(icon, name);
+    if (this.size !== '') {
+      const size = document.createElement('span');
+      size.className = 'cm-z-file__size';
+      size.textContent = this.size;
+      card.appendChild(size);
+    }
+
+    /* Клик открывает файл системным приложением — этим занимается оболочка. */
+    card.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      this.onOpen(this.path);
+    });
+    return card;
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+/**
+ * Мини-плеер аудио (ITERATION-1 §5, COMPONENTS §8).
+ *
+ * Стандартный `<audio controls>` не годится: его рисует система, и он выглядит
+ * чужим в каждой из трёх оболочек по-своему. Здесь ровно то, что нужно, —
+ * кнопка, полоса и длительность.
+ *
+ * Виджет не грузит файл заранее: `preload="metadata"` даёт длительность, не
+ * вытягивая в память сам звук. Заметка с десятком записей иначе тянула бы
+ * десяток файлов при открытии.
+ */
+export class AudioWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly name: string,
+  ) {
+    super();
+  }
+
+  override eq(other: AudioWidget): boolean {
+    return other.src === this.src;
+  }
+
+  override toDOM(): HTMLElement {
+    const host = document.createElement('span');
+    host.className = 'cm-z-audio';
+
+    const audio = document.createElement('audio');
+    audio.src = this.src;
+    audio.preload = 'metadata';
+
+    const play = document.createElement('button');
+    play.type = 'button';
+    play.className = 'cm-z-audio__play';
+    play.setAttribute('aria-label', this.name);
+    play.textContent = '▶';
+
+    const track = document.createElement('span');
+    track.className = 'cm-z-audio__track';
+    const fill = document.createElement('span');
+    fill.className = 'cm-z-audio__fill';
+    track.appendChild(fill);
+
+    const time = document.createElement('span');
+    time.className = 'cm-z-audio__time';
+    time.textContent = '--:--';
+
+    const clock = (seconds: number): string => {
+      if (!Number.isFinite(seconds)) return '--:--';
+      const whole = Math.floor(seconds);
+      return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+    };
+
+    audio.addEventListener('loadedmetadata', () => {
+      time.textContent = clock(audio.duration);
+    });
+    audio.addEventListener('timeupdate', () => {
+      const ratio = audio.duration > 0 ? audio.currentTime / audio.duration : 0;
+      fill.style.inlineSize = `${Math.round(ratio * 100)}%`;
+      time.textContent = clock(audio.duration - audio.currentTime);
+    });
+    audio.addEventListener('ended', () => {
+      play.textContent = '▶';
+      fill.style.inlineSize = '0%';
+    });
+
+    play.addEventListener('mousedown', (event) => {
+      event.preventDefault();
+      if (audio.paused) {
+        void audio.play();
+        play.textContent = '■';
+      } else {
+        audio.pause();
+        play.textContent = '▶';
+      }
+    });
+
+    host.append(play, track, time, audio);
+    return host;
   }
 
   override ignoreEvent(): boolean {

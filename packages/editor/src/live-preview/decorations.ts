@@ -52,7 +52,7 @@ import { hidesMarkup } from './editor-mode.js';
 import type { SyntaxNodeRef } from '@lezer/common';
 import { editorRuntime } from '../runtime.js';
 import type { EditorRuntime } from '../runtime.js';
-import { ImageWidget, TaskBoxWidget } from './widgets.js';
+import { AudioWidget, FileWidget, ImageWidget, TaskBoxWidget } from './widgets.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Кэш деклараций: одинаковый класс → один и тот же объект `Decoration`.
@@ -140,6 +140,13 @@ const HEADING_LINE: Record<string, string> = {
 };
 
 const IMAGE_URL = /^(https?:)?\/\//i;
+/** Что показывать плеером, а не карточкой. */
+const AUDIO_ATTACHMENT = /\.(mp3|ogg|opus|wav|m4a|aac|flac)$/i;
+/** Расширения картинок — те же, что знает ядро. */
+const isImageUrl = (url: string): boolean =>
+  /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic)$/i.test(url.split('?')[0] ?? url);
+/** Имя файла из пути — подпись карточки, когда её не задали в тексте. */
+const fileNameOf = (path: string): string => path.split('/').pop() ?? path;
 const TASK_CHECKED = /^\[[xX]\]$/;
 /** Строка-определение сноски: `[^1]: текст` (SCREENS §4). */
 const FOOTNOTE_DEF = /^\s{0,3}\[\^[^\]\s]+\]:/;
@@ -322,6 +329,11 @@ class LivePreviewBuilder {
       case 'Image':
         this.image(node);
         return;
+      case 'Link':
+        /* Ссылка на файл в хранилище — карточка или плеер, а не голый адрес
+           (ITERATION-1 §5). Внешние ссылки остаются ссылками. */
+        this.attachment(node);
+        break;
       default:
         break;
     }
@@ -362,7 +374,43 @@ class LivePreviewBuilder {
         : this.runtime.resolveAttachment(rawSrc);
     if (!src) return;
     const lineEnd = this.state.doc.lineAt(node.to).to;
-    this.widget(lineEnd, Decoration.widget({ widget: new ImageWidget(src, alt), side: 1 }));
+    /* Путь из текста едет вместе с URL: по нему тап открывает полноэкранный
+       просмотр. У внешнего адреса путь — он сам. */
+    this.widget(
+      lineEnd,
+      Decoration.widget({ widget: new ImageWidget(src, alt, rawSrc), side: 1 }),
+    );
+  }
+
+  /**
+   * Вложение-НЕкартинка: документ или аудиозапись.
+   *
+   * Раньше и то и другое оставалось голой ссылкой `[](attachments/договор.pdf)`
+   * — то есть выглядело как опечатка. Теперь документ показывается карточкой,
+   * а звук — мини-плеером (§5).
+   *
+   * Внешние адреса сюда не попадают: `http(s)://` и `data:` остаются обычной
+   * ссылкой, за ними нет файла, который мы могли бы открыть.
+   */
+  private attachment(node: SyntaxNodeRef): void {
+    const raw = this.state.doc.sliceString(node.from, node.to);
+    const parsed = /^\[([^\]]*)\]\(\s*<?([^\s>)]*)>?/.exec(raw);
+    if (!parsed) return;
+    const rawSrc = parsed[2] ?? '';
+    if (!rawSrc || IMAGE_URL.test(rawSrc) || rawSrc.startsWith('data:')) return;
+    if (isImageUrl(rawSrc)) return;
+
+    const src = this.runtime.resolveAttachment(rawSrc);
+    if (!src) return;
+
+    const name = (parsed[1] ?? '') || fileNameOf(rawSrc);
+    const lineEnd = this.state.doc.lineAt(node.to).to;
+    const widget = AUDIO_ATTACHMENT.test(rawSrc)
+      ? new AudioWidget(src, name)
+      : new FileWidget(rawSrc, name, this.runtime.attachmentSize(rawSrc), (path) =>
+          this.runtime.openAttachment(path),
+        );
+    this.widget(lineEnd, Decoration.widget({ widget, side: 1 }));
   }
 
   /** Определения сносок оформляются построчно — узла для них в грамматике нет. */

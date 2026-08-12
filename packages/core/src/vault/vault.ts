@@ -111,6 +111,18 @@ export interface AddAttachmentOptions {
 /** Расширения, при которых вложение вставляется картинкой, а не карточкой. */
 const IMAGE_ATTACHMENT = /\.(png|jpe?g|gif|webp|svg|bmp|avif|heic)$/i;
 
+/**
+ * Картинка ли это вложение — по расширению.
+ *
+ * Один и тот же ответ нужен в трёх местах: при вставке (`!` перед ссылкой),
+ * при показе в тексте и при тапе (картинку открывает просмотрщик, остальное —
+ * системное приложение). Список расширений обязан быть один, иначе файл,
+ * вставленный картинкой, откроется как документ.
+ */
+export function isImageAttachment(path: string): boolean {
+  return IMAGE_ATTACHMENT.test(path.split('?')[0]?.split('#')[0] ?? path);
+}
+
 const extOf = (name: string): string => {
   const dot = name.lastIndexOf('.');
   return dot > 0 ? name.slice(dot) : '';

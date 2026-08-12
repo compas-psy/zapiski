@@ -69,6 +69,20 @@ describe('переключение чекбокса', () => {
     expect(v.state.doc.toString()).toBe('1. [x] пункт');
   });
 
+  it('тап по самому квадрату отмечает задачу', () => {
+    /* Проверяется именно через DOM, а не вызовом `toggleTaskAt`: ломалось
+       ровно звено между ними. `ignoreEvent()` виджета возвращал `true`, и
+       CodeMirror не пускал событие в свой конвейер вообще — до обработчика
+       оно не доходило, квадрат молча не нажимался. На телефоне это основная
+       цель нажатия, то есть отмечать задачу было нечем. */
+    const v = makeView('- [ ] задача', { selection: { anchor: 0 } });
+    view = v;
+    const box = v.dom.querySelector('.cm-z-taskbox');
+    expect(box, 'квадрат не нарисован').not.toBeNull();
+    box?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    expect(v.state.doc.toString()).toBe('- [x] задача');
+  });
+
   it('тап по тексту задачи курсор не переключает — обработчик его не ловит', () => {
     const v = makeView('- [ ] задача', { selection: { anchor: 0 } });
     view = v;

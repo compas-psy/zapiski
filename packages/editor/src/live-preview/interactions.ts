@@ -89,6 +89,21 @@ export const markupInteractions: Extension = EditorView.domEventHandlers({
       }
     }
 
+    // ── Картинка ────────────────────────────────────────────────────────────
+    /* Тап по превью — полноэкранный просмотр (ITERATION-1 §5). Открывает его
+       приложение: редактор не знает ни про оболочку, ни про просмотрщик.
+       Путь берём из атрибута, а не из `src`: в `src` лежит `blob:`-адрес из
+       кэша, за пределами редактора он ничего не значит. */
+    const image = target.closest('.cm-z-image');
+    if (image instanceof HTMLElement) {
+      const src = image.dataset['zSrc'];
+      if (src) {
+        event.preventDefault();
+        runtime.openAttachment(src);
+        return true;
+      }
+    }
+
     // ── Тег ─────────────────────────────────────────────────────────────────
     const tag = target.closest('.cm-z-tag');
     if (tag instanceof HTMLElement) {

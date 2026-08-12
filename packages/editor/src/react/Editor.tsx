@@ -23,6 +23,7 @@ import { setFocusMode } from '../focus/focus-mode.js';
 import { setRawMode } from '../live-preview/raw-mode.js';
 import { setEditorMode, type EditorMode } from '../live-preview/editor-mode.js';
 import { flushAutosave } from '../save/autosave.js';
+import { redecorateEffect } from '../ime/composition.js';
 import { applyTaskOrder } from '../input/task-order.js';
 
 export interface EditorHandle {
@@ -65,6 +66,20 @@ export interface EditorProps {
   onOpenTag?: (tag: string) => void;
   /** `attachments/…` → URL для показа картинки. */
   resolveAttachment?: (src: string) => string | null;
+  /** Объём вложения строкой («96 КБ») для карточки файла (ITERATION-1 §5). */
+  attachmentSize?: (src: string) => string;
+  /**
+   * Счётчик готовности вложений: меняется, когда дочитан очередной файл.
+   *
+   * Без него картинка не появлялась до следующего нажатия клавиши, и это
+   * выглядело ровно как «картинки не показываются». Причина в том, что
+   * `resolveAttachment` синхронный: первый вызов отвечает `null` и запускает
+   * чтение, — а рендер React сам по себе CodeMirror ни о чём не уведомляет,
+   * набор декораций пересчитывается только по транзакциям.
+   */
+  attachmentsVersion?: number;
+  /** Тап по вложению: картинка — просмотр, файл — системное приложение. */
+  onOpenAttachment?: (src: string) => void;
 
   /** Настройки типографики; применяются мгновенно (BEHAVIOR §10). */
   typography?: TypographySettings;
@@ -156,6 +171,8 @@ export function Editor(props: EditorProps): React.ReactElement {
       createNote: (title) => propsRef.current.onCreateNote?.(title),
       openTag: (tag) => propsRef.current.onOpenTag?.(tag),
       resolveAttachment: (src) => propsRef.current.resolveAttachment?.(src) ?? null,
+      attachmentSize: (src) => propsRef.current.attachmentSize?.(src) ?? '',
+      openAttachment: (src) => propsRef.current.onOpenAttachment?.(src),
     };
 
     const state = EditorState.create({
@@ -242,6 +259,16 @@ export function Editor(props: EditorProps): React.ReactElement {
     const view = viewRef.current;
     if (view) applyTaskOrder(view, props.moveDoneToBottom ?? false);
   }, [props.moveDoneToBottom]);
+
+  /* Дочитано очередное вложение — пересчитать декорации сейчас. Транзакция
+     пустая, меняется только набор декораций: ни документ, ни курсор, ни
+     история от неё не страдают. */
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view && props.attachmentsVersion !== undefined) {
+      view.dispatch({ effects: redecorateEffect.of(null) });
+    }
+  }, [props.attachmentsVersion]);
 
   /* Смена режима — эффект над готовым состоянием: мгновенно, без потери
      истории отмены и позиции курсора (ITERATION-1 §8). */

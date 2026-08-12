@@ -331,6 +331,9 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     maxWidth: '100%',
     borderRadius: '12px',
     margin: '8px 0',
+    // Тап открывает полноэкранный просмотр (ITERATION-1 §5) — курсор об этом
+    // и сообщает; на телефоне подсказки нет, там об этом говорит сам жест.
+    cursor: 'zoom-in',
   },
   '.cm-z-image-missing': {
     display: 'block',
@@ -342,6 +345,98 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     fontSize: '0.8em',
     fontFamily: fontFamily.mono,
   },
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Файл и аудио в тексте (ITERATION-1 §5, «Как выглядит в тексте»)
+  // ───────────────────────────────────────────────────────────────────────────
+  // Оба блочные и стоят в конце строки — как превью картинки. Сама ссылка при
+  // этом остаётся видимой: карточка ДОБАВЛЯЕТСЯ к тексту, а не подменяет его,
+  // иначе исчезал бы адрес, который человек правит руками.
+  '.cm-z-file': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    margin: '8px 0',
+    padding: '12px 14px',
+    borderRadius: '12px',
+    border: '1px solid var(--line)',
+    backgroundColor: 'var(--surface)',
+    cursor: 'pointer',
+  },
+  '.cm-z-file__icon': {
+    flex: '0 0 auto',
+    width: '20px',
+    height: '20px',
+    fill: 'none',
+    stroke: 'var(--text-secondary)',
+    strokeWidth: '1.5',
+    strokeLinejoin: 'round',
+  },
+  '.cm-z-file__name': {
+    flex: '1 1 auto',
+    minWidth: '0',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    color: 'var(--text-primary)',
+  },
+  '.cm-z-file__size': {
+    flex: '0 0 auto',
+    fontFamily: fontFamily.mono,
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+  },
+
+  '.cm-z-audio': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    margin: '8px 0',
+    padding: '10px 14px',
+    borderRadius: '12px',
+    border: '1px solid var(--line)',
+    backgroundColor: 'var(--surface)',
+  },
+  '.cm-z-audio__play': {
+    flex: '0 0 auto',
+    width: '34px',
+    height: '34px',
+    padding: '0',
+    borderRadius: '50%',
+    border: 'none',
+    backgroundColor: 'var(--accent)',
+    color: 'var(--on-accent)',
+    fontSize: '13px',
+    lineHeight: '34px',
+    cursor: 'pointer',
+  },
+  // Полоса — 3 px, как в COMPONENTS §8. Заливка растёт по `inline-size`, а не
+  // `transform`: масштабированная полоса размывает края на дробном пикселе.
+  '.cm-z-audio__track': {
+    flex: '1 1 auto',
+    height: '3px',
+    borderRadius: '2px',
+    backgroundColor: 'var(--surface-sunken)',
+    overflow: 'hidden',
+  },
+  '.cm-z-audio__fill': {
+    display: 'block',
+    height: '100%',
+    inlineSize: '0%',
+    borderRadius: '2px',
+    backgroundColor: 'var(--accent)',
+    transition: 'inline-size 120ms linear',
+  },
+  '.cm-z-audio__time': {
+    flex: '0 0 auto',
+    fontFamily: fontFamily.mono,
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  // Сам `<audio>` не показываем: элементов управления у него свои, системные,
+  // и в каждой из трёх оболочек они выглядят по-разному.
+  '.cm-z-audio audio': { display: 'none' },
 
   // ───────────────────────────────────────────────────────────────────────────
   // Режим фокуса (BEHAVIOR §2.8)
@@ -452,5 +547,13 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
       transition: 'none',
     },
     '.cm-z-taskbox rect, .cm-z-taskbox path': { transition: 'none' },
+    '.cm-z-audio__fill': { transition: 'none' },
+  },
+
+  // Наведение — только там, где есть мышь. На Android WebView `:hover`
+  // залипает на последнем тронутом элементе и не снимается (см. сторож
+  // стилей в @zapiski/ui).
+  '@media (hover: hover)': {
+    '.cm-z-file:hover': { borderColor: 'var(--accent)' },
   },
 });

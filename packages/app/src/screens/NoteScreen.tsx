@@ -10,6 +10,7 @@ import {
   countWords,
   extractTags,
   isEncryptedPath,
+  isImageAttachment,
   joinTitle,
   splitTitle,
   stemOf,
@@ -56,8 +57,9 @@ import { NoteSkeleton } from '../components/ScreenStates.js';
 import { LockScreen } from './LockScreen.js';
 import { InfoPanel } from './InfoPanel.js';
 import { NoteMenu } from './NoteMenu.js';
-import { relativeTime } from '../lib/format.js';
+import { formatBytes, relativeTime } from '../lib/format.js';
 import { AttachmentUrls } from '../lib/attachment-urls.js';
+import { ImageViewer } from '../components/ImageViewer.js';
 
 /**
  * Что предлагать в системном выборе файла (ITERATION-1 §5).
@@ -110,6 +112,8 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
    * возвращает `null` и запускает чтение, а перерисовка показывает результат.
    */
   const [attachmentTick, setAttachmentTick] = useState(0);
+  /** Картинка в полноэкранном просмотре; `null` — просмотр закрыт (§5). */
+  const [viewing, setViewing] = useState<{ src: string; alt: string } | null>(null);
   const attachments = useRef<AttachmentUrls | null>(null);
   if (attachments.current === null) {
     attachments.current = new AttachmentUrls(() => setAttachmentTick((value) => value + 1));
@@ -419,6 +423,29 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
                 void attachmentTick;
                 return attachments.current?.resolve(src) ?? null;
               }}
+              /* Дочитанное вложение обязано появиться сразу. Одного нового
+                 колбэка мало: CodeMirror пересчитывает декорации по
+                 транзакциям, а не по рендерам React, — и картинка ждала
+                 следующего нажатия клавиши. */
+              attachmentsVersion={attachmentTick}
+              /* Размер для карточки файла (§5). Пока байты не прочитаны —
+                 пустая строка: карточка тогда без размера, а не с нулём. */
+              attachmentSize={(src) => {
+                void attachmentTick;
+                const bytes = attachments.current?.size(src);
+                return bytes === null || bytes === undefined ? '' : formatBytes(bytes, strings);
+              }}
+              /* Тап по вложению (§5): картинка — полноэкранный просмотр,
+                 остальное — системное приложение. Разделение здесь, а не в
+                 редакторе: про оболочку знает приложение. */
+              onOpenAttachment={(src) => {
+                const url = /^(https?:)?\/\//i.test(src)
+                  ? src
+                  : (attachments.current?.resolve(src) ?? null);
+                if (!url) return;
+                if (isImageAttachment(src)) setViewing({ src: url, alt: src });
+                else void app.host.openExternal(url);
+              }}
               wikiExists={(target) =>
                 state.notes.some((item) => item.title.toLowerCase() === target.toLowerCase())
               }
@@ -542,6 +569,13 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
           onClose={() => setMenuOpen(false)}
         />
       ) : null}
+
+      {/* Полноэкранный просмотр картинки (ITERATION-1 §5). */}
+      <ImageViewer
+        src={viewing?.src ?? null}
+        alt={viewing?.alt ?? ''}
+        onClose={() => setViewing(null)}
+      />
     </div>
   );
 

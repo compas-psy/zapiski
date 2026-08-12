@@ -47,6 +47,12 @@ function mimeOf(path: string): string {
 
 export class AttachmentUrls {
   private readonly urls = new Map<VaultPath, string>();
+  /**
+   * Объём в байтах — для карточки файла (ITERATION-1 §5). Берётся из тех же
+   * байтов, что уже прочитаны ради URL: отдельного обращения к диску ради
+   * размера не делаем, а спрашивают его на каждом пересчёте декораций.
+   */
+  private readonly bytes = new Map<VaultPath, number>();
   /** Пути, которые уже читаются: без этого один кейстрок стартует десять чтений. */
   private readonly loading = new Set<VaultPath>();
   private storage: VaultStorage | null = null;
@@ -75,6 +81,15 @@ export class AttachmentUrls {
     return null;
   }
 
+  /**
+   * Объём вложения в байтах или `null`, пока байты не прочитаны. Чтение сам не
+   * запускает: карточка появляется только после `resolve`, а тот его и начал.
+   */
+  size(path: string): number | null {
+    const clean = path.split('#')[0]?.split('?')[0] ?? path;
+    return this.bytes.get(clean) ?? null;
+  }
+
   private async load(path: VaultPath): Promise<void> {
     const storage = this.storage;
     if (!storage) return;
@@ -86,6 +101,7 @@ export class AttachmentUrls {
          пул, и Blob поверх него однажды покажет чужие байты. */
       const blob = new Blob([bytes.slice() as unknown as BlobPart], { type: mimeOf(path) });
       this.urls.set(path, URL.createObjectURL(blob));
+      this.bytes.set(path, bytes.byteLength);
       this.onReady();
     } catch {
       /* Файла нет или доступ отозван — виджет просто не появится, а текст
@@ -100,6 +116,7 @@ export class AttachmentUrls {
   clear(): void {
     for (const url of this.urls.values()) URL.revokeObjectURL(url);
     this.urls.clear();
+    this.bytes.clear();
     this.loading.clear();
   }
 }

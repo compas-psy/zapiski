@@ -100,6 +100,7 @@ export { inlineToText, parseBlocks, parseInline, type Block, type Inline, type L
 
 // ── Vault ──────────────────────────────────────────────────────────────────
 export {
+  isImageAttachment,
   RENAME_DELAY_MS,
   TRASH_TTL_DAYS,
   Vault,
