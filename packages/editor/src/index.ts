@@ -22,6 +22,19 @@ export {
 } from './commands/block-state.js';
 export { insertCallout, insertCollapsible, insertSmall } from './commands/blocks.js';
 export {
+  alignColumn,
+  insertColumn,
+  insertRow,
+  removeColumn,
+  removeRow,
+  renderTable,
+  tableAt,
+  tableChange,
+  toggleHeader,
+  type ColumnAlign,
+  type TableModel,
+} from './commands/table.js';
+export {
   editorMode,
   editorModeField,
   editorModeOf,

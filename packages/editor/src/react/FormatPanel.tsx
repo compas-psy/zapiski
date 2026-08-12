@@ -48,6 +48,16 @@ import {
   toggleTaskList,
 } from '../commands/formatting.js';
 import { insertCallout, insertCollapsible, insertSmall } from '../commands/blocks.js';
+import {
+  alignColumn,
+  insertColumn,
+  insertRow,
+  removeColumn,
+  removeRow,
+  tableAt,
+  tableChange,
+  toggleHeader,
+} from '../commands/table.js';
 
 
 /* ── Стили ────────────────────────────────────────────────────────────────
@@ -173,6 +183,40 @@ const styles = new StyleModule({
     minWidth: '18px',
   },
   '.zp-panel__check': { color: 'var(--accent)', fontSize: '16px' },
+  /* Удаление — своим цветом и последним пунктом за хайрлайном (§4). */
+  '.zp-panel__item--danger': {
+    color: 'var(--danger-text)',
+    marginTop: '5px',
+    paddingTop: '5px',
+    borderTop: '1px solid var(--line)',
+  },
+  '.zp-panel__group': {
+    padding: '6px 10px 2px',
+    fontSize: '11px',
+    letterSpacing: '.04em',
+    textTransform: 'uppercase',
+    color: 'var(--text-tertiary)',
+  },
+  '.zp-panel__group--separated': {
+    marginTop: '5px',
+    paddingTop: '9px',
+    borderTop: '1px solid var(--line)',
+  },
+  /* Выравнивание — отдельной плашкой над списком действий, как в §4. */
+  '.zp-panel__aligns': { display: 'flex', gap: '2px', padding: '2px 6px 4px' },
+  '.zp-panel__align': {
+    flex: '1',
+    height: '36px',
+    border: '0',
+    borderRadius: '8px',
+    background: 'transparent',
+    color: 'var(--text-secondary)',
+    cursor: 'pointer',
+  },
+  '.zp-panel__align--on': {
+    backgroundColor: 'var(--accent-soft)',
+    color: 'var(--accent-on-soft)',
+  },
   /* Палитра эмодзи: сетка вместо списка — символы читаются глазом, а не
      подписью, и восемь в ряд помещаются на самом узком экране. */
   '.zp-panel__menu--emoji': {
@@ -231,7 +275,7 @@ export interface FormatPanelProps {
 }
 
 /** Какое меню раскрыто. `heading` — вложенное, оно занимает место родителя. */
-type OpenMenu = null | 'style' | 'heading' | 'weight' | 'list' | 'attach' | 'emoji';
+type OpenMenu = null | 'style' | 'heading' | 'weight' | 'list' | 'attach' | 'emoji' | 'table';
 
 export function FormatPanel({
   view,
@@ -286,6 +330,21 @@ export function FormatPanel({
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
+
+  /* Таблица под курсором: от неё зависит и поведение кнопки, и состав меню. */
+  const table = view ? tableAt(view.state) : null;
+
+  /**
+   * Применить действие над таблицей. `null` — действие запрещено (последний
+   * столбец, шапка), и тогда не делается ничего: пункт меню и так виден, а
+   * тост на каждое «нельзя» — шум.
+   */
+  const applyTable = (next: ReturnType<typeof tableAt>): void => {
+    if (!view || !table || !next) return;
+    view.dispatch({ changes: tableChange(view.state, table, next), userEvent: 'input.format' });
+    setOpen(null);
+    view.focus();
+  };
 
   const style: BlockStyle = view ? blockStyleAt(view.state) : 'text';
   const list: ListStyle = view ? listStyleAt(view.state) : 'none';
@@ -474,9 +533,91 @@ export function FormatPanel({
 
         <Divider />
 
-        <PanelButton label={copy.table} onPress={run(insertTable)}>
+        {/*
+          Таблица. Вне таблицы кнопка вставляет 3×3, внутри — открывает меню
+          правки: ручки строк и столбцов (ITERATION-1 §4).
+
+          §4 рисует ручки прямо у краёв таблицы, плашками с тремя точками.
+          Здесь они собраны в меню одной кнопки: плашка поверх текста требует
+          знать координаты ячеек в пикселях, а те меняются от каждого
+          набранного символа — на телефоне такая ручка неизбежно оказывается
+          не под тем пальцем. Действия те же и в том же порядке, форма проще
+          и надёжнее.
+        */}
+        <MenuButton
+          label={copy.table}
+          expanded={open === 'table'}
+          onPress={table ? menuFor('table') : run(insertTable)}
+          menu={
+            open === 'table' && table ? (
+              <Menu>
+                <MenuLabel>{copy.tableMenu.align}</MenuLabel>
+                <div className="zp-panel__aligns">
+                  {(['left', 'center', 'right'] as const).map((align) => (
+                    <button
+                      key={align}
+                      type="button"
+                      role="menuitem"
+                      aria-label={copy.tableMenu.aligns[align]}
+                      title={copy.tableMenu.aligns[align]}
+                      aria-checked={table.aligns[table.column] === align}
+                      className={`zp-panel__align${
+                        table.aligns[table.column] === align ? ' zp-panel__align--on' : ''
+                      }`}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        applyTable(alignColumn(table, align));
+                      }}
+                      onTouchStart={(event) => {
+                        event.preventDefault();
+                        applyTable(alignColumn(table, align));
+                      }}
+                    >
+                      <AlignGlyph side={align} />
+                    </button>
+                  ))}
+                </div>
+
+                <MenuLabel separated>{copy.tableMenu.row}</MenuLabel>
+                <MenuItem
+                  label={copy.tableMenu.insertAbove}
+                  onPress={() => applyTable(insertRow(table, 'above'))}
+                />
+                <MenuItem
+                  label={copy.tableMenu.insertBelow}
+                  onPress={() => applyTable(insertRow(table, 'below'))}
+                />
+                <MenuItem
+                  label={copy.tableMenu.removeRow}
+                  danger
+                  onPress={() => applyTable(removeRow(table))}
+                />
+
+                <MenuLabel separated>{copy.tableMenu.column}</MenuLabel>
+                <MenuItem
+                  label={copy.tableMenu.insertLeft}
+                  onPress={() => applyTable(insertColumn(table, 'left'))}
+                />
+                <MenuItem
+                  label={copy.tableMenu.insertRight}
+                  onPress={() => applyTable(insertColumn(table, 'right'))}
+                />
+                <MenuItem
+                  label={copy.tableMenu.headerRow}
+                  checked={table.header}
+                  onPress={() => applyTable(toggleHeader(table))}
+                />
+                <MenuItem
+                  label={copy.tableMenu.removeColumn}
+                  danger
+                  onPress={() => applyTable(removeColumn(table))}
+                />
+              </Menu>
+            ) : null
+          }
+        >
           <IconTable />
-        </PanelButton>
+        </MenuButton>
 
         <Divider />
         {/* Ссылка есть всегда: без обработчика — командой редактора, которая
@@ -734,6 +875,36 @@ function MenuButton({
   );
 }
 
+/** Подпись раздела внутри меню: 11 caps, третичным (§4). */
+function MenuLabel({
+  children,
+  separated,
+}: {
+  children: ReactNode;
+  separated?: boolean;
+}): ReactElement {
+  return (
+    <div className={`zp-panel__group${separated ? ' zp-panel__group--separated' : ''}`}>
+      {children}
+    </div>
+  );
+}
+
+/** Ряд выравнивания — шесть кнопок §4 свёрнуты до трёх: вертикального
+    выравнивания у markdown-таблицы нет, и обещать его нельзя. */
+function AlignGlyph({ side }: { side: 'left' | 'center' | 'right' }): ReactElement {
+  const lines: Record<typeof side, string> = {
+    left: 'M4 7h16M4 12h10M4 17h13',
+    center: 'M4 7h16M7 12h10M6 17h12',
+    right: 'M4 7h16M10 12h10M7 17h13',
+  };
+  return (
+    <svg {...ICON} width={17} height={17}>
+      <path d={lines[side]} />
+    </svg>
+  );
+}
+
 function Menu({ children }: { children: ReactNode }): ReactElement {
   return (
     <div className="zp-panel__menu" role="menu">
@@ -758,6 +929,8 @@ interface MenuItemProps {
   sample?: string;
   /** Моноширинный индекс слева: H₁…H₆. */
   index?: string;
+  /** Удаление — последним пунктом и своим цветом (§4). */
+  danger?: boolean;
 }
 
 function MenuItem({
@@ -770,6 +943,7 @@ function MenuItem({
   separated,
   sample,
   index,
+  danger,
 }: MenuItemProps): ReactElement {
   return (
     <button
@@ -781,6 +955,7 @@ function MenuItem({
         separated ? 'zp-panel__item--separated' : '',
         back ? 'zp-panel__item--back' : '',
         sample ? `zp-panel__item--${sample}` : '',
+        danger ? 'zp-panel__item--danger' : '',
       ]
         .filter(Boolean)
         .join(' ')}

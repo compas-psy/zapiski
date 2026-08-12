@@ -23,10 +23,17 @@ let root: Root | null = null;
 let host: HTMLElement | null = null;
 let view: EditorView | null = null;
 
-/** Редактор с курсором на позиции `|`. */
+/**
+ * Редактор с курсором на месте маркера.
+ *
+ * Маркеров два: обычно `|`, но в таблицах палка — часть разметки, и там
+ * курсор помечается `¦`. Один маркер на всё не годится: `text.indexOf('|')`
+ * в таблице находит первую палку строки, а не то место, куда его ставили.
+ */
 function makeView(text: string): EditorView {
-  const pos = text.indexOf('|');
-  const doc = text.replace('|', '');
+  const marker = text.includes('¦') ? '¦' : '|';
+  const pos = text.indexOf(marker);
+  const doc = text.replace(marker, '');
   const parent = document.createElement('div');
   document.body.appendChild(parent);
   return new EditorView({
@@ -252,5 +259,77 @@ describe('команды действительно меняют текст', ()
     press(button(container, copy.lists));
     press(itemByText(container, copy.listKinds.none));
     expect(view?.state.doc.toString()).toBe('пункт');
+  });
+});
+
+/**
+ * Ручки строк и столбцов таблицы (ITERATION-1 §4).
+ *
+ * §4 называет это «самой недооценённой частью, без которой таблица
+ * нередактируема на телефоне». Модель проверена отдельно (`table.test.ts`);
+ * здесь — что до неё можно дотянуться пальцем и что кнопка меняет поведение в
+ * зависимости от того, где стоит курсор.
+ */
+describe('таблица правится из панели', () => {
+  const TABLE = '| Дело   | Срок |\n| ------ | ---- |\n| созвон | пн   |';
+  /* Курсор в таблице помечается `¦`: палка занята разметкой. */
+
+  it('вне таблицы кнопка вставляет новую', () => {
+    const container = mount('текст|');
+    press(button(container, copy.table));
+    expect(view?.state.doc.toString()).toContain('|');
+    /* Меню при этом не открылось: вставлять нечего было. */
+    expect(container.querySelector('.zp-panel__menu')).toBeNull();
+  });
+
+  it('внутри таблицы та же кнопка открывает меню правки', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    expect(itemByText(container, copy.tableMenu.insertBelow)).toBeTruthy();
+    expect(itemByText(container, copy.tableMenu.removeRow)).toBeTruthy();
+  });
+
+  it('вставка строки снизу', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    press(itemByText(container, copy.tableMenu.insertBelow));
+    expect(view?.state.doc.toString().split('\n')).toHaveLength(4);
+  });
+
+  it('удаление столбца', () => {
+    const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
+    press(button(container, copy.table));
+    press(itemByText(container, copy.tableMenu.removeColumn));
+    expect(view?.state.doc.toString()).not.toContain('Срок');
+    expect(view?.state.doc.toString()).toContain('созвон');
+  });
+
+  it('выравнивание помечено и применяется', () => {
+    const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
+    press(button(container, copy.table));
+    const centre = container.querySelector<HTMLElement>(
+      `[aria-label="${copy.tableMenu.aligns.center}"]`,
+    );
+    expect(centre, 'кнопки выравнивания нет').not.toBeNull();
+    press(centre as HTMLElement);
+    expect(view?.state.doc.toString().split('\n')[1]).toMatch(/:-+:/);
+  });
+
+  it('строка заголовка помечена галочкой', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    expect(itemByText(container, copy.tableMenu.headerRow).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+  });
+
+  it('удаление шапки не рушит таблицу молча', () => {
+    /* Действие запрещено моделью: текст остаётся прежним, а не превращается
+       в набор строк с палками. */
+    const container = mount(TABLE.replace('Дело', 'Де¦ло'));
+    const before = view?.state.doc.toString();
+    press(button(container, copy.table));
+    press(itemByText(container, copy.tableMenu.removeRow));
+    expect(view?.state.doc.toString()).toBe(before);
   });
 });

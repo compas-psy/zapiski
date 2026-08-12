@@ -87,6 +87,19 @@ export interface EditorStrings {
       'bold' | 'italic' | 'text' | 'quote' | 'code' | 'bullet' | 'ordered' | 'task',
       string
     >;
+    tableMenu: {
+      row: string;
+      column: string;
+      align: string;
+      aligns: Record<'left' | 'center' | 'right', string>;
+      insertAbove: string;
+      insertBelow: string;
+      insertLeft: string;
+      insertRight: string;
+      removeRow: string;
+      removeColumn: string;
+      headerRow: string;
+    };
   };
 }
 
@@ -179,6 +192,19 @@ export const ru: EditorStrings = {
       ordered: 'Ctrl+Shift+O',
       task: 'Ctrl+Shift+K',
     },
+    tableMenu: {
+      row: 'Строка',
+      column: 'Столбец',
+      align: 'Выравнивание',
+      aligns: { left: 'По левому краю', center: 'По центру', right: 'По правому краю' },
+      insertAbove: 'Вставить сверху',
+      insertBelow: 'Вставить снизу',
+      insertLeft: 'Вставить слева',
+      insertRight: 'Вставить справа',
+      removeRow: 'Удалить строку',
+      removeColumn: 'Удалить столбец',
+      headerRow: 'Строка заголовка',
+    },
   },
 };
 
@@ -269,6 +295,19 @@ export const en: EditorStrings = {
       bullet: 'Ctrl+Shift+L',
       ordered: 'Ctrl+Shift+O',
       task: 'Ctrl+Shift+K',
+    },
+    tableMenu: {
+      row: 'Row',
+      column: 'Column',
+      align: 'Alignment',
+      aligns: { left: 'Align left', center: 'Align centre', right: 'Align right' },
+      insertAbove: 'Insert above',
+      insertBelow: 'Insert below',
+      insertLeft: 'Insert left',
+      insertRight: 'Insert right',
+      removeRow: 'Delete row',
+      removeColumn: 'Delete column',
+      headerRow: 'Header row',
     },
   },
 };
