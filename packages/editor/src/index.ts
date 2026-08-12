@@ -143,6 +143,7 @@ export {
   splitLine,
 } from './commands/formatting.js';
 export type { LineParts } from './commands/formatting.js';
+export { applyLink, linkDraft, type LinkDraft } from './commands/link.js';
 export { zapiskiKeymap, editorCommands, toolbarCommands } from './commands/keymap.js';
 export type { EditorCommandSpec } from './commands/keymap.js';
 

@@ -42,8 +42,25 @@ function makeView(text: string): EditorView {
   });
 }
 
+/**
+ * Редактор с ВЫДЕЛЕНИЕМ — от «до». Отдельно от курсора нарочно: маркер
+ * курсора `|` в документе с таблицей совпал бы с палкой разметки, а
+ * выделение нужно ровно диалогу ссылки.
+ */
+function makeSelection(text: string): EditorView {
+  const from = text.indexOf('«');
+  const to = text.indexOf('»') - 1;
+  const doc = text.replace('«', '').replace('»', '');
+  const parent = document.createElement('div');
+  document.body.appendChild(parent);
+  return new EditorView({
+    state: EditorState.create({ doc, selection: { anchor: from, head: to } }),
+    parent,
+  });
+}
+
 function mount(text: string): HTMLElement {
-  view = makeView(text);
+  view = text.includes('«') ? makeSelection(text) : makeView(text);
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -86,6 +103,15 @@ function itemByText(container: HTMLElement, text: string): HTMLElement {
   return found as HTMLElement;
 }
 
+/** Кнопка диалога по надписи — у неё нет роли `menuitem`. */
+function itemByLabel(container: HTMLElement, text: string): HTMLElement {
+  const found = Array.from(container.querySelectorAll('button')).find(
+    (node) => node.textContent === text,
+  );
+  expect(found, `кнопки «${text}» нет`).toBeTruthy();
+  return found as HTMLElement;
+}
+
 const copy = ru.panel;
 
 describe('состав панели', () => {
@@ -98,8 +124,8 @@ describe('состав панели', () => {
   });
 
   it('ссылка есть и без обработчика приложения', () => {
-    /* Своей команды хватает: `[текст]()` с курсором внутри скобок. Диалог
-       «Текст» + «Адрес» приложение подставляет сверху, если хочет. */
+    /* Диалог «Текст» + «Адрес» — свой, панельный (§4). Приложение может
+       подменить его своим через `onLink`, но не обязано. */
     expect(button(mount('текст|'), copy.link)).toBeTruthy();
   });
 
@@ -187,6 +213,104 @@ describe('кнопка подсвечена, пока её меню открыт
 
     press(aa);
     expect(aa.className).not.toContain('zp-panel__btn--active');
+  });
+});
+
+describe('кнопка отражает текст под курсором', () => {
+  /* §4, «Поведение»: курсор внутри жирного → «B» подсвечена. Без этого
+     кнопка говорила только про своё меню, и понять, что уже применено к
+     тексту, было нельзя — особенно в простом режиме, где разметки не видно
+     вовсе (§8). */
+  it('курсор внутри жирного подсвечивает «B»', () => {
+    const bold = button(mount('это **жир|ное** слово'), copy.weight);
+    expect(bold.className).toContain('zp-panel__btn--active');
+    expect(bold.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('курсор снаружи — подсветки нет', () => {
+    const bold = button(mount('это **жирное** сло|во'), copy.weight);
+    expect(bold.className).not.toContain('zp-panel__btn--active');
+    expect(bold.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('в меню начертаний галочкой отмечено то, что применено', () => {
+    const container = mount('это ~~зачёр|кнутое~~ слово');
+    /* Меню открывается долгим нажатием; короткое переключило бы жирный — и
+       проверка тогда мерила бы собственное действие. Правый клик открывает
+       то же меню и текста не трогает. */
+    act(() => {
+      button(container, copy.weight).dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, cancelable: true }),
+      );
+    });
+    const strike = itemByText(container, copy.weights.strike);
+    expect(strike.textContent).toContain('✓');
+    expect(itemByText(container, copy.weights.bold).textContent).not.toContain('✓');
+  });
+});
+
+describe('ссылка вставляется диалогом «Текст» + «Адрес»', () => {
+  /** Поле диалога по его подписи. */
+  function field(container: HTMLElement, label: string): HTMLInputElement {
+    const found = Array.from(container.querySelectorAll('label')).find(
+      (node) => node.textContent === label,
+    );
+    expect(found, `поля «${label}» нет`).toBeTruthy();
+    const input = container.querySelector<HTMLInputElement>(`#${found!.htmlFor}`);
+    expect(input, `поле «${label}» ни к чему не привязано`).not.toBeNull();
+    return input as HTMLInputElement;
+  }
+
+  function type(input: HTMLInputElement, value: string): void {
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      setter?.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  function click(element: Element): void {
+    act(() => {
+      element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+  }
+
+  it('выделение предзаполняет «Текст»', () => {
+    const container = mount('см. «документацию» дальше');
+    press(button(container, copy.link));
+    expect(field(container, copy.linkText).value).toBe('документацию');
+    expect(field(container, copy.linkUrl).value).toBe('');
+  });
+
+  it('«Вставить» кладёт в текст готовую разметку', () => {
+    const container = mount('см. «документацию» дальше');
+    press(button(container, copy.link));
+    type(field(container, copy.linkUrl), 'https://example.org');
+    click(itemByLabel(container, copy.insert));
+    expect(view?.state.doc.toString()).toBe('см. [документацию](https://example.org) дальше');
+  });
+
+  it('«Отмена» не трогает текст', () => {
+    const container = mount('см. «документацию» дальше');
+    press(button(container, copy.link));
+    type(field(container, copy.linkUrl), 'https://example.org');
+    click(itemByLabel(container, copy.cancel));
+    expect(view?.state.doc.toString()).toBe('см. документацию дальше');
+  });
+
+  it('курсор внутри готовой ссылки открывает её на правку', () => {
+    /* Иначе поправить адрес значило бы сначала стереть ссылку руками. */
+    const container = mount('см. [дока|](https://old.example) дальше');
+    press(button(container, copy.link));
+    expect(field(container, copy.linkText).value).toBe('дока');
+    expect(field(container, copy.linkUrl).value).toBe('https://old.example');
+
+    type(field(container, copy.linkUrl), 'https://new.example');
+    click(itemByLabel(container, copy.insert));
+    expect(view?.state.doc.toString()).toBe('см. [дока](https://new.example) дальше');
   });
 });
 

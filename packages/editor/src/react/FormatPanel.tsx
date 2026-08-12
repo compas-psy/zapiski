@@ -30,11 +30,16 @@ import { StyleModule } from 'style-mod';
 import { StateEffect } from '@codemirror/state';
 
 import { ru, type EditorStrings } from '../i18n.js';
-import { blockStyleAt, listStyleAt, type BlockStyle, type ListStyle } from '../commands/block-state.js';
+import {
+  blockStyleAt,
+  inlineActiveAt,
+  listStyleAt,
+  type BlockStyle,
+  type ListStyle,
+} from '../commands/block-state.js';
 import {
   insertCodeBlock,
   insertDivider,
-  insertLink,
   insertTable,
   setHeading,
   toggleBold,
@@ -48,6 +53,7 @@ import {
   toggleTaskList,
 } from '../commands/formatting.js';
 import { insertCallout, insertCollapsible, insertSmall } from '../commands/blocks.js';
+import { applyLink, linkDraft } from '../commands/link.js';
 import {
   alignColumn,
   insertColumn,
@@ -239,6 +245,47 @@ const styles = new StyleModule({
     cursor: 'pointer',
   },
 
+  /* Диалог ссылки: два поля и две кнопки. Меню в этом же слое, поэтому
+     размеры и тень те же — иначе он читался бы как чужой элемент. */
+  '.zp-panel__menu--link': { display: 'grid', gap: '8px', padding: '10px' },
+  '.zp-panel__field': { display: 'grid', gap: '4px' },
+  '.zp-panel__field label': {
+    fontSize: '11px',
+    letterSpacing: '.04em',
+    textTransform: 'uppercase',
+    color: 'var(--text-tertiary)',
+  },
+  '.zp-panel__input': {
+    height: '36px',
+    padding: '0 10px',
+    borderRadius: '8px',
+    border: '1px solid var(--line)',
+    backgroundColor: 'var(--surface-sunken)',
+    color: 'var(--text)',
+    font: 'inherit',
+    fontSize: 'var(--fs-md, 15px)',
+  },
+  '.zp-panel__input:focus-visible': {
+    outline: '2px solid var(--focus-ring, var(--accent))',
+    outlineOffset: '1px',
+  },
+  '.zp-panel__actions': { display: 'flex', justifyContent: 'flex-end', gap: '8px' },
+  '.zp-panel__action': {
+    height: '34px',
+    padding: '0 14px',
+    borderRadius: '8px',
+    border: '1px solid var(--line)',
+    backgroundColor: 'transparent',
+    color: 'var(--text)',
+    font: 'inherit',
+    cursor: 'pointer',
+  },
+  '.zp-panel__action--primary': {
+    borderColor: 'transparent',
+    backgroundColor: 'var(--accent)',
+    color: 'var(--on-accent)',
+  },
+
   '.zp-panel__chevron': { color: 'var(--text-tertiary)' },
 
   /* Пункты подменю набраны реальными кеглями H1…H6 — человек видит результат,
@@ -275,7 +322,16 @@ export interface FormatPanelProps {
 }
 
 /** Какое меню раскрыто. `heading` — вложенное, оно занимает место родителя. */
-type OpenMenu = null | 'style' | 'heading' | 'weight' | 'list' | 'attach' | 'emoji' | 'table';
+type OpenMenu =
+  | null
+  | 'style'
+  | 'heading'
+  | 'weight'
+  | 'list'
+  | 'attach'
+  | 'emoji'
+  | 'table'
+  | 'link';
 
 export function FormatPanel({
   view,
@@ -348,6 +404,12 @@ export function FormatPanel({
 
   const style: BlockStyle = view ? blockStyleAt(view.state) : 'text';
   const list: ListStyle = view ? listStyleAt(view.state) : 'none';
+  /* Начертания под курсором (§4, «Поведение»): курсор внутри жирного → «B»
+     подсвечена. Без этого кнопка говорила только про своё меню, а не про
+     текст, — и понять, что уже применено, было нельзя. */
+  const inline = view
+    ? inlineActiveAt(view.state)
+    : { bold: false, italic: false, strike: false, highlight: false, code: false };
   void tick;
 
   /** Выполнить команду и вернуть курсор в текст — §4, «панель не берёт фокус». */
@@ -462,6 +524,8 @@ export function FormatPanel({
         <MenuButton
           label={copy.weight}
           expanded={open === 'weight'}
+          /* Подсвечена и когда открыто меню, и когда курсор внутри жирного. */
+          active={inline.bold}
           onPress={run(toggleBold)}
           onLongPress={menuFor('weight')}
           menu={
@@ -470,16 +534,30 @@ export function FormatPanel({
                 <MenuItem
                   label={copy.weights.bold}
                   hotkey={copy.hotkeys.bold}
+                  checked={inline.bold}
                   onPress={run(toggleBold)}
                 />
                 <MenuItem
                   label={copy.weights.italic}
                   hotkey={copy.hotkeys.italic}
+                  checked={inline.italic}
                   onPress={run(toggleItalic)}
                 />
-                <MenuItem label={copy.weights.strike} onPress={run(toggleStrike)} />
-                <MenuItem label={copy.weights.highlight} onPress={run(toggleHighlight)} />
-                <MenuItem label={copy.weights.mono} onPress={run(toggleInlineCode)} />
+                <MenuItem
+                  label={copy.weights.strike}
+                  checked={inline.strike}
+                  onPress={run(toggleStrike)}
+                />
+                <MenuItem
+                  label={copy.weights.highlight}
+                  checked={inline.highlight}
+                  onPress={run(toggleHighlight)}
+                />
+                <MenuItem
+                  label={copy.weights.mono}
+                  checked={inline.code}
+                  onPress={run(toggleInlineCode)}
+                />
               </Menu>
             ) : null
           }
@@ -620,22 +698,35 @@ export function FormatPanel({
         </MenuButton>
 
         <Divider />
-        {/* Ссылка есть всегда: без обработчика — командой редактора, которая
-            вставляет `[текст]()` и ставит курсор внутрь скобок для адреса.
-            Приложение может подменить это диалогом «Текст» + «Адрес» (§4). */}
-        <PanelButton
+        {/* Ссылка — диалог «Текст» + «Адрес» с предзаполнением из выделения
+            (§4). Приложение может подменить его своим через `onLink`; без
+            этого работает встроенный. */}
+        <MenuButton
           label={copy.link}
+          expanded={open === 'link'}
           onPress={
             onLink
               ? () => {
                   setOpen(null);
                   onLink();
                 }
-              : run(insertLink)
+              : () => setOpen((current) => (current === 'link' ? null : 'link'))
+          }
+          menu={
+            open === 'link' && view ? (
+              <LinkDialog
+                copy={copy}
+                view={view}
+                onClose={() => {
+                  setOpen(null);
+                  view.focus();
+                }}
+              />
+            ) : null
           }
         >
           <IconLink />
-        </PanelButton>
+        </MenuButton>
 
         {onAttach ? (
           <>
@@ -811,6 +902,7 @@ function MenuButton({
   onPress,
   onLongPress,
   expanded,
+  active,
   menu,
   children,
 }: MenuButtonProps): ReactElement {
@@ -842,8 +934,10 @@ function MenuButton({
     <span className="zp-panel__anchor">
       <button
         type="button"
-        /* Кнопка подсвечена, пока её меню открыто (§4, правило 2). */
-        className={`zp-panel__btn${expanded ? ' zp-panel__btn--active' : ''}`}
+        /* Кнопка подсвечена, пока её меню открыто (§4, правило 2), и пока
+           курсор стоит внутри того, что она применяет (§4, «Поведение»). */
+        className={`zp-panel__btn${expanded || active ? ' zp-panel__btn--active' : ''}`}
+        aria-pressed={active ?? undefined}
         aria-label={label}
         title={label}
         aria-expanded={expanded}
@@ -909,6 +1003,97 @@ function Menu({ children }: { children: ReactNode }): ReactElement {
   return (
     <div className="zp-panel__menu" role="menu">
       {children}
+    </div>
+  );
+}
+
+/**
+ * Диалог ссылки: «Текст» и «Адрес» (§4).
+ *
+ * Прежняя кнопка вставляла `[текст]()` и ставила курсор внутрь скобок —
+ * работает, но требует знать разметку: человек видит две пары скобок и должен
+ * догадаться, что адрес идёт во вторую.
+ *
+ * Поля заполняются из состояния РАЗ, при открытии: пока диалог открыт, курсор
+ * в тексте не двигается, а перечитывание на каждый ввод затирало бы
+ * набранное. Диапазон замены запомнен там же — по нему вставка и попадает
+ * туда, откуда её позвали.
+ */
+function LinkDialog({
+  copy,
+  view,
+  onClose,
+}: {
+  copy: EditorStrings['panel'];
+  view: EditorView;
+  onClose: () => void;
+}): ReactElement {
+  const draft = useRef(linkDraft(view.state));
+  const [text, setText] = useState(draft.current.text);
+  const [url, setUrl] = useState(draft.current.url);
+  const first = useRef<HTMLInputElement>(null);
+
+  /* Фокус в поле — иначе с клавиатуры до диалога не добраться, а на телефоне
+     не поднимется клавиатура. В пустой «Текст», а при правке готовой ссылки
+     — сразу в «Адрес»: подпись у неё уже есть. */
+  useEffect(() => {
+    first.current?.focus();
+    first.current?.select();
+  }, []);
+
+  const submit = (): void => {
+    view.dispatch(applyLink(draft.current, text, url));
+    onClose();
+  };
+
+  return (
+    <div
+      className="zp-panel__menu zp-panel__menu--link"
+      role="dialog"
+      aria-label={copy.link}
+      /* Клик внутри диалога не должен уводить фокус из полей: панель гасит
+         `mousedown` целиком, а полю он нужен, чтобы поставить каретку. */
+      onMouseDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          submit();
+        }
+      }}
+    >
+      <div className="zp-panel__field">
+        <label htmlFor="zp-link-text">{copy.linkText}</label>
+        <input
+          id="zp-link-text"
+          ref={draft.current.editing ? null : first}
+          className="zp-panel__input"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+        />
+      </div>
+      <div className="zp-panel__field">
+        <label htmlFor="zp-link-url">{copy.linkUrl}</label>
+        <input
+          id="zp-link-url"
+          ref={draft.current.editing ? first : null}
+          className="zp-panel__input"
+          inputMode="url"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+        />
+      </div>
+      <div className="zp-panel__actions">
+        <button type="button" className="zp-panel__action" onClick={onClose}>
+          {copy.cancel}
+        </button>
+        <button
+          type="button"
+          className="zp-panel__action zp-panel__action--primary"
+          onClick={submit}
+        >
+          {copy.insert}
+        </button>
+      </div>
     </div>
   );
 }
