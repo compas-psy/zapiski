@@ -170,6 +170,7 @@ export function CommandPalette(): ReactNode {
       },
       { id: 'app.toggleLibrary', group, label: strings.commands.toggleLibrary, run: () => app.toggleLibrary() },
       { id: 'app.settings', group, label: strings.commands.settings, run: () => app.openSettings() },
+      { id: 'app.help', group, label: strings.help.open, run: () => app.navigate({ name: 'help' }) },
       {
         id: 'app.togglePin',
         group,

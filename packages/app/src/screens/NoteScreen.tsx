@@ -57,6 +57,7 @@ import { LockScreen } from './LockScreen.js';
 import { InfoPanel } from './InfoPanel.js';
 import { NoteMenu } from './NoteMenu.js';
 import { relativeTime } from '../lib/format.js';
+import { AttachmentUrls } from '../lib/attachment-urls.js';
 
 /**
  * Что предлагать в системном выборе файла (ITERATION-1 §5).
@@ -100,6 +101,24 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const [attachKind, setAttachKind] = useState<'image' | 'file' | 'audio'>('image');
   /** Файл висит над областью текста — подсветка зоны (ITERATION-1 §5). */
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * Мост «путь вложения → URL».
+   *
+   * Без него вставленная картинка показывалась строкой `attachments/…`:
+   * редактор спрашивал `resolveAttachment`, а передать его было некому.
+   * Счётчик перерисовки нужен затем, что колбэк синхронный — первый вызов
+   * возвращает `null` и запускает чтение, а перерисовка показывает результат.
+   */
+  const [attachmentTick, setAttachmentTick] = useState(0);
+  const attachments = useRef<AttachmentUrls | null>(null);
+  if (attachments.current === null) {
+    attachments.current = new AttachmentUrls(() => setAttachmentTick((value) => value + 1));
+  }
+  useEffect(() => {
+    const urls = attachments.current;
+    urls?.attach(app.vaultRef?.storage ?? null);
+    return () => urls?.clear();
+  }, [app, app.vaultRef]);
   /* Предыдущий путь — чтобы отличить «открыли другую заметку» от
      «эта же заметка переехала». Разница принципиальна: во втором случае
      перечитывать с диска нельзя, см. эффект ниже. */
@@ -392,7 +411,14 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               /* Картинка из буфера — второй путь к вложению (BEHAVIOR §2.6).
                  Редактор ждал этот колбэк с самого начала, а никто его не
                  передавал: вставка картинки молча ничего не делала. */
-              onPasteImage={async (file) => (await app.attachImage(file))?.path ?? null}
+              onPasteImage={async (file) => (await app.attachImage(file, path))?.path ?? null}
+              /* `attachmentTick` в зависимостях нарочно: колбэк обязан быть
+                 новым после каждой дочитанной картинки, иначе редактор не
+                 пересчитает декорации и виджет не появится. */
+              resolveAttachment={(src) => {
+                void attachmentTick;
+                return attachments.current?.resolve(src) ?? null;
+              }}
               wikiExists={(target) =>
                 state.notes.some((item) => item.title.toLowerCase() === target.toLowerCase())
               }

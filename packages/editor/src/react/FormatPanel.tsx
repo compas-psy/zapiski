@@ -34,6 +34,7 @@ import { blockStyleAt, listStyleAt, type BlockStyle, type ListStyle } from '../c
 import {
   insertCodeBlock,
   insertDivider,
+  insertLink,
   insertTable,
   setHeading,
   toggleBold,
@@ -60,8 +61,19 @@ const styles = new StyleModule({
     gap: '10px',
     userSelect: 'none',
     color: 'var(--text-secondary)',
+    /* На телефоне кнопок больше, чем ширины экрана. Перенос на вторую строку
+       ломает форму «одна строка пилюль» и съедает высоту у текста — панель
+       прокручивается вбок. Полоса прокрутки скрыта: она здесь только мешает. */
+    maxWidth: '100%',
+    overflowX: 'auto',
+    scrollbarWidth: 'none',
+    paddingBottom: '2px',
   },
+  '.zp-panel::-webkit-scrollbar': { display: 'none' },
   '.zp-panel__pill': {
+    /* Пилюля не сжимается: при прокрутке вбок кнопки обязаны сохранять
+       размер, иначе на узком экране они молча превратятся в полоски. */
+    flex: 'none',
     display: 'flex',
     alignItems: 'center',
     height: '44px',
@@ -97,6 +109,7 @@ const styles = new StyleModule({
     '.zp-panel__btn:hover': { backgroundColor: 'var(--surface-alt)' },
     '.zp-panel__btn--active:hover': { backgroundColor: 'var(--accent-soft)' },
     '.zp-panel__item:hover': { backgroundColor: 'var(--surface-alt)' },
+    '.zp-panel__emoji:hover': { backgroundColor: 'var(--surface-alt)' },
   },
   /* Разделитель — хайрлайн высотой 20, а не отступ (§4). */
   '.zp-panel__divider': {
@@ -160,6 +173,28 @@ const styles = new StyleModule({
     minWidth: '18px',
   },
   '.zp-panel__check': { color: 'var(--accent)', fontSize: '16px' },
+  /* Палитра эмодзи: сетка вместо списка — символы читаются глазом, а не
+     подписью, и восемь в ряд помещаются на самом узком экране. */
+  '.zp-panel__menu--emoji': {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(8, 1fr)',
+    gap: '2px',
+    minWidth: '0',
+    right: '0',
+    left: 'auto',
+    transformOrigin: 'top right',
+  },
+  '.zp-panel__emoji': {
+    width: '34px',
+    height: '34px',
+    border: '0',
+    borderRadius: '8px',
+    background: 'transparent',
+    fontSize: '20px',
+    lineHeight: '1',
+    cursor: 'pointer',
+  },
+
   '.zp-panel__chevron': { color: 'var(--text-tertiary)' },
 
   /* Пункты подменю набраны реальными кеглями H1…H6 — человек видит результат,
@@ -196,7 +231,7 @@ export interface FormatPanelProps {
 }
 
 /** Какое меню раскрыто. `heading` — вложенное, оно занимает место родителя. */
-type OpenMenu = null | 'style' | 'heading' | 'weight' | 'list' | 'attach';
+type OpenMenu = null | 'style' | 'heading' | 'weight' | 'list' | 'attach' | 'emoji';
 
 export function FormatPanel({
   view,
@@ -266,6 +301,19 @@ export function FormatPanel({
 
   const menuFor = (which: Exclude<OpenMenu, null>) => (): void =>
     setOpen((current) => (current === which ? null : which));
+
+  /** Вставка символа на позицию курсора — эмодзи это обычный текст. */
+  const insertText = (text: string): void => {
+    if (!view) return;
+    const { from, to } = view.state.selection.main;
+    view.dispatch({
+      changes: { from, to, insert: text },
+      selection: { anchor: from + text.length },
+      userEvent: 'input.type',
+    });
+    setOpen(null);
+    view.focus();
+  };
 
   return (
     <div
@@ -430,20 +478,23 @@ export function FormatPanel({
           <IconTable />
         </PanelButton>
 
-        {onLink ? (
-          <>
-            <Divider />
-            <PanelButton
-              label={copy.link}
-              onPress={() => {
-                setOpen(null);
-                onLink();
-              }}
-            >
-              <IconLink />
-            </PanelButton>
-          </>
-        ) : null}
+        <Divider />
+        {/* Ссылка есть всегда: без обработчика — командой редактора, которая
+            вставляет `[текст]()` и ставит курсор внутрь скобок для адреса.
+            Приложение может подменить это диалогом «Текст» + «Адрес» (§4). */}
+        <PanelButton
+          label={copy.link}
+          onPress={
+            onLink
+              ? () => {
+                  setOpen(null);
+                  onLink();
+                }
+              : run(insertLink)
+          }
+        >
+          <IconLink />
+        </PanelButton>
 
         {onAttach ? (
           <>
@@ -492,22 +543,64 @@ export function FormatPanel({
         ) : null}
       </Pill>
 
-      {onEmoji ? (
-        <Pill>
-          <PanelButton
-            label={copy.emoji}
-            onPress={() => {
-              setOpen(null);
-              onEmoji();
-            }}
-          >
-            <IconSmile />
-          </PanelButton>
-        </Pill>
-      ) : null}
+      <Pill>
+        <MenuButton
+          label={copy.emoji}
+          expanded={open === 'emoji'}
+          onPress={
+            onEmoji
+              ? () => {
+                  setOpen(null);
+                  onEmoji();
+                }
+              : menuFor('emoji')
+          }
+          menu={
+            open === 'emoji' ? (
+              <div className="zp-panel__menu zp-panel__menu--emoji" role="menu">
+                {EMOJI.map((symbol) => (
+                  <button
+                    key={symbol}
+                    type="button"
+                    role="menuitem"
+                    className="zp-panel__emoji"
+                    aria-label={symbol}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      insertText(symbol);
+                    }}
+                    onTouchStart={(event) => {
+                      event.preventDefault();
+                      insertText(symbol);
+                    }}
+                  >
+                    {symbol}
+                  </button>
+                ))}
+              </div>
+            ) : null
+          }
+        >
+          <IconSmile />
+        </MenuButton>
+      </Pill>
     </div>
   );
 }
+
+/**
+ * Палитра эмодзи.
+ *
+ * Короткая и осознанно: это вставка в ТЕКСТ пользователя, а не украшение
+ * интерфейса, — запрет на эмодзи в UI она не нарушает. Полноценный
+ * системный выбор с поиском и категориями сюда не тянем: в вебе его нет, а
+ * своя копия таблицы Unicode весит больше, чем стоит.
+ */
+const EMOJI = [
+  '✅', '❗', '❓', '⭐', '🔥', '💡', '📌', '📎',
+  '📅', '⏰', '📈', '📉', '💰', '🎯', '🧩', '🔒',
+  '🙂', '😐', '😕', '👍', '👎', '🙏', '💬', '🤔',
+] as const;
 
 /** Индексы уровней в подменю заголовков: H₁…H₆. */
 const SUBSCRIPT = ['₁', '₂', '₃', '₄', '₅', '₆'];

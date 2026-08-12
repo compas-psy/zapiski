@@ -167,12 +167,13 @@ describe("до вложения можно дотянуться из редак�
       copy.weight,
       copy.lists,
       copy.table,
+      copy.link,
       copy.attachment,
+      copy.emoji,
     ]);
-    /* Формулы и эмодзи в этой сборке нет — и кнопок тоже: элемент, который
-       есть и не работает, хуже отсутствующего (§4). */
+    /* Формулы нет: KaTeX не подключён, а кнопка, которая есть и не работает,
+       хуже отсутствующей (§4). */
     expect(labels).not.toContain(copy.formula);
-    expect(labels).not.toContain(copy.emoji);
   });
 });
 

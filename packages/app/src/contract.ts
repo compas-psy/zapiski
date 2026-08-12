@@ -87,7 +87,9 @@ export type Route =
   | { name: 'paywall' }
   | { name: 'signin' }
   | { name: 'import' }
-  | { name: 'versions'; noteId: string };
+  | { name: 'versions'; noteId: string }
+  /** Справка: горячие клавиши и шпаргалка по разметке. */
+  | { name: 'help' };
 
 export type SettingsSection =
   | 'appearance'

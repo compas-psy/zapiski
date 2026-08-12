@@ -82,18 +82,29 @@ function itemByText(container: HTMLElement, text: string): HTMLElement {
 const copy = ru.panel;
 
 describe('состав панели', () => {
-  it('три группы: отмена, форматирование и — по наличию — эмодзи', () => {
+  it('три группы: отмена, форматирование, эмодзи', () => {
     const container = mount('текст|');
-    expect(container.querySelectorAll('.zp-panel__pill').length).toBe(2);
+    expect(container.querySelectorAll('.zp-panel__pill').length).toBe(3);
     expect(button(container, copy.undo)).toBeTruthy();
     expect(button(container, copy.blockStyle)).toBeTruthy();
+    expect(button(container, copy.emoji)).toBeTruthy();
   });
 
-  it('кнопки без обработчика не рисуются вовсе', () => {
-    /* §4: формула включается только если KaTeX в сборке. Кнопка, которая есть
-       и не работает, хуже отсутствующей. */
+  it('ссылка есть и без обработчика приложения', () => {
+    /* Своей команды хватает: `[текст]()` с курсором внутри скобок. Диалог
+       «Текст» + «Адрес» приложение подставляет сверху, если хочет. */
+    expect(button(mount('текст|'), copy.link)).toBeTruthy();
+  });
+
+  it('формулы нет, пока нет KaTeX', () => {
+    /* §4: включается только если KaTeX в сборке. Кнопка, которая есть и не
+       работает, хуже отсутствующей. */
     const container = mount('текст|');
     expect(container.querySelector(`button[aria-label="${copy.formula}"]`)).toBeNull();
+  });
+
+  it('вложения нет без обработчика: класть файл приложению некуда', () => {
+    const container = mount('текст|');
     expect(container.querySelector(`button[aria-label="${copy.attachment}"]`)).toBeNull();
   });
 });
@@ -169,6 +180,19 @@ describe('кнопка подсвечена, пока её меню открыт
 
     press(aa);
     expect(aa.className).not.toContain('zp-panel__btn--active');
+  });
+});
+
+describe('эмодзи вставляется в текст', () => {
+  it('символ попадает на позицию курсора', () => {
+    /* Это вставка в ТЕКСТ пользователя, а не украшение интерфейса, — запрет
+       на эмодзи в UI она не нарушает. */
+    const container = mount('мысль|');
+    press(button(container, copy.emoji));
+    const star = container.querySelector<HTMLElement>('button[aria-label="⭐"]');
+    expect(star, 'палитра не открылась').not.toBeNull();
+    press(star as HTMLElement);
+    expect(view?.state.doc.toString()).toBe('мысль⭐');
   });
 });
 

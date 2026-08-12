@@ -24,7 +24,7 @@ import {
   Tree,
   type TreeNode,
 } from '@zapiski/ui';
-import { IconArchive, IconSettings } from '../components/icons.js';
+import { IconArchive, IconHelp, IconSettings } from '../components/icons.js';
 import { useLongPress } from '../lib/gestures.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { Section, TreeSkeleton } from '../components/ScreenStates.js';
@@ -255,6 +255,16 @@ export function LibraryPanel(): ReactNode {
           >
             <IconSettings size={15} />
             {strings.settings.title}
+          </button>
+          {/* Справка — рядом с настройками и по той же причине: на телефоне
+              это единственная дорога к ней, клавиатуры с Ctrl+K там нет. */}
+          <button
+            type="button"
+            className="za-nav__item"
+            onClick={() => app.navigate({ name: 'help' })}
+          >
+            <IconHelp size={15} />
+            {strings.help.open}
           </button>
         </div>
       </div>

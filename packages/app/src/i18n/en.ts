@@ -195,6 +195,82 @@ export const en: AppCatalog = {
     findOrphans: 'Find unused attachments',
   },
 
+  help: {
+    title: 'Help',
+    open: 'Help',
+    hotkeyGroups: [
+      {
+        title: 'TEXT',
+        items: [
+          ['Bold', 'Mod+B'],
+          ['Italic', 'Mod+I'],
+          ['Highlight', 'Mod+U'],
+          ['Strikethrough', 'Mod+Shift+X'],
+          ['Headings 1–6', 'Mod+1 … Mod+6'],
+          ['Plain text', 'Mod+0'],
+          ['Quote', 'Mod+Shift+Q'],
+          ['Code block', 'Mod+Shift+C'],
+        ] as Array<[string, string]>,
+      },
+      {
+        title: 'LISTS AND TASKS',
+        items: [
+          ['Bulleted list', 'Mod+Shift+L'],
+          ['Numbered list', 'Mod+Shift+O'],
+          ['Checklist', 'Mod+Shift+K'],
+          ['Toggle task', 'Mod+Enter'],
+        ] as Array<[string, string]>,
+      },
+      {
+        title: 'LINKS AND LINES',
+        items: [
+          ['Link', 'Mod+L'],
+          ['Wiki link', 'Mod+Shift+W'],
+          ['Duplicate line', 'Mod+D'],
+          ['Move line', 'Alt+↑ / Alt+↓'],
+          ['Paste without formatting', 'Mod+Shift+V'],
+        ] as Array<[string, string]>,
+      },
+      {
+        title: 'WINDOW AND SEARCH',
+        items: [
+          ['Command palette', 'Mod+K'],
+          ['Search notes', 'Mod+P'],
+          ['Find in note', 'Mod+F'],
+          ['Replace', 'Mod+H'],
+          ['Library', 'Mod+\\'],
+          ['Settings', 'Mod+,'],
+          ['Focus mode', 'Mod+Shift+F'],
+          ['Show markup', 'Mod+E'],
+        ] as Array<[string, string]>,
+      },
+    ],
+    markdownTitle: 'Markdown syntax',
+    markdownIntro:
+      'Notes are stored as plain .md files. Even when simple mode hides the syntax, it stays in the file — and you will need it when the note is opened in another editor.',
+    markdown: [
+      ['# Heading', 'first-level heading; ## is second, down to ######'],
+      ['**bold**', 'bold text'],
+      ['*italic*', 'italic text'],
+      ['~~struck~~', 'strikethrough'],
+      ['==highlight==', 'highlighted text'],
+      ['`code`', 'monospace fragment inside a line'],
+      ['```', 'code block: a line of three backticks before and after'],
+      ['> quote', 'quote'],
+      ['> [!note] text', 'callout — a large inset inside the text'],
+      ['- item', 'bulleted list; 1. makes it numbered'],
+      ['- [ ] task', 'checklist; a done item is - [x]'],
+      ['---', 'full-width divider'],
+      ['[text](address)', 'link'],
+      ['![](attachments/file.png)', 'image from attachments'],
+      ['[[Note]]', 'link to another note by its title'],
+      ['#tag and #tag/nested', 'tag; nested ones use a slash'],
+      ['| a | b |', 'table: a header row, then a row of dashes'],
+    ] as Array<[string, string]>,
+    footer:
+      'You do not have to type the syntax: the same actions live on the formatting panel below the text.',
+  },
+
   library: {
     label: 'Library',
     all: 'All notes',
