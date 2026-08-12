@@ -150,3 +150,45 @@ describe('выбор переживает перезапуск', () => {
     expect(app.attachmentNamingValue()).toBe('hash');
   });
 });
+
+/**
+ * Ужимание крупных изображений (§5).
+ *
+ * Снимок с телефона — 4000 px и несколько мегабайт, а в заметке от него видно
+ * ширину колонки. §5 ставит «Ужимать до 2048 px» умолчанием; настройки в
+ * интерфейсе до этого не было вовсе — по правилу «неработающий переключатель
+ * хуже отсутствующего».
+ *
+ * Сам пересчёт пикселей проверяется там, где он живёт, — в `downscale.ts`.
+ * Здесь важно другое: что настройка есть, переживает перезапуск и что отказ
+ * ужать НЕ теряет вложение.
+ */
+describe('крупные изображения', () => {
+  it('по умолчанию ужимаются — так написано в §5', async () => {
+    const app = await boot();
+    expect(app.attachmentDownscaleValue()).toBe(true);
+  });
+
+  it('выбор «оставлять оригинал» переживает перезапуск', async () => {
+    const prefs = memoryPreferences({ onboarded: true });
+    const host = { ...createTestHost({ files: { 'Заметка.md': '# З\n' } }), prefs };
+
+    const before = new AppController(host);
+    await before.boot();
+    await before.setAttachmentDownscale(false);
+
+    const after = new AppController(host);
+    await after.boot();
+    expect(after.attachmentDownscaleValue()).toBe(false);
+  });
+
+  it('вложение сохраняется и когда ужать не вышло', async () => {
+    /* В тестовой среде нет ни `createImageBitmap`, ни `OffscreenCanvas` — то
+       есть ровно случай «браузер не умеет». Файл обязан лечь как есть:
+       терять вложение из-за неудавшейся экономии нельзя. */
+    const app = await boot();
+    const result = await app.attachImage(file('снимок.png'), 'Проекты/Идея.md');
+    expect(result?.path).toMatch(/\.png$/);
+    expect(await app.vaultRef?.storage.read(result!.path as never)).toBeTruthy();
+  });
+});

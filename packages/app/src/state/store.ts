@@ -66,6 +66,7 @@ import type {
   SettingsSection,
 } from '../contract.js';
 import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } from '../i18n/index.js';
+import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
 import { AuthError, SessionStore, type AuthErrorCode } from './session.js';
 
@@ -263,6 +264,7 @@ const PREF = {
   attachmentPlacement: 'attachments.placement',
   attachmentNaming: 'attachments.naming',
   attachmentFolder: 'attachments.folder',
+  attachmentDownscale: 'attachments.downscale',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -324,6 +326,8 @@ export class AppController {
   private attachmentPlacement: AttachmentPlacement = 'shared';
   private attachmentNaming: AttachmentNaming = 'hash';
   private attachmentFolder = '';
+  /** Ужимать ли крупные изображения. Умолчание из §5 — да. */
+  private attachmentDownscale = true;
   /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
@@ -400,6 +404,7 @@ export class AppController {
       savedPlacement,
       savedNaming,
       savedFolder,
+      savedDownscale,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -413,6 +418,7 @@ export class AppController {
       this.host.prefs.get<unknown>(PREF.attachmentPlacement, null),
       this.host.prefs.get<unknown>(PREF.attachmentNaming, null),
       this.host.prefs.get<string>(PREF.attachmentFolder, ''),
+      this.host.prefs.get<boolean>(PREF.attachmentDownscale, true),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -429,6 +435,7 @@ export class AppController {
       this.attachmentNaming = savedNaming;
     }
     this.attachmentFolder = savedFolder;
+    this.attachmentDownscale = savedDownscale;
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -895,7 +902,11 @@ export class AppController {
     const vault = this.vault;
     if (!vault) return null;
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
+      /* Крупные изображения ужимаются до 2048 px по длинной стороне
+         (ITERATION-1 §5). Отказ ужать — не ошибка: тогда кладётся оригинал,
+         потому что вложение важнее экономии. */
+      const source = this.attachmentDownscale ? ((await downscaleImage(file)) ?? file) : file;
+      const bytes = new Uint8Array(await source.arrayBuffer());
       /* Расширение берём из имени файла: тип из `File.type` на Android бывает
          пустым, а имя есть всегда. Умолчание `png` — только для картинки из
          буфера, у которой имени нет вовсе. */
@@ -950,6 +961,16 @@ export class AppController {
 
   attachmentFolderValue(): string {
     return this.attachmentFolder;
+  }
+
+  attachmentDownscaleValue(): boolean {
+    return this.attachmentDownscale;
+  }
+
+  async setAttachmentDownscale(value: boolean): Promise<void> {
+    this.attachmentDownscale = value;
+    await this.host.prefs.set(PREF.attachmentDownscale, value);
+    this.patch({});
   }
 
   async setAttachmentFolder(value: string): Promise<void> {

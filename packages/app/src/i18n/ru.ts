@@ -205,6 +205,13 @@ export const ru = {
       original: 'Исходное имя',
       'date-original': 'Дата и исходное имя',
     },
+    largeImages: 'Крупные изображения',
+    largeImageValues: {
+      original: 'Оставлять оригинал',
+      downscale: 'Ужимать до 2048 px',
+    },
+    largeImagesHint:
+      'Снимок с камеры — это 4000 px и несколько мегабайт; в заметке видно ширину колонки. GIF и SVG не трогаем.',
     actualPath: 'Файлы попадают сюда',
     findOrphans: 'Найти неиспользуемые вложения',
   },

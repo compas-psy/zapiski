@@ -191,6 +191,13 @@ export const en: AppCatalog = {
       original: 'Original name',
       'date-original': 'Date and original name',
     },
+    largeImages: 'Large images',
+    largeImageValues: {
+      original: 'Keep the original',
+      downscale: 'Scale down to 2048 px',
+    },
+    largeImagesHint:
+      'A camera photo is 4000 px and several megabytes; a note shows it at column width. GIF and SVG are left alone.',
     actualPath: 'Files go here',
     findOrphans: 'Find unused attachments',
   },

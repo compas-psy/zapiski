@@ -283,6 +283,20 @@ function AttachmentsSection(): ReactNode {
         ]}
       />
 
+      {/* Ужимание — выбор из двух, а не тумблер: «Оставлять оригинал» это
+          полноценный вариант, а не выключенное состояние (§5). */}
+      <Section>{copy.largeImages}</Section>
+      <SegmentedControl<'downscale' | 'original'>
+        label={copy.largeImages}
+        value={app.attachmentDownscaleValue() ? 'downscale' : 'original'}
+        onChange={(value) => void app.setAttachmentDownscale(value === 'downscale')}
+        options={[
+          { value: 'downscale', label: copy.largeImageValues.downscale },
+          { value: 'original', label: copy.largeImageValues.original },
+        ]}
+      />
+      <p className="za-muted">{copy.largeImagesHint}</p>
+
       <Section>{copy.actualPath}</Section>
       <p className="za-tertiary-mono">{app.attachmentPathHint()}</p>
 
