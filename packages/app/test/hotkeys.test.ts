@@ -42,19 +42,34 @@ function normalize(combo: string): string {
  *   `Ctrl+K / Ctrl+P` → два независимых сочетания.
  */
 function expand(cell: string): string[] {
-  const range = /^(.*?)\+(\d)…(\d)$/.exec(cell.trim());
-  if (range) {
-    const [, prefix, from, to] = range;
-    const out: string[] = [];
-    for (let n = Number(from); n <= Number(to); n += 1) out.push(`${prefix}+${n}`);
-    return out;
+  /*
+   * Порядок важен: сперва «или», потом диапазоны.
+   *
+   * В ячейке может стоять и то и другое разом — «Ctrl+1…6 / Ctrl+Shift+1…6»:
+   * первое сочетание привычное, второе живёт ради браузера, который первое
+   * забирает себе. Пока диапазон разбирался до слэша, такая ячейка не
+   * разбиралась вовсе и сторож ронял всю таблицу.
+   */
+  const parts = cell
+    .split('/')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const first = parts[0] ?? '';
+  const prefix = first.slice(0, first.lastIndexOf('+') + 1);
+
+  const out: string[] = [];
+  for (const [index, part] of parts.entries()) {
+    /* Если у продолжения нет своего модификатора — он общий с первым. */
+    const whole = index === 0 || part.includes('+') ? part : prefix + part;
+    const range = /^(.*?)\+(\d)…(\d)$/.exec(whole);
+    if (!range) {
+      out.push(whole);
+      continue;
+    }
+    const [, head, from, to] = range;
+    for (let n = Number(from); n <= Number(to); n += 1) out.push(`${head}+${n}`);
   }
-  const parts = cell.split('/').map((part) => part.trim()).filter(Boolean);
-  if (parts.length < 2) return parts;
-  /* Если во второй части нет своего модификатора — он общий с первой. */
-  const [first, ...rest] = parts;
-  const prefix = first!.slice(0, first!.lastIndexOf('+') + 1);
-  return [first!, ...rest.map((part) => (part.includes('+') ? part : prefix + part))];
+  return out;
 }
 
 /**

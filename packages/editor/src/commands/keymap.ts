@@ -54,6 +54,24 @@ export interface EditorCommandSpec {
   preventDefault?: boolean;
 }
 
+/**
+ * Сочетания, которые в окне браузера принадлежат браузеру.
+ *
+ * Заказчик: «не работают горячие клавиши, например Ctrl+Shift+0 (Windows,
+ * Web)». Проверка нажатием показала, что дело не в нашей карте: до страницы
+ * эти сочетания просто не доходят. Ctrl+1…8 переключают вкладки, Ctrl+0
+ * сбрасывает масштаб, Ctrl+L уводит в адресную строку, Ctrl+E — в поиск
+ * омнибокса, Ctrl+Shift+O открывает закладки. Отменить их страница не может
+ * никак: их разбирает браузер до того, как событие уйдёт в документ.
+ *
+ * Поэтому у каждой такой команды есть ВТОРОЕ сочетание, которого браузер не
+ * трогает. Первое остаётся ради оболочек — в окне Windows и на Android
+ * адресной строки нет, и там работает привычное Ctrl+1.
+ *
+ * Ctrl+Shift+0…6 выбраны не случайно: так это сделано в Notion, и заказчик
+ * нажал именно Ctrl+Shift+0, ожидая «обычный текст». Ctrl+Shift+7 и
+ * Ctrl+Shift+8 для списков — соглашение Word и Google Docs.
+ */
 export const editorCommands: EditorCommandSpec[] = [
   { id: 'format.bold', key: 'Mod-b', run: toggleBold },
   { id: 'format.italic', key: 'Mod-i', run: toggleItalic },
@@ -66,12 +84,23 @@ export const editorCommands: EditorCommandSpec[] = [
   { id: 'format.h5', key: 'Mod-5', run: setHeading(5) },
   { id: 'format.h6', key: 'Mod-6', run: setHeading(6) },
   { id: 'format.paragraph', key: 'Mod-0', run: setHeading(0) },
+  /* Вторые сочетания — те, что доживают до страницы в браузере. */
+  { id: 'format.h1.alt', key: 'Mod-Shift-1', run: setHeading(1) },
+  { id: 'format.h2.alt', key: 'Mod-Shift-2', run: setHeading(2) },
+  { id: 'format.h3.alt', key: 'Mod-Shift-3', run: setHeading(3) },
+  { id: 'format.h4.alt', key: 'Mod-Shift-4', run: setHeading(4) },
+  { id: 'format.h5.alt', key: 'Mod-Shift-5', run: setHeading(5) },
+  { id: 'format.h6.alt', key: 'Mod-Shift-6', run: setHeading(6) },
+  { id: 'format.paragraph.alt', key: 'Mod-Shift-0', run: setHeading(0) },
   { id: 'format.bulletList', key: 'Mod-Shift-l', run: toggleBulletList },
   { id: 'format.orderedList', key: 'Mod-Shift-o', run: toggleOrderedList },
   { id: 'format.task', key: 'Mod-Shift-k', run: toggleTaskList },
   { id: 'format.quote', key: 'Mod-Shift-q', run: toggleQuote },
   { id: 'format.codeBlock', key: 'Mod-Shift-c', run: insertCodeBlock },
   { id: 'insert.link', key: 'Mod-l', run: insertLink },
+  { id: 'insert.link.alt', key: 'Mod-Alt-l', run: insertLink },
+  { id: 'format.orderedList.alt', key: 'Mod-Shift-7', run: toggleOrderedList },
+  { id: 'format.bulletList.alt', key: 'Mod-Shift-8', run: toggleBulletList },
   { id: 'insert.wikiLink', key: 'Mod-Shift-w', run: insertWikiLink },
   { id: 'line.duplicate', key: 'Mod-d', run: copyLineDown },
   { id: 'line.moveUp', key: 'Alt-ArrowUp', run: moveLineUp },
@@ -80,6 +109,8 @@ export const editorCommands: EditorCommandSpec[] = [
   { id: 'note.find', key: 'Mod-f', run: openFind },
   { id: 'note.replace', key: 'Mod-h', run: openReplace },
   { id: 'view.raw', key: 'Mod-e', run: toggleRawMode },
+  { id: 'view.raw.alt', key: 'Mod-Alt-e', run: toggleRawMode },
+  { id: 'note.replace.alt', key: 'Mod-Alt-h', run: openReplace },
   { id: 'view.focus', key: 'Mod-Shift-f', run: toggleFocusMode },
   { id: 'paste.plain', key: 'Mod-Shift-v', run: plainPaste, preventDefault: false },
 ];

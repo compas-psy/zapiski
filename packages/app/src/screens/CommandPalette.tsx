@@ -122,10 +122,20 @@ export function displayHotkey(key: string): string {
     .join('+');
 }
 
-/** Хоткей команды редактора по её id — единственный источник, копий нет. */
+/**
+ * Хоткей команды редактора по её id — единственный источник, копий нет.
+ *
+ * Показываются ОБА сочетания, если у команды есть второе (`…​.alt`). Второе
+ * заведено не для красоты: в окне браузера Ctrl+1 переключает вкладку, Ctrl+0
+ * сбрасывает масштаб, Ctrl+L уводит в адресную строку — до страницы они не
+ * доходят вовсе. Показать только первое значило бы отправить человека
+ * нажимать то, что у него не сработает.
+ */
 export function editorHotkey(id: string): string | undefined {
   const spec = editorCommands.find((item: EditorCommandSpec) => item.id === id);
-  return spec ? displayHotkey(spec.key) : undefined;
+  if (!spec) return undefined;
+  const alt = editorCommands.find((item: EditorCommandSpec) => item.id === `${id}.alt`);
+  return alt ? `${displayHotkey(spec.key)} / ${displayHotkey(alt.key)}` : displayHotkey(spec.key);
 }
 
 /** Последние использованные команды. Живут сессию — на диск не пишутся. */
@@ -217,12 +227,14 @@ export function CommandPalette(): ReactNode {
       path === null
         ? []
         : editorCommands
-            .filter((spec) => !SHELL_OWNED.has(spec.id))
+            /* Вторые сочетания (`…​.alt`) отдельной строкой в палитре не
+               нужны: это та же команда, и её хоткей показывается парой. */
+            .filter((spec) => !SHELL_OWNED.has(spec.id) && !spec.id.endsWith('.alt'))
             .map((spec) => ({
               id: spec.id,
               group,
               label: editorCommandLabel(spec.id, strings) ?? spec.id,
-              hotkey: displayHotkey(spec.key),
+              hotkey: editorHotkey(spec.id) ?? displayHotkey(spec.key),
               run: () => {
                 const view = activeEditor()?.view;
                 if (view) spec.run?.(view);

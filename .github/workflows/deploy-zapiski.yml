@@ -217,6 +217,10 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/walkthrough.mjs --strict
 
+      - name: Живой браузер — горячие клавиши
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-hotkeys.mjs --strict
+
       # Политика безопасности оболочек не должна убивать стили редактора.
       # Браузером это не поймать: связка «HTML + Tauri» существует только на
       # устройстве, а веб-сборка такой политики не получает — поэтому дефект и

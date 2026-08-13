@@ -86,16 +86,27 @@ describe('справка не расходится с кодом', () => {
       .replace(/-([a-zA-Z])$/, (_m, letter: string) => `-${letter.toLowerCase()}`);
 
   it('каждое объявленное сочетание редактора есть в keymap', () => {
-    const editorGroups = ru.help.hotkeyGroups.filter((group) => group.title !== 'ОКНО И ПОИСК');
+    const editorGroups = ru.help.hotkeyGroups.filter(
+      (group) => group.title !== 'ЗАМЕТКИ И ОКНО',
+    );
     const checked: string[] = [];
     for (const group of editorGroups) {
       for (const [, keys] of group.items) {
-        /* Диапазоны и пары («Mod+1 … Mod+6», «Alt+↑ / Alt+↓») проверяются по
-           первому сочетанию: остальные объявлены рядом той же строкой. */
-        const first = keys.split(/\s*[…/]\s*/)[0] as string;
-        const needle = asKeymap(first);
-        checked.push(needle);
-        expect(keymap, `${needle} нет в keymap`).toContain(`'${needle}'`);
+        /*
+         * Строка справки может нести ДВА сочетания через «·» — второе для
+         * браузера, который первое забирает себе (Ctrl+1 — вкладка, Ctrl+0 —
+         * масштаб, Ctrl+L — адресная строка). Проверяются оба: обещать
+         * запасное и не завести его — тот же обман, что и с основным.
+         *
+         * Диапазоны и пары («Mod+1 … Mod+6», «Alt+↑ / Alt+↓») проверяются по
+         * первому сочетанию: остальные объявлены рядом той же строкой.
+         */
+        for (const variant of keys.split('·')) {
+          const first = variant.trim().split(/\s*[…/]\s*/)[0] as string;
+          const needle = asKeymap(first);
+          checked.push(needle);
+          expect(keymap, `${needle} нет в keymap`).toContain(`'${needle}'`);
+        }
       }
     }
     /* Сторож не проверяет пустоту: если разбор сломается, здесь будет ноль. */

@@ -227,8 +227,8 @@ export const en: AppCatalog = {
           ['Italic', 'Mod+I'],
           ['Highlight', 'Mod+U'],
           ['Strikethrough', 'Mod+Shift+X'],
-          ['Headings 1–6', 'Mod+1 … Mod+6'],
-          ['Plain text', 'Mod+0'],
+          ['Headings 1–6', 'Mod+1 … Mod+6  ·  Mod+Shift+1 … Mod+Shift+6'],
+          ['Body text', 'Mod+0  ·  Mod+Shift+0'],
           ['Quote', 'Mod+Shift+Q'],
           ['Code block', 'Mod+Shift+C'],
         ] as Array<[string, string]>,
@@ -236,8 +236,8 @@ export const en: AppCatalog = {
       {
         title: 'LISTS AND TASKS',
         items: [
-          ['Bulleted list', 'Mod+Shift+L'],
-          ['Numbered list', 'Mod+Shift+O'],
+          ['Bulleted list', 'Mod+Shift+L  ·  Mod+Shift+8'],
+          ['Numbered list', 'Mod+Shift+O  ·  Mod+Shift+7'],
           ['Checklist', 'Mod+Shift+K'],
           ['Toggle task', 'Mod+Enter'],
         ] as Array<[string, string]>,
@@ -245,7 +245,7 @@ export const en: AppCatalog = {
       {
         title: 'LINKS AND LINES',
         items: [
-          ['Link', 'Mod+L'],
+          ['Link', 'Mod+L  ·  Mod+Alt+L'],
           ['Wiki link', 'Mod+Shift+W'],
           ['Duplicate line', 'Mod+D'],
           ['Move line', 'Alt+↑ / Alt+↓'],
@@ -253,16 +253,20 @@ export const en: AppCatalog = {
         ] as Array<[string, string]>,
       },
       {
-        title: 'WINDOW AND SEARCH',
+        title: 'NOTES AND WINDOW',
         items: [
-          ['Command palette', 'Mod+K'],
-          ['Search notes', 'Mod+P'],
+          ['New note', 'Mod+N'],
+          ['New note in this folder', 'Mod+Shift+N'],
+          ['Search notes', 'Mod+K  ·  Mod+Shift+S'],
+          ['Command palette', 'Mod+P'],
           ['Find in note', 'Mod+F'],
-          ['Replace', 'Mod+H'],
+          ['Replace', 'Mod+H  ·  Mod+Alt+H'],
           ['Library', 'Mod+\\'],
           ['Settings', 'Mod+,'],
           ['Focus mode', 'Mod+Shift+F'],
-          ['Show markup', 'Mod+E'],
+          ['Show markup', 'Mod+E  ·  Mod+Alt+E'],
+          ['Pin note', 'Mod+Shift+P'],
+          ['Export note', 'Mod+Shift+E'],
         ] as Array<[string, string]>,
       },
     ],
@@ -289,7 +293,7 @@ export const en: AppCatalog = {
       ['| a | b |', 'table: a header row, then a row of dashes'],
     ] as Array<[string, string]>,
     footer:
-      'You do not have to type the syntax: the same actions live on the formatting panel below the text.',
+      'You do not have to type the syntax: the same actions live on the formatting panel below the text. Where two shortcuts are listed, the second one is for the browser: it keeps Ctrl+1…8, Ctrl+0, Ctrl+L and Ctrl+E for itself (tabs, zoom, address bar), so those never reach the page. Both work in the Windows and Android apps.',
   },
 
   library: {
