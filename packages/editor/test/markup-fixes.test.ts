@@ -7,7 +7,7 @@
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 
-import { insertSmall } from '../src/commands/blocks';
+import { insertQuoteAuthor, insertSmall } from '../src/commands/blocks';
 import { insertCodeBlock, toggleBulletList, toggleOrderedList } from '../src/commands/formatting';
 import { decorationsOf, hiddenRanges, makeState } from './helpers.js';
 import { toggleCollapsed } from '../src/live-preview/collapsed';
@@ -291,5 +291,35 @@ describe('замечание 13: таблица читается колонка�
       .map((deco) => deco.class ?? '')
       .join(' ');
     expect(classes).not.toContain('cm-z-table-rule');
+  });
+});
+
+describe('замечание 4: автор цитаты', () => {
+  it('пункт добавляет строку атрибуции к цитате', () => {
+    expect(run('> Мысль|', insertQuoteAuthor)).toBe('> Мысль\n> — ');
+  });
+
+  it('вне цитаты не срабатывает', () => {
+    /* Автор без цитаты — просто тире посреди текста. */
+    expect(run('Обычный абзац|', insertQuoteAuthor)).toBe('Обычный абзац');
+  });
+
+  it('пустая атрибуция не занимает места в просмотре', () => {
+    /* Прямое требование: «если пользователь не вбивает автора, место под него
+       в режиме просмотра не должно оставаться». */
+    const doc = '> Мысль\n> — \n\nдалее';
+    const classes = decorationsOf(makeState(doc, { selection: { anchor: doc.length - 1 } }))
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-collapsed');
+  });
+
+  it('заполненная показывается подписью', () => {
+    const doc = '> Мысль\n> — Автор\n\nдалее';
+    const classes = decorationsOf(makeState(doc, { selection: { anchor: doc.length - 1 } }))
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-quote-author');
+    expect(classes).not.toContain('cm-z-collapsed');
   });
 });

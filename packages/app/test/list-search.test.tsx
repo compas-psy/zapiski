@@ -20,11 +20,10 @@ import { AppController } from '../src/state/store.js';
 import { NoteListScreen } from '../src/screens/NoteListScreen.js';
 import { createTestHost } from './host.js';
 
-async function mount(width: number): Promise<AppController> {
+async function mount(): Promise<AppController> {
   const host = createTestHost({ prefs: { onboarded: true } });
   const app = new AppController(host);
   await app.boot();
-  app.setLayoutWidth?.(width);
   render(
     <ThemeProvider persist={false}>
       <ToastProvider>
@@ -39,12 +38,12 @@ async function mount(width: number): Promise<AppController> {
 
 describe('поиск в колонке списка', () => {
   it('на широком экране поле видно без единого нажатия', async () => {
-    await mount(1440);
+    await mount();
     expect(screen.getByRole('searchbox')).toBeTruthy();
   });
 
   it('набранное сразу уходит в поиск — первые символы не теряются', async () => {
-    const app = await mount(1440);
+    const app = await mount();
     fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'смета' } });
 
     expect(app.getState().query).toBe('смета');
@@ -54,7 +53,7 @@ describe('поиск в колонке списка', () => {
   it('сочетание подписано у поля', async () => {
     /* Подпись — способ научить: она показывает, чем открыть поиск, не
        отрывая рук от клавиатуры. */
-    await mount(1440);
+    await mount();
     expect(screen.getByText(/Ctrl \+ K/)).toBeTruthy();
   });
 });

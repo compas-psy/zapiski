@@ -63,7 +63,12 @@ import {
   toggleStrike,
   toggleTaskList,
 } from '../commands/formatting.js';
-import { insertCallout, insertCollapsible, insertSmall } from '../commands/blocks.js';
+import {
+  insertCallout,
+  insertCollapsible,
+  insertQuoteAuthor,
+  insertSmall,
+} from '../commands/blocks.js';
 import { applyLink, linkDraft } from '../commands/link.js';
 import {
   alignColumn,
@@ -575,6 +580,14 @@ export function FormatPanel({
                   hotkey={copy.hotkeys.quote}
                   checked={style === 'quote'}
                   onPress={run(toggleQuote)}
+                />
+                {/* Автор цитаты (замечание 4). Пункт живёт под самой цитатой
+                    и виден всегда: пустая атрибуция места в просмотре не
+                    занимает, поэтому предлагать её не страшно. */}
+                <MenuItem
+                  label={copy.styles.quoteAuthor}
+                  glyph="quote"
+                  onPress={run(insertQuoteAuthor)}
                 />
                 <MenuItem
                   label={copy.styles.callout}

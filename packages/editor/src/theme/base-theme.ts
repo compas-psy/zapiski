@@ -230,6 +230,13 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   /* Служебная строка `| --- | --- |` нужна разбору, а не читателю. */
   '.cm-z-table-rule': { display: 'none' },
 
+  /* Атрибуция цитаты: подпись, а не продолжение текста. */
+  '.cm-z-quote-author': {
+    fontSize: '0.875em',
+    color: 'var(--text-tertiary)',
+    fontStyle: 'normal',
+  },
+
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {
     display: 'inline-flex',

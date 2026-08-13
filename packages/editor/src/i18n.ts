@@ -60,7 +60,7 @@ export interface EditorStrings {
     redo: string;
     blockStyle: string;
     styles: Record<
-      'text' | 'heading' | 'quote' | 'callout' | 'code' | 'small' | 'divider',
+      'text' | 'heading' | 'quote' | 'quoteAuthor' | 'callout' | 'code' | 'small' | 'divider',
       string
     >;
     headingLevel(level: number): string;
@@ -147,6 +147,7 @@ export const ru: EditorStrings = {
       text: 'Текст',
       heading: 'Заголовок',
       quote: 'Цитата',
+      quoteAuthor: 'Автор цитаты',
       callout: 'Выноска',
       code: 'Код',
       small: 'Мелкий текст',
@@ -253,6 +254,7 @@ export const en: EditorStrings = {
       text: 'Text',
       heading: 'Heading',
       quote: 'Quote',
+      quoteAuthor: 'Quote author',
       callout: 'Callout',
       code: 'Code',
       small: 'Small text',

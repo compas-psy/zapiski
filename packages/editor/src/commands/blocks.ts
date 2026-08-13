@@ -102,3 +102,39 @@ export const insertCollapsible: StateCommand = ({ state, dispatch }) => {
 function stripQuote(text: string): string {
   return text.replace(/^>\s?/, '');
 }
+
+/**
+ * Автор цитаты (замечание 4).
+ *
+ * В файле это остаётся markdown: ещё одна строка цитаты, начинающаяся с
+ * тире, — `> — Автор`. Так пишут атрибуцию от руки, и так она читается в
+ * любом редакторе, который про наши договорённости не знает.
+ *
+ * Если автора не вписали, никакой строки не появляется: пустая атрибуция не
+ * должна занимать место в просмотре — это прямое требование заказчика.
+ * Поэтому команда добавляет строку, а показ прячет её, пока в ней нет ничего
+ * кроме тире (см. `decorations.ts`).
+ */
+export const insertQuoteAuthor: StateCommand = ({ state, dispatch }) => {
+  const line = state.doc.lineAt(state.selection.main.head);
+  /* Работает только внутри цитаты: автор без цитаты — просто тире в тексте. */
+  if (!/^\s*>/.test(line.text)) return false;
+  /* Уже есть строка автора — ставим курсор в неё, а не плодим вторую. */
+  const AUTHOR = /^\s*>\s*—/;
+  if (AUTHOR.test(line.text)) {
+    dispatch(state.update({ selection: { anchor: line.to }, scrollIntoView: true }));
+    return true;
+  }
+
+  const indent = line.text.slice(0, line.text.length - line.text.trimStart().length);
+  const insert = `\n${indent}> — `;
+  dispatch(
+    state.update({
+      changes: { from: line.to, insert },
+      selection: { anchor: line.to + insert.length },
+      scrollIntoView: true,
+      userEvent: 'input.format',
+    }),
+  );
+  return true;
+};
