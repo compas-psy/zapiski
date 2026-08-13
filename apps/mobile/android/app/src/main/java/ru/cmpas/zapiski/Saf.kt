@@ -533,6 +533,37 @@ object Saf {
      * Забрать долгоживущее разрешение на выбранное дерево. Без этого доступ
      * умрёт вместе с процессом, и после перезапуска заметки «пропали бы».
      */
+    /**
+     * Открыть вложение системным приложением (замечание 16).
+     *
+     * До этого «по клику открыть файл» работало только в вебе: там открытие
+     * идёт через `blob:`-адрес, а Android от него бесполезен — системе нужен
+     * `content://`, по которому чужое приложение сможет прочитать файл.
+     *
+     * `FLAG_GRANT_READ_URI_PERMISSION` обязателен: без него получатель увидит
+     * URI, но прочитать по нему ничего не сможет — разрешение выдано нам, а
+     * не ему. `NEW_TASK` — потому что запускаем из контекста приложения, а не
+     * из активности.
+     *
+     * `false` — открывать нечем или файла нет; приложение скажет об этом само.
+     */
+    fun open(context: Context, tree: String, path: String): Boolean {
+        val id = documentId(context, tree, path, false) ?: return false
+        val uri = DocumentsContract.buildDocumentUriUsingTree(Uri.parse(tree), id)
+        val mime = context.contentResolver.getType(uri) ?: mimeOf(path)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (error: Throwable) {
+            // Нет приложения, умеющего такой тип, — это не сбой, а ответ «нет».
+            false
+        }
+    }
+
     fun persist(context: Context, uri: Uri) {
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         context.contentResolver.takePersistableUriPermission(uri, flags)

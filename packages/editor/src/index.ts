@@ -11,6 +11,8 @@
 
 // ── React ────────────────────────────────────────────────────────────────────
 export { Editor } from './react/Editor.js';
+/* Размер картинки в заметке (замечание 2): подпись `![…|400]`. */
+export { imageWidthOf, setImageWidth } from './commands/image.js';
 export type { EditorProps, EditorHandle } from './react/Editor.js';
 export { FormatPanel, type FormatPanelProps } from './react/FormatPanel.js';
 export {

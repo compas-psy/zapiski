@@ -10,7 +10,7 @@ import { createPlatform, PREF_SAF_TREE } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
-import { createSafStorage, probeSafTree } from './platform/saf';
+import { createSafStorage, openSafFile, probeSafTree } from './platform/saf';
 import { currentVaultRoot, defaultVaultRoot, openVault } from './platform/vault';
 
 /**
@@ -87,6 +87,19 @@ export function createHost(): AppHost {
       const root = known ?? (await defaultVaultRoot().catch(() => null));
       if (root === null) return null;
       return openVault(root);
+    },
+
+    /**
+     * Открыть вложение системным приложением (замечание 16).
+     *
+     * Работает только для папки, выбранной через SAF: у каталога приложения
+     * своего `content://` нет, и отдать файл чужому приложению оттуда нельзя.
+     * `false` — приложение попробует прежний путь через `blob:`.
+     */
+    async openAttachment(path: string): Promise<boolean> {
+      const tree = await prefs.get<string | null>(PREF_SAF_TREE, null);
+      if (tree === null) return false;
+      return openSafFile(tree, path).catch(() => false);
     },
 
     async openExternal(url: string) {

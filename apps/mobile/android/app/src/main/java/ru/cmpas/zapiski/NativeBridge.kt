@@ -290,6 +290,10 @@ object NativeBridge {
     @JvmStatic
     fun safRemove(tree: String, path: String) = Saf.remove(requireContext(), tree, path)
 
+    /** Открыть вложение системным приложением (замечание 16). */
+    @JvmStatic
+    fun safOpen(tree: String, path: String): Boolean = Saf.open(requireContext(), tree, path)
+
     @JvmStatic
     fun safRename(tree: String, from: String, to: String) = Saf.rename(requireContext(), tree, from, to)
 

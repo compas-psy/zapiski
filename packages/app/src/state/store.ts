@@ -67,6 +67,7 @@ import type {
   SettingsSection,
 } from '../contract.js';
 import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } from '../i18n/index.js';
+import { cropImage, type CropRect } from '../lib/crop.js';
 import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
 import { AuthError, SessionStore, type AuthErrorCode } from './session.js';
@@ -970,6 +971,41 @@ export class AppController {
     } catch {
       this.toast({ message: this.strings.errors.imageInsertFailed });
       return null;
+    }
+  }
+
+  /**
+   * Обрезать вложенную картинку по рамке (замечание 2).
+   *
+   * Файл перезаписывается на месте: путь не меняется, и все ссылки на него в
+   * заметках остаются рабочими. Это осознанно — «сохранить как копию» плодило
+   * бы файлы, о которых человек не просил, а отменить обрезку можно тем же
+   * инструментом, заново.
+   *
+   * `false` — обрезать не вышло (формат не перерисовывается, движок не дал
+   * холста, запись не удалась). Молчать в этом случае нельзя: человек видел
+   * рамку и ждёт результата, поэтому здесь тост.
+   */
+  async cropAttachment(path: VaultPath, rect: CropRect): Promise<boolean> {
+    const vault = this.vault;
+    if (!vault) {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return false;
+    }
+    try {
+      const bytes = await vault.storage.read(path);
+      if (!bytes) return false;
+      const cropped = await cropImage(bytes, path, rect);
+      if (!cropped) {
+        this.toast({ message: this.strings.attachments.cropFailed });
+        return false;
+      }
+      await vault.storage.write(path, cropped);
+      await this.refresh();
+      return true;
+    } catch {
+      this.toast({ message: this.strings.attachments.cropFailed });
+      return false;
     }
   }
 

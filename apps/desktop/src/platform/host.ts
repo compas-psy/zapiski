@@ -6,7 +6,7 @@
  * кнопки, ни одной строки продуктовой логики (ARCHITECTURE §1).
  */
 import { invoke } from '@tauri-apps/api/core';
-import { openUrl } from '@tauri-apps/plugin-opener';
+import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 import type { Locale, VaultStorage } from '@zapiski/core';
 
@@ -18,7 +18,7 @@ import { WebviewPdfRenderer } from './pdf';
 import { NativePreferences, SHELL_PREF } from './prefs';
 import { platformStrings, resolveShellLocale, type PlatformStrings } from './strings';
 import { NativeUpdater } from './updater';
-import { openVaultAt } from './vault';
+import { currentVaultRoot, openVaultAt } from './vault';
 
 /** Боевой ZapiskiCloud. В дев-режиме подменяется переменной окружения Vite. */
 // База ОБЯЗАНА включать префикс версии: приложение дописывает только путь
@@ -81,6 +81,30 @@ export async function createDesktopShell(): Promise<DesktopShell> {
       /* Именно системный браузер, а не окно вебвью: внешняя страница не
          должна исполняться в контексте приложения. */
       await openUrl(url);
+    },
+
+    /**
+     * Открыть вложение системным приложением (замечание 16).
+     *
+     * Windows нужен настоящий путь на диске: `blob:`-адрес, которым открытие
+     * работало в вебе, системе бесполезен — по нему не откроется ни pdf, ни
+     * docx. Корень хранилища знает оболочка, а приложение знает путь внутри
+     * него; собираем здесь, потому что разделитель тоже свойство оболочки.
+     */
+    async openAttachment(path: string): Promise<boolean> {
+      const root = await currentVaultRoot().catch(() => null);
+      if (root === null) return false;
+      const separator = root.includes('\\') ? '\\' : '/';
+      const full = `${root}${root.endsWith(separator) ? '' : separator}${path.split('/').join(separator)}`;
+      try {
+        await openPath(full);
+        return true;
+      } catch {
+        /* Нет приложения для такого типа файла, файл удалён, доступ закрыт —
+           снаружи всё это одно и то же: открыть не вышло. Приложение
+           попробует прежний путь. */
+        return false;
+      }
     },
 
     cloudBaseUrl: CLOUD_BASE_URL,

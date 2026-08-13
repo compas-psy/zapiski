@@ -1520,3 +1520,50 @@
     transition: none;
   }
 }
+
+/* ── Работа с картинкой в просмотре (замечание 2) ─────────────────────────────
+   Размер картинки В ЗАМЕТКЕ и обрезка САМОГО ФАЙЛА стоят рядом, но делают
+   разное, поэтому обрезка подтверждается отдельной кнопкой: она меняет файл. */
+.za-viewer__stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-inline-size: 100%;
+  max-block-size: 100%;
+}
+.za-viewer__sizes {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+.za-viewer__size {
+  min-inline-size: 32px;
+  block-size: 32px;
+  padding-inline: var(--sp-12);
+  border: 0;
+  border-radius: var(--r-full);
+  background-color: var(--sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-caption);
+  cursor: pointer;
+}
+.za-viewer__size--accent {
+  background-color: var(--accent);
+  color: var(--on-accent);
+}
+.za-viewer__size:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Рамка кадрирования: затемнения вокруг нет намеренно — на тёмном слое
+   просмотра оно превратило бы картинку в кашу. Границу видно и так. */
+.za-viewer__crop {
+  position: absolute;
+  border: 2px solid var(--accent);
+  /* Затемнение вокруг рамки — тем же токеном, что и у модалок: свой литерал
+     цвета здесь был бы единственным в проекте. */
+  box-shadow: 0 0 0 9999px var(--scrim);
+  pointer-events: none;
+}

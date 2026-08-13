@@ -97,7 +97,24 @@ export class ImageWidget extends WidgetType {
     const img = document.createElement('img');
     img.className = 'cm-z-image';
     img.src = this.src;
-    img.alt = this.alt;
+    /*
+     * Ширина из подписи: `![подпись|400](путь)` (замечание 2).
+     *
+     * Это соглашение Obsidian, и взято оно намеренно: в самом markdown
+     * размеров нет, а придумывать своё значило бы, что заметка с картинкой
+     * читается правильно только у нас. Чужой редактор покажет `|400` частью
+     * подписи — некрасиво, но не сломано.
+     *
+     * Ширина, а не высота: колонка текста узкая, и по ней картинка и
+     * масштабируется. Пропорции держит CSS.
+     */
+    const sized = /^(.*)\|(\d{1,4})$/.exec(this.alt);
+    if (sized) {
+      img.style.width = `${Math.min(Number(sized[2]), 4000)}px`;
+      img.alt = (sized[1] ?? '').trim();
+    } else {
+      img.alt = this.alt;
+    }
     if (this.path !== '') img.dataset['zSrc'] = this.path;
     img.loading = 'lazy';
     img.draggable = false;

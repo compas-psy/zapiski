@@ -60,6 +60,7 @@ import { NoteMenu } from './NoteMenu.js';
 import { formatBytes, relativeTime } from '../lib/format.js';
 import { AttachmentUrls } from '../lib/attachment-urls.js';
 import { ImageViewer } from '../components/ImageViewer.js';
+import { imageWidthOf, setImageWidth } from '@zapiski/editor';
 import { ModeSwitch } from '../components/ModeSwitch.js';
 
 /**
@@ -467,12 +468,28 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
                  остальное — системное приложение. Разделение здесь, а не в
                  редакторе: про оболочку знает приложение. */
               onOpenAttachment={(src) => {
-                const url = /^(https?:)?\/\//i.test(src)
-                  ? src
-                  : (attachments.current?.resolve(src) ?? null);
-                if (!url) return;
-                if (isImageAttachment(src)) setViewing({ src: url, alt: src });
-                else void app.host.openExternal(url);
+                const external = /^(https?:)?\/\//i.test(src);
+                if (isImageAttachment(src)) {
+                  const url = external ? src : (attachments.current?.resolve(src) ?? null);
+                  if (url) setViewing({ src: url, alt: src });
+                  return;
+                }
+                if (external) {
+                  void app.host.openExternal(src);
+                  return;
+                }
+                /*
+                 * Файл из хранилища отдаём СИСТЕМЕ, а не браузеру (замечание
+                 * 16). `blob:`-адрес, которым это работало в вебе, Android и
+                 * Windows бесполезен: им нужен настоящий путь или
+                 * `content://`. Поэтому сперва порт оболочки, и только если
+                 * она не смогла — прежний путь: в вебе другого и нет.
+                 */
+                void (async () => {
+                  if (await app.host.openAttachment?.(src as never).catch(() => false)) return;
+                  const url = attachments.current?.resolve(src) ?? null;
+                  if (url) await app.host.openExternal(url);
+                })();
               }}
               wikiExists={(target) =>
                 state.notes.some((item) => item.title.toLowerCase() === target.toLowerCase())
@@ -616,6 +633,33 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         src={viewing?.src ?? null}
         alt={viewing?.alt ?? ''}
         onClose={() => setViewing(null)}
+        /* Размер картинки В ЗАМЕТКЕ и обрезка САМОГО ФАЙЛА — разные вещи, и
+           обе доступны только для вложений из хранилища: у картинки по
+           внешней ссылке ни того, ни другого мы не касаемся (замечание 2). */
+        {...(viewing && !/^(https?:)?\/\//i.test(viewing.alt)
+          ? {
+              width: imageWidthOf(altOfImage(editorBody, viewing.alt)),
+              onWidth: (next: number | null) => {
+                const view = editorRef.current?.view;
+                if (view) setImageWidth(viewing.alt, next)(view);
+              },
+              onCrop: async (rect: {
+                x: number;
+                y: number;
+                width: number;
+                height: number;
+              }): Promise<boolean> => {
+                const ok = await app.cropAttachment(viewing.alt as VaultPath, rect);
+                if (ok) {
+                  /* Кэш держит прежние байты — без сброса на экране осталась
+                     бы необрезанная картинка. */
+                  attachments.current?.forget(viewing.alt);
+                  setViewing(null);
+                }
+                return ok;
+              },
+            }
+          : {})}
       />
     </div>
   );
@@ -759,4 +803,15 @@ function DecryptedChip({ lockAt }: { lockAt: number }): ReactNode {
       {soon ? strings.crypto.closingSoon : strings.crypto.decryptedChip(Math.max(1, Math.round(left / 60_000)))}
     </span>
   );
+}
+
+/**
+ * Подпись картинки по её пути — в ней живёт ширина (`![подпись|400](путь)`).
+ * Пустая строка, если картинки с таким путём в тексте нет.
+ */
+function altOfImage(text: string, path: string): string {
+  for (const match of text.matchAll(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g)) {
+    if ((match[2] ?? '') === path) return match[1] ?? '';
+  }
+  return '';
 }

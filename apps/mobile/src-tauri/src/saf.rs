@@ -130,6 +130,12 @@ pub fn saf_remove(tree: String, path: String) -> Result<(), String> {
     android::saf_remove(&tree, &path)
 }
 
+/// Открыть вложение системным приложением (замечание 16). `false` — нечем.
+#[tauri::command(async)]
+pub fn saf_open(tree: String, path: String) -> Result<bool, String> {
+    android::saf_open(&tree, &path)
+}
+
 #[tauri::command(async)]
 pub fn saf_rename(tree: String, from: String, to: String) -> Result<(), String> {
     android::saf_rename(&tree, &from, &to)

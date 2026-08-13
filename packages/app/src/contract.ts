@@ -13,6 +13,7 @@
 import type {
   PdfRenderer,
   PlatformCapabilities,
+  VaultPath,
   VaultStorage,
   SyncBackend,
 } from '@zapiski/core/contract';
@@ -33,6 +34,20 @@ export interface AppHost {
 
   /** Открыть ссылку во внешнем браузере. */
   openExternal(url: string): Promise<void>;
+
+  /**
+   * Открыть вложение системным приложением (замечание 16).
+   *
+   * Порт необязателен: в вебе настоящего пути к файлу нет, там открытие идёт
+   * через `blob:`-адрес и `openExternal`. А в оболочках наоборот — `blob:`
+   * системе бесполезен: Android и Windows ждут либо реальный путь, либо
+   * `content://`. Из-за этого «по клику открыть файл» работало ровно на одной
+   * платформе из трёх.
+   *
+   * Возвращает `false`, если открыть не удалось: приложение тогда пробует
+   * прежний путь через `blob:`, а не оставляет человека без результата.
+   */
+  openAttachment?(path: VaultPath): Promise<boolean>;
 
   /**
    * Базовый URL API облака, **включая префикс версии**: `…/api/v1`.

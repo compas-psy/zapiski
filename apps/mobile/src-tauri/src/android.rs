@@ -528,6 +528,23 @@ mod api {
         saf_action("safRemove", tree, path, None)
     }
 
+    /// Открыть вложение системным приложением. `false` — открывать нечем.
+    pub fn saf_open(tree: &str, path: &str) -> Result<bool, String> {
+        with_env(|env| {
+            let tree = env.new_string(tree)?;
+            let path = env.new_string(path)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    "safOpen",
+                    "(Ljava/lang/String;Ljava/lang/String;)Z",
+                    &[JValue::Object(&tree), JValue::Object(&path)],
+                )?
+                .z()?;
+            Ok(value)
+        })
+    }
+
     pub fn saf_rename(tree: &str, from: &str, to: &str) -> Result<(), String> {
         saf_action("safRename", tree, from, Some(to))
     }
@@ -763,6 +780,9 @@ mod api {
     pub fn saf_mkdir(_tree: &str, _path: &str) -> Result<(), String> {
         only_android("папка через SAF")
     }
+    pub fn saf_open(_tree: &str, _path: &str) -> Result<bool, String> {
+        Ok(false)
+    }
     pub fn saf_remove(_tree: &str, _path: &str) -> Result<(), String> {
         only_android("папка через SAF")
     }
@@ -775,6 +795,6 @@ pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
     render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_pick_folder, saf_read,
-    saf_remove, saf_rename, saf_stat, saf_supports_rename, saf_write, save_to_downloads,
+    saf_open, saf_remove, saf_rename, saf_stat, saf_supports_rename, saf_write, save_to_downloads,
     set_secure,
 };

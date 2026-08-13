@@ -133,11 +133,40 @@ describe('файл открывается системным приложени�
     });
     fireEvent.mouseDown(card);
 
-    expect(opened).toHaveBeenCalledTimes(1);
+    /* Ожидание не формальность: открытие стало асинхронным. Сначала
+       спрашивается порт оболочки, и только если её нет или она не смогла —
+       прежний путь через `blob:`. */
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     /* Открывать нужно URL, а не путь в хранилище: в вебе это OPFS, на Android
        — SAF, и системному приложению такой путь ничего не говорит. */
     expect(String(opened.mock.calls[0]?.[0] ?? '')).not.toBe('attachments/договор.pdf');
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('оболочка со своим открытием получает ПУТЬ, а не blob-адрес', async () => {
+    /* Замечание 16. В вебе настоящего пути нет, и там открытие идёт через
+       `blob:`. А Android и Windows от `blob:` бесполезны: им нужен реальный
+       путь или `content://`. Поэтому оболочка, умеющая открывать сама,
+       спрашивается первой и получает путь внутри хранилища. */
+    const host = await mountNote('[](attachments/договор.pdf)', {
+      path: 'attachments/договор.pdf',
+      bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+    });
+    const byShell = vi.fn(async (_path: string) => true);
+    const byBrowser = vi.fn(async (_url: string) => {});
+    host.openAttachment = byShell as never;
+    host.openExternal = byBrowser;
+
+    const card = await waitFor(() => {
+      const found = document.querySelector('.cm-z-file');
+      expect(found).not.toBeNull();
+      return found as Element;
+    });
+    fireEvent.mouseDown(card);
+
+    await waitFor(() => expect(byShell).toHaveBeenCalledWith('attachments/договор.pdf'));
+    /* И браузерный путь не дёргается вовсе: файл уже открыт системой. */
+    expect(byBrowser).not.toHaveBeenCalled();
   });
 
   it('на карточке виден размер файла', async () => {
