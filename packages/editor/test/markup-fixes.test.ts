@@ -323,3 +323,52 @@ describe('замечание 4: автор цитаты', () => {
     expect(classes).not.toContain('cm-z-collapsed');
   });
 });
+
+describe('дефекты со снимков экрана', () => {
+  it('курсор встаёт ЗА маркером и на пустой строке', () => {
+    /* На непустой строке дефект не воспроизводился, поэтому и дожил до
+       второго круга: курсор стоял в позиции 0, маркер вставлялся туда же и
+       позиция «прилипала» к началу вставки — `|- `. */
+    const doc = '';
+    let state = EditorState.create({ doc, selection: EditorSelection.cursor(0) });
+    toggleBulletList({
+      state,
+      dispatch: (tr: { state: EditorState }) => {
+        state = tr.state;
+      },
+    } as never);
+    expect(state.selection.main.head).toBe(state.doc.length);
+  });
+
+  it('мелкий текст показывается мелким, а теги прячутся', () => {
+    /* «Вставка мелкого текста не работает»: команда его вставляла, а показ —
+       нет, на экране оставалась сырая разметка. */
+    const doc = 'Проба <small>2</small> дальше';
+    const state = makeState(doc, { selection: { anchor: 0 } });
+    const hiddenText = hiddenRanges(state).map((range) => doc.slice(range.from, range.to));
+    expect(hiddenText).toContain('<small>');
+    expect(hiddenText).toContain('</small>');
+
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-small');
+  });
+
+  it('путь с пробелом остаётся вложением, а не текстом', () => {
+    /* Папка «Other files» с пробелом разрывала ссылку: markdown читал её как
+       ссылку на «Other», а хвост — обычным текстом. Экранируется угловыми
+       скобками, и разбор обязан их понимать. */
+    const doc = '[](<Other files/смета.docx>)';
+    const state = makeState(doc, {
+      selection: { anchor: doc.length },
+      /* Карточка рисуется только для вложения, которое хранилище умеет
+         показать, — поэтому подставляем разрешение пути. */
+      runtime: { resolveAttachment: (src: string) => `blob:${src}` },
+    });
+    const widgets = decorationsOf(state)
+      .map((deco) => deco.widget ?? '')
+      .join(' ');
+    expect(widgets).toContain('FileWidget');
+  });
+});

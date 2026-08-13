@@ -237,6 +237,10 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     fontStyle: 'normal',
   },
 
+  /* Мелкий текст — 13 px при базовых 16 (§4). Относительной величиной, чтобы
+     он оставался мелким и при увеличенном кегле заметки. */
+  '.cm-z-small': { fontSize: '0.8125em', color: 'var(--text-secondary)' },
+
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {
     display: 'inline-flex',

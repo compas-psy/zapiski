@@ -14,6 +14,7 @@ import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { buildLivePreview, type LivePreviewSets } from './decorations.js';
 import { rawMode, rawModeField, setRawMode } from './raw-mode.js';
+import { toggleCollapsed } from './collapsed.js';
 import { imeSupport, isComposing, noteDeferral, redecorateEffect } from '../ime/composition.js';
 
 const EMPTY: LivePreviewSets = { decorations: Decoration.none, atomic: Decoration.none };
@@ -54,8 +55,19 @@ class LivePreviewPlugin {
       return;
     }
 
+    /*
+     * Эффекты, после которых декорации обязаны пересобраться.
+     *
+     * `toggleCollapsed` попал сюда не сразу, и стоило это заказчику
+     * впечатления «сворачиваемый блок не сворачивается»: поле состояния
+     * менялось, а плагин про этот эффект не знал и оставлял прежние
+     * декорации — на экране ничего не происходило. Любое новое поле,
+     * влияющее на показ, обязано появиться и в этом списке.
+     */
     const forced = update.transactions.some((tr) =>
-      tr.effects.some((e) => e.is(redecorateEffect) || e.is(setRawMode)),
+      tr.effects.some(
+        (e) => e.is(redecorateEffect) || e.is(setRawMode) || e.is(toggleCollapsed),
+      ),
     );
     // Разбор большого документа идёт порциями: когда дерево доросло до
     // вьюпорта, декорации надо пересобрать, даже если ничего не менялось.
