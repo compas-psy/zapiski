@@ -62,6 +62,27 @@ export class ZapiskiCloudBackend implements SyncBackend {
     return catalog(this.locale);
   }
 
+  /**
+   * Что сказать человеку про 402.
+   *
+   * Раньше здесь стояла одна строка на все случаи — «Подписка закончилась». У
+   * того, кто только что завёл аккаунт, подписки не было ни разу, и сообщение
+   * рассказывало о конце того, что не начиналось. Сервер различает эти случаи
+   * кодом (`subscription_required` / `subscription_expired`), и текст берётся
+   * по коду, а не по номеру ответа. Текст — свой, а не серверный: он обязан
+   * быть на языке приложения.
+   */
+  private async paymentMessage(response: Response): Promise<string> {
+    const code = await response
+      .clone()
+      .json()
+      .then((body: unknown) => (body as { error?: { code?: string } }).error?.code)
+      .catch(() => undefined);
+    return code === 'subscription_expired'
+      ? this.strings.errors.subscriptionExpired
+      : this.strings.errors.subscriptionRequired;
+  }
+
   private async call(path: string, init: RequestInit = {}): Promise<Response> {
     let response: Response;
     try {
@@ -77,7 +98,7 @@ export class ZapiskiCloudBackend implements SyncBackend {
       throw new SyncError(this.strings.errors.syncFailed, 'unreachable');
     }
     if (response.status === 401) throw new SyncError(this.strings.errors.magicLinkExpired, 'auth');
-    if (response.status === 402) throw new SyncError(this.strings.errors.subscriptionExpired, 'auth');
+    if (response.status === 402) throw new SyncError(await this.paymentMessage(response), 'auth');
     if (response.status >= 500) throw new SyncError(this.strings.errors.syncFailed, 'server');
     return response;
   }

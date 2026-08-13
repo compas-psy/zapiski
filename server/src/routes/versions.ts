@@ -64,7 +64,7 @@ export async function registerVersionRoutes(app: FastifyInstance): Promise<void>
         [auth.userId, params.data.noteId, query.data.limit ?? 100],
       );
 
-      const entitlement = await getEntitlement(ctx.db, auth.userId, ctx.retention, ctx.now());
+      const entitlement = await getEntitlement(ctx.db, auth.userId, ctx.retention, ctx.env.BILLING_ENABLED, ctx.now());
       const versions: RemoteVersionSnapshot[] = rows.map(toSnapshot);
 
       return reply.send({
@@ -142,7 +142,7 @@ export async function registerVersionRoutes(app: FastifyInstance): Promise<void>
       // Адрес считаем заранее, пишем после проверки квоты — см. тот же приём
       // в PUT блоба: отказ по квоте не должен занимать место в томе.
       const stored = ctx.blobs.describeContent(auth.userId, data);
-      const entitlement = await getEntitlement(ctx.db, auth.userId, ctx.retention, ctx.now());
+      const entitlement = await getEntitlement(ctx.db, auth.userId, ctx.retention, ctx.env.BILLING_ENABLED, ctx.now());
       const expiresAt = new Date(
         ctx.now().getTime() + entitlement.versionRetentionDays * 86_400_000,
       );

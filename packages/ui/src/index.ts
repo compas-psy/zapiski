@@ -181,6 +181,9 @@ export {
   type ServiceMarkProps,
 } from './components/ServiceMark/ServiceMark';
 
+/* Логотип Яндекс ID: файл внутри пакета, адрес считает сборщик. */
+export { YANDEX_ID_LOGO } from './assets/services/yandexId';
+
 /* ── Иконки ──────────────────────────────────────────────────────────────── */
 export * from './icons';
 

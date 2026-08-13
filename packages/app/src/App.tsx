@@ -42,6 +42,7 @@ import { TitleBar } from "./components/TitleBar.js";
 import { SearchScreen } from "./screens/SearchScreen.js";
 import { SettingsScreen } from "./screens/SettingsScreen.js";
 import { SignInScreen } from "./screens/SignInScreen.js";
+import { BILLING_ENABLED } from "@zapiski/core";
 import { PaywallScreen } from "./screens/PaywallScreen.js";
 import { ImportScreen } from "./screens/ImportScreen.js";
 import { ArchiveScreen } from "./screens/ArchiveScreen.js";
@@ -276,7 +277,11 @@ function AppShell(): ReactNode {
       case "import":
         return <ImportScreen />;
       case "paywall":
-        return <PaywallScreen />;
+        /* Экран цел и покрыт тестами; пока оплата выключена, он просто не
+           показывается — заказчик просил спрятать тарифы, а не удалять их.
+           `null` здесь означает «solo-экрана нет», и остаётся обычная
+           библиотека, а не пустое окно. */
+        return BILLING_ENABLED ? <PaywallScreen /> : null;
       case "settings":
         return <SettingsScreen section={state.route.section} />;
       case "versions":

@@ -607,6 +607,10 @@ describe.skipIf(noDatabase())('периметр: адрес клиента и в
         YOOKASSA_WEBHOOK_SECRET: SECRET,
         YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27',
         TRUST_PROXY: '1',
+        /* Проверка «подделанный вебхук не включил подписку» смотрит на
+           canWrite: при выключенной оплате оно истинно у всех, и подделку
+           было бы не отличить от честного состояния. */
+        BILLING_ENABLED: '1',
       },
     });
   });

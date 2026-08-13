@@ -379,10 +379,29 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
 // Общие помощники — их же переиспользуют маршруты версий
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** ТЗ §5.5: писать может только действующая подписка; читать — все. */
+/**
+ * ТЗ §5.5: писать может только действующая подписка; читать — все.
+ *
+ * Пока оплата выключена (`BILLING_ENABLED=false`), `canWrite` истинно у
+ * каждого вошедшего, и до отказа дело не доходит вовсе.
+ *
+ * Если оплату включат, отказ обязан называть вещи своими именами: тому, у
+ * кого подписки не было ни разу, «Подписка закончилась» сообщает о событии,
+ * которого не происходило. Поэтому текст выбирается по состоянию, а не один
+ * на оба случая.
+ */
 export async function assertCanWrite(ctx: AppContext, userId: string): Promise<void> {
-  const entitlement = await getEntitlement(ctx.db, userId, ctx.retention, ctx.now());
-  if (!entitlement.canWrite) throw errors.subscriptionExpired();
+  const entitlement = await getEntitlement(
+    ctx.db,
+    userId,
+    ctx.retention,
+    ctx.env.BILLING_ENABLED,
+    ctx.now(),
+  );
+  if (entitlement.canWrite) return;
+  throw entitlement.status === 'expired'
+    ? errors.subscriptionExpired()
+    : errors.subscriptionRequired();
 }
 
 export function requirePath(request: FastifyRequest): string {
@@ -486,7 +505,13 @@ async function snapshotVersion(
   client: DbClient,
   input: SnapshotInput,
 ): Promise<number> {
-  const entitlement = await getEntitlement(client, input.userId, ctx.retention, ctx.now());
+  const entitlement = await getEntitlement(
+    client,
+    input.userId,
+    ctx.retention,
+    ctx.env.BILLING_ENABLED,
+    ctx.now(),
+  );
   const expiresAt = new Date(
     ctx.now().getTime() + entitlement.versionRetentionDays * 86_400_000,
   );

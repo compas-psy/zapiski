@@ -9,7 +9,15 @@
  */
 import { useEffect, useState, type ReactNode } from 'react';
 import { LEGAL_URLS } from '@zapiski/core';
-import { Button, IconArrowLeft, IconButton, IconCheck, InfoNote, TextField } from '@zapiski/ui';
+import {
+  Button,
+  IconArrowLeft,
+  IconButton,
+  IconCheck,
+  InfoNote,
+  TextField,
+  YANDEX_ID_LOGO,
+} from '@zapiski/ui';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 
 type Stage = 'form' | 'sent' | 'expired';
@@ -165,7 +173,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
                   iconStart={
                     <img
                       className="za-yandex-logo"
-                      src="/assets/yandex-logo.png"
+                      src={YANDEX_ID_LOGO}
                       alt=""
                       width={20}
                       height={20}

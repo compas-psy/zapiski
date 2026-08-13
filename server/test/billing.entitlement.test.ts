@@ -27,7 +27,10 @@ describe.skipIf(noDatabase())('подписка и доступ к данным'
   let harness: Harness;
 
   beforeAll(async () => {
-    harness = await createHarness();
+    /* Этот набор описывает продукт С ВКЛЮЧЁННОЙ оплатой: у сервера она по
+       умолчанию выключена (MVP бесплатный), и без этой строки проверять было
+       бы нечего — писать может каждый. */
+    harness = await createHarness({ env: { BILLING_ENABLED: '1' } });
   });
 
   afterAll(async () => {
@@ -218,7 +221,7 @@ describe('расчёт права на запись', () => {
   const past = new Date('2026-07-09T00:00:00Z');
 
   it('оплаченный период — запись есть, хранение 365 дней', () => {
-    const result = evaluate({ ...base, current_period_end: future }, RETENTION, now);
+    const result = evaluate({ ...base, current_period_end: future }, RETENTION, true, now);
     expect(result.canWrite).toBe(true);
     expect(result.status).toBe('active');
     expect(result.versionRetentionDays).toBe(365);
@@ -228,6 +231,7 @@ describe('расчёт права на запись', () => {
     const result = evaluate(
       { ...base, current_period_end: past, grace_ends_at: future },
       RETENTION,
+      true,
       now,
     );
     expect(result.canWrite).toBe(true);
@@ -238,6 +242,7 @@ describe('расчёт права на запись', () => {
     const result = evaluate(
       { ...base, plan: 'trial', status: 'trial', trial_ends_at: future },
       RETENTION,
+      true,
       now,
     );
     expect(result.canWrite).toBe(true);
@@ -249,6 +254,7 @@ describe('расчёт права на запись', () => {
     const result = evaluate(
       { ...base, current_period_end: past, grace_ends_at: past },
       RETENTION,
+      true,
       now,
     );
     expect(result.canWrite).toBe(false);
@@ -256,7 +262,7 @@ describe('расчёт права на запись', () => {
   });
 
   it('без подписки вовсе — статус none', () => {
-    const result = evaluate({ ...base, plan: 'free', status: 'none' }, RETENTION, now);
+    const result = evaluate({ ...base, plan: 'free', status: 'none' }, RETENTION, true, now);
     expect(result.canWrite).toBe(false);
     expect(result.status).toBe('none');
   });

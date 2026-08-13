@@ -49,14 +49,26 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     return reply.send(await buildStatus(ctx, auth.userId));
   });
 
+  /*
+   * Ниже — всё, что берёт деньги или начинает отсчёт. Пока оплата выключена,
+   * эти пути закрыты честным «оплата не подключена», а не молча работают
+   * вхолостую: начатый пробный период у бесплатного продукта — это таймер,
+   * который однажды кончится и отберёт то, что ничего не стоило.
+   */
+  const requireBilling = (): void => {
+    if (!ctx.env.BILLING_ENABLED) throw errors.billingDisabled();
+  };
+
   /** SCREENS §9: кнопка «Попробовать 14 дней». Без карты и без таймеров. */
   app.post('/api/v1/billing/trial', { preHandler: app.requireAuth }, async (request, reply) => {
+    requireBilling();
     const auth = authOf(request);
     const result = await startTrial(
       ctx.db,
       auth.userId,
       ctx.env.TRIAL_DAYS,
       ctx.retention,
+      ctx.env.BILLING_ENABLED,
       ctx.now(),
     );
     return reply.code(result.started ? 201 : 200).send({
@@ -80,6 +92,7 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     '/api/v1/billing/yookassa/payment',
     { preHandler: app.requireAuth },
     async (request, reply) => {
+      requireBilling();
       const shopId = ctx.env.YOOKASSA_SHOP_ID;
       const secretKey = ctx.env.YOOKASSA_SECRET_KEY;
       if (!shopId || !secretKey) throw errors.billingUnavailable();
@@ -186,6 +199,7 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     '/api/v1/billing/google-play/verify',
     { preHandler: app.requireAuth },
     async (request, reply) => {
+      requireBilling();
       const verifier = ctx.play;
       if (verifier === null) throw errors.billingUnavailable();
 
@@ -248,8 +262,17 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
 
 async function buildStatus(ctx: AppContext, userId: string): Promise<BillingStatus> {
   await ensureSubscription(ctx.db, userId);
-  const entitlement = await getEntitlement(ctx.db, userId, ctx.retention, ctx.now());
+  const entitlement = await getEntitlement(
+    ctx.db,
+    userId,
+    ctx.retention,
+    ctx.env.BILLING_ENABLED,
+    ctx.now(),
+  );
   return {
+    /* Интерфейс прячет разговор о тарифах по этому полю: сервер — источник
+       правды о том, берём ли мы сейчас деньги вообще. */
+    billingEnabled: ctx.env.BILLING_ENABLED,
     plan: entitlement.plan,
     status: entitlement.status,
     canWrite: entitlement.canWrite,

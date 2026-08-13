@@ -15,7 +15,10 @@ describe.skipIf(noDatabase())('история версий', () => {
   let harness: Harness;
 
   beforeAll(async () => {
-    harness = await createHarness();
+    /* Сроки хранения версий — часть тарифа (30 дней пробный, 365 платный), и
+       различать их имеет смысл только при включённой оплате. По умолчанию она
+       выключена, и всем даётся полный срок — это проверяется в mvp.free. */
+    harness = await createHarness({ env: { BILLING_ENABLED: '1' } });
   });
 
   afterAll(async () => {

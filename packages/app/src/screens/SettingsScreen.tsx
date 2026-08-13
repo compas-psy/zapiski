@@ -30,6 +30,7 @@ import {
   type ThemePreference,
 } from '@zapiski/ui';
 import {
+  BILLING_ENABLED,
   LocalFolderBackend,
   WebDAVBackend,
   type AttachmentNaming,
@@ -42,6 +43,14 @@ import { ConfirmDialog } from '../components/ConfirmDialog.js';
 import { IconBug, IconMerge } from '../components/icons.js';
 import { clockTime, formatBytes } from '../lib/format.js';
 
+/*
+ * Раздел «ЗАПИСКИ+» появляется вместе с оплатой, а не раньше. Пока всё
+ * бесплатно, рассказывать про тариф нечего: раздел с ценами у продукта,
+ * который ничего не стоит, обещает ограничение, которого нет.
+ *
+ * Именно СПРЯТАН, а не удалён: `PlusSection`, экран тарифов и все тексты на
+ * месте и вернутся одной строкой — `BILLING_ENABLED` в `@zapiski/core`.
+ */
 const SECTIONS: SettingsSection[] = [
   'appearance',
   'editor',
@@ -50,7 +59,7 @@ const SECTIONS: SettingsSection[] = [
   'security',
   'transfer',
   'account',
-  'plus',
+  ...(BILLING_ENABLED ? (['plus'] as SettingsSection[]) : []),
   'about',
 ];
 
@@ -515,7 +524,9 @@ function SyncSection(): ReactNode {
       void app.connectYandexDisk(yandexToken);
       return;
     }
-    app.navigate({ name: 'paywall' });
+    /* Неизвестный режим хранилища. Раньше это вело на экран тарифов; пока
+       он спрятан, молчим — открывать спрятанное «на всякий случай» нельзя. */
+    if (BILLING_ENABLED) app.navigate({ name: 'paywall' });
   };
 
   return (
@@ -1066,12 +1077,16 @@ function AccountSection(): ReactNode {
         <span>{strings.signIn.emailLabel}</span>
         <span className="za-info__value">{state.account.email}</span>
       </div>
-      <div className="za-info__row">
-        <span>{copy.plan}</span>
-        <span className="za-info__value">
-          {state.account.plan === 'plus' ? copy.planPlus : copy.planFree}
-        </span>
-      </div>
+      {/* Строка про тариф — только когда тарифы существуют. Иначе это ответ
+          на вопрос, которого человек не задавал, и намёк на ограничение. */}
+      {BILLING_ENABLED ? (
+        <div className="za-info__row">
+          <span>{copy.plan}</span>
+          <span className="za-info__value">
+            {state.account.plan === 'plus' ? copy.planPlus : copy.planFree}
+          </span>
+        </div>
+      ) : null}
       {/*
         Отзыв рекламного согласия — здесь, и это не вежливость, а обязанность:
         согласие, которое нельзя снять, согласием не является. Тумблер

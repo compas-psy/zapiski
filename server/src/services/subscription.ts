@@ -81,12 +81,41 @@ export async function ensureSubscription(
  * Пересчитывает право на запись по календарю. Ничего не пишет в базу:
  * состояние в колонке `status` — это последнее известное от провайдера,
  * а фактическое право считается от текущего момента.
+ *
+ * `billingEnabled` — обязательный параметр, а не значение по умолчанию,
+ * нарочно: право на запись выдаётся здесь, и каждое место, которое его
+ * спрашивает, обязано сказать, действует ли сейчас оплата вообще. Забытое
+ * умолчание в такой функции — это либо бесплатный доступ там, где он оплачен,
+ * либо отказ в записи там, где всё бесплатно; второе мы уже показывали
+ * человеку и повторять не хотим.
  */
 export function evaluate(
   row: SubscriptionRow | null,
   retention: RetentionPolicy,
+  billingEnabled: boolean,
   now: Date = new Date(),
 ): Entitlement {
+  /*
+   * Оплата выключена — писать может каждый вошедший, и разговора о подписке
+   * нет вовсе. Статус при этом честный: `none` означает «подписки нет», а не
+   * «была и кончилась». Именно на это смотрит текст ошибки, если оплату
+   * когда-нибудь включат.
+   */
+  if (!billingEnabled) {
+    return {
+      plan: row?.plan ?? 'free',
+      status: 'none',
+      canWrite: true,
+      currentPeriodEnd: row?.current_period_end ?? null,
+      graceEndsAt: row?.grace_ends_at ?? null,
+      trialEndsAt: row?.trial_ends_at ?? null,
+      autoRenew: row?.auto_renew ?? false,
+      /* История версий — по самому щедрому сроку: он и так не про деньги,
+         пока денег нет. */
+      versionRetentionDays: retention.paidDays,
+    };
+  }
+
   const base: Entitlement = {
     plan: row?.plan ?? 'free',
     status: 'none',
@@ -146,10 +175,11 @@ export async function getEntitlement(
   db: Db | DbClient,
   userId: string,
   retention: RetentionPolicy,
+  billingEnabled: boolean,
   now: Date = new Date(),
 ): Promise<Entitlement> {
   const row = await getSubscriptionRow(db, userId);
-  return evaluate(row, retention, now);
+  return evaluate(row, retention, billingEnabled, now);
 }
 
 export interface StartTrialResult {
@@ -166,6 +196,7 @@ export async function startTrial(
   userId: string,
   trialDays: number,
   retention: RetentionPolicy,
+  billingEnabled: boolean,
   now: Date = new Date(),
 ): Promise<StartTrialResult> {
   await ensureSubscription(db, userId);
@@ -188,9 +219,12 @@ export async function startTrial(
   );
 
   if (rows[0] !== undefined) {
-    return { started: true, entitlement: evaluate(rows[0], retention, now) };
+    return { started: true, entitlement: evaluate(rows[0], retention, billingEnabled, now) };
   }
-  return { started: false, entitlement: await getEntitlement(db, userId, retention, now) };
+  return {
+    started: false,
+    entitlement: await getEntitlement(db, userId, retention, billingEnabled, now),
+  };
 }
 
 export interface ActivationInput {

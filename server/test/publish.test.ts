@@ -14,7 +14,10 @@ describe.skipIf(noDatabase())('публикация', () => {
   let harness: Harness;
 
   beforeAll(async () => {
-    harness = await createHarness();
+    /* Публикация по ТЗ — часть ЗАПИСКИ+, и проверка «без подписки не
+       проходит» имеет смысл только при включённой оплате. По умолчанию она
+       выключена: на MVP публиковать может каждый вошедший. */
+    harness = await createHarness({ env: { BILLING_ENABLED: '1' } });
   });
 
   afterAll(async () => {

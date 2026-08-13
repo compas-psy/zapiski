@@ -231,9 +231,40 @@ describe('ZapiskiCloudBackend (ADR-0003)', () => {
     const backend = new ZapiskiCloudBackend({
       token: 'jwt',
       deviceId: 'd',
-      fetch: async () => new Response('', { status: 402 }),
+      fetch: async () =>
+        new Response(JSON.stringify({ error: { code: 'subscription_expired' } }), {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        }),
     });
     await expect(backend.list()).rejects.toThrow('Подписка закончилась');
+  });
+
+  it('подписки не было — про конец не сообщаем', async () => {
+    /* Дефект, который увидел заказчик: человек впервые вошёл, а продукт
+       объявил конец подписки. Код 402 один на оба случая, различает их
+       `code`, и текст обязан идти по нему. */
+    const backend = new ZapiskiCloudBackend({
+      token: 'jwt',
+      deviceId: 'd',
+      fetch: async () =>
+        new Response(JSON.stringify({ error: { code: 'subscription_required' } }), {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        }),
+    });
+    await expect(backend.list()).rejects.toThrow('входит в подписку');
+  });
+
+  it('402 без внятного тела не превращается в рассказ о конце подписки', async () => {
+    /* Ответ без JSON — это неизвестность, а не «подписка кончилась». В
+       неизвестности выбираем формулировку, которая не утверждает лишнего. */
+    const backend = new ZapiskiCloudBackend({
+      token: 'jwt',
+      deviceId: 'd',
+      fetch: async () => new Response('', { status: 402 }),
+    });
+    await expect(backend.list()).rejects.toThrow('входит в подписку');
   });
 
   it('push/pull CRDT-обновлений кодируются base64', async () => {

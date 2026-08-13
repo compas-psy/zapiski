@@ -27,7 +27,7 @@ describe.skipIf(noDatabase())('вебхук ЮKassa', () => {
   let harness: Harness;
 
   beforeAll(async () => {
-    harness = await createHarness({ env: { YOOKASSA_WEBHOOK_SECRET: WEBHOOK_SECRET } });
+    harness = await createHarness({ env: { YOOKASSA_WEBHOOK_SECRET: WEBHOOK_SECRET, BILLING_ENABLED: '1' } });
   });
 
   afterAll(async () => {
@@ -181,6 +181,7 @@ describe.skipIf(noDatabase())('вебхук ЮKassa', () => {
       env: {
         YOOKASSA_WEBHOOK_SECRET: WEBHOOK_SECRET,
         YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27',
+        BILLING_ENABLED: '1',
       },
     });
     try {
@@ -213,7 +214,7 @@ describe.skipIf(noDatabase())('вебхук ЮKassa', () => {
 
   it('одного лишь списка сетей недостаточно: без секрета вебхук выключен', async () => {
     const cidrOnly = await createHarness({
-      env: { YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27' },
+      env: { YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27', BILLING_ENABLED: '1' },
     });
     try {
       const user = await createUser(cidrOnly, { subscribed: false });
@@ -258,7 +259,7 @@ describe.skipIf(noDatabase())('валидация покупки Google Play', (
   };
 
   beforeAll(async () => {
-    harness = await createHarness({ play: verifier });
+    harness = await createHarness({ play: verifier, env: { BILLING_ENABLED: '1' } });
   });
 
   afterAll(async () => {
@@ -339,7 +340,7 @@ describe.skipIf(noDatabase())('валидация покупки Google Play', (
   });
 
   it('без настроенного сервисного аккаунта — 503, а не «покупка принята»', async () => {
-    const bare = await createHarness();
+    const bare = await createHarness({ env: { BILLING_ENABLED: '1' } });
     try {
       const user = await createUser(bare, { subscribed: false });
       const response = await bare.app.inject({

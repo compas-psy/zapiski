@@ -186,6 +186,34 @@ export async function createUser(
   };
 }
 
+/**
+ * Второе устройство того же человека: своя сессия, свой `X-Device-Id`.
+ *
+ * Синхронизация — это не «сервер принял байты», а «второе устройство их
+ * увидело». Без отдельного устройства проверить второе нечем: один и тот же
+ * токен читает собственную запись даже там, где чужая не доехала бы.
+ */
+export async function addDevice(
+  harness: Harness,
+  user: TestUser,
+  name: string,
+): Promise<{ deviceId: string; authHeader: { authorization: string } }> {
+  const deviceId = await ensureDevice(harness.db, user.userId, name, 'desktop');
+  const now = harness.ctx.now();
+  const session = await createSession(
+    harness.db,
+    { userId: user.userId, deviceId, ttlSeconds: harness.ctx.env.AUTH_REFRESH_TTL_SECONDS },
+    now,
+  );
+  const accessToken = signJwt(
+    { sub: user.userId, sid: session.sessionId, did: deviceId, typ: 'access' },
+    TEST_AUTH_SECRET,
+    harness.ctx.env.AUTH_ACCESS_TTL_SECONDS,
+    now.getTime(),
+  );
+  return { deviceId, authHeader: { authorization: `Bearer ${accessToken}` } };
+}
+
 /** Помечает подписку истёкшей: право на чтение остаётся, на запись — нет. */
 export async function expireSubscription(harness: Harness, userId: string): Promise<void> {
   const past = new Date(harness.ctx.now().getTime() - 86_400_000);

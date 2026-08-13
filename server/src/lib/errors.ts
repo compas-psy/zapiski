@@ -60,6 +60,19 @@ export const errors = {
   subscriptionExpired: (): ApiError =>
     new ApiError(402, 'subscription_expired', REGISTRY.subscriptionExpired),
 
+  /**
+   * Подписки не было ни разу. Тот же код 402 — платить действительно надо, —
+   * но другой `code` и другой текст: «закончилась» про то, чего не начинали,
+   * это сообщение о несуществующем событии. Клиент выбирает текст по `code`,
+   * а не по номеру ответа.
+   */
+  subscriptionRequired: (): ApiError =>
+    new ApiError(402, 'subscription_required', PENDING_REGISTRY.subscriptionRequired),
+
+  /** Оплата в этой сборке не подключена: платить не за что, всё открыто. */
+  billingDisabled: (): ApiError =>
+    new ApiError(404, 'billing_disabled', PENDING_REGISTRY.billingDisabled),
+
   etagMismatch: (): ApiError => new ApiError(412, 'etag_mismatch', PENDING_REGISTRY.etagMismatch),
 
   blobTooLarge: (): ApiError => new ApiError(413, 'blob_too_large', PENDING_REGISTRY.blobTooLarge),

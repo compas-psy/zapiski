@@ -26,6 +26,8 @@ export const en: Catalog = {
     imageInsertFailed: 'Could not insert the image · Retry',
     encryptFailed: 'Could not encrypt the note · Retry',
     subscriptionExpired: 'The subscription has ended. Your notes are here, syncing via Zapiski Cloud is paused',
+    subscriptionRequired:
+      'Syncing via Zapiski Cloud is part of the subscription. Your notes are here and open as usual',
     importPartial: (imported: number, skipped: number): string => `Imported ${imported} · Skipped ${skipped} — show`,
     linksUpdated: (count: number): string => `Links updated: ${count}`,
     renamedTags: (count: number): string =>

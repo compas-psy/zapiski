@@ -103,6 +103,12 @@ export type SubscriptionPlan = 'free' | 'trial' | 'monthly' | 'yearly';
 export type SubscriptionStatus = 'none' | 'trial' | 'active' | 'grace' | 'expired';
 
 export interface BillingStatus {
+  /**
+   * Берём ли мы сейчас деньги вообще. На MVP — нет: всё бесплатно, экраны
+   * тарифов спрятаны, и приложение узнаёт об этом отсюда, а не догадывается
+   * по косвенным признакам.
+   */
+  billingEnabled: boolean;
   plan: SubscriptionPlan;
   status: SubscriptionStatus;
   /** Можно ли писать в облако прямо сейчас. Чтение доступно всегда. */
