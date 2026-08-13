@@ -54,6 +54,7 @@ import {
   insertTable,
   setHeading,
   toggleBold,
+  bulletListWith,
   toggleBulletList,
   toggleHighlight,
   toggleInlineCode,
@@ -396,6 +397,12 @@ function ensureStyles(): void {
 export interface FormatPanelProps {
   /** Представление редактора; пока его нет, панель неактивна. */
   view: EditorView | null;
+  /**
+   * Символ маркерного списка из настроек (замечание 10). Меняет ТЕКСТ файла,
+   * поэтому приходит из приложения, а не из темы редактора: тема отвечает за
+   * показ, а это разметка.
+   */
+  bulletMarker?: '-' | '*' | '+';
   strings?: EditorStrings;
   /** Вложения (§5). Пункт скрывается, если обработчика нет. */
   onAttach?: (kind: 'image' | 'file' | 'audio') => void;
@@ -435,6 +442,7 @@ export function FormatPanel({
   onFormula,
   onEmoji,
   onUndoable,
+  bulletMarker = '-',
   className,
 }: FormatPanelProps): ReactElement {
   ensureStyles();
@@ -728,7 +736,7 @@ export function FormatPanel({
                   glyph="listBullet"
                   hotkey={copy.hotkeys.bullet}
                   checked={list === 'bullet'}
-                  onPress={run(toggleBulletList)}
+                  onPress={run(bulletListWith(bulletMarker))}
                 />
                 <MenuItem
                   label={copy.listKinds.ordered}

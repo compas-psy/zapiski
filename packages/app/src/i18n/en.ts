@@ -430,6 +430,11 @@ export const en: AppCatalog = {
       typewriter: 'Keep the line centred (typewriter)',
       moveDone: 'Move finished items down',
       spellcheck: 'Check spelling',
+      listMarker: 'List marker',
+      listMarkColor: 'Marker and number colour',
+      listMarkColors: { muted: 'Muted', text: 'Same as text', accent: 'Accent' },
+      listIndent: 'List indent',
+      listIndents: { none: 'None', normal: 'Normal', wide: 'Wide' },
     },
     sync: {
       statusSynced: 'Synchronised',

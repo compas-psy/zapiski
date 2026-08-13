@@ -26,6 +26,12 @@ export interface TypographySettings {
   family: 'sans' | 'serif';
   /** Компактный режим: плотнее кегль, интерлиньяж и поля. */
   compact: boolean;
+  /**
+   * Оформление списков (замечание 10). Сюда попадает только показ: символ
+   * маркера — это текст файла, и его выбирает команда вставки, а не тема.
+   */
+  listIndent?: 'none' | 'normal' | 'wide';
+  listMarkColor?: 'muted' | 'text' | 'accent';
 }
 
 export const defaultTypography: TypographySettings = {
@@ -34,7 +40,18 @@ export const defaultTypography: TypographySettings = {
   column: 640,
   family: 'sans',
   compact: false,
+  listIndent: 'normal',
+  listMarkColor: 'muted',
 };
+
+/** Сдвиг пунктов списка вправо. `none` — вровень с абзацем. */
+const LIST_INDENT = { none: '0px', normal: '24px', wide: '40px' } as const;
+/** Цвет маркера и номера. Приглушённый — умолчание, акцентный — по желанию. */
+const LIST_MARK_COLOR = {
+  muted: 'var(--text-secondary)',
+  text: 'var(--text)',
+  accent: 'var(--accent)',
+} as const;
 
 /** Компактный множитель: 16 → 14.5, 1.65 → 1.5 (DESIGN_TOKENS §2). */
 const COMPACT_SIZE = 0.906;
@@ -58,6 +75,8 @@ export function typographyStyle(settings: TypographySettings): string {
     `--z-pad-y: ${padY}px`,
     `--z-pad-x: ${padX}px`,
     `--z-block-gap: ${settings.compact ? '0.4em' : '0.6em'}`,
+    `--z-list-indent: ${LIST_INDENT[settings.listIndent ?? 'normal']}`,
+    `--z-list-mark-color: ${LIST_MARK_COLOR[settings.listMarkColor ?? 'muted']}`,
   ].join('; ');
 }
 

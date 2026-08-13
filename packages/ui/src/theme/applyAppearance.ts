@@ -51,6 +51,15 @@ export function parseAppearance(raw: unknown): AppearanceState {
       moveDone: editorSrc['moveDone'] === true,
       spellcheck: editorSrc['spellcheck'] === true,
       mode: editorSrc['mode'] === 'pro' ? 'pro' : 'simple',
+      listMarker: includes(['-', '*', '+'] as const, editorSrc['listMarker'])
+        ? editorSrc['listMarker']
+        : DEFAULT_EDITOR_PREFERENCES.listMarker,
+      listMarkColor: includes(['muted', 'text', 'accent'] as const, editorSrc['listMarkColor'])
+        ? editorSrc['listMarkColor']
+        : DEFAULT_EDITOR_PREFERENCES.listMarkColor,
+      listIndent: includes(['none', 'normal', 'wide'] as const, editorSrc['listIndent'])
+        ? editorSrc['listIndent']
+        : DEFAULT_EDITOR_PREFERENCES.listIndent,
     },
   };
 }

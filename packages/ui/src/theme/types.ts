@@ -84,6 +84,16 @@ export interface EditorPreferences {
   /** Проверка орфографии системой (ITERATION-1 §3). */
   spellcheck: boolean;
   /**
+   * Оформление списков (замечание 10 из отзыва: «маркеры, цвет номеров, а
+   * также наличие смещения вправо должны настраиваться в настройках»).
+   *
+   * `listMarker` меняет ТЕКСТ в файле — это символ markdown, а не показ;
+   * остальные два — только показ, файла не касаются.
+   */
+  listMarker: ListMarker;
+  listMarkColor: ListMarkColor;
+  listIndent: ListIndent;
+  /**
    * Режим редактора (ITERATION-1 §8): `simple` — разметка не видна никогда,
    * `pro` — проявляется у курсора, доступен raw и wiki-ссылки.
    */
@@ -107,6 +117,11 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
      прыжок строки сбивает чтение (BEHAVIOR §2.3). */
   moveDone: false,
   spellcheck: false,
+  /* Дефис — самый частый маркер в markdown и единственный, который не спорит
+     с курсивом при чтении сырого файла (`*пункт*` читается как выделение). */
+  listMarker: '-',
+  listMarkColor: 'muted',
+  listIndent: 'normal',
   /* Простой — умолчание для новых людей (§8). При первом запуске ничего не
      спрашиваем: вопрос про режим человеку, который ещё не написал ни строчки,
      ответить нечем. */
@@ -128,3 +143,10 @@ export function resolveTheme(preference: ThemePreference, prefersDark: boolean):
   if (preference !== 'system') return preference;
   return prefersDark ? 'graphite' : 'paper';
 }
+
+/** Символ маркерного списка. Все три — канонический markdown. */
+export type ListMarker = '-' | '*' | '+';
+/** Цвет маркера и номера: приглушённый, как текст, или акцентный. */
+export type ListMarkColor = 'muted' | 'text' | 'accent';
+/** Сдвиг пунктов вправо. `none` — вровень с абзацем. */
+export type ListIndent = 'none' | 'normal' | 'wide';

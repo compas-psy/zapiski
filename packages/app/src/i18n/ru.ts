@@ -511,6 +511,11 @@ export const ru = {
       typewriter: 'Держать строку по центру (typewriter)',
       moveDone: 'Переносить выполненные вниз',
       spellcheck: 'Проверять орфографию',
+      listMarker: 'Маркер списка',
+      listMarkColor: 'Цвет маркера и номера',
+      listMarkColors: { muted: 'Приглушённый', text: 'Как текст', accent: 'Акцентный' },
+      listIndent: 'Сдвиг списка вправо',
+      listIndents: { none: 'Нет', normal: 'Обычный', wide: 'Широкий' },
     },
     sync: {
       statusSynced: 'Синхронизировано',
