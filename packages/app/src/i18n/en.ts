@@ -129,6 +129,10 @@ export const en: AppCatalog = {
   note: {
     info: 'Info',
     raw: 'Show markup',
+    modeSimple: 'Simple mode',
+    modePro: 'Pro mode',
+    markupShow: 'Show all markup',
+    markupHide: 'Hide markup',
     focus: 'Focus',
     focusHint: 'focus · Esc to leave',
     lockNow: 'Lock now',
