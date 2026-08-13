@@ -394,6 +394,20 @@ class LivePreviewBuilder {
     }
   }
 
+  /**
+   * Раскрасить текст между `<small>` и ближайшим `</small>`.
+   *
+   * Ищем закрывающий тег по документу, а не по дереву: парсер отдаёт теги
+   *отдельными узлами и парой их не связывает. Без закрывающего — красим до конца
+   * строки: незакрытый тег бывает в процессе набора, и мигать при этом нечем.
+   */
+  private smallText(from: number): void {
+    const line = this.state.doc.lineAt(from);
+    const rest = this.state.doc.sliceString(from, line.to);
+    const closing = rest.search(/<\/small\s*>/i);
+    this.mark(from, closing === -1 ? line.to : from + closing, 'cm-z-small');
+  }
+
   private widget(pos: number, deco: Decoration): void {
     this.out.push(deco.range(pos));
   }
@@ -479,6 +493,28 @@ class LivePreviewBuilder {
       /* Курсор внутри ссылки — адрес показан и остаётся собой: приглушённым
          моноширинным (`cm-z-url` ниже), а не «символом разметки». Иначе
          редактировать ссылку пришлось бы вслепую. */
+    }
+
+    /*
+     * Мелкий текст: `<small>…</small>` (замечание 8).
+     *
+     * Команда его вставляла, а показ — нет: на экране оставалась сырая
+     * разметка, и текст мельче не становился. Заказчик так и написал:
+     * «вставка мелкого текста не работает».
+     *
+     * `<small>` — html, который markdown пропускает как есть; парсер отдаёт
+     * его отдельными узлами `HTMLTag`. Прячем сами теги и красим то, что
+     * между ними. Под курсором теги видны — иначе их не убрать.
+     */
+    if (name === 'HTMLTag') {
+      const tag = this.state.doc.sliceString(from, to);
+      if (/^<\/?small\s*>$/i.test(tag)) {
+        const paragraph = this.stack[this.stack.length - 2];
+        const active = paragraph ? this.isActive(from, to) : false;
+        this.fade(from, to, active);
+        if (!tag.startsWith('</')) this.smallText(to);
+        return;
+      }
     }
 
     // ── Маркеры списков: акцент, деликатно; НЕ фейдятся ─────────────────────
@@ -624,7 +660,7 @@ class LivePreviewBuilder {
     const parsed = /^!\[([^\]]*)\]\(\s*<?([^\s>)]*)>?/.exec(raw);
     if (!parsed) return;
     const alt = parsed[1] ?? '';
-    const rawSrc = parsed[2] ?? '';
+    const rawSrc = parsed[2] ?? parsed[3] ?? '';
     if (!rawSrc) return;
     const src =
       IMAGE_URL.test(rawSrc) || rawSrc.startsWith('data:')
@@ -652,9 +688,13 @@ class LivePreviewBuilder {
    */
   private attachment(node: SyntaxNodeRef): void {
     const raw = this.state.doc.sliceString(node.from, node.to);
-    const parsed = /^\[([^\]]*)\]\(\s*<?([^\s>)]*)>?/.exec(raw);
+    /* Путь может быть в угловых скобках — так записывается адрес с пробелом
+       (`<Other files/смета.docx>`). Без этой ветки разбор обрывался на первом
+       же пробеле, и вместо карточки файла на экране оставался голый текст. */
+    const parsed = /^\[([^\]]*)\]\(\s*(?:<([^>]*)>|([^\s>)]*))/.exec(raw);
     if (!parsed) return;
-    const rawSrc = parsed[2] ?? '';
+    /* Вторая группа — путь в угловых скобках, третья — обычный. */
+    const rawSrc = parsed[2] ?? parsed[3] ?? '';
     if (!rawSrc || IMAGE_URL.test(rawSrc) || rawSrc.startsWith('data:')) return;
     if (isImageUrl(rawSrc)) return;
 

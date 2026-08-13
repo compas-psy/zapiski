@@ -136,7 +136,26 @@ function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boo
     });
     if (!changes.length) return false;
 
-    dispatch(state.update({ changes, scrollIntoView: true, userEvent: 'input.format' }));
+    /*
+     * Курсор явно переносится ЗА вставленный маркер.
+     *
+     * Точечной правки мало, и это выяснилось на пустой строке: курсор стоит в
+     * позиции 0, маркер вставляется туда же, и по умолчанию позиция
+     * «прилипает» к началу вставки — получается `|- `, курсор перед дефисом.
+     * Ровно это заказчик и описал: «добавляется `-`, но курсор встаёт перед
+     * этим символом», и на непустой строке дефект не воспроизводился.
+     *
+     * `map(changes, 1)` двигает позицию в другую сторону — за вставленное.
+     */
+    const changeSet = state.changes(changes);
+    dispatch(
+      state.update({
+        changes: changeSet,
+        selection: state.selection.map(changeSet, 1),
+        scrollIntoView: true,
+        userEvent: 'input.format',
+      }),
+    );
     return true;
   };
 }

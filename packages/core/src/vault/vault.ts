@@ -919,7 +919,7 @@ export class Vault {
     if (!existing || target !== path) await writeAtomic(this.storage, target, data);
 
     const isImage = IMAGE_ATTACHMENT.test(target);
-    return { path: target, markdown: `${isImage ? '!' : ''}[](${target})` };
+    return { path: target, markdown: `${isImage ? '!' : ''}[](${mdUrl(target)})` };
   }
 
   /** Вложения, на которые никто не ссылается (Настройки → Хранилище). */
@@ -960,3 +960,19 @@ export class Vault {
 }
 
 export { safeFileName, uniqueNotePath };
+
+/**
+ * Путь как адрес внутри markdown-ссылки.
+ *
+ * Пробел в пути разрывает ссылку: `[](Other files/смета.docx)` markdown читает
+ * как «ссылка на `Other`» и хвост обычным текстом. Именно это и случилось,
+ * когда вложения разложили по папкам `Images`, `Audio` и `Other files`, — на
+ * экране вместо карточки файла оставалась строка `(Other files/…docx)`.
+ *
+ * Канонический выход — угловые скобки: `[](<Other files/смета.docx>)`. Их
+ * понимают все реализации CommonMark, и путь внутри остаётся читаемым
+ * человеком, в отличие от `%20`.
+ */
+function mdUrl(path: string): string {
+  return /[\s()<>]/.test(path) ? `<${path}>` : path;
+}

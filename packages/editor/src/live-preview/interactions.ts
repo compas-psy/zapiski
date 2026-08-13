@@ -116,6 +116,25 @@ export const markupInteractions: Extension = EditorView.domEventHandlers({
       }
     }
 
+    /*
+     * Обычная ссылка (замечание 14: «кликнуть на неё нельзя»).
+     *
+     * Обрабатывались только wiki-ссылки, теги и вложения — а `[текст](адрес)`
+     * рисовался акцентом и молчал: выглядел ссылкой, вёл себя как текст.
+     *
+     * Адрес берётся из документа, а не из подписи: подпись — то, что человек
+     * читает, а идти надо туда, куда написано.
+     */
+    const link = target.closest('.cm-z-link');
+    if (link instanceof HTMLElement) {
+      const url = linkUrlAt(view, view.posAtDOM(link));
+      if (url) {
+        event.preventDefault();
+        runtime.openAttachment(url);
+        return true;
+      }
+    }
+
     // ── Wiki-ссылка ─────────────────────────────────────────────────────────
     const wiki = target.closest('.cm-z-wiki');
     if (wiki instanceof HTMLElement) {
@@ -132,3 +151,21 @@ export const markupInteractions: Extension = EditorView.domEventHandlers({
     return false;
   },
 });
+
+/**
+ * Адрес ссылки, внутри которой стоит позиция.
+ *
+ * Угловые скобки снимаются: `<Other files/смета.docx>` — это способ записать
+ * путь с пробелом, а не часть адреса.
+ */
+function linkUrlAt(view: EditorView, pos: number): string | null {
+  const tree = syntaxTree(view.state);
+  let node = tree.resolveInner(pos, 1);
+  while (node.parent && node.name !== 'Link') node = node.parent;
+  if (node.name !== 'Link') return null;
+  const raw = view.state.doc.sliceString(node.from, node.to);
+  const found = /\]\(\s*(<[^>]*>|[^\s)]*)/.exec(raw);
+  const url = (found?.[1] ?? '').trim();
+  if (url === '') return null;
+  return url.startsWith('<') && url.endsWith('>') ? url.slice(1, -1) : url;
+}
