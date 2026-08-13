@@ -126,6 +126,82 @@ describe('где лежат заметки — ТЗ §4.1 п. 1', () => {
     app.dispose();
   });
 
+  it('платформа отказала — приложение говорит об этом, а не молчит', async () => {
+    /* Отзыв заказчика: «Android — папка не выбирается». Тап по кнопке не делал
+       НИЧЕГО и не говорил ни слова, потому что отказ платформы ловился тем же
+       `catch`, что и отмена человеком. Мост не поднялся, провайдера документов
+       нет, система убила процесс, пока висел системный выбор, — со стороны всё
+       это выглядело одинаково: приложение сломано целиком. */
+    const refusing: VaultFolderPicker = {
+      async chooseFolder() {
+        throw new Error('мост не ответил');
+      },
+      async useAppFolder() {
+        throw new Error('мост не ответил');
+      },
+      async current() {
+        return { kind: 'app', writeMode: 'atomic', label: 'Записки' };
+      },
+    };
+    const app = await boot({ vaultFolders: refusing });
+
+    expect(await app.chooseVaultFolder()).toBeNull();
+    expect(toasts.at(-1), 'отказ прошёл молча').toBe(ru.errors.folderUnavailable);
+
+    toasts = [];
+    expect(await app.useAppVaultFolder()).toBeNull();
+    expect(toasts.at(-1), 'возврат в папку приложения отказал молча').toBe(
+      ru.errors.folderUnavailable,
+    );
+    app.dispose();
+  });
+
+  it('папка не открылась — её имя не появляется в настройках', async () => {
+    /* Вторая половина того же отзыва: «и по факту ничего не сохраняется».
+       Название места менялось ПЕРВЫМ, до открытия хранилища, — и при отказе
+       настройки показывали новую папку, в которой ничего не работает. Место в
+       интерфейсе обязано называть то, где заметки лежат на самом деле. */
+    const broken: VaultFolderPicker = {
+      async chooseFolder() {
+        return {
+          kind: 'user',
+          writeMode: 'direct',
+          label: 'Флешка',
+          /* Хранилище, которое не читается: `Vault.open` обойдёт его и упадёт. */
+          storage: {
+            read: async () => null,
+            write: async () => {
+              throw new Error('провайдер не дал записать документ');
+            },
+            remove: async () => undefined,
+            rename: async () => undefined,
+            list: async () => [],
+            stat: async () => null,
+            mkdir: async () => {
+              throw new Error('провайдер не дал создать папку');
+            },
+          },
+        };
+      },
+      async useAppFolder() {
+        return null;
+      },
+      async current() {
+        return { kind: 'app', writeMode: 'atomic', label: 'Записки' };
+      },
+    };
+    const app = await boot({ vaultFolders: broken });
+
+    expect(await app.chooseVaultFolder()).toBeNull();
+    expect(app.getState().vaultLocation?.label, 'настройки назвали папку, которой нет').toBe(
+      'Записки',
+    );
+    expect(toasts.at(-1)).toBe(ru.errors.folderUnavailable);
+    /* И прежние заметки на месте: неудачный переезд ничего не увозит. */
+    expect(app.getState().notes.map((note) => note.path)).toContain('Заметка.md');
+    app.dispose();
+  });
+
   it('отмена выбора ничего не меняет (BEHAVIOR §0)', async () => {
     const cancelling: VaultFolderPicker = {
       async chooseFolder() {
@@ -142,6 +218,48 @@ describe('где лежат заметки — ТЗ §4.1 п. 1', () => {
     expect(await app.chooseVaultFolder()).toBeNull();
     expect(app.getState().vaultLocation?.kind).toBe('app');
     expect(app.getState().notes.map((note) => note.path)).toContain('Заметка.md');
+    app.dispose();
+  });
+});
+
+/**
+ * Когда папки нет.
+ *
+ * Вторая половина отзыва — «по факту ничего не сохраняется». Без хранилища
+ * приложение вело себя так, будто всё в порядке: `save()` выходил первой же
+ * строкой, набранный текст никуда не уходил, и ни одного слова об этом сказано
+ * не было. Человек печатает, видит буквы на экране и уверен, что они
+ * сохраняются, — а их нет.
+ *
+ * Правило: писать некуда — говорим. В статусе, а не тостом: автосохранение
+ * срабатывает каждые полсекунды, и тост стал бы мигающей стеной.
+ */
+describe('писать некуда — приложение говорит об этом', () => {
+  /** Хранилище пропало: разрешение на папку отозвали между запусками. */
+  async function bootWithoutVault(): Promise<AppController> {
+    const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
+    host.restoreVault = async () => null;
+    toasts = [];
+    const app = new AppController(host, (toast) => toasts.push(toast.message));
+    await app.boot();
+    return app;
+  }
+
+  it('прошедшему онбординг сказано, почему он снова видит первый экран', async () => {
+    const app = await bootWithoutVault();
+    /* Экран онбординга сам по себе объясняет обратное — «первый запуск», то
+       есть «заметки пропали». Причина другая, и её называют вслух. */
+    expect(app.getState().route.name).toBe('onboarding');
+    expect(toasts).toContain(ru.errors.folderUnavailable);
+    app.dispose();
+  });
+
+  it('набранное не уходит в никуда молча', async () => {
+    const app = await bootWithoutVault();
+    await app.save('Заметка.md', '# Заметка\n\nновый текст\n');
+    expect(app.getState().syncError, 'запись провалилась беззвучно').toBe(
+      ru.errors.folderUnavailable,
+    );
     app.dispose();
   });
 });

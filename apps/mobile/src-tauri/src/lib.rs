@@ -37,6 +37,8 @@ pub fn run() {
             /* Папка пользователя через SAF (ТЗ §4.1 п. 1) — см. saf.rs. */
             saf::saf_pick,
             saf::saf_probe,
+            saf::saf_persisted,
+            saf::saf_release,
             saf::saf_list,
             saf::saf_read,
             saf::saf_write,

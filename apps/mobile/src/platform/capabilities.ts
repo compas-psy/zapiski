@@ -26,7 +26,15 @@ import type { PreferencesStore } from '@zapiski/app';
 import { createBiometrics } from './biometrics';
 import { createHaptics } from './haptics';
 import { COMMANDS, call } from './ipc';
-import { createSafStorage, pickSafTree, probeSafTree, writeModeOf, type SafTree } from './saf';
+import {
+  createSafStorage,
+  persistedSafTrees,
+  pickSafTree,
+  probeSafTree,
+  releaseSafTrees,
+  writeModeOf,
+  type SafTree,
+} from './saf';
 import { createShareTarget } from './share';
 import { createUpdater } from './updater';
 import { defaultVaultRoot, openVault } from './vault';
@@ -40,6 +48,40 @@ export const PREF_SAF_TREE = 'storage.androidTree';
 
 /** Имя каталога приложения в интерфейсе — не путь: путь пользователю не нужен. */
 const APP_FOLDER_LABEL = 'Записки';
+
+/**
+ * Дерево, которое приложение считает выбранным. `null` — выбора нет, заметки
+ * лежат в каталоге приложения.
+ *
+ * ── Почему одной настройки мало ─────────────────────────────────────────────
+ *
+ * Настройка пишется в самом конце: система вернула адрес папки → Rust отдал
+ * его в JS → JS записал. Пока открыт системный выбор, приложение в фоне, и
+ * Android вправе убить его процесс. Тогда результат приходит уже в новый
+ * процесс: разрешение на папку забирается, а тот, кто ждал ответа, не
+ * существует — и до настройки адрес не доезжает. Человек выбрал папку,
+ * вернулся, а список прежний и пустой: «папка не выбирается».
+ *
+ * Разрешение при этом осталось в системе и переживает перезапуск. Значит,
+ * надёжный след выбора — оно, а настройка лишь его копия. Копии нет —
+ * восстанавливаем по следу и чиним копию.
+ *
+ * Обратная сторона обязательна: «вернуться в каталог приложения» ОТПУСКАЕТ
+ * разрешения (`useAppFolder`), иначе восстановление молча утащило бы человека
+ * назад в папку, из которой он ушёл.
+ */
+export async function chosenSafTree(prefs: PreferencesStore): Promise<string | null> {
+  const saved = await prefs.get<string | null>(PREF_SAF_TREE, null);
+  if (saved !== null) return saved;
+
+  /* Мост не ответил — это «сейчас не знаю», а не «выбора нет». Настройку не
+     трогаем и ничего не выдумываем. */
+  const persisted = await persistedSafTrees().catch(() => [] as string[]);
+  const adopted = persisted[0];
+  if (adopted === undefined) return null;
+  await prefs.set(PREF_SAF_TREE, adopted);
+  return adopted;
+}
 
 function safLocation(tree: SafTree): VaultLocation {
   return {
@@ -103,6 +145,10 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
       },
 
       async useAppFolder() {
+        /* Разрешение отпускается вместе с настройкой. Оставить его значило бы
+           оставить след выбора, по которому приложение при следующем запуске
+           вернёт человека в ту самую папку, из которой он только что ушёл. */
+        await releaseSafTrees().catch(() => undefined);
         await prefs.set(PREF_SAF_TREE, null);
         return openAppFolder();
       },
@@ -129,7 +175,7 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
        * распоряжаться чужими данными.
        */
       async current(): Promise<VaultLocationInfo | null> {
-        const uri = await prefs.get<string | null>(PREF_SAF_TREE, null);
+        const uri = await chosenSafTree(prefs);
         if (uri === null) {
           return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
         }

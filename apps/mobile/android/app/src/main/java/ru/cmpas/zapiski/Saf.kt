@@ -530,10 +530,6 @@ object Saf {
     // ── Выбор папки ─────────────────────────────────────────────────────────
 
     /**
-     * Забрать долгоживущее разрешение на выбранное дерево. Без этого доступ
-     * умрёт вместе с процессом, и после перезапуска заметки «пропали бы».
-     */
-    /**
      * Открыть вложение системным приложением (замечание 16).
      *
      * До этого «по клику открыть файл» работало только в вебе: там открытие
@@ -564,9 +560,72 @@ object Saf {
         }
     }
 
-    fun persist(context: Context, uri: Uri) {
-        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+    /**
+     * Забрать долгоживущее разрешение на выбранное дерево.
+     *
+     * `granted` — флаги, которые СИСТЕМА выдала в ответном намерении. Раньше
+     * здесь стояла жёсткая пара READ|WRITE, и провайдер, выдавший только
+     * чтение, получал `SecurityException` вместо папки: выбор обрывался на
+     * ровном месте. Просить больше выданного нельзя; просить меньше — тоже
+     * незачем, поэтому пустые флаги трактуем как обычную пару.
+     */
+    fun persist(context: Context, uri: Uri, granted: Int = 0) {
+        val both = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        val flags = (granted and both).takeIf { it != 0 } ?: both
         context.contentResolver.takePersistableUriPermission(uri, flags)
         cache.clear()
+    }
+
+    /**
+     * Деревья, разрешение на которые у нас есть прямо сейчас, новейшее первым.
+     *
+     * ── Зачем это нужно ────────────────────────────────────────────────────
+     *
+     * Выбранная папка записывалась ровно в одном месте — в настройках, уже
+     * после того, как ответ дошёл до JS. Но пока открыт системный выбор,
+     * приложение в фоне, и Android вправе убить его процесс: диалог выбора
+     * документов тяжёлый, на телефоне со скромной памятью это обычное дело.
+     * Тогда `onActivityResult` отрабатывает в НОВОМ процессе, разрешение
+     * забирается, — а Rust-части, которая ждала ответ, уже нет, и до настроек
+     * он не доходит. Человек выбрал папку, приложение вернулось с прежним
+     * пустым списком: «папка не выбирается».
+     *
+     * Разрешение при этом никуда не делось — оно живёт в системе и переживает
+     * перезапуск. Оно и есть надёжный след выбора; настройки — лишь его копия.
+     * Отсюда приложение восстанавливает выбор, если копия не сохранилась.
+     *
+     * Только деревья: одиночные документы (например, выбранный файл для
+     * импорта) папкой не являются, и путать их с хранилищем нельзя. Из этого
+     * же следует правило на будущее: долгоживущее разрешение НА ДЕРЕВО берёт
+     * только `persist`, и только для папки заметок. Появится второй повод
+     * держать дерево — его придётся отличать здесь явно, иначе восстановление
+     * подхватит чужое.
+     */
+    fun persistedTrees(context: Context): String {
+        val out = JSONArray()
+        context.contentResolver.persistedUriPermissions
+            .filter { it.isReadPermission && it.isWritePermission }
+            .filter { runCatching { DocumentsContract.isTreeUri(it.uri) }.getOrDefault(false) }
+            .sortedByDescending { it.persistedTime }
+            .forEach { out.put(it.uri.toString()) }
+        return out.toString()
+    }
+
+    /**
+     * Отпустить разрешения на все наши деревья.
+     *
+     * Зовётся ровно при возврате в каталог приложения. Без этого «вернуться в
+     * папку приложения» не был бы решением: разрешение осталось бы в системе,
+     * восстановление подхватило бы его при следующем запуске и молча утащило
+     * человека обратно в папку, из которой он ушёл.
+     */
+    fun releaseTrees(context: Context) {
+        val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        for (permission in context.contentResolver.persistedUriPermissions) {
+            if (!runCatching { DocumentsContract.isTreeUri(permission.uri) }.getOrDefault(false)) continue
+            runCatching { context.contentResolver.releasePersistableUriPermission(permission.uri, flags) }
+        }
+        cache.clear()
+        renameSupport.clear()
     }
 }

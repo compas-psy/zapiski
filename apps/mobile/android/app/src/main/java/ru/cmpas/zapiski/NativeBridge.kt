@@ -261,6 +261,18 @@ object NativeBridge {
         context.startActivity(intent)
     }
 
+    /**
+     * Деревья, разрешение на которые у нас есть прямо сейчас (JSON-массив,
+     * новейшее первым). Отсюда приложение восстанавливает выбор папки, если
+     * система убила процесс, пока был открыт системный выбор.
+     */
+    @JvmStatic
+    fun safPersistedTrees(): String = Saf.persistedTrees(requireContext())
+
+    /** Отпустить разрешения на все деревья — возврат в каталог приложения. */
+    @JvmStatic
+    fun safReleaseTrees() = Saf.releaseTrees(requireContext())
+
     @JvmStatic
     fun safHasAccess(tree: String): Boolean = Saf.hasAccess(requireContext(), tree)
 

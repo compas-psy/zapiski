@@ -20,9 +20,21 @@ class FolderPickActivity : Activity() {
 
     private var requestId: Long = 0
 
+    /**
+     * Системный выбор уже открыт.
+     *
+     * Пока он открыт, наша активность в фоне, и Android вправе её уничтожить —
+     * а потом воссоздать вместе с результатом. `onCreate` при этом выполняется
+     * заново, и без этого флага открывался ВТОРОЙ выбор поверх первого: человек
+     * выбирал папку, а его снова спрашивали, где она.
+     */
+    private var launched = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestId = intent?.getLongExtra(EXTRA_REQUEST_ID, 0L) ?: 0L
+        launched = savedInstanceState?.getBoolean(STATE_LAUNCHED) == true
+        if (launched) return
 
         val pick = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or
@@ -32,6 +44,7 @@ class FolderPickActivity : Activity() {
 
         try {
             startActivityForResult(pick, REQUEST_TREE)
+            launched = true
         } catch (error: Throwable) {
             // Ни одного приложения-провайдера документов на устройстве нет.
             // Это редкость, но не повод падать: заметки остаются в каталоге
@@ -39,6 +52,11 @@ class FolderPickActivity : Activity() {
             NativeBridge.result(requestId, false, "на устройстве нет системного выбора папки", null)
             finish()
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_LAUNCHED, launched)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -59,7 +77,11 @@ class FolderPickActivity : Activity() {
         try {
             // Разрешение обязано пережить перезапуск: иначе после закрытия
             // приложения заметки «пропали бы» вместе с доступом к папке.
-            Saf.persist(applicationContext, uri)
+            //
+            // Флаги берём из ответа системы, а не из головы: провайдер выдаёт
+            // ровно то, что выдал, и просить у него больше — верный
+            // SecurityException вместо папки.
+            Saf.persist(applicationContext, uri, data?.flags ?: 0)
             NativeBridge.result(requestId, true, uri.toString(), null)
         } catch (error: Throwable) {
             NativeBridge.result(requestId, false, "не удалось получить доступ к папке", null)
@@ -70,5 +92,6 @@ class FolderPickActivity : Activity() {
     companion object {
         const val EXTRA_REQUEST_ID = "ru.cmpas.zapiski.saf.request"
         private const val REQUEST_TREE = 4301
+        private const val STATE_LAUNCHED = "ru.cmpas.zapiski.saf.launched"
     }
 }

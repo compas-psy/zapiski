@@ -489,7 +489,14 @@ export class AppController {
 
     const storage = await this.host.restoreVault().catch(() => null);
     if (!storage || !onboarded) {
-      /* Нет хранилища — онбординг с выбором места (SCREENS §1, шаг 2). */
+      /* Нет хранилища — онбординг с выбором места (SCREENS §1, шаг 2).
+
+         Тому, кто онбординг уже проходил, этот экран сам по себе ничего не
+         объясняет: он выглядит как первый запуск, то есть как «заметки
+         пропали». Причина другая — папка сейчас недоступна, — и её надо
+         назвать словами реестра (BEHAVIOR §11). Обещание сказать вслух дано
+         ещё в `restoreVault` оболочки; здесь оно выполняется. */
+      if (onboarded) this.toast({ message: this.strings.errors.folderUnavailable });
       this.patch({ booting: false, route: { name: 'onboarding', step: 1 } });
       return;
     }
@@ -499,11 +506,6 @@ export class AppController {
   /** Открыть vault поверх готового хранилища и перейти к списку. */
   async openVault(storage: VaultStorage): Promise<void> {
     this.patch({ booting: true });
-    /* Смена папки открывает vault повторно: старые таймеры прежнего vault'а
-       обязаны остановиться, иначе они продолжат переименовывать файлы там,
-       откуда мы уже ушли. */
-    if (this.renameTimer) clearInterval(this.renameTimer);
-    if (this.lockTimer) clearInterval(this.lockTimer);
     /* Отказ открыть хранилище обязан снять флаг «загружаюсь». Без этого
        состояние врёт о себе: vault не открыт, а приложение считает, что оно
        всё ещё в процессе, — и вызывающий не может ни показать ошибку, ни
@@ -515,6 +517,12 @@ export class AppController {
       this.patch({ booting: false });
       throw error;
     }
+    /* Таймеры прежнего vault'а останавливаются ЗДЕСЬ, а не до открытия.
+       Остановить их раньше значило бы обезоружить работающее хранилище из-за
+       чужой неудачи: не открылась выбранная папка — прежняя осталась на месте,
+       но без отложенных переименований и без сторожа автоблокировки. */
+    if (this.renameTimer) clearInterval(this.renameTimer);
+    if (this.lockTimer) clearInterval(this.lockTimer);
     this.vault = vault;
     this.versions = new VersionHistory(storage);
     vault.onChange(() => {
@@ -581,15 +589,40 @@ export class AppController {
   }
 
   /**
-   * Системный выбор папки. `null` — выбора нет на этой платформе либо
-   * пользователь отменил его (отмена не ошибка и сообщений не требует).
+   * Системный выбор папки. `null` — выбора нет на этой платформе, человек
+   * отменил его либо платформа не смогла его выполнить.
+   *
+   * ── Почему отмена и отказ разошлись ────────────────────────────────────────
+   *
+   * Здесь стояло `picker.chooseFolder().catch(() => null)`, то есть ЛЮБАЯ
+   * неудача платформы выглядела как «человек передумал»: не поднялся мост в
+   * Android, не нашлось приложения-провайдера документов, система убила
+   * процесс, пока висел системный выбор, — во всех случаях тап по «Выбрать
+   * папку» не делал ровно ничего и не говорил ни слова.
+   *
+   * Ровно так это и выглядело со стороны: «папка не выбирается». Молчаливый
+   * отказ хуже любой ошибки — человек делает вывод, что сломано приложение
+   * целиком, и второй раз уже не нажимает.
+   *
+   * Теперь: `null` от порта — это отмена, и она по-прежнему молчит
+   * (BEHAVIOR §0). Исключение — это отказ, и о нём говорится текстом реестра
+   * (BEHAVIOR §11).
    */
   async chooseVaultFolder(): Promise<VaultLocationInfo | null> {
     const picker = this.host.platform.vaultFolders;
     if (!picker) return null;
-    const chosen = await picker.chooseFolder().catch(() => null);
+
+    let chosen: VaultLocation | null;
+    try {
+      chosen = await picker.chooseFolder();
+    } catch {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return null;
+    }
+    /* Отмена — право человека, и сообщений она не требует. */
     if (!chosen) return null;
-    await this.switchVaultLocation(chosen);
+    if (!(await this.switchVaultLocation(chosen))) return null;
+
     /* Итог выбора называется вслух, и вместе с ним — цена, если она есть.
        Предупреждение живёт и в настройках (`vaultLocationWarning`), но сказать
        о нём в момент выбора обязательно: молчание здесь было бы обманом. */
@@ -603,9 +636,21 @@ export class AppController {
   async useAppVaultFolder(): Promise<VaultLocationInfo | null> {
     const picker = this.host.platform.vaultFolders;
     if (!picker) return null;
-    const location = await picker.useAppFolder().catch(() => null);
-    if (!location) return null;
-    await this.switchVaultLocation(location);
+
+    let location: VaultLocation | null;
+    try {
+      location = await picker.useAppFolder();
+    } catch {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return null;
+    }
+    /* `null` без исключения — платформе нечего предложить. Это тоже отказ:
+       кнопку человек нажал, и остаться без ответа он не должен. */
+    if (!location) {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return null;
+    }
+    if (!(await this.switchVaultLocation(location))) return null;
     this.toast({ message: this.storageStrings.returned });
     return this.state.vaultLocation;
   }
@@ -614,13 +659,25 @@ export class AppController {
    * Переезд на другое место. Открытые (расшифрованные) заметки при этом
    * закрываются: их содержимое живёт только в памяти и относится к прежнему
    * хранилищу (ТЗ §3.3, BEHAVIOR §5.3).
+   *
+   * `false` — переезд не состоялся: хранилище не открылось. Название места
+   * при этом НЕ меняется. Раньше оно менялось первым, до открытия, и при
+   * отказе настройки показывали новую папку, в которой ничего не работает, —
+   * то самое «папку выбрал, а ничего не сохраняется». Место в интерфейсе
+   * обязано называть то, где заметки лежат на самом деле.
    */
-  private async switchVaultLocation(location: VaultLocation): Promise<void> {
+  private async switchVaultLocation(location: VaultLocation): Promise<boolean> {
     this.lockAll();
+    try {
+      await this.openVault(location.storage);
+    } catch {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return false;
+    }
     this.patch({
       vaultLocation: { kind: location.kind, writeMode: location.writeMode, label: location.label },
     });
-    await this.openVault(location.storage);
+    return true;
   }
 
   // ── Вход в облако (ТЗ §5.5, SCREENS §2) ────────────────────────────────────
@@ -1357,7 +1414,15 @@ export class AppController {
    */
   async save(requested: VaultPath, body: string): Promise<void> {
     const vault = this.vault;
-    if (!vault) return;
+    /* Хранилища нет — писать некуда, и молчать об этом нельзя: человек
+       набирает текст и считает, что он сохраняется. Ровно это и описано как
+       «по факту ничего не сохраняется». Сообщение живёт в статусе, а не в
+       тосте: автосохранение срабатывает каждые полсекунды, и тост превратился
+       бы в мигающую стену (приёмочный критерий №5 — ввод не трогаем). */
+    if (!vault) {
+      this.reportError(this.strings.errors.folderUnavailable);
+      return;
+    }
     const path = await this.resolveSavePath(requested);
     const unlocked = this.state.unlocked[path];
     if (unlocked) {
@@ -1365,7 +1430,14 @@ export class AppController {
       this.patch({
         unlocked: { ...this.state.unlocked, [path]: { ...unlocked, body } },
       });
-      await encryptNoteFileSafely(vault, this.crypto, path, body, unlocked.key);
+      try {
+        await encryptNoteFileSafely(vault, this.crypto, path, body, unlocked.key);
+      } catch (error) {
+        /* Тот же разговор, что и с открытой заметкой: отказ диска слышен.
+           Раньше он улетал необработанным отказом промиса — то есть в никуда. */
+        this.reportError(diskErrorMessage(error, this.strings));
+        return;
+      }
       this.touchLock(path);
       return;
     }

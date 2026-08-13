@@ -16,6 +16,8 @@ export const COMMANDS = {
   /* Папка пользователя через SAF (ТЗ §4.1 п. 1) — `src-tauri/src/saf.rs`. */
   safPick: 'saf_pick',
   safProbe: 'saf_probe',
+  safPersisted: 'saf_persisted',
+  safRelease: 'saf_release',
   safList: 'saf_list',
   safRead: 'saf_read',
   safWrite: 'saf_write',

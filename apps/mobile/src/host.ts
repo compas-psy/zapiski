@@ -6,7 +6,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
-import { createPlatform, PREF_SAF_TREE } from './platform/capabilities';
+import { chosenSafTree, createPlatform, PREF_SAF_TREE } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
@@ -72,7 +72,10 @@ export function createHost(): AppHost {
      *     попробует снова, чем мы молча подменим ему хранилище.
      */
     async restoreVault() {
-      const tree = await prefs.get<string | null>(PREF_SAF_TREE, null);
+      /* `chosenSafTree`, а не голая настройка: выбор мог не доехать до неё,
+         если система убила процесс, пока был открыт системный выбор папки.
+         Тогда след выбора — разрешение, выданное системой. */
+      const tree = await chosenSafTree(prefs);
       if (tree !== null) {
         let alive;
         try {
@@ -97,7 +100,7 @@ export function createHost(): AppHost {
      * `false` — приложение попробует прежний путь через `blob:`.
      */
     async openAttachment(path: string): Promise<boolean> {
-      const tree = await prefs.get<string | null>(PREF_SAF_TREE, null);
+      const tree = await chosenSafTree(prefs);
       if (tree === null) return false;
       return openSafFile(tree, path).catch(() => false);
     },

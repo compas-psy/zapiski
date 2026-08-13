@@ -411,6 +411,19 @@ mod api {
         saf_bool("safHasAccess", tree)
     }
 
+    /// Деревья, разрешение на которые есть прямо сейчас (JSON, новейшее первым).
+    pub fn saf_persisted_trees() -> Result<String, String> {
+        Ok(string_getter("safPersistedTrees")?.unwrap_or_else(|| "[]".to_owned()))
+    }
+
+    /// Отпустить разрешения на все деревья — возврат в каталог приложения.
+    pub fn saf_release_trees() -> Result<(), String> {
+        with_env(|env| {
+            env.call_static_method(BRIDGE, "safReleaseTrees", "()V", &[])?;
+            Ok(())
+        })
+    }
+
     /// Метод «дерево + путь → строка». `None` — такого документа нет.
     fn saf_path_string(method: &str, tree: &str, path: &str) -> Result<Option<String>, String> {
         with_env(|env| {
@@ -765,6 +778,14 @@ mod api {
     pub fn saf_has_access(_tree: &str) -> Result<bool, String> {
         Ok(false)
     }
+    /// Разрешений нет — и это тоже ответ, а не отказ: список просто пуст.
+    pub fn saf_persisted_trees() -> Result<String, String> {
+        Ok("[]".to_owned())
+    }
+    /// Отпускать нечего — тишина здесь честнее ошибки.
+    pub fn saf_release_trees() -> Result<(), String> {
+        Ok(())
+    }
     pub fn saf_list(_tree: &str, _path: &str) -> Result<String, String> {
         only_android("папка через SAF")
     }
@@ -794,7 +815,7 @@ mod api {
 pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
-    render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_pick_folder, saf_read,
-    saf_open, saf_remove, saf_rename, saf_stat, saf_supports_rename, saf_write, save_to_downloads,
-    set_secure,
+    render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_persisted_trees,
+    saf_pick_folder, saf_read, saf_open, saf_release_trees, saf_remove, saf_rename, saf_stat,
+    saf_supports_rename, saf_write, save_to_downloads, set_secure,
 };

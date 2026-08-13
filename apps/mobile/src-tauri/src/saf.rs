@@ -72,6 +72,30 @@ pub fn saf_probe(tree: String) -> Result<Option<SafTree>, String> {
     describe(tree).map(Some)
 }
 
+/// Деревья, разрешение на которые есть прямо сейчас: JSON-массив, новейшее
+/// первым.
+///
+/// Это восстановление выбора папки, а не удобство. Пока открыт системный
+/// выбор, приложение в фоне и Android вправе убить его процесс; результат
+/// тогда приходит в новый процесс, разрешение забирается, а тот, кто ждал
+/// ответа, уже не существует — и до настроек выбор не доходит. Разрешение при
+/// этом остаётся в системе и переживает перезапуск: по нему приложение и
+/// узнаёт папку, которую человек выбрал.
+#[tauri::command(async)]
+pub fn saf_persisted() -> Result<String, String> {
+    android::saf_persisted_trees()
+}
+
+/// Отпустить разрешения на все деревья — возврат в каталог приложения.
+///
+/// Без этого возврат был бы неполным: разрешение осталось бы в системе,
+/// восстановление подхватило бы его при следующем запуске и вернуло человека
+/// в папку, из которой он ушёл.
+#[tauri::command(async)]
+pub fn saf_release() -> Result<(), String> {
+    android::saf_release_trees()
+}
+
 fn describe(uri: String) -> Result<SafTree, String> {
     let label = android::saf_label(&uri)?.unwrap_or_else(|| uri.clone());
     let supports_rename = android::saf_supports_rename(&uri)?;

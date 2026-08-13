@@ -1,11 +1,17 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Права главного окна. Список принципиально короткий: всё, что можно сделать своей командой с проверкой, сделано командой, а не выдачей плагину широких прав. Каждое право здесь соответствует реальному вызову из apps/desktop/src — неиспользуемых нет.",
+  "description": "Права главного окна. Список принципиально короткий: всё, что можно сделать своей командой с проверкой, сделано командой, а не выдачей плагину широких прав. Каждое право здесь соответствует реальному вызову из apps/desktop/src — неиспользуемых нет. Управление окном перечислено поимённо: core:default даёт только ЧТЕНИЕ состояния окна (is-maximized, is-minimized, размеры), а свернуть, закрыть, развернуть и тащить окно за нашу строку заголовка без явных прав нельзя — вызов молча отклоняется. Окно у нас безрамочное (decorations: false), других кнопок нет, поэтому без этих пяти строк окно не сворачивается и не таскается вовсе. Сторож — apps/desktop/test/window-permissions.test.ts.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:event:default",
+
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized",
+    "core:window:allow-start-dragging",
 
     "fs:allow-read-file",
     "fs:allow-read-dir",

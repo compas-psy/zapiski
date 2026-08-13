@@ -21,10 +21,14 @@
  * Первый раз чинилось только одно из них — второе осталось и дожило до
  * отзыва.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** Управляемая замена платформенного моста. */
 const probe = vi.fn();
+/** Разрешения на деревья, которые система якобы помнит за нами. */
+const persisted = vi.fn<() => Promise<string[]>>(async () => []);
+/** Отпускание разрешений — считаем вызовы: это половина «вернуться в папку». */
+const release = vi.fn(async () => undefined);
 
 /* Настройки для `createHost`: он собирает их сам, поэтому подменяется весь
    модуль. `vi.hoisted` нужен потому, что фабрики `vi.mock` поднимаются выше
@@ -39,6 +43,8 @@ vi.mock('../src/platform/saf', () => ({
   pickSafTree: async () => null,
   createSafStorage: (tree: string) => ({ kind: 'saf', tree }),
   writeModeOf: () => 'direct' as const,
+  persistedSafTrees: () => persisted(),
+  releaseSafTrees: () => release(),
 }));
 
 /* Мост в нативную часть в тестах не поднимается: любой вызов `call` означал бы
@@ -68,6 +74,15 @@ function memoryPrefs(initial: Record<string, unknown> = {}) {
     subscribe: () => () => undefined,
   };
 }
+
+/* Счётчики вызовов не должны перетекать из проверки в проверку: иначе
+   утверждение «мост не дёргали» смотрит на чужие вызовы. Умолчание для
+   разрешений — пустой список: «система за нами ничего не помнит». */
+beforeEach(() => {
+  probe.mockReset();
+  release.mockClear();
+  persisted.mockImplementation(async () => []);
+});
 
 describe('папка пользователя переживает молчание моста', () => {
   it('IPC не ответил — адрес папки остаётся на месте', async () => {
@@ -148,5 +163,85 @@ describe('открытие хранилища на старте', () => {
       prefs.store.get(PREF_SAF_TREE),
       'молчание моста стёрло выбор пользователя при запуске',
     ).toBe('content://tree/notes');
+  });
+});
+
+/**
+ * Выбор папки переживает смерть процесса.
+ *
+ * Отзыв заказчика второго круга: «Android — папка не выбирается и по факту
+ * ничего не сохраняется». Механика такая. Настройка пишется в самом конце:
+ * система вернула адрес → Rust отдал его в JS → JS записал. Но пока открыт
+ * системный выбор, приложение в фоне, а диалог выбора документов тяжёлый — на
+ * телефоне со скромной памятью Android спокойно убивает наш процесс. Тогда
+ * результат приходит уже в НОВЫЙ процесс: разрешение на папку система выдаёт,
+ * а того, кто ждал ответа, больше нет — и до настройки адрес не доезжает.
+ * Человек выбрал папку, вернулся, а список прежний: выбор будто не случился.
+ *
+ * Разрешение при этом никуда не делось. Значит, надёжный след выбора — оно, а
+ * настройка лишь его копия. Здесь сторожится и это, и обратная сторона: без
+ * отпускания разрешений «вернуться в каталог приложения» перестало бы
+ * работать — восстановление утащило бы человека обратно.
+ */
+describe('выбор папки переживает смерть процесса', () => {
+  it('настройки пусты, а разрешение есть — папка возвращается', async () => {
+    persisted.mockImplementation(async () => ['content://tree/notes']);
+    probe.mockImplementation(async () => ({
+      uri: 'content://tree/notes',
+      label: 'Заметки',
+      supportsRename: true,
+    }));
+    const prefs = memoryPrefs();
+
+    const platform = createPlatform(prefs as never);
+    const where = await platform.vaultFolders?.current();
+
+    expect(where?.kind, 'выбранная папка не восстановилась').toBe('user');
+    expect(where?.label).toBe('Заметки');
+    /* И копия чинится, чтобы следующий запуск не спрашивал систему заново. */
+    expect(prefs.store.get(PREF_SAF_TREE)).toBe('content://tree/notes');
+  });
+
+  it('то же самое при запуске: хранилище открывается по восстановленной папке', async () => {
+    persisted.mockImplementation(async () => ['content://tree/notes']);
+    probe.mockImplementation(async () => ({
+      uri: 'content://tree/notes',
+      label: 'Заметки',
+      supportsRename: true,
+    }));
+    const prefs = memoryPrefs();
+    prefsHolder.current = prefs;
+
+    const { createHost } = await import('../src/host');
+    const storage = await createHost().restoreVault();
+
+    expect(storage, 'запуск не нашёл выбранную папку').toEqual({
+      kind: 'saf',
+      tree: 'content://tree/notes',
+    });
+  });
+
+  it('разрешений нет — каталог приложения, и ничего не выдумываем', async () => {
+    persisted.mockImplementation(async () => []);
+    const prefs = memoryPrefs();
+
+    const platform = createPlatform(prefs as never);
+    const where = await platform.vaultFolders?.current();
+
+    expect(where?.kind).toBe('app');
+    expect(probe, 'нечего проверять — а мост всё-таки дёрнули').not.toHaveBeenCalled();
+  });
+
+  it('возврат в каталог приложения отпускает разрешение', async () => {
+    persisted.mockImplementation(async () => ['content://tree/notes']);
+    const prefs = memoryPrefs({ [PREF_SAF_TREE]: 'content://tree/notes' });
+
+    const platform = createPlatform(prefs as never);
+    /* Каталог приложения открывается настоящим мостом, которого в тестах нет,
+       — но нас интересует то, что случилось ДО него. */
+    await platform.vaultFolders?.useAppFolder().catch(() => null);
+
+    expect(release, 'разрешение осталось у нас — выбор вернётся сам собой').toHaveBeenCalled();
+    expect(prefs.store.get(PREF_SAF_TREE)).toBeNull();
   });
 });
