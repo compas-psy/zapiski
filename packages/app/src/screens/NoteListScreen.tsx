@@ -123,6 +123,9 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
                   haptic={haptic}
                   rightLabel={item.note.pinned ? strings.list.unpin : strings.list.pin}
                   leftLabel={item.note.archived ? strings.list.unarchive : strings.list.archive}
+                  /* Тащить можно там, где есть чем: на телефоне мышью не
+                     тащат, а через две панели пальцем — тем более. */
+                  draggable={!isMobile}
                 />
               ),
             )}
@@ -143,13 +146,36 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
             onClick={() => app.toggleLibrary(true)}
           />
         ) : null}
-        <h1 className="za-h1 za-h1--mobile za-header__title">{title}</h1>
+        <h1
+          className={`za-h1 za-h1--mobile za-header__title${
+            embedded ? ' za-header__title--column' : ''
+          }`}
+        >
+          {title}
+        </h1>
         {/* Оффлайн — чип-пилюля в шапке, не блокирующий баннер (SCREENS §3). */}
         {screenState === 'offline' ? (
           <span className="za-chip">{strings.errors.offline}</span>
         ) : null}
         <div className="za-header__actions">
           <SyncIndicator />
+          {/*
+            «+» — создать заметку. На телефоне для этого есть круглая кнопка
+            внизу, а на широком экране не было НИЧЕГО: заметка заводилась
+            только сочетанием Ctrl+N, о котором надо знать. Заказчик так и
+            написал: «нет + ков для добавления папок или заметок».
+
+            Место выбрано по правилу колонки: действие относится к списку,
+            значит живёт в его шапке, а не в общей навигации слева.
+          */}
+          {!isMobile ? (
+            <IconButton
+              icon={<IconPlus size={18} />}
+              label={strings.list.newNote}
+              tone="ghost"
+              onClick={() => void app.createNote(state.folder ?? undefined)}
+            />
+          ) : null}
           <IconButton
             icon={<span aria-hidden="true">⋯</span>}
             label={strings.list.sortMenu}
@@ -170,8 +196,15 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
         Поле настоящее, а не кнопка: набранное сразу уходит в поиск, и человек
         не теряет первые символы. Подпись сочетания — не украшение, а способ
         научить: она показывает, чем открыть поиск, не отрывая рук.
+
+        Условие `!embedded` отсюда снято, и это второй заход на ту же жалобу.
+        В трёхпанельной раскладке — а это ровно то, что человек видит на
+        Windows в развёрнутом окне, — список показывается «встроенным», и поле
+        пряталось. То есть поиск чинили для двухпанельной раскладки, а
+        заказчик сидел в трёхпанельной и снова написал: «нет поиска по
+        заметкам, хотя в дизайне есть».
       */}
-      {!isMobile && !embedded ? (
+      {!isMobile ? (
         <div className="za-listsearch">
           <IconSearch size={15} />
           <input

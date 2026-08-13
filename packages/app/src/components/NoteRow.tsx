@@ -26,6 +26,20 @@ export interface NoteRowProps {
   /** Подписи подложек — зависят от того, закреплена ли заметка и в архиве ли. */
   rightLabel: string;
   leftLabel: string;
+  /**
+   * Строку можно утащить мышью в папку библиотеки.
+   *
+   * Заказчик: «я не могу перетягивать записки в папки». Перенос был только
+   * пунктом меню — и меню это открывалось правым щелчком, о чём тоже надо
+   * догадаться.
+   *
+   * Штатный html-перенос, а не свой на указателях: строка уже слушает
+   * указатель ради свайпа, и второй разбор того же потока подрался бы с
+   * первым. Плюс браузер сам рисует «призрак» строки и сам меняет курсор.
+   * На телефоне html-переноса нет вовсе — там остаётся меню, и это
+   * правильно: тащить пальцем через две панели невозможно.
+   */
+  draggable?: boolean;
 }
 
 export function NoteRow({
@@ -39,6 +53,7 @@ export function NoteRow({
   haptic,
   rightLabel,
   leftLabel,
+  draggable = false,
 }: NoteRowProps): ReactNode {
   const strings = useStrings();
   const swipe = useSwipe({
@@ -97,6 +112,14 @@ export function NoteRow({
         }}
         onPointerLeave={longPress.onPointerLeave}
         onContextMenu={longPress.onContextMenu}
+        draggable={draggable || undefined}
+        onDragStart={(event) => {
+          /* Путь заметки — то, что понимает получатель. Тип свой: чужие
+             обработчики (например, вставка файла в редактор) не должны
+             принимать нашу строку за файл. */
+          event.dataTransfer.setData('application/x-zapiski-note', note.path);
+          event.dataTransfer.effectAllowed = 'move';
+        }}
       >
         <span className="za-row__body">
           <span className="za-row__head">

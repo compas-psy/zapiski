@@ -9,11 +9,12 @@ import {
   useMemo,
   useRef,
   useState,
+  type DragEvent as ReactDragEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import type { FolderNode } from '@zapiski/core';
+import type { FolderNode, VaultPath } from '@zapiski/core';
 import {
   Button,
   IconFolder,
@@ -36,6 +37,14 @@ import {
   FolderPickerDialog,
 } from '../components/FolderDialogs.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
+
+/**
+ * Чем помечена заметка, которую тащат.
+ *
+ * Свой тип, а не `text/plain`: чужие обработчики — вставка файла в редактор,
+ * поле ввода — не должны принимать нашу строку за текст или файл.
+ */
+export const NOTE_DRAG_TYPE = 'application/x-zapiski-note';
 
 export function LibraryPanel(): ReactNode {
   const app = useApp();
@@ -71,6 +80,8 @@ export function LibraryPanel(): ReactNode {
   const haptic = app.host.platform.haptics
     ? app.host.platform.haptics.impact.bind(app.host.platform.haptics)
     : undefined;
+  /** Папка под указателем при переносе — она подсвечивается. */
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const pressedFolder = useRef<string | null>(null);
   const pressedTag = useRef<string | null>(null);
   const openFolderMenu = useCallback(() => setFolderMenu(pressedFolder.current), []);
@@ -92,6 +103,35 @@ export function LibraryPanel(): ReactNode {
       remember.current = id;
       press.onContextMenu(event);
     },
+  });
+
+  /**
+   * Папка принимает заметку, которую на неё тащат.
+   *
+   * Заказчик: «я не могу перетягивать записки в папки». Строка списка теперь
+   * тащится (см. `NoteRow`), а принимает её эта пара обработчиков.
+   *
+   * `preventDefault` в `dragover` — не формальность: без него браузер считает,
+   * что бросать сюда нельзя, и `drop` не приходит вовсе. Подсветка цели
+   * держится в состоянии, а не классом на событии: иначе она остаётся гореть
+   * на папке, из которой указатель ушёл боком.
+   */
+  const dropPropsFor = (folder: string): Record<string, unknown> => ({
+    onDragOver: (event: ReactDragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes(NOTE_DRAG_TYPE)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      if (dropTarget !== folder) setDropTarget(folder);
+    },
+    onDragLeave: () => setDropTarget((current) => (current === folder ? null : current)),
+    onDrop: (event: ReactDragEvent<HTMLElement>) => {
+      const path = event.dataTransfer.getData(NOTE_DRAG_TYPE);
+      setDropTarget(null);
+      if (!path) return;
+      event.preventDefault();
+      void app.move(path as VaultPath, folder);
+    },
+    'data-drop-target': dropTarget === folder ? 'true' : undefined,
   });
 
   const screenState = app.screenState('library', state.folders.length === 0);
@@ -123,6 +163,10 @@ export function LibraryPanel(): ReactNode {
             app.setScope('all');
             app.navigate({ name: 'list' });
           }}
+          /* «Все заметки» — это корень хранилища, и он тоже принимает
+             перенос: иначе заметку, положенную в папку, нельзя вернуть
+             обратно перетаскиванием. */
+          {...dropPropsFor('')}
         >
           {strings.library.all}
           {/* REBUILD §1.12: ноль не отображается вовсе — ни в навигации, ни в
@@ -181,7 +225,10 @@ export function LibraryPanel(): ReactNode {
                 label={strings.library.folders}
                 selectedId={state.folder ?? undefined}
                 onSelect={(id) => app.openFolder(id)}
-                nodeProps={nodePropsFor(pressedFolder, folderPress)}
+                nodeProps={(id) => ({
+                  ...nodePropsFor(pressedFolder, folderPress)(id),
+                  ...dropPropsFor(id),
+                })}
               />
               {/*
                 «Новая папка» — обычный пункт списка с «+», в общем ритме
