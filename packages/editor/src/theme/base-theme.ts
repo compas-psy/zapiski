@@ -227,6 +227,9 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     paddingInline: '10px',
     borderRight: '1px solid var(--line)',
   },
+  /* Та же ячейка, когда таблица правится: палки на экране, и вторая линия
+     рядом с ними — это тот самый двойной разделитель `| |`. */
+  '.cm-z-table-cell-raw': { paddingInline: '4px' },
   /* Служебная строка `| --- | --- |` нужна разбору, а не читателю. */
   '.cm-z-table-rule': { display: 'none' },
 

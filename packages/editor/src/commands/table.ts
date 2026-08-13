@@ -40,10 +40,34 @@ const ROW = /^\s*\|.*\|\s*$/;
 /** Разделитель шапки: `| --- | :-: |`. */
 const DIVIDER = /^\s*\|(?:\s*:?-{1,}:?\s*\|)+\s*$/;
 
-/** Разбирает строку в ячейки, снимая крайние палки. */
+/**
+ * Разбирает строку в ячейки, снимая крайние палки.
+ *
+ * Экранированная палка `\|` — часть текста, а не граница ячейки: так её
+ * понимает GFM, и так её пишет редактор таблицы, когда палку набирают внутри
+ * ячейки. Обычный `split('|')` разорвал бы такую ячейку надвое, и таблица
+ * молча получала бы лишний столбец.
+ */
 function cells(line: string): string[] {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  return trimmed.split('|').map((cell) => cell.trim());
+  const out: string[] = [];
+  let current = '';
+  for (let index = 0; index < trimmed.length; index += 1) {
+    const char = trimmed[index] as string;
+    if (char === '\\' && trimmed[index + 1] === '|') {
+      current += '\\|';
+      index += 1;
+      continue;
+    }
+    if (char === '|') {
+      out.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += char;
+  }
+  out.push(current.trim());
+  return out;
 }
 
 function alignOf(spec: string): ColumnAlign {
@@ -197,6 +221,66 @@ export function removeColumn(model: TableModel): TableModel | null {
   const rows = model.rows.map((row) => row.filter((_cell, index) => index !== model.column));
   const aligns = model.aligns.filter((_align, index) => index !== model.column);
   return { ...model, rows, aligns };
+}
+
+// ── Перестановка перетаскиванием ────────────────────────────────────────────
+
+/**
+ * Переставить строку. `to` — место В ИСХОДНОЙ нумерации, куда её кладут.
+ *
+ * Шапка остаётся шапкой: её не уносят и на её место не кладут. Это не
+ * придирка к порядку, а разметка — первая строка таблицы и есть заголовок,
+ * и перестановка сделала бы заголовком чужие данные.
+ */
+export function moveRow(model: TableModel, from: number, to: number): TableModel | null {
+  const first = model.header ? 1 : 0;
+  if (from < first || to < first) return null;
+  if (from >= model.rows.length || to >= model.rows.length || from === to) return null;
+  const rows = [...model.rows];
+  const [moved] = rows.splice(from, 1);
+  rows.splice(to, 0, moved as string[]);
+  return { ...model, rows, row: to };
+}
+
+/** Переставить столбец вместе с его выравниванием. */
+export function moveColumn(model: TableModel, from: number, to: number): TableModel | null {
+  const width = model.rows[0]?.length ?? 0;
+  if (from < 0 || to < 0 || from >= width || to >= width || from === to) return null;
+  const rows = model.rows.map((row) => {
+    const next = [...row];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved ?? '');
+    return next;
+  });
+  const aligns = [...model.aligns];
+  const [movedAlign] = aligns.splice(from, 1);
+  aligns.splice(to, 0, movedAlign ?? 'none');
+  return { ...model, rows, aligns, column: to };
+}
+
+/** Правка одной ячейки: редактор таблицы правит содержимое, а не только каркас. */
+export function setCell(model: TableModel, row: number, column: number, text: string): TableModel {
+  const rows = model.rows.map((cells, index) =>
+    index === row ? cells.map((cell, at) => (at === column ? sanitizeCell(text) : cell)) : cells,
+  );
+  return { ...model, rows };
+}
+
+/**
+ * Что нельзя пускать в ячейку.
+ *
+ * Палка разорвала бы строку на две ячейки, перевод строки — на две строки:
+ * человек напечатал бы обычный текст, а таблица развалилась бы молча. Палка
+ * экранируется (так её понимает GFM), перевод строки становится пробелом.
+ *
+ * Края НЕ обрезаются, и это принципиально. Обрезка тут значила бы, что
+ * пробел, набранный между двумя словами последним, исчезает ровно в момент
+ * набора, — и «Бумага А4» напечатать было бы нельзя. В файл ячейка всё равно
+ * ляжет ровной: ширину добивает `renderTable`, а при следующем разборе края
+ * снимет `cells`.
+ */
+function sanitizeCell(text: string): string {
+  return text.replace(/\r?\n/g, ' ').replace(/(?<!\\)\|/g, '\\|');
 }
 
 /** Выравнивание текущего столбца. Требует строки заголовка: она его и кодирует. */

@@ -566,7 +566,15 @@ class LivePreviewBuilder {
     }
 
     if (name === 'TableCell') {
-      this.mark(from, to, 'cm-z-table-cell');
+      /*
+       * Когда таблица под курсором, палки видны — и рисовать рядом с ними ещё
+       * и рамку ячейки значит показывать разделитель дважды: `| |`. Заказчик
+       * увидел ровно это и назвал «капут при вводе». Правится один раз, здесь:
+       * либо палка, либо линия.
+       */
+      const table = this.stack.find((frame) => frame.name === 'Table');
+      const active = table ? this.isActive(table.from, table.to) : false;
+      this.mark(from, to, active ? 'cm-z-table-cell-raw' : 'cm-z-table-cell');
       return;
     }
 

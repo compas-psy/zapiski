@@ -102,6 +102,22 @@ export interface EditorStrings {
       rowRemoved: string;
       columnRemoved: string;
       headerRow: string;
+      /** Заголовок редактора таблицы. */
+      title: string;
+      /** Подписи ручек перетаскивания — их читает диктор, глазами видны точки. */
+      dragRow: string;
+      dragColumn: string;
+      addRow: string;
+      addColumn: string;
+      /** «Столбец 2» — к какому столбцу относятся выравнивание и кнопки. */
+      columnNumber(index: number): string;
+      /**
+       * Про вертикальное выравнивание. Заказчик просил его наравне с
+       * горизонтальным, но в markdown его нет вовсе: строка-разделитель
+       * кодирует только левое, правое и центр. Мёртвых кнопок не рисуем —
+       * пишем прямо, почему их нет.
+       */
+      noVertical: string;
     };
   };
 }
@@ -211,6 +227,13 @@ export const ru: EditorStrings = {
       rowRemoved: 'Строка удалена',
       columnRemoved: 'Столбец удалён',
       headerRow: 'Строка заголовка',
+      title: 'Таблица',
+      dragRow: 'Перетащить строку',
+      dragColumn: 'Перетащить столбец',
+      addRow: 'Строка',
+      addColumn: 'Столбец',
+      columnNumber: (index) => `Столбец ${index}`,
+      noVertical: 'По вертикали markdown не выравнивает',
     },
   },
 };
@@ -319,6 +342,13 @@ export const en: EditorStrings = {
       rowRemoved: 'Row deleted',
       columnRemoved: 'Column deleted',
       headerRow: 'Header row',
+      title: 'Table',
+      dragRow: 'Drag the row',
+      dragColumn: 'Drag the column',
+      addRow: 'Row',
+      addColumn: 'Column',
+      columnNumber: (index: number): string => `Column ${index}`,
+      noVertical: 'Markdown has no vertical alignment',
     },
   },
 };

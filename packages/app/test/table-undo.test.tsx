@@ -81,26 +81,37 @@ async function undoInToast(): Promise<HTMLElement> {
   return within(toast).getByRole('button', { name: ru.actions.undo });
 }
 
-/** Пункт меню панели по подписи. */
-function menuItem(text: string): HTMLElement {
-  const found = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-    (item) => item.textContent?.includes(text),
-  );
-  expect(found, `пункта «${text}» нет в меню`).toBeTruthy();
+/**
+ * Крестик удаления строки в редакторе таблицы.
+ *
+ * Раньше здесь искался пункт меню: правка таблицы жила выпадающим списком.
+ * Теперь это виджет — вся таблица целиком, у каждой строки своя ручка и свой
+ * крестик, — и удаление нажимается там же, где видно, какую строку удаляют.
+ */
+function rowDrop(index: number): HTMLElement {
+  const found = Array.from(document.querySelectorAll<HTMLElement>('.zp-table__drop'))[index];
+  expect(found, `удаления строки ${index} нет`).toBeTruthy();
   return found as HTMLElement;
 }
 
+/** Нажатие на обычную кнопку диалога: браузер шлёт ей и `click`. */
+function tap(element: Element): void {
+  fireEvent.pointerDown(element);
+  fireEvent.pointerUp(element);
+  fireEvent.click(element);
+}
+
 describe('панель видит живой редактор', () => {
-  it('меню правки таблицы открывается сразу, без единого нажатия клавиши', async () => {
+  it('редактор таблицы открывается сразу, без единого нажатия клавиши', async () => {
     /* Представление CodeMirror живёт не весь срок экрана: перезаход в
        хранилище поднимает флаг «загружаюсь», экран уходит в скелетон, и
        редактор пересоздаётся. Ссылка в ref об этом никому не сообщала —
-       панель держала представление, которого уже нет, и меню правки таблицы
-       не открывалось вовсе. Первое же нажатие клавиши всё чинило, поэтому
+       панель держала представление, которого уже нет, и редактор таблицы
+       не открывался вовсе. Первое же нажатие клавиши всё чинило, поэтому
        дефект и выглядел мистикой. */
     await mountTable();
     press(screen.getByRole('button', { name: copy.table }));
-    expect(menuItem(copy.tableMenu.removeRow)).toBeTruthy();
+    expect(rowDrop(1)).toBeTruthy();
   });
 
   it('палитра команд получает тот же живой редактор', async () => {
@@ -115,7 +126,7 @@ describe('удаление строки таблицы отменяется', ()
   it('тост появляется и говорит, что именно удалено', async () => {
     await mountTable();
     press(screen.getByRole('button', { name: copy.table }));
-    press(menuItem(copy.tableMenu.removeRow));
+    tap(rowDrop(1));
 
     expect(await screen.findByText(copy.tableMenu.rowRemoved)).toBeTruthy();
     expect(await undoInToast()).toBeTruthy();
@@ -124,7 +135,7 @@ describe('удаление строки таблицы отменяется', ()
   it('«Отменить» возвращает строку в текст', async () => {
     await mountTable();
     press(screen.getByRole('button', { name: copy.table }));
-    press(menuItem(copy.tableMenu.removeRow));
+    tap(rowDrop(1));
 
     const text = (): string => activeEditor()?.view?.state.doc.toString() ?? '';
     expect(text()).not.toContain('созвон');

@@ -71,16 +71,8 @@ import {
   insertSmall,
 } from '../commands/blocks.js';
 import { applyLink, linkDraft } from '../commands/link.js';
-import {
-  alignColumn,
-  insertColumn,
-  insertRow,
-  removeColumn,
-  removeRow,
-  tableAt,
-  tableChange,
-  toggleHeader,
-} from '../commands/table.js';
+import { tableAt } from '../commands/table.js';
+import { TableDialog, tableDialogStyles } from './TableDialog.js';
 
 
 /* ── Стили ────────────────────────────────────────────────────────────────
@@ -385,6 +377,10 @@ const styles = new StyleModule({
      свои значения, причём три из шести ссылались на несуществующие токены
      `--fs-h3`/`--fw-h3` и молча набирались как попало. */
   ...headingSamples(),
+
+  /* Редактор таблицы: живёт в этом же модуле, чтобы тень, радиусы и токены
+     у него были те же, что у меню и диалога ссылки. */
+  ...tableDialogStyles,
 });
 
 let mounted = false;
@@ -501,38 +497,10 @@ export function FormatPanel({
     return () => document.removeEventListener('pointerdown', onDown);
   }, [open]);
 
-  /* Таблица под курсором: от неё зависит и поведение кнопки, и состав меню. */
+  /* Таблица под курсором: от неё зависит поведение кнопки — вставить новую
+     или открыть редактор той, что уже есть. Сама правка живёт в
+     `TableDialog`, вместе с тостом «Отменить» на удаление. */
   const table = view ? tableAt(view.state) : null;
-
-  /**
-   * Применить действие над таблицей. `null` — действие запрещено (последний
-   * столбец, шапка), и тогда не делается ничего: пункт меню и так виден, а
-   * тост на каждое «нельзя» — шум.
-   */
-  const applyTable = (next: ReturnType<typeof tableAt>): void => {
-    if (!view || !table || !next) return;
-    view.dispatch({ changes: tableChange(view.state, table, next), userEvent: 'input.format' });
-    setOpen(null);
-    view.focus();
-  };
-
-  /**
-   * Удаление строки или столбца с тостом «Отменить» (§4).
-   *
-   * Отменяет обычная отмена редактора: удаление — одна транзакция, и
-   * `undo` возвращает таблицу как была вместе с позицией курсора. Тост
-   * поэтому не хранит никакого снимка — хранить его значило бы завести
-   * второй механизм отмены рядом с настоящим.
-   */
-  const removeWithUndo = (next: ReturnType<typeof tableAt>, message: string): void => {
-    if (!view || !table || !next) return;
-    applyTable(next);
-    const target = view;
-    onUndoable?.(message, () => {
-      undo(target);
-      target.focus();
-    });
-  };
 
   const style: BlockStyle = view ? blockStyleAt(view.state) : 'text';
   const list: ListStyle = view ? listStyleAt(view.state) : 'none';
@@ -768,88 +736,29 @@ export function FormatPanel({
         <Divider />
 
         {/*
-          Таблица. Вне таблицы кнопка вставляет 3×3, внутри — открывает меню
-          правки: ручки строк и столбцов (ITERATION-1 §4).
+          Таблица. Вне таблицы кнопка вставляет 3×3, внутри — открывает
+          редактор: вся таблица целиком, с ручками строк и столбцов
+          (ITERATION-1 §4).
 
-          §4 рисует ручки прямо у краёв таблицы, плашками с тремя точками.
-          Здесь они собраны в меню одной кнопки: плашка поверх текста требует
-          знать координаты ячеек в пикселях, а те меняются от каждого
-          набранного символа — на телефоне такая ручка неизбежно оказывается
-          не под тем пальцем. Действия те же и в том же порядке, форма проще
-          и надёжнее.
+          Раньше здесь было меню, и правило в нём было одно: «сделать что-то
+          с той ячейкой, где стоит курсор». Заказчик попросил виджет по
+          образцу диалога ссылки — и он прав: переставить строку, не видя
+          таблицы и не помня, где каретка, нельзя. Диалог встаёт у каретки,
+          а не у кнопки: панель может быть далеко внизу у клавиатуры.
         */}
         <MenuButton
           label={copy.table}
           expanded={open === 'table'}
+          anchorToCaret={() => caretRect(view)}
           onPress={table ? menuFor('table') : run(insertTable)}
           menu={
-            open === 'table' && table ? (
-              <Menu>
-                <MenuLabel>{copy.tableMenu.align}</MenuLabel>
-                <div className="zp-panel__aligns">
-                  {(['left', 'center', 'right'] as const).map((align) => (
-                    <button
-                      key={align}
-                      type="button"
-                      role="menuitem"
-                      aria-label={copy.tableMenu.aligns[align]}
-                      title={copy.tableMenu.aligns[align]}
-                      aria-checked={table.aligns[table.column] === align}
-                      className={`zp-panel__align${
-                        table.aligns[table.column] === align ? ' zp-panel__align--on' : ''
-                      }`}
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        applyTable(alignColumn(table, align));
-                      }}
-                    >
-                      <AlignGlyph side={align} />
-                    </button>
-                  ))}
-                </div>
-
-                <MenuLabel separated>{copy.tableMenu.row}</MenuLabel>
-                <MenuItem
-                  label={copy.tableMenu.insertAbove}
-                  glyph="rowAbove"
-                  onPress={() => applyTable(insertRow(table, 'above'))}
-                />
-                <MenuItem
-                  label={copy.tableMenu.insertBelow}
-                  glyph="rowBelow"
-                  onPress={() => applyTable(insertRow(table, 'below'))}
-                />
-                <MenuItem
-                  label={copy.tableMenu.removeRow}
-                  glyph="remove"
-                  danger
-                  onPress={() => removeWithUndo(removeRow(table), copy.tableMenu.rowRemoved)}
-                />
-
-                <MenuLabel separated>{copy.tableMenu.column}</MenuLabel>
-                <MenuItem
-                  label={copy.tableMenu.insertLeft}
-                  glyph="colLeft"
-                  onPress={() => applyTable(insertColumn(table, 'left'))}
-                />
-                <MenuItem
-                  label={copy.tableMenu.insertRight}
-                  glyph="colRight"
-                  onPress={() => applyTable(insertColumn(table, 'right'))}
-                />
-                <MenuItem
-                  label={copy.tableMenu.headerRow}
-                  glyph="header"
-                  checked={table.header}
-                  onPress={() => applyTable(toggleHeader(table))}
-                />
-                <MenuItem
-                  label={copy.tableMenu.removeColumn}
-                  glyph="remove"
-                  danger
-                  onPress={() => removeWithUndo(removeColumn(table), copy.tableMenu.columnRemoved)}
-                />
-              </Menu>
+            open === 'table' && table && view ? (
+              <TableDialog
+                copy={copy}
+                view={view}
+                {...(onUndoable ? { onUndoable } : {})}
+                onClose={() => setOpen(null)}
+              />
             ) : null
           }
         >
@@ -1312,35 +1221,9 @@ function MenuButton({
 }
 
 /** Подпись раздела внутри меню: 11 caps, третичным (§4). */
-function MenuLabel({
-  children,
-  separated,
-}: {
-  children: ReactNode;
-  separated?: boolean;
-}): ReactElement {
-  return (
-    <div className={`zp-panel__group${separated ? ' zp-panel__group--separated' : ''}`}>
-      {children}
-    </div>
-  );
-}
 
 /** Ряд выравнивания — шесть кнопок §4 свёрнуты до трёх: вертикального
     выравнивания у markdown-таблицы нет, и обещать его нельзя. */
-function AlignGlyph({ side }: { side: 'left' | 'center' | 'right' }): ReactElement {
-  const lines: Record<typeof side, string> = {
-    left: 'M4 7h16M4 12h10M4 17h13',
-    center: 'M4 7h16M7 12h10M6 17h12',
-    right: 'M4 7h16M10 12h10M7 17h13',
-  };
-  return (
-    <svg {...ICON} width={17} height={17}>
-      <path d={lines[side]} />
-    </svg>
-  );
-}
-
 function Menu({ children }: { children: ReactNode }): ReactElement {
   return (
     <div className="zp-panel__menu" role="menu">

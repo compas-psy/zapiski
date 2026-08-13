@@ -140,6 +140,56 @@ function itemByLabel(_container: HTMLElement, text: string): HTMLElement {
   return found as HTMLElement;
 }
 
+/**
+ * Нажатие на обычную кнопку диалога.
+ *
+ * Отдельно от `press` нарочно. `press` — про кнопки панели: они слушают
+ * `pointerdown`/`pointerup`, потому что не должны уводить фокус из текста и
+ * потому что пара `mouse*` + `touch*` давала на касании два срабатывания.
+ * Кнопки внутри диалога — обычные: браузер шлёт им и `click`, и слушают они
+ * его. Гнать их через `press` значило бы проверять не тот путь, каким по ним
+ * попадает человек.
+ */
+function tap(element: Element): void {
+  act(() => {
+    element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+    element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+  });
+}
+
+/** Кнопка по подписи для диктора — ими помечены глифы без текста. */
+function byLabel(label: string): HTMLElement {
+  const found = document.querySelector<HTMLElement>(`button[aria-label="${label}"]`);
+  expect(found, `кнопки «${label}» нет`).not.toBeNull();
+  return found as HTMLElement;
+}
+
+/** Ручка строки редактора таблицы (первая колонка сетки). */
+function rowHandle(index: number): HTMLElement {
+  const found = Array.from(
+    document.querySelectorAll<HTMLElement>('.zp-table__handle:not(.zp-table__handle--col)'),
+  )[index];
+  expect(found, `ручки строки ${index} нет`).toBeTruthy();
+  return found as HTMLElement;
+}
+
+/** Кнопка «＋ Строка» / «＋ Столбец»: глиф плюса плюс подпись. */
+function addButton(text: string): HTMLElement {
+  const found = Array.from(document.querySelectorAll<HTMLElement>('.zp-table__add')).find((node) =>
+    node.textContent?.includes(text),
+  );
+  expect(found, `кнопки «${text}» нет`).toBeTruthy();
+  return found as HTMLElement;
+}
+
+/** Крестик удаления строки. */
+function rowDrop(index: number): HTMLElement {
+  const found = Array.from(document.querySelectorAll<HTMLElement>('.zp-table__drop'))[index];
+  expect(found, `удаления строки ${index} нет`).toBeTruthy();
+  return found as HTMLElement;
+}
+
 const copy = ru.panel;
 
 describe('состав панели', () => {
@@ -435,43 +485,92 @@ describe('команды действительно меняют текст', ()
 });
 
 /**
- * Ручки строк и столбцов таблицы (ITERATION-1 §4).
+ * Редактор таблицы (ITERATION-1 §4).
  *
- * §4 называет это «самой недооценённой частью, без которой таблица
- * нередактируема на телефоне». Модель проверена отдельно (`table.test.ts`);
- * здесь — что до неё можно дотянуться пальцем и что кнопка меняет поведение в
- * зависимости от того, где стоит курсор.
+ * §4 называет ручки строк и столбцов «самой недооценённой частью, без которой
+ * таблица нередактируема на телефоне». Заказчик попросил довести их до
+ * виджета — по образцу диалога ссылки: вся таблица целиком, ячейки полями,
+ * строки и столбцы ручками.
+ *
+ * Модель проверена отдельно (`table.test.ts`); здесь — что до неё можно
+ * дотянуться пальцем и что кнопка меняет поведение в зависимости от того, где
+ * стоит курсор.
  */
-describe('таблица правится из панели', () => {
+describe('таблица правится редактором', () => {
   const TABLE = '| Дело   | Срок |\n| ------ | ---- |\n| созвон | пн   |';
   /* Курсор в таблице помечается `¦`: палка занята разметкой. */
+
+  /** Поля ячеек в порядке обхода. */
+  function cells(): HTMLInputElement[] {
+    return Array.from(document.querySelectorAll<HTMLInputElement>('.zp-table__cell'));
+  }
+
+  /** Ввод в поле ячейки — как его делает человек. */
+  function type(cell: HTMLInputElement, text: string): void {
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      setter?.call(cell, text);
+      cell.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
 
   it('вне таблицы кнопка вставляет новую', () => {
     const container = mount('текст|');
     press(button(container, copy.table));
     expect(view?.state.doc.toString()).toContain('|');
-    /* Меню при этом не открылось: вставлять нечего было. */
-    expect(container.querySelector('.zp-panel__menu')).toBeNull();
+    /* Редактор при этом не открылся: править было нечего. */
+    expect(document.querySelector('.zp-table')).toBeNull();
   });
 
-  it('внутри таблицы та же кнопка открывает меню правки', () => {
+  it('внутри таблицы та же кнопка открывает редактор', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
     press(button(container, copy.table));
-    expect(itemByText(container, copy.tableMenu.insertBelow)).toBeTruthy();
-    expect(itemByText(container, copy.tableMenu.removeRow)).toBeTruthy();
+    /* Вся таблица видна целиком: четыре ячейки — по одной на каждую. */
+    expect(cells().map((cell) => cell.value)).toEqual(['Дело', 'Срок', 'созвон', 'пн']);
   });
 
-  it('вставка строки снизу', () => {
+  it('ячейка правится прямо в редакторе', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
     press(button(container, copy.table));
-    press(itemByText(container, copy.tableMenu.insertBelow));
+    type(cells()[2] as HTMLInputElement, 'встреча');
+    expect(view?.state.doc.toString()).toContain('встреча');
+    expect(view?.state.doc.toString()).not.toContain('созвон');
+  });
+
+  it('пробел в конце ячейки не съедается', () => {
+    /* Иначе «Бумага А4» не набрать: в файле ячейка хранится обрезанной, и
+       возвращённое из документа значение стирало бы каждый последний пробел
+       ровно в тот момент, когда его набрали. */
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    type(cells()[2] as HTMLInputElement, 'Бумага ');
+    expect((cells()[2] as HTMLInputElement).value).toBe('Бумага ');
+  });
+
+  it('палка внутри ячейки не рвёт таблицу на лишний столбец', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    type(cells()[2] as HTMLInputElement, 'до | после');
+    expect(view?.state.doc.toString()).toContain('\\|');
+    expect(cells()).toHaveLength(4);
+  });
+
+  it('добавление строки и столбца', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    tap(addButton(copy.tableMenu.addRow));
     expect(view?.state.doc.toString().split('\n')).toHaveLength(4);
+    tap(addButton(copy.tableMenu.addColumn));
+    expect(cells()).toHaveLength(9);
   });
 
   it('удаление столбца', () => {
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
     press(button(container, copy.table));
-    press(itemByText(container, copy.tableMenu.removeColumn));
+    tap(byLabel(copy.tableMenu.removeColumn));
     expect(view?.state.doc.toString()).not.toContain('Срок');
     expect(view?.state.doc.toString()).toContain('созвон');
   });
@@ -492,7 +591,7 @@ describe('таблица правится из панели', () => {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      press(itemByText(container, copy.tableMenu.removeRow));
+      tap(rowDrop(1));
 
       expect(box.calls.map(([message]) => message)).toEqual([copy.tableMenu.rowRemoved]);
     });
@@ -503,11 +602,13 @@ describe('таблица правится из панели', () => {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      press(itemByText(container, copy.tableMenu.removeRow));
+      tap(rowDrop(1));
       expect(view?.state.doc.toString()).not.toContain('созвон');
 
       act(() => box.calls[0]?.[1]());
       expect(view?.state.doc.toString()).toContain('созвон');
+      /* И редактор показывает вернувшуюся строку, а не свой прежний вид. */
+      expect(cells().map((cell) => cell.value)).toContain('созвон');
     });
 
     it('у столбца своё сообщение — иначе оно врёт про удалённое', () => {
@@ -516,7 +617,7 @@ describe('таблица правится из панели', () => {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      press(itemByText(container, copy.tableMenu.removeColumn));
+      tap(byLabel(copy.tableMenu.removeColumn));
       expect(box.calls[0]?.[0]).toBe(copy.tableMenu.columnRemoved);
     });
 
@@ -529,19 +630,19 @@ describe('таблица правится из панели', () => {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      press(itemByText(container, copy.tableMenu.removeRow));
+      tap(rowDrop(0));
       expect(box.calls).toEqual([]);
       expect(view?.state.doc.toString()).toContain('Дело');
     });
 
-    it('вставка строки тоста не поднимает', () => {
+    it('добавление строки тоста не поднимает', () => {
       /* ОО — про деструктив. Тост на каждое действие панели был бы шумом. */
       const box = undoable();
       const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      press(itemByText(container, copy.tableMenu.insertBelow));
+      tap(addButton(copy.tableMenu.addRow));
       expect(box.calls).toEqual([]);
     });
   });
@@ -549,30 +650,68 @@ describe('таблица правится из панели', () => {
   it('выравнивание помечено и применяется', () => {
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
     press(button(container, copy.table));
-    const centre = document.querySelector<HTMLElement>(
-      `[aria-label="${copy.tableMenu.aligns.center}"]`,
-    );
-    expect(centre, 'кнопки выравнивания нет').not.toBeNull();
-    press(centre as HTMLElement);
+    tap(byLabel(copy.tableMenu.aligns.center));
     expect(view?.state.doc.toString().split('\n')[1]).toMatch(/:-+:/);
+    expect(byLabel(copy.tableMenu.aligns.center).getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('строка заголовка помечена галочкой', () => {
+  it('вертикального выравнивания нет — и об этом сказано вслух', () => {
+    /* Заказчик просил его наравне с горизонтальным, но markdown кодирует
+       только левое, правое и центр. Мёртвых кнопок не рисуем. */
+    const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
+    press(button(container, copy.table));
+    expect(document.querySelector('.zp-table__note')?.textContent).toBe(
+      copy.tableMenu.noVertical,
+    );
+  });
+
+  it('строка заголовка отмечена галочкой', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
     press(button(container, copy.table));
-    expect(itemByText(container, copy.tableMenu.headerRow).getAttribute('aria-checked')).toBe(
-      'true',
-    );
+    const check = document.querySelector<HTMLInputElement>('.zp-table__check input');
+    expect(check?.checked).toBe(true);
   });
 
-  it('удаление шапки не рушит таблицу молча', () => {
-    /* Действие запрещено моделью: текст остаётся прежним, а не превращается
-       в набор строк с палками. */
-    const container = mount(TABLE.replace('Дело', 'Де¦ло'));
-    const before = view?.state.doc.toString();
+  it('шапку не тащат: её ручка выключена', () => {
+    /* Перестановка сделала бы заголовком чужие данные. */
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
     press(button(container, copy.table));
-    press(itemByText(container, copy.tableMenu.removeRow));
-    expect(view?.state.doc.toString()).toBe(before);
+    expect(rowHandle(0).hasAttribute('disabled')).toBe(true);
+    expect(rowHandle(1).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('строка переносится перетаскиванием', () => {
+    const container = mount(
+      '| Дело   | Срок |\n| ------ | ---- |\n| созвон | пн   |\n| отчёт¦ | ср   |',
+    );
+    press(button(container, copy.table));
+    /* Прямоугольники в happy-dom нулевые, поэтому строкам раздаются
+       настоящие: перетаскивание считает попадание именно по ним. */
+    [0, 1, 2].forEach((index) => {
+      const node = rowHandle(index);
+      node.getBoundingClientRect = () =>
+        ({ top: index * 30, bottom: index * 30 + 30, left: 0, right: 24 }) as DOMRect;
+    });
+    const handle = rowHandle(2);
+    /* Каждое событие — своим `act`: React объединяет обновления внутри одного,
+       и `pointermove` увидел бы состояние ДО нажатия, то есть «никто ничего не
+       тащит». В браузере события приходят разными задачами, и такого нет. */
+    act(() => {
+      handle.dispatchEvent(
+        new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 1 }),
+      );
+    });
+    act(() => {
+      handle.dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientY: 40 }),
+      );
+    });
+    act(() => {
+      handle.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    });
+    const lines = view?.state.doc.toString().split('\n') ?? [];
+    expect(lines[2]).toContain('отчёт');
+    expect(lines[3]).toContain('созвон');
   });
 });
 

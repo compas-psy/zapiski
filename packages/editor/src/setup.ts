@@ -28,6 +28,7 @@ import { zapiskiBaseTheme } from './theme/base-theme.js';
 import { zapiskiCodeHighlight } from './theme/highlight.js';
 import { zapiskiMarkdown } from './syntax/language.js';
 import { livePreview } from './live-preview/plugin.js';
+import { tableAutoFormat } from './live-preview/table-format.js';
 import { markupInteractions } from './live-preview/interactions.js';
 import { autoformat } from './input/autoformat.js';
 import { smartPaste } from './paste/smart-paste.js';
@@ -81,6 +82,9 @@ export function zapiskiEditor(options: ZapiskiEditorOptions = {}): Extension[] {
     /* Какие сворачиваемые блоки свёрнуты. Поле, а не правка текста:
        в файле `<details>` всегда записан целиком (замечание 12). */
     collapsible,
+    /* Таблица встаёт ровно, когда курсор из неё уходит: markdown держит
+       колонки пробелами, и от одного дописанного слова они разъезжаются. */
+    tableAutoFormat,
     markupInteractions,
     autoformat,
     smartPaste,

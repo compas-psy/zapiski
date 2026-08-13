@@ -17,9 +17,12 @@ import {
   alignColumn,
   insertColumn,
   insertRow,
+  moveColumn,
+  moveRow,
   removeColumn,
   removeRow,
   renderTable,
+  setCell,
   tableAt,
   toggleHeader,
 } from '../src/commands/table.js';
@@ -207,5 +210,78 @@ describe('таблица остаётся ровной', () => {
   it('разбор и сборка не меняют таблицу, которая уже ровная', () => {
     const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон')));
     expect(renderTable(model as NonNullable<typeof model>)).toBe(TABLE);
+  });
+});
+
+/**
+ * Перестановка перетаскиванием и правка ячейки — то, ради чего заказчик
+ * попросил виджет вместо меню. Само перетаскивание живёт в React-компоненте,
+ * здесь — арифметика, которую он зовёт.
+ */
+describe('перестановка строк и столбцов', () => {
+  it('строка встаёт на новое место', () => {
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон')));
+    const next = moveRow(model as NonNullable<typeof model>, 2, 1);
+    expect(next?.rows.map((row) => row[0])).toEqual(['Дело', 'отчёт', 'созвон']);
+  });
+
+  it('шапку не уносят и на её место не кладут', () => {
+    /* Иначе заголовком стали бы чужие данные: первая строка таблицы и есть
+       заголовок, это разметка, а не порядок. */
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    expect(moveRow(model, 0, 2)).toBeNull();
+    expect(moveRow(model, 2, 0)).toBeNull();
+  });
+
+  it('столбец переезжает вместе со своим выравниванием', () => {
+    const model = tableAt(at('| a¦ | b |\n| :-- | --: |\n| 1 | 2 |')) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    const next = moveColumn(model, 0, 1);
+    expect(next?.rows[0]).toEqual(['b', 'a']);
+    expect(next?.aligns).toEqual(['right', 'left']);
+  });
+
+  it('перестановка в то же место ничего не делает', () => {
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    expect(moveRow(model, 1, 1)).toBeNull();
+    expect(moveColumn(model, 1, 1)).toBeNull();
+  });
+});
+
+describe('правка ячейки', () => {
+  it('текст ложится в свою ячейку и таблица остаётся ровной', () => {
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    const out = renderTable(setCell(model, 1, 0, 'встреча у нотариуса'));
+    expect(out).toContain('встреча у нотариуса');
+    const widths = out.split('\n').map((line) => line.length);
+    expect(new Set(widths).size, `строки разной длины: ${widths.join(', ')}`).toBe(1);
+  });
+
+  it('палка в тексте экранируется, а не рвёт строку на лишний столбец', () => {
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    const out = renderTable(setCell(model, 1, 0, 'до | после'));
+    const again = tableAt(at(out.replace('Дело', 'Де¦ло'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    expect(again.rows[0]).toHaveLength(2);
+    expect(again.rows[1]?.[0]).toBe('до \\| после');
+  });
+
+  it('пробелы по краям остаются в ячейке до записи в файл', () => {
+    /* Обрезать их в модели значило бы съедать пробел ровно в тот момент,
+       когда его набирают между словами. */
+    const model = tableAt(at(TABLE.replace('созвон', 'соз¦вон'))) as NonNullable<
+      ReturnType<typeof tableAt>
+    >;
+    expect(setCell(model, 1, 0, 'Бумага ').rows[1]?.[0]).toBe('Бумага ');
   });
 });
