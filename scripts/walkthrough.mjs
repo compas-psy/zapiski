@@ -353,7 +353,25 @@ if (canCreateFolder) {
        раскладке. Прогон идёт тем же путём, что и человек за большим экраном. */
     await page.getByRole('button', { name: /Назад|Back/ }).first().click().catch(() => undefined);
     await page.waitForTimeout(600);
-    const row = page.locator('.za-row').first();
+
+    /* Ждём ПОЯВЛЕНИЯ нужной строки, а не «столько-то миллисекунд».
+       Прогон падал в CI на медленном раннере: набранное не успевало доехать
+       до списка, заметка оставалась «Без названия», и шифровалась не та
+       строка. Местная машина при этом проходила все прогоны подряд — то есть
+       сторож жаловался на продукт, а виноват был его собственный секундомер. */
+    await page
+      .waitForFunction(
+        () =>
+          [...document.querySelectorAll('.za-row__title')].some((node) =>
+            node.textContent?.includes('Личное'),
+          ),
+        { timeout: 15000 },
+      )
+      .catch(() => undefined);
+
+    /* И берём строку ПО ИМЕНИ, а не первую попавшуюся: список отсортирован по
+       времени правки, и «первая» — это допущение, а не факт. */
+    const row = page.locator('.za-row', { hasText: 'Личное' }).first();
     check((await row.count()) > 0, 'в списке нет строки заметки — шифровать нечего');
     if ((await row.count()) > 0) {
       await row.click({ button: 'right' });
