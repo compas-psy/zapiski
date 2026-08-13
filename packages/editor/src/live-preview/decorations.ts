@@ -474,9 +474,39 @@ class LivePreviewBuilder {
       return;
     }
 
-    // ── Разделители таблицы: структурные, тоже не фейдятся ──────────────────
+    /*
+     * Таблица (замечание 13): «просто выдаётся текстовый каркас, с которым в
+     * простом режиме непросто работать».
+     *
+     * В файле остаётся канонический GFM — иначе таблица перестанет быть
+     * таблицей в любом другом редакторе. Прячется служебное:
+     *
+     *   · строка `| --- | --- |` целиком: она нужна разбору, а не читателю;
+     *   · сами палки `|` вне таблицы под курсором — колонки разделяет тонкая
+     *     линия, которую рисует ячейка.
+     *
+     * Когда курсор в таблице, всё возвращается: править её иначе нельзя.
+     */
     if (name === 'TableDelimiter') {
-      this.mark(from, to, 'cm-z-table-delim');
+      const table = this.stack.find((frame) => frame.name === 'Table');
+      const active = table ? this.isActive(table.from, table.to) : this.isActive(from, to);
+      const line = this.state.doc.lineAt(from);
+      const wholeLine = from <= line.from && to >= line.to;
+
+      if (active) {
+        this.mark(from, to, 'cm-z-table-delim');
+        return;
+      }
+      if (wholeLine) {
+        this.lines(from, to, 'cm-z-table-rule');
+        return;
+      }
+      this.fade(from, to, false);
+      return;
+    }
+
+    if (name === 'TableCell') {
+      this.mark(from, to, 'cm-z-table-cell');
       return;
     }
 

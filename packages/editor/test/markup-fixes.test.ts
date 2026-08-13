@@ -256,3 +256,40 @@ describe('замечание 12: сворачиваемый блок работ�
     expect(classes).not.toContain('cm-z-collapsed');
   });
 });
+
+describe('замечание 13: таблица читается колонками, а не каркасом', () => {
+  const DOC = '| Колонка | Колонка |\n| --- | --- |\n| раз | два |\n\nдалее';
+
+  it('служебная строка `| --- |` не показывается', () => {
+    /* Она нужна разбору, а не читателю: без неё markdown перестаёт считать
+       это таблицей, поэтому в файле она остаётся. */
+    const state = makeState(DOC, { selection: { anchor: DOC.length - 1 } });
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-table-rule');
+  });
+
+  it('палки между ячейками спрятаны, а ячейки помечены', () => {
+    const state = makeState(DOC, { selection: { anchor: DOC.length - 1 } });
+    const hiddenText = hiddenRanges(state).map((range) => DOC.slice(range.from, range.to));
+    expect(hiddenText).toContain('|');
+
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-table-cell');
+  });
+
+  it('курсор в таблице возвращает разметку целиком', () => {
+    /* Иначе таблицу не отредактировать: границы ячеек — это и есть палки. */
+    const state = makeState(DOC, { selection: { anchor: DOC.indexOf('раз') } });
+    const hiddenText = hiddenRanges(state).map((range) => DOC.slice(range.from, range.to));
+    expect(hiddenText).not.toContain('|');
+
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).not.toContain('cm-z-table-rule');
+  });
+});

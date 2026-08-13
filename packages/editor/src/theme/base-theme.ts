@@ -221,6 +221,15 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
    * на экране — заголовок со стрелкой; тело прячется классом строки, а не
    * удалением из документа: свёрнутый текст обязан оставаться в поиске.
    */
+  /* Ячейка таблицы: колонки разделяет тонкая линия, а не палка `|`. Отступы
+     дают воздух, без которого значения слипаются, когда палки спрятаны. */
+  '.cm-z-table-cell': {
+    paddingInline: '10px',
+    borderRight: '1px solid var(--line)',
+  },
+  /* Служебная строка `| --- | --- |` нужна разбору, а не читателю. */
+  '.cm-z-table-rule': { display: 'none' },
+
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {
     display: 'inline-flex',
