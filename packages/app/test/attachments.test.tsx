@@ -8,7 +8,7 @@
  * оборваны, и строка «Не удалось вставить изображение · Повторить» из реестра
  * не могла появиться в принципе.
  *
- * Здесь проверяется весь путь: файл → `attachments/` → разметка в тексте, и
+ * Здесь проверяется весь путь: файл → папка по типу → разметка в тексте, и
  * отдельно — что до этого пути можно дотянуться из интерфейса.
  */
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -50,14 +50,16 @@ async function boot(
 }
 
 describe("вложение изображения", () => {
-  it("файл копируется в attachments/ и возвращает готовую разметку", async () => {
+  it("файл копируется в Images/ и возвращает готовую разметку", async () => {
     const app = await boot();
 
     const result = await app.attachImage(png());
 
     expect(result).not.toBeNull();
+    /* Три папки в корне по типу вложения (замечание 6): картинки — в
+       `Images`, звук — в `Audio`, остальное — в `Other files`. */
     expect(result!.path).toMatch(
-      /^attachments\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/,
+      /^Images\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/,
     );
     // Восклицательный знак — это картинка, а не просто файл (BEHAVIOR §2.6).
     expect(result!.markdown).toBe(`![](${result!.path})`);

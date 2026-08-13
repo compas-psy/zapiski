@@ -55,6 +55,8 @@ export {
   ancestorDirs,
   ATTACHMENT_EXTENSIONS,
   ATTACHMENTS_DIR,
+  ATTACHMENT_DIRS,
+  attachmentDirFor,
   baseName,
   CONFIG_FILE,
   CRDT_DIR,

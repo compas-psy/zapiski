@@ -1423,3 +1423,46 @@
     background-color: var(--surface-alt);
   }
 }
+
+/* ── Переключатель режимов в шапке заметки (замечание 3) ──────────────────────
+   Две маленькие кнопки-символа: глаз — «вижу результат», угловые скобки —
+   «вижу разметку». Слова в шапке не помещаются: на телефоне рядом уже стоят
+   «назад», «инфо» и «ещё», а сегменты с подписями съели бы её целиком.
+   Поэтому состояние читается заливкой, а слова живут в подсказке и в
+   `aria-label`. */
+.za-modeswitch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--r-full);
+  background-color: var(--sunken);
+}
+.za-modeswitch__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 28px;
+  block-size: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-full);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
+}
+.za-modeswitch__btn[aria-pressed='true'] {
+  background-color: var(--surface);
+  color: var(--accent);
+}
+@media (hover: hover) {
+  .za-modeswitch__btn:hover {
+    color: var(--text);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .za-modeswitch__btn {
+    transition: none;
+  }
+}

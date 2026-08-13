@@ -14,6 +14,41 @@ export const CONFIG_FILE = `${META_DIR}/config.json`;
 export const QUEUE_FILE = `${META_DIR}/sync-queue.json`;
 export const ATTACHMENTS_DIR = 'attachments';
 
+/**
+ * Куда по умолчанию ложатся вложения — три папки в корне хранилища.
+ *
+ * Решение заказчика, и оно сознательно жёстче, чем у Obsidian: там папку
+ * вложений настраивают как угодно, здесь правило одно и без исключений. Ближе
+ * к Bear, где место вложений человек не выбирает вовсе, — но честнее: файлы
+ * остаются обычными файлами в его хранилище, а не в чужой базе.
+ *
+ * Имена латиницей и с большой буквы: папки видны в файловом менеджере рядом с
+ * заметками, и такой вид не зависит ни от языка интерфейса, ни от того, чем их
+ * потом откроют.
+ */
+export const ATTACHMENT_DIRS = {
+  image: 'Images',
+  audio: 'Audio',
+  other: 'Other files',
+} as const;
+
+/** Расширения, которые кладём в `Audio`. Остальное аудио редкое и идёт в «прочее». */
+const AUDIO_EXTENSIONS = new Set(['mp3', 'ogg', 'opus', 'wav', 'm4a', 'aac', 'flac']);
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'heic', 'bmp']);
+
+/**
+ * Папка для вложения по его расширению.
+ *
+ * Именно по расширению, а не по кнопке, которой файл выбрали: человек может
+ * приложить картинку через «файл», и она всё равно должна лечь к картинкам.
+ */
+export function attachmentDirFor(extension: string): string {
+  const ext = extension.replace(/^\./, '').toLowerCase();
+  if (IMAGE_EXTENSIONS.has(ext)) return ATTACHMENT_DIRS.image;
+  if (AUDIO_EXTENSIONS.has(ext)) return ATTACHMENT_DIRS.audio;
+  return ATTACHMENT_DIRS.other;
+}
+
 export function normalizePath(path: string): VaultPath {
   const unified = path.replace(/\\/g, '/');
   const parts: string[] = [];

@@ -60,6 +60,7 @@ import { NoteMenu } from './NoteMenu.js';
 import { formatBytes, relativeTime } from '../lib/format.js';
 import { AttachmentUrls } from '../lib/attachment-urls.js';
 import { ImageViewer } from '../components/ImageViewer.js';
+import { ModeSwitch } from '../components/ModeSwitch.js';
 
 /**
  * Что предлагать в системном выборе файла (ITERATION-1 §5).
@@ -627,6 +628,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         />
         <span className="za-header__crumb">{crumb}</span>
         <div className="za-header__actions">
+          {/* Режим показа разметки — на каждой заметке, справа сверху
+              (замечание 3). Стоит первым в группе действий: это взгляд на
+              текст, а не действие над ним. */}
+          <ModeSwitch />
           {/* Замок в шапке — быстрое «запереть сейчас» (SCREENS §7 `2g`). */}
           {unlocked ? (
             <IconButton
