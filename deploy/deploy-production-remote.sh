@@ -326,12 +326,17 @@ run_migrations() {
 # ровно так, как их увидит браузер.
 PUBLIC_URL='https://zapiski.cmpas.ru'
 
+# Про `|| true` вместо `|| echo '000'` ниже: при неудаче curl печатает «000»
+# сам, и второй источник того же значения давал «000000» — строку, которая не
+# равна ни одному ожидаемому коду. Здесь это ещё сходило с рук (всё, что не
+# начинается с двойки, считается провалом), но та же связка в проверке TLS
+# провижна пропускала ровно тот случай, ради которого написана.
 verify_public() {
   local retries=10 code
   log "Проверяем ${PUBLIC_URL}/api/v1/health через nginx..."
   while true; do
     code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-      "${PUBLIC_URL}/api/v1/health" 2>/dev/null || echo '000')"
+      "${PUBLIC_URL}/api/v1/health" 2>/dev/null || true)"
     case "${code}" in
       2*) log "API снаружи отвечает ${code}."; break ;;
     esac
@@ -346,7 +351,7 @@ verify_public() {
   # Статика. Пустой docroot или сломанный SPA-фолбэк дают 403/404 — деплой
   # веба при этом считался бы успешным, хотя сайт не открывается.
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-    "${PUBLIC_URL}/" 2>/dev/null || echo '000')"
+    "${PUBLIC_URL}/" 2>/dev/null || true)"
   case "${code}" in
     2*) log "Статика PWA отдаётся (${code})." ;;
     *)  log "Статика PWA НЕ отдаётся: код ${code}."; return 1 ;;
@@ -372,7 +377,7 @@ verify_documents() {
   for page in terms privacy; do
     body="$(curl -sS --max-time 10 "${PUBLIC_URL}/${page}" 2>/dev/null || true)"
     code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-      "${PUBLIC_URL}/${page}" 2>/dev/null || echo '000')"
+      "${PUBLIC_URL}/${page}" 2>/dev/null || true)"
     case "${code}" in
       2*) ;;
       *)  log "/${page} отвечает ${code} — документ недоступен."; return 1 ;;
@@ -394,7 +399,7 @@ verify_documents() {
   # запрос до API не дошёл, и человек, открывший чужую ссылку, увидит вместо
   # заметки пустое приложение.
   code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
-    "${PUBLIC_URL}/p/probe-zapiski-deploy" 2>/dev/null || echo '000')"
+    "${PUBLIC_URL}/p/probe-zapiski-deploy" 2>/dev/null || true)"
   case "${code}" in
     404) log 'Публикация проведена в API (несуществующий ключ честно даёт 404).' ;;
     2*)  log "/p/ отвечает ${code} на несуществующий ключ — запрос уходит в SPA, а не в API."
