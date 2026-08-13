@@ -208,12 +208,27 @@ try {
     page.evaluate(() => document.querySelector('.cm-content').cmTile.view.state.doc.toString());
 
   for (const item of CASES) {
+    /*
+     * Экран возвращается в исходное состояние перед КАЖДЫМ нажатием.
+     *
+     * Часть сочетаний открывает диалог (ссылка, вложение), а открытый диалог
+     * забирает фокус у текста — и следующее нажатие уходит не туда. В CI это
+     * дало плавающее падение: «Ссылка (браузерное)» и «Чек-лист» через раз
+     * «ничего не делали», хотя оба работают. Прогон, падающий по своей же
+     * инерции, обвиняет продукт вместо себя, а по такому отчёту ищут дефект
+     * там, где его нет.
+     *
+     * `Escape` закрывает то, что осталось от предыдущего шага, а `setDoc`
+     * ниже сам возвращает фокус в текст.
+     */
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(60);
     await setDoc(item.doc, item.caret);
     const focusBefore = await page.evaluate(
       () => document.activeElement?.className || document.activeElement?.tagName || '?',
     );
     await page.keyboard.press(item.keys);
-    await page.waitForTimeout(60);
+    await page.waitForTimeout(80);
     const text = await readDoc();
     const ok = item.expect(text);
     if (!ok) problems.push(`  фокус перед нажатием: ${focusBefore}`);
