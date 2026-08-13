@@ -73,6 +73,20 @@ export const insertSmall: StateCommand = (target) => {
 };
 
 /**
+ * Надстрочный и подстрочный текст: `2<sup>2</sup>`, `H<sub>2</sub>O`.
+ *
+ * Заказчик: «мелкий текст формально работает, но нужно лучше переделать на
+ * superscript и subscript, если это есть в MarkDown». В markdown их нет — ни
+ * в CommonMark, ни в GFM: степень и индекс там пишут html-тегами, и так их
+ * понимают и GitHub, и Obsidian, и браузер. Своего синтаксиса не выдумываем.
+ *
+ * Работают только с выделением: «сделать степенью» без выделенного знака —
+ * бессмысленное действие, а пустая пара тегов посреди строки мешает.
+ */
+export const insertSuperscript: StateCommand = toggleWrap('<sup>', '</sup>');
+export const insertSubscript: StateCommand = toggleWrap('<sub>', '</sub>');
+
+/**
  * Сворачиваемый блок: заголовок со стрелкой и скрытым содержимым.
  *
  * В файле сохраняется как `<details><summary>` — так его понимают и GitHub, и

@@ -66,7 +66,10 @@ export interface EditorStrings {
     headingLevel(level: number): string;
     back: string;
     weight: string;
-    weights: Record<'bold' | 'italic' | 'strike' | 'highlight' | 'mono', string>;
+    weights: Record<
+      'bold' | 'italic' | 'strike' | 'highlight' | 'mono' | 'superscript' | 'subscript',
+      string
+    >;
     lists: string;
     listKinds: Record<'none' | 'bullet' | 'ordered' | 'task' | 'details', string>;
     table: string;
@@ -179,6 +182,8 @@ export const ru: EditorStrings = {
       strike: 'Зачёркнутый',
       highlight: 'Подсветка',
       mono: 'Моноширинный',
+      superscript: 'Надстрочный',
+      subscript: 'Подстрочный',
     },
     lists: 'Списки',
     listKinds: {
@@ -294,6 +299,8 @@ export const en: EditorStrings = {
       strike: 'Strikethrough',
       highlight: 'Highlight',
       mono: 'Monospace',
+      superscript: 'Superscript',
+      subscript: 'Subscript',
     },
     lists: 'Lists',
     listKinds: {

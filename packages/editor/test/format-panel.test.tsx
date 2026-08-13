@@ -207,11 +207,45 @@ describe('состав панели', () => {
     expect(button(mount('текст|'), copy.link)).toBeTruthy();
   });
 
-  it('формулы нет, пока нет KaTeX', () => {
-    /* §4: включается только если KaTeX в сборке. Кнопка, которая есть и не
-       работает, хуже отсутствующей. */
+  it('формула есть и без обработчика приложения', () => {
+    /* §4 требовал прятать кнопку, пока KaTeX не в сборке: «есть и не
+       работает» хуже отсутствующей. Теперь KaTeX в сборке — и кнопка есть
+       всегда, со своим диалогом, как у ссылки. */
+    expect(button(mount('текст|'), copy.formula)).toBeTruthy();
+  });
+
+  it('диалог формулы показывает набранное', () => {
     const container = mount('текст|');
-    expect(container.querySelector(`button[aria-label="${copy.formula}"]`)).toBeNull();
+    press(button(container, copy.formula));
+    const field = document.querySelector<HTMLTextAreaElement>('#zp-formula-tex');
+    expect(field, 'поля формулы нет').not.toBeNull();
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value',
+      )?.set;
+      setter?.call(field, 'x^2');
+      field?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    /* KaTeX рисует формулу в свою разметку — её наличие и проверяем: текст
+       поля в показе остался бы и без разбора. */
+    expect(document.querySelector('.zp-formula__preview .katex')).not.toBeNull();
+  });
+
+  it('формула уходит в текст долларами', () => {
+    const container = mount('текст|');
+    press(button(container, copy.formula));
+    const field = document.querySelector<HTMLTextAreaElement>('#zp-formula-tex');
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value',
+      )?.set;
+      setter?.call(field, 'e^{i\\pi}+1=0');
+      field?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    tap(itemByLabel(container, copy.insert));
+    expect(view?.state.doc.toString()).toContain('$e^{i\\pi}+1=0$');
   });
 
   it('вложения нет без обработчика: класть файл приложению некуда', () => {

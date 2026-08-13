@@ -15,6 +15,7 @@ import { syntaxTree } from '@codemirror/language';
 import { buildLivePreview, type LivePreviewSets } from './decorations.js';
 import { rawMode, rawModeField, setRawMode } from './raw-mode.js';
 import { toggleCollapsed } from './collapsed.js';
+import { imageSelection, selectImage } from './image-select.js';
 import { imeSupport, isComposing, noteDeferral, redecorateEffect } from '../ime/composition.js';
 
 const EMPTY: LivePreviewSets = { decorations: Decoration.none, atomic: Decoration.none };
@@ -66,7 +67,11 @@ class LivePreviewPlugin {
      */
     const forced = update.transactions.some((tr) =>
       tr.effects.some(
-        (e) => e.is(redecorateEffect) || e.is(setRawMode) || e.is(toggleCollapsed),
+        (e) =>
+          e.is(redecorateEffect) ||
+          e.is(setRawMode) ||
+          e.is(toggleCollapsed) ||
+          e.is(selectImage),
       ),
     );
     // Разбор большого документа идёт порциями: когда дерево доросло до
@@ -102,4 +107,4 @@ const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
  * Live-preview целиком: разметка, чекбоксы, картинки, raw-режим и защита IME.
  * Это то, что подключают те, кому нужен голый CodeMirror без React.
  */
-export const livePreview: Extension = [rawMode, imeSupport, livePreviewPlugin];
+export const livePreview: Extension = [rawMode, imeSupport, imageSelection, livePreviewPlugin];

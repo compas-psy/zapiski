@@ -4,7 +4,8 @@
  */
 
 import { EditorSelection } from '@codemirror/state';
-import type { ChangeSpec, StateCommand } from '@codemirror/state';
+import type { ChangeSpec, EditorState, SelectionRange, StateCommand } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
 
 /** Разбор начала строки на отступ, блочный маркер и остальное. */
 const MARKER =
@@ -31,9 +32,35 @@ export function splitLine(text: string): LineParts {
  * Обернуть/развернуть выделение парными маркерами.
  * Без выделения вставляет пару и ставит курсор между маркерами — BEHAVIOR §2.7.
  */
+/**
+ * Что оборачивать, когда ничего не выделено.
+ *
+ * Обычно — пустая пара маркеров под курсором: человек нажал «B» и печатает
+ * жирным, это привычно. Но внутри ссылки такой ответ бессмысленный, и
+ * заказчик описал это прямо: «её нельзя обернуть жирным или курсивом».
+ * Получалось `[Вот**** так выглядит ссылка](адрес)` — пара маркеров падала в
+ * середину подписи, ссылка жирной не становилась, а текст ломался.
+ *
+ * Поэтому курсор внутри ссылки или картинки расширяется до всего узла:
+ * `**[подпись](адрес)**`. Так это делают все редакторы, и так это остаётся
+ * честным markdown — ссылка внутри выделения жирного, а не наоборот.
+ */
+function wrapTarget(state: EditorState, range: SelectionRange): SelectionRange {
+  if (!range.empty) return range;
+  let node = syntaxTree(state).resolveInner(range.from, 0);
+  while (node.parent) {
+    if (node.name === 'Link' || node.name === 'Image') {
+      return EditorSelection.range(node.from, node.to);
+    }
+    node = node.parent;
+  }
+  return range;
+}
+
 export function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
-    const tr = state.changeByRange((range) => {
+    const tr = state.changeByRange((cursor) => {
+      const range = wrapTarget(state, cursor);
       const outerFrom = range.from - open.length;
       const outerTo = range.to + close.length;
       const hasOuter =

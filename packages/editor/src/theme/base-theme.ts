@@ -28,13 +28,31 @@ import { fontFamily } from './tokens.js';
  * `--fs-h3`/`--fw-h3`, которых не существует, — и три пункта из шести молча
  * набирались как попало.
  */
+/*
+ * Шкала заголовков.
+ *
+ * Заказчик прислал снимок с шестью «Пишем» подряд: H1 отличался, а H2…H6
+ * читались как одна и та же строка. Так и было — прежние 19/17/16/15/14
+ * укладывали ПЯТЬ уровней в пять пикселей, причём H4 совпадал с кеглем
+ * текста. Разницу в один пиксель глаз не видит, и уровень заголовка
+ * приходилось считать по решёткам.
+ *
+ * Теперь шаг заметный на каждом уровне: 30 → 24 → 20 → 17 → 15 → 13.5 при
+ * базовых 16. Различие только размером и насыщенностью — цветом заголовки
+ * не различаются, это прямое правило DESIGN_TOKENS §2.
+ *
+ * Отступление от буквы таблицы токенов названо вслух: там H2 в заметке — 19.
+ * Между 19 и кеглем текста 16 четыре уровня не помещаются никак, поэтому H2
+ * поднят до 24. Если важнее буква таблицы — вернём, но тогда H3…H6 снова
+ * станут неразличимы.
+ */
 export const HEADING = [
   { size: '1.875', weight: '700', tracking: '-0.02em', lh: '1.2' }, // H1 30/16
-  { size: '1.1875', weight: '600', tracking: '-0.01em', lh: '1.35' }, // H2 19/16
-  { size: '1.0625', weight: '600', tracking: '-0.01em', lh: '1.4' }, // H3 17/16
-  { size: '1', weight: '600', tracking: '0', lh: '1.45' }, // H4
-  { size: '0.9375', weight: '600', tracking: '0.01em', lh: '1.5' }, // H5
-  { size: '0.875', weight: '700', tracking: '0.04em', lh: '1.5' }, // H6
+  { size: '1.5', weight: '700', tracking: '-0.02em', lh: '1.25' }, // H2 24/16
+  { size: '1.25', weight: '600', tracking: '-0.01em', lh: '1.3' }, // H3 20/16
+  { size: '1.0625', weight: '600', tracking: '0', lh: '1.4' }, // H4 17/16
+  { size: '0.9375', weight: '700', tracking: '0.01em', lh: '1.45' }, // H5 15/16
+  { size: '0.84375', weight: '700', tracking: '0.04em', lh: '1.5' }, // H6 13.5/16
 ] as const;
 
 function headingRules(): Record<string, Record<string, string>> {
@@ -244,6 +262,12 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
      он оставался мелким и при увеличенном кегле заметки. */
   '.cm-z-small': { fontSize: '0.8125em', color: 'var(--text-secondary)' },
 
+  /* Надстрочный и подстрочный: `2<sup>2</sup>` и `H<sub>2</sub>O`.
+     `vertical-align` вместо `<sup>`-элемента — потому что в тексте редактора
+     это обычные символы, и поднимать их можно только оформлением. */
+  '.cm-z-sup': { verticalAlign: 'super', fontSize: '0.7em', lineHeight: '0' },
+  '.cm-z-sub': { verticalAlign: 'sub', fontSize: '0.7em', lineHeight: '0' },
+
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {
     display: 'inline-flex',
@@ -431,6 +455,57 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     // и сообщает; на телефоне подсказки нет, там об этом говорит сам жест.
     cursor: 'zoom-in',
   },
+  /* Выделенная картинка: тонкая рамка акцентом и четыре квадратика по углам.
+     Ручки лежат ВНУТРИ обёртки, поэтому она `position: relative`. */
+  /* Обёртка выделенной картинки сжимается по ней: `width: 100%` у обычной
+     увёл бы правые ручки на край колонки, а не на край изображения. */
+  '.cm-z-image-wrap-sel': {
+    position: 'relative',
+    display: 'inline-block',
+    width: 'max-content',
+    maxWidth: '100%',
+  },
+  '.cm-z-image-wrap-sel .cm-z-image': {
+    outline: '2px solid var(--accent)',
+    outlineOffset: '1px',
+    cursor: 'default',
+  },
+  '.cm-z-image-grip': {
+    position: 'absolute',
+    inlineSize: '12px',
+    blockSize: '12px',
+    borderRadius: '3px',
+    border: '1.5px solid var(--accent)',
+    backgroundColor: 'var(--bg)',
+    /* Палец в 12 px не попадает — область нажатия расширена невидимым полем. */
+    boxSizing: 'border-box',
+    touchAction: 'none',
+    cursor: 'ew-resize',
+  },
+  /* Отступы 8px сверху и снизу — это `margin` картинки: ручки садятся на её
+     углы, а не на углы обёртки. */
+  '.cm-z-image-grip-nw': { insetInlineStart: '-6px', insetBlockStart: '2px' },
+  '.cm-z-image-grip-ne': { insetInlineEnd: '-6px', insetBlockStart: '2px' },
+  '.cm-z-image-grip-sw': { insetInlineStart: '-6px', insetBlockEnd: '2px' },
+  '.cm-z-image-grip-se': { insetInlineEnd: '-6px', insetBlockEnd: '2px' },
+  '.cm-z-image-grip::after': {
+    content: '""',
+    position: 'absolute',
+    inset: '-10px',
+  },
+
+  /* Формула. Своих цветов у KaTeX нет — он наследует `color`, и это то, что
+     нужно: формула должна быть того же цвета, что текст вокруг. */
+  '.cm-z-math': { color: 'var(--text)' },
+  '.cm-z-math-block': { display: 'block', margin: '10px 0', textAlign: 'center' },
+  /* Исходник под курсором — моноширинным, как код: его правят, а не читают. */
+  '.cm-z-math-src': {
+    fontFamily: fontFamily.mono,
+    fontSize: '0.9em',
+    color: 'var(--text-secondary)',
+  },
+  '.cm-z-math .katex-error': { color: 'var(--danger, var(--accent))' },
+
   '.cm-z-image-missing': {
     display: 'block',
     padding: '12px 14px',

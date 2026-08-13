@@ -69,7 +69,10 @@ describe('картинка открывается полноэкранно', () 
       return found as Element;
     });
 
-    fireEvent.mouseDown(image);
+    /* Тапов два: первый выделяет картинку и показывает ручки размера
+       (заказчик просил менять размер по месту), просмотр — на втором. */
+    fireEvent.mouseDown(image, { detail: 1 });
+    fireEvent.mouseDown(document.querySelector('.cm-z-image') as Element, { detail: 2 });
     expect(await screen.findByRole('dialog')).toBeTruthy();
   });
 
@@ -83,7 +86,9 @@ describe('картинка открывается полноэкранно', () 
       expect(found).not.toBeNull();
       return found as Element;
     });
-    fireEvent.mouseDown(image);
+    /* Первый тап выделяет картинку, просмотр открывает второй. */
+    fireEvent.mouseDown(image, { detail: 1 });
+    fireEvent.mouseDown(document.querySelector('.cm-z-image') as Element, { detail: 2 });
     const viewer = await screen.findByRole('dialog');
 
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -102,7 +107,9 @@ describe('картинка открывается полноэкранно', () 
       expect(found).not.toBeNull();
       return found as Element;
     });
-    fireEvent.mouseDown(image);
+    /* Первый тап выделяет картинку, просмотр открывает второй. */
+    fireEvent.mouseDown(image, { detail: 1 });
+    fireEvent.mouseDown(document.querySelector('.cm-z-image') as Element, { detail: 2 });
     const viewer = await screen.findByRole('dialog');
 
     fireEvent.pointerDown(viewer, { clientY: 100 });

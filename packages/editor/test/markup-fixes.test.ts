@@ -393,3 +393,49 @@ describe('маркеры внутри сворачиваемого блока', 
     expect(decos.map((deco) => deco.class ?? '').join(' ')).toContain('cm-z-list-mark');
   });
 });
+
+/**
+ * Правки по снимкам веб-версии от заказчика.
+ */
+describe('снимки веб-версии', () => {
+  it('закрывающий `</details>` не печатается в тексте', () => {
+    /* На снимке под заголовком блока стояло голое `</details>` — разметка,
+       которую заказчик не писал и убрать не мог. Так выходит, когда тело не
+       отделено от `<summary>` пустой строкой: html-блок по правилу CommonMark
+       тянется до первой пустой строки и утаскивает закрывающий тег внутрь. */
+    const doc = ['<details>', '<summary>Заголовок</summary>', 'Тело', '</details>', '', 'хвост'].join(
+      '\n',
+    );
+    /* Курсор в хвосте: внутри блока разметка показывается нарочно — иначе её
+       не поправить. */
+    const found = decorationsOf(makeState(doc, { selection: { anchor: doc.length } }));
+    const closing = doc.indexOf('</details>');
+    const hidden = found.some(
+      (deco) => deco.from <= closing && deco.to >= closing + '</details>'.length && deco.class === null,
+    );
+    expect(hidden, 'закрывающий тег остался видимым').toBe(true);
+  });
+
+  it('разметка картинки прячется целиком', () => {
+    /* На снимке над картинкой стояла строка `|320Images/…png`: подпись с
+       шириной и путь торчали обычным текстом. */
+    const doc = '![подпись|320](Images/кот.png)';
+    const found = decorationsOf(
+      makeState(doc + '\n\nхвост', {
+        runtime: { resolveAttachment: (src: string) => `blob:${src}` },
+        selection: { anchor: doc.length + 3 },
+      }),
+    );
+    const hidden = found.some((deco) => deco.from === 0 && deco.to === doc.length);
+    expect(hidden, 'разметка картинки осталась на экране').toBe(true);
+  });
+
+  it('надстрочный и подстрочный набираются тегами', () => {
+    /* Своего синтаксиса у markdown для них нет: `<sup>`/`<sub>` — то, что
+       понимают GitHub, Obsidian и браузер. */
+    const doc = '2<sup>2</sup> и H<sub>2</sub>O';
+    const found = decorationsOf(makeState(doc, { selection: { anchor: doc.length } }));
+    expect(found.some((deco) => deco.class === 'cm-z-sup')).toBe(true);
+    expect(found.some((deco) => deco.class === 'cm-z-sub')).toBe(true);
+  });
+});

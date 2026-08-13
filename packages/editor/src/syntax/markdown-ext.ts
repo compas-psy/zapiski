@@ -5,6 +5,7 @@
  * - `[[wiki-ссылка]]` — BEHAVIOR §2.5
  * - `#тег`            — BEHAVIOR §2.4
  * - `[^сноска]`       — SCREENS §4 (витринная заметка)
+ * - `$формула$`      — ITERATION-1 §4 (LaTeX, показывается KaTeX)
  *
  * Узлы получают префикс `Z`, чтобы никогда не столкнуться с именами из
  * `@lezer/markdown` — даже если в будущем там появятся свои `Highlight`
@@ -19,6 +20,7 @@ const CH_CLOSE_BRACKET = 93; // ']'
 const CH_CARET = 94; // '^'
 const CH_PIPE = 124; // '|'
 const CH_EQUALS = 61; // '='
+const CH_DOLLAR = 36; // '$'
 
 /** Пунктуация по CommonMark — нужна для правил открытия/закрытия делимитеров. */
 const PUNCTUATION = /[!-/:-@[-`{-~¡‐-‧]/;
@@ -179,10 +181,60 @@ export const FootnoteExtension: MarkdownConfig = {
   ],
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// $формула$ и $$формула$$
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Формула LaTeX между долларами — соглашение, которое понимают Obsidian,
+ * GitHub, Pandoc и любой markdown с математикой. Своего синтаксиса не
+ * выдумываем: формула должна остаться формулой и в чужом редакторе.
+ *
+ * Разбор намеренно строгий, потому что доллар — обычный символ в тексте про
+ * деньги. Открывающий доллар не должен упираться в пробел, закрывающий — не
+ * должен начинать слово, а пустая пара `$$` формулой не считается. Иначе
+ * «заплатил $5 и $7» стало бы формулой «5 и ».
+ */
+export const MathExtension: MarkdownConfig = {
+  defineNodes: [{ name: 'ZMath' }, { name: 'ZMathMark' }],
+  parseInline: [
+    {
+      name: 'ZMath',
+      parse(cx: InlineContext, next: number, pos: number): number {
+        if (next !== CH_DOLLAR) return -1;
+        /* Блочная формула `$$…$$` — те же правила, только маркер длиннее. */
+        const double = cx.char(pos + 1) === CH_DOLLAR;
+        const open = pos + (double ? 2 : 1);
+        if (/\s|^$/.test(cx.slice(open, open + 1))) return -1;
+
+        for (let i = open; i < cx.end; i += 1) {
+          const ch = cx.char(i);
+          if (ch !== CH_DOLLAR) continue;
+          if (double && cx.char(i + 1) !== CH_DOLLAR) continue;
+          if (i === open) return -1;
+          /* Закрывающий доллар не должен висеть после пробела: `$a $` —
+             это не формула, а два доллара в тексте. */
+          if (/\s/.test(cx.slice(i - 1, i))) return -1;
+          const close = i + (double ? 2 : 1);
+          return cx.addElement(
+            cx.elt('ZMath', pos, close, [
+              cx.elt('ZMathMark', pos, open),
+              cx.elt('ZMathMark', i, close),
+            ]),
+          );
+        }
+        return -1;
+      },
+      before: 'Emphasis',
+    },
+  ],
+};
+
 /** Полный набор фирменных расширений грамматики. */
 export const zapiskiMarkdownExtensions: MarkdownConfig[] = [
   HighlightExtension,
   WikiLinkExtension,
   FootnoteExtension,
   TagExtension,
+  MathExtension,
 ];

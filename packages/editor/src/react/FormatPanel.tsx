@@ -69,10 +69,13 @@ import {
   insertCollapsible,
   insertQuoteAuthor,
   insertSmall,
+  insertSubscript,
+  insertSuperscript,
 } from '../commands/blocks.js';
 import { applyLink, linkDraft } from '../commands/link.js';
 import { tableAt } from '../commands/table.js';
 import { TableDialog, tableDialogStyles } from './TableDialog.js';
+import { FormulaDialog, formulaDialogStyles } from './FormulaDialog.js';
 
 
 /* ── Стили ────────────────────────────────────────────────────────────────
@@ -381,6 +384,7 @@ const styles = new StyleModule({
   /* Редактор таблицы: живёт в этом же модуле, чтобы тень, радиусы и токены
      у него были те же, что у меню и диалога ссылки. */
   ...tableDialogStyles,
+  ...formulaDialogStyles,
 });
 
 let mounted = false;
@@ -428,6 +432,7 @@ type OpenMenu =
   | 'attach'
   | 'emoji'
   | 'table'
+  | 'formula'
   | 'link';
 
 export function FormatPanel({
@@ -677,6 +682,18 @@ export function FormatPanel({
                   checked={inline.code}
                   onPress={run(toggleInlineCode)}
                 />
+                {/* Степень и индекс — html-теги: своего синтаксиса у markdown
+                    для них нет, а `<sup>`/`<sub>` понимают все. */}
+                <MenuItem
+                  label={copy.weights.superscript}
+                  glyph="superscript"
+                  onPress={run(insertSuperscript)}
+                />
+                <MenuItem
+                  label={copy.weights.subscript}
+                  glyph="subscript"
+                  onPress={run(insertSubscript)}
+                />
               </Menu>
             ) : null
           }
@@ -830,22 +847,42 @@ export function FormatPanel({
           </>
         ) : null}
 
-        {/* Формула — только если KaTeX в сборке (§4): иначе кнопки нет вовсе,
-            а не есть и не работает. */}
-        {onFormula ? (
-          <>
-            <Divider />
-            <PanelButton
-              label={copy.formula}
-              onPress={() => {
-                setOpen(null);
-                onFormula();
-              }}
-            >
-              <IconSigma />
-            </PanelButton>
-          </>
-        ) : null}
+        {/*
+          Формула. KaTeX теперь в сборке, поэтому кнопка есть всегда — раньше
+          её прятали, потому что «нет кнопки лучше, чем есть и не работает».
+
+          Диалог свой, встроенный: поле, живой показ и «отдельной строкой».
+          Приложение может подменить его своим через `onFormula` — так же, как
+          подменяет диалог ссылки.
+        */}
+        <Divider />
+        <MenuButton
+          label={copy.formula}
+          expanded={open === 'formula'}
+          anchorToCaret={() => caretRect(view)}
+          onPress={
+            onFormula
+              ? () => {
+                  setOpen(null);
+                  onFormula();
+                }
+              : () => setOpen((current) => (current === 'formula' ? null : 'formula'))
+          }
+          menu={
+            open === 'formula' && view ? (
+              <FormulaDialog
+                copy={copy}
+                view={view}
+                onClose={() => {
+                  setOpen(null);
+                  view.focus();
+                }}
+              />
+            ) : null
+          }
+        >
+          <IconSigma />
+        </MenuButton>
       </Pill>
 
       <Pill>
@@ -1437,6 +1474,8 @@ export type MenuGlyphName =
   | 'strike'
   | 'highlight'
   | 'mono'
+  | 'superscript'
+  | 'subscript'
   | 'listNone'
   | 'listBullet'
   | 'listOrdered'
@@ -1465,6 +1504,9 @@ const GLYPH: Record<MenuGlyphName, string[]> = {
   strike: ['M7 12h10', 'M8 7h8M8 17h8'],
   highlight: ['M5 16h14v3H5z', 'M8 13l4-8 4 8'],
   mono: ['M4 6h16v12H4z', 'M9 10l-2 2 2 2M15 10l2 2-2 2'],
+  /* Крупная «x» и маленькая цифра сверху — знак степени, снизу — индекса. */
+  superscript: ['M5 17l7-9M5 8l7 9', 'M16 9h3M17.5 9V6'],
+  subscript: ['M5 16l7-9M5 7l7 9', 'M16 19h3M17.5 19v-3'],
   listNone: ['M7 7h12M7 12h12M7 17h12'],
   listBullet: ['M9 7h10M9 12h10M9 17h10', 'M5 7h.01M5 12h.01M5 17h.01'],
   listOrdered: ['M9 7h10M9 12h10M9 17h10', 'M4 6l1-.5V9M4 12h2l-2 3h2M4 16h2v2H4v2h2'],

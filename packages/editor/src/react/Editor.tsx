@@ -16,6 +16,7 @@ import type { LanguageDescription } from '@codemirror/language';
 import { zapiskiEditor } from '../setup.js';
 import type { EditorRuntime, NoteSuggestion, TagSuggestion } from '../runtime.js';
 import { toggleCollapsed } from '../live-preview/collapsed.js';
+import { setImageWidth } from '../commands/image.js';
 import type { EditorStrings } from '../i18n.js';
 import type { HapticStrength } from '../contract-types.js';
 import { applyTypography, defaultTypography } from '../typography.js';
@@ -176,6 +177,10 @@ export function Editor(props: EditorProps): React.ReactElement {
       openAttachment: (src) => propsRef.current.onOpenAttachment?.(src),
       /* Сворачивание `<details>` — состояние показа, а не текста: файл не
          меняется, меняется только то, что видно (замечание 12). */
+      setImageWidth: (path, width) => {
+        const view = viewRef.current;
+        if (view) setImageWidth(path, width)(view);
+      },
       toggleCollapsed: (at) => {
         viewRef.current?.dispatch({ effects: toggleCollapsed.of(at) });
       },

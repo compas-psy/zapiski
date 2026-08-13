@@ -80,6 +80,14 @@ export interface EditorRuntime {
    * представлению: он получает готовый обработчик и только зовёт его.
    */
   toggleCollapsed(at: number): void;
+
+  /**
+   * Новая ширина картинки: `![подпись|320](путь)`.
+   *
+   * Как и сворачивание, живёт в рантайме: ручку тянет виджет, а он до
+   * представления не дотягивается — зовёт готовый обработчик.
+   */
+  setImageWidth(path: string, width: number): void;
 }
 
 /** Заглушка: редактор полностью работоспособен и без приложения вокруг. */
@@ -97,6 +105,7 @@ export const noopRuntime: EditorRuntime = {
   attachmentSize: () => '',
   openAttachment: () => {},
   toggleCollapsed: () => {},
+  setImageWidth: () => {},
 };
 
 /**

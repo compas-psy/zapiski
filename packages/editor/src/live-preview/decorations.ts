@@ -52,8 +52,16 @@ import { hidesMarkup } from './editor-mode.js';
 import type { SyntaxNodeRef } from '@lezer/common';
 import { editorRuntime } from '../runtime.js';
 import type { EditorRuntime } from '../runtime.js';
-import { AudioWidget, FileWidget, ImageWidget, SummaryWidget, TaskBoxWidget } from './widgets.js';
+import {
+  AudioWidget,
+  FileWidget,
+  ImageWidget,
+  MathWidget,
+  SummaryWidget,
+  TaskBoxWidget,
+} from './widgets.js';
 import { isCollapsed } from './collapsed.js';
+import { selectedImage } from './image-select.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Кэш деклараций: одинаковый класс → один и тот же объект `Decoration`.
@@ -322,12 +330,24 @@ class LivePreviewBuilder {
     const open = /<details[^>]*>/i.exec(text);
     const summary = /<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(text);
 
-    /* Закрывающий блок — только тег: прячем его целиком. */
-    if (!open && !summary) {
-      const close = /<\/details\s*>/i.exec(text);
-      if (close) this.fade(from + (close.index ?? 0), from + (close.index ?? 0) + close[0].length, active);
-      return;
+    /*
+     * Закрывающий тег прячется, ГДЕ БЫ он ни оказался в блоке.
+     *
+     * Обычно парсер отдаёт его отдельным html-блоком, и всё просто. Но если
+     * тело не отделено от `<summary>` пустой строкой, html-блок по правилу
+     * CommonMark тянется до первой пустой строки — и закрывающий тег попадает
+     * внутрь того же узла вместе с телом. Заказчик прислал снимок ровно
+     * такого блока: под заголовком стоял текст, а под ним голое
+     * `</details>` — то есть разметка, которую он не писал и убрать не мог.
+     *
+     * Ищем все вхождения, а не первое: в одном блоке может закрыться и
+     * вложенный `<details>`.
+     */
+    for (const close of text.matchAll(/<\/details\s*>/gi)) {
+      const at = from + (close.index ?? 0);
+      this.fade(at, at + close[0].length, active);
     }
+    if (!open && !summary) return;
 
     if (open) this.fade(from + open.index, from + open.index + open[0].length, active);
 
@@ -401,11 +421,17 @@ class LivePreviewBuilder {
    *отдельными узлами и парой их не связывает. Без закрывающего — красим до конца
    * строки: незакрытый тег бывает в процессе набора, и мигать при этом нечем.
    */
-  private smallText(from: number): void {
+  /**
+   * Текст между парой html-тегов: `<small>`, `<sup>`, `<sub>`.
+   *
+   * Ищется в пределах строки: у всех трёх это инлайн-оформление, и тег,
+   * оставшийся незакрытым, не должен утаскивать за собой пол-заметки.
+   */
+  private taggedText(from: number, tag: string, cls: string): void {
     const line = this.state.doc.lineAt(from);
     const rest = this.state.doc.sliceString(from, line.to);
-    const closing = rest.search(/<\/small\s*>/i);
-    this.mark(from, closing === -1 ? line.to : from + closing, 'cm-z-small');
+    const closing = rest.search(new RegExp(`</${tag}\\s*>`, 'i'));
+    this.mark(from, closing === -1 ? line.to : from + closing, cls);
   }
 
   private widget(pos: number, deco: Decoration): void {
@@ -508,11 +534,23 @@ class LivePreviewBuilder {
      */
     if (name === 'HTMLTag') {
       const tag = this.state.doc.sliceString(from, to);
-      if (/^<\/?small\s*>$/i.test(tag)) {
+      /*
+       * Надстрочный и подстрочный — той же природы, что и мелкий текст.
+       *
+       * Заказчик: «мелкий текст формально работает, но нужно лучше переделать
+       * на superscript и subscript, если это есть в MarkDown». В markdown их
+       * нет — ни в CommonMark, ни в GFM. Зато html markdown пропускает как
+       * есть, и `<sup>`/`<sub>` понимают все: и GitHub, и Obsidian, и браузер,
+       * если открыть файл напрямую. Своего синтаксиса не выдумываем: заметка
+       * с ним читалась бы правильно только у нас.
+       */
+      const inline = /^<\/?(small|sup|sub)\s*>$/i.exec(tag);
+      if (inline) {
+        const kind = (inline[1] ?? '').toLowerCase();
         const paragraph = this.stack[this.stack.length - 2];
         const active = paragraph ? this.isActive(from, to) : false;
         this.fade(from, to, active);
-        if (!tag.startsWith('</')) this.smallText(to);
+        if (!tag.startsWith('</')) this.taggedText(to, kind, `cm-z-${kind}`);
         return;
       }
     }
@@ -628,6 +666,9 @@ class LivePreviewBuilder {
       case 'ZWikiLink':
         this.wikiLink(from, to);
         return;
+      case 'ZMath':
+        this.math(from, to);
+        return;
       case 'Image':
         this.image(node);
         return;
@@ -653,6 +694,27 @@ class LivePreviewBuilder {
     this.stack.pop();
   }
 
+  /**
+   * Формула: на месте `$…$` — набранная KaTeX, под курсором — исходник.
+   *
+   * Показ ЗАМЕЩАЕТ разметку, а не добавляется рядом: формула, набранная
+   * рядом со своим исходником, читается как ошибка. Под курсором наоборот —
+   * виден только исходник, иначе формулу не поправить.
+   */
+  private math(from: number, to: number): void {
+    if (this.isActive(from, to)) {
+      this.mark(from, to, 'cm-z-math-src');
+      return;
+    }
+    const raw = this.state.doc.sliceString(from, to);
+    const block = raw.startsWith('$$');
+    const tex = raw.slice(block ? 2 : 1, raw.length - (block ? 2 : 1)).trim();
+    if (tex === '') return;
+    const deco = Decoration.replace({ widget: new MathWidget(tex, block) }).range(from, to);
+    this.out.push(deco);
+    this.hidden.push(deco);
+  }
+
   /** Висячая wiki-ссылка — акцент + пунктир 50% opacity (BEHAVIOR §2.5). */
   private wikiLink(from: number, to: number): void {
     const inner = this.state.doc.sliceString(from + 2, Math.max(from + 2, to - 2));
@@ -676,11 +738,32 @@ class LivePreviewBuilder {
         : this.runtime.resolveAttachment(rawSrc);
     if (!src) return;
     const lineEnd = this.state.doc.lineAt(node.to).to;
+    /*
+     * Разметка картинки прячется целиком, пока курсор не в ней.
+     *
+     * Дефект со снимка заказчика: над картинкой стояла строка
+     * `|320Images/2026-08-13_8cabf5.png` — то есть подпись с шириной и путь
+     * к файлу торчали как обычный текст. Прежде прятались только скобки
+     * (`LinkMark`), а подпись и адрес оставались: у ссылки адрес пряч[ется]
+     * веткой `URL`, но там условие «родитель — Link», и картинку оно не
+     * покрывало.
+     *
+     * Прячем весь узел разом, а не по кусочкам: у картинки, в отличие от
+     * ссылки, на экране не остаётся НИЧЕГО от разметки — само изображение
+     * рисуется виджетом ниже. Курсор внутри — разметка возвращается целиком,
+     * иначе ширину и путь не поправить.
+     */
+    this.fade(node.from, node.to, this.isActive(node.from, node.to));
     /* Путь из текста едет вместе с URL: по нему тап открывает полноэкранный
        просмотр. У внешнего адреса путь — он сам. */
     this.widget(
       lineEnd,
-      Decoration.widget({ widget: new ImageWidget(src, alt, rawSrc), side: 1 }),
+      Decoration.widget({
+        widget: new ImageWidget(src, alt, rawSrc, selectedImage(this.state) === rawSrc, (path, width) =>
+          this.runtime.setImageWidth(path, width),
+        ),
+        side: 1,
+      }),
     );
   }
 

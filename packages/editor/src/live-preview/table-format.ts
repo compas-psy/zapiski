@@ -24,6 +24,7 @@ import type { PluginValue, ViewUpdate } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
 import { renderTable, tableAt } from '../commands/table.js';
+import type { TableModel } from '../commands/table.js';
 import { isComposing } from '../ime/composition.js';
 
 class TableFormatter implements PluginValue {
@@ -49,7 +50,7 @@ class TableFormatter implements PluginValue {
 
     const from = doc.line(left.firstLine).from;
     const to = doc.line(left.lastLine).to;
-    const text = renderTable(left);
+    const text = renderTable(withHeader(left));
     if (doc.sliceString(from, to) === text) return;
 
     /* Курсор вне заменяемого куска, поэтому его позиция отобразится сама и
@@ -62,6 +63,24 @@ class TableFormatter implements PluginValue {
       });
     });
   }
+}
+
+/**
+ * Дописать строку-разделитель, если её нет.
+ *
+ * Заказчик набрал таблицу руками, двумя строками с палками, и получил
+ * обычный текст: «нет виджета никакого». Это не наша прихоть — по правилам
+ * GFM таблица начинается со строки `| --- | --- |`, и без неё ни один
+ * markdown-редактор таблицы не увидит. Но человек-то набрал таблицу, и
+ * говорить ему «вы забыли служебную строку» бессмысленно: строку эту
+ * добавляем сами, когда курсор из таблицы уходит.
+ *
+ * Порог — две строки: одна строка с палками бывает и в обычном тексте
+ * («вариант А | вариант Б»), и превращать её в таблицу было бы самоуправством.
+ */
+function withHeader(model: TableModel): TableModel {
+  if (model.header || model.rows.length < 2) return model;
+  return { ...model, header: true };
 }
 
 /** Расширение: подключается рядом с live-preview. */

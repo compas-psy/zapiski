@@ -171,11 +171,13 @@ describe("до вложения можно дотянуться из редак�
       copy.table,
       copy.link,
       copy.attachment,
+      copy.formula,
       copy.emoji,
     ]);
-    /* Формулы нет: KaTeX не подключён, а кнопка, которая есть и не работает,
-       хуже отсутствующей (§4). */
-    expect(labels).not.toContain(copy.formula);
+    /* Формула появилась вместе с KaTeX в сборке: §4 велел прятать кнопку,
+       пока его нет, — «есть и не работает» хуже отсутствующей. Теперь есть и
+       работает, со своим диалогом. */
+    expect(labels).toContain(copy.formula);
   });
 });
 

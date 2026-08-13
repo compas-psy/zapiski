@@ -110,9 +110,13 @@ describe('что написано на карточке', () => {
 });
 
 describe('тап по вложению', () => {
-  it('картинка отдаёт путь из текста, а не blob:-адрес', () => {
+  it('второй тап отдаёт путь из текста, а не blob:-адрес', () => {
     /* `blob:`-адрес живёт только внутри кэша приложения и за его пределами
-       не значит ничего: открыть по нему файл нельзя. */
+       не значит ничего: открыть по нему файл нельзя.
+
+       Тапов теперь два. Первый ВЫДЕЛЯЕТ картинку — по её углам появляются
+       ручки размера: заказчик просил менять размер по месту, «без открытия
+       на полный экран». Просмотр остался на втором нажатии. */
     const openAttachment = vi.fn();
     const v = makeView('![кот](attachments/кот.png)', {
       runtime: { ...resolving, openAttachment },
@@ -120,7 +124,16 @@ describe('тап по вложению', () => {
     view = v;
     const image = v.dom.querySelector('.cm-z-image');
     expect(image, 'превью не нарисовано').not.toBeNull();
-    image?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+
+    image?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 1 }));
+    expect(openAttachment, 'первый тап не должен открывать просмотр').not.toHaveBeenCalled();
+    expect(v.dom.querySelectorAll('.cm-z-image-grip'), 'ручек размера нет').toHaveLength(4);
+
+    /* Картинку ищем заново: после выделения виджет перерисован, и прежний
+       узел уже вне документа — событие из него никуда не дойдёт. */
+    v.dom
+      .querySelector('.cm-z-image')
+      ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, detail: 2 }));
     expect(openAttachment).toHaveBeenCalledWith('attachments/кот.png');
   });
 

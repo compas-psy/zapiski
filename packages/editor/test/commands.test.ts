@@ -204,3 +204,38 @@ describe('карта хоткеев', () => {
     expect(v.state.field(rawModeField)).toBe(false);
   });
 });
+
+/**
+ * Начертания на ссылке (снимок веб-версии).
+ *
+ * Заказчик: «вот так выглядит ссылка, но её нельзя обернуть жирным или
+ * курсивом или жирным курсивом». И правда: пара маркеров падала в середину
+ * подписи — `[Вот**** так выглядит ссылка](адрес)`.
+ */
+describe('жирный и курсив на ссылке', () => {
+  const LINK = '[подпись](https://example.org)';
+
+  it('курсор внутри ссылки оборачивает её целиком', () => {
+    const v = open(LINK, 3);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe(`**${LINK}**`);
+  });
+
+  it('повторное нажатие снимает', () => {
+    const v = open(`**${LINK}**`, 5);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe(LINK);
+  });
+
+  it('курсив ведёт себя так же', () => {
+    const v = open(LINK, 3);
+    toggleItalic(v);
+    expect(v.state.doc.toString()).toBe(`*${LINK}*`);
+  });
+
+  it('вне ссылки поведение прежнее: пара маркеров под курсором', () => {
+    const v = open('обычный текст', 3);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('обы****чный текст');
+  });
+});

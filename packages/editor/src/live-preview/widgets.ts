@@ -14,8 +14,62 @@
  */
 
 import { WidgetType } from '@codemirror/view';
+import katex from 'katex';
+/* Стили KaTeX — обычный файл, а не `StyleModule`: в нём объявления шрифтов,
+   и переписывать их своими руками значило бы держать копию чужого пакета.
+   Шрифты приезжают в сборку рядом с ним, из сети ничего не грузится. */
+import 'katex/dist/katex.min.css';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * Формула LaTeX (ITERATION-1 §4).
+ *
+ * Заказчик: «ты тихой сапой забыл про формулы LaTeX с вводом через виджет».
+ * Забыл не совсем — строки и кнопка были готовы, но KaTeX не входил в сборку,
+ * и кнопка пряталась. Теперь входит: пакет ставится в бандл, из сети ничего
+ * не тянется, и правило «работает в самолёте» цело.
+ *
+ * `throwOnError: false` — разбор ломается на каждом втором символе, пока
+ * формулу набирают, и падать на этом нельзя. KaTeX в таком режиме рисует
+ * неразобранный кусок красным, а сообщение мы кладём в подсказку.
+ */
+export class MathWidget extends WidgetType {
+  constructor(
+    readonly tex: string,
+    /** `$$…$$` — формула отдельной строкой, по центру. */
+    readonly block: boolean,
+  ) {
+    super();
+  }
+
+  override eq(other: MathWidget): boolean {
+    return other.tex === this.tex && other.block === this.block;
+  }
+
+  override toDOM(): HTMLElement {
+    const host = document.createElement(this.block ? 'div' : 'span');
+    host.className = this.block ? 'cm-z-math cm-z-math-block' : 'cm-z-math';
+    try {
+      katex.render(this.tex, host, {
+        displayMode: this.block,
+        throwOnError: false,
+        output: 'html',
+      });
+    } catch (error) {
+      /* Сюда попадают только отказы самого KaTeX, а не разбора формулы:
+         разбор с `throwOnError: false` не бросает. Показываем исходник — он
+         честнее пустого места. */
+      host.textContent = this.tex;
+      host.title = error instanceof Error ? error.message : String(error);
+    }
+    return host;
+  }
+
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}
 
 /** Квадрат чекбокса с галочкой, рисуемой через `stroke-dashoffset` (BEHAVIOR §2.3). */
 export class TaskBoxWidget extends WidgetType {
@@ -81,18 +135,32 @@ export class ImageWidget extends WidgetType {
      * `blob:`-адресу, который живёт только внутри кэша (ITERATION-1 §5).
      */
     readonly path = '',
+    /** Выделена ли картинка: у выделенной по углам стоят ручки размера. */
+    readonly selected = false,
+    /** Записать новую ширину в подпись. Ставит её приложение. */
+    readonly onResize: (path: string, width: number) => void = () => {},
   ) {
     super();
   }
 
   override eq(other: ImageWidget): boolean {
-    return other.src === this.src && other.alt === this.alt && other.path === this.path;
+    return (
+      other.src === this.src &&
+      other.alt === this.alt &&
+      other.path === this.path &&
+      other.selected === this.selected
+    );
   }
 
   override toDOM(): HTMLElement {
     const wrap = document.createElement('span');
-    wrap.className = 'cm-z-image-wrap';
-    wrap.setAttribute('aria-hidden', 'true');
+    wrap.className = 'cm-z-image-wrap' + (this.selected ? ' cm-z-image-wrap-sel' : '');
+    /*
+     * `aria-hidden` только у невыделенной: пока картинка просто показана,
+     * её содержимое диктору даёт текст разметки. У выделенной появляются
+     * органы управления, и прятать их от клавиатуры и диктора нельзя.
+     */
+    if (!this.selected) wrap.setAttribute('aria-hidden', 'true');
 
     const img = document.createElement('img');
     img.className = 'cm-z-image';
@@ -128,7 +196,63 @@ export class ImageWidget extends WidgetType {
     });
 
     wrap.appendChild(img);
+    if (this.selected) this.addHandles(wrap, img);
     return wrap;
+  }
+
+  /**
+   * Четыре квадратика по углам — ими и тянут.
+   *
+   * Меняется ТОЛЬКО ширина: высоту держит пропорция, а «растянуть по одной
+   * оси» для фотографии в заметке — не то, чего от неё ждут. Поэтому любая
+   * ручка ведёт по горизонтали, а левые считают сдвиг наоборот.
+   *
+   * Пока тянут, ширина живёт в стиле картинки: документ трогать на каждый
+   * пиксель нельзя — это была бы сотня правок в истории и сотня пересчётов
+   * разметки. В текст ширина уходит один раз, когда палец отпустили.
+   */
+  private addHandles(wrap: HTMLElement, img: HTMLImageElement): void {
+    const CORNERS = [
+      ['nw', -1],
+      ['ne', 1],
+      ['sw', -1],
+      ['se', 1],
+    ] as const;
+
+    for (const [corner, direction] of CORNERS) {
+      const grip = document.createElement('span');
+      grip.className = `cm-z-image-grip cm-z-image-grip-${corner}`;
+      grip.dataset['zGrip'] = corner;
+
+      let startX = 0;
+      let startWidth = 0;
+      let width = 0;
+
+      grip.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        startX = event.clientX;
+        startWidth = img.getBoundingClientRect().width;
+        width = startWidth;
+        grip.setPointerCapture(event.pointerId);
+      });
+      grip.addEventListener('pointermove', (event) => {
+        if (!grip.hasPointerCapture(event.pointerId)) return;
+        event.preventDefault();
+        /* Нижняя граница 48: картинку меньше уже не ухватить обратно. */
+        width = Math.max(48, Math.min(4000, startWidth + (event.clientX - startX) * direction));
+        img.style.width = `${Math.round(width)}px`;
+      });
+      const finish = (event: PointerEvent): void => {
+        if (!grip.hasPointerCapture(event.pointerId)) return;
+        grip.releasePointerCapture(event.pointerId);
+        if (Math.round(width) === Math.round(startWidth)) return;
+        this.onResize(this.path, Math.round(width));
+      };
+      grip.addEventListener('pointerup', finish);
+      grip.addEventListener('pointercancel', finish);
+      wrap.appendChild(grip);
+    }
   }
 
   override get estimatedHeight(): number {

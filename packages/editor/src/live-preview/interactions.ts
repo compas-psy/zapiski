@@ -14,6 +14,7 @@ import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { editorRuntime } from '../runtime.js';
 import { reorderTasks } from '../input/task-order.js';
+import { selectImage } from './image-select.js';
 
 /** Элемент списка-задачи: маркер списка, затем `[ ]` / `[x]`. */
 const TASK_LINE = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/;
@@ -89,17 +90,31 @@ export const markupInteractions: Extension = EditorView.domEventHandlers({
       }
     }
 
+    // ── Ручка размера картинки ──────────────────────────────────────────────
+    /* Нажатие на квадратик разбирает сам виджет: он тянет ширину. Здесь его
+       только пропускаем мимо, чтобы тап не открыл просмотр. */
+    if (target.closest('.cm-z-image-grip')) return false;
+
     // ── Картинка ────────────────────────────────────────────────────────────
-    /* Тап по превью — полноэкранный просмотр (ITERATION-1 §5). Открывает его
-       приложение: редактор не знает ни про оболочку, ни про просмотрщик.
-       Путь берём из атрибута, а не из `src`: в `src` лежит `blob:`-адрес из
-       кэша, за пределами редактора он ничего не значит. */
+    /*
+     * Одиночный тап ВЫДЕЛЯЕТ картинку — по углам появляются ручки размера.
+     * Двойной открывает полноэкранный просмотр (ITERATION-1 §5).
+     *
+     * Раньше тап сразу уводил в просмотр, и заказчик написал прямо:
+     * «масштабирование должно быть по месту, без открытия на полный экран:
+     * кликнул на изображении → появились квадратики в углах». Просмотр никуда
+     * не делся — он теперь на втором нажатии, как открытие файла в проводнике.
+     *
+     * Путь берём из атрибута, а не из `src`: в `src` лежит `blob:`-адрес из
+     * кэша, за пределами редактора он ничего не значит.
+     */
     const image = target.closest('.cm-z-image');
     if (image instanceof HTMLElement) {
       const src = image.dataset['zSrc'];
       if (src) {
         event.preventDefault();
-        runtime.openAttachment(src);
+        if (event.detail >= 2) runtime.openAttachment(src);
+        else view.dispatch({ effects: selectImage.of(src) });
         return true;
       }
     }

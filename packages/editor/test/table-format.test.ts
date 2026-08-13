@@ -72,6 +72,29 @@ describe('таблица встаёт ровно сама', () => {
     expect(v.state.doc.toString()).toBe(before);
   });
 
+  it('таблица без строки-разделителя получает её', async () => {
+    /* Заказчик набрал таблицу руками и получил обычный текст: «нет виджета
+       никакого». По правилам GFM без `| --- |` это и не таблица — строку
+       дописываем сами, когда курсор из неё уходит. */
+    const doc = '| Колонка | Колонка |\n| Что пишем? | Не работает |\n\nХвост.';
+    const v = makeView(doc, { selection: { anchor: 5 } });
+    view = v;
+    v.dispatch({ selection: { anchor: v.state.doc.length } });
+    await settled();
+    expect(v.state.doc.toString().split('\n')[1]).toMatch(/^\|\s-+/);
+  });
+
+  it('одна строка с палками таблицей не становится', async () => {
+    /* «вариант А | вариант Б» — обычный текст, и дописывать ему разделитель
+       было бы самоуправством. */
+    const doc = '| вариант А | вариант Б |\n\nХвост.';
+    const v = makeView(doc, { selection: { anchor: 5 } });
+    view = v;
+    v.dispatch({ selection: { anchor: v.state.doc.length } });
+    await settled();
+    expect(v.state.doc.toString().split('\n')[1]).toBe('');
+  });
+
   it('текст вне таблицы не трогаем вовсе', async () => {
     const doc = 'Просто абзац с палкой | внутри.\n\nВторой абзац.';
     const v = makeView(doc, { selection: { anchor: 5 } });
