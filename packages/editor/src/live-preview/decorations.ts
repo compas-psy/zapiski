@@ -223,6 +223,70 @@ class LivePreviewBuilder {
     this.hidden.push(range);
   }
 
+  /**
+   * Докуда на самом деле тянется блочный маркер.
+   *
+   * Дефект, ради которого появился этот метод: «при применении Hx остаётся
+   * пробел перед словом». Парсер markdown относит к `HeaderMark` только сами
+   * решётки, а пробел между ними и текстом — уже содержимое строки. Пока
+   * схлопывался один узел, пробел оставался на экране, и заголовок оказывался
+   * сдвинут на символ вправо относительно обычного текста. То же и у цитаты:
+   * `>` пряталось, а её отступ жил своей жизнью.
+   *
+   * Пробел после блочного маркера — часть разметки: без него `#Заголовок`
+   * вообще не заголовок. Значит и прятать его нужно вместе с маркером.
+   *
+   * Только для блочных маркеров и только вперёд по строке: у закрывающих
+   * решёток (`## Текст ##`) справа пробелов нет, а инлайновые `*` и `` ` ``
+   * окружены обычным текстом, который трогать нельзя.
+   */
+  private markEnd(name: string, from: number, to: number): number {
+    if (name !== 'HeaderMark' && name !== 'QuoteMark') return to;
+    const line = this.state.doc.lineAt(from);
+    /* Закрывающая решётка стоит в конце строки — там поглощать нечего. */
+    if (to >= line.to) return to;
+    let end = to;
+    while (end < line.to && ' \t'.includes(this.state.doc.sliceString(end, end + 1))) end += 1;
+    return end;
+  }
+
+  /**
+   * Цитата и выноска — один узел markdown, разное на экране.
+   *
+   * Выноска записывается как цитата с меткой типа: `> [!note] текст`. Это
+   * соглашение Obsidian и GitHub, и оно намеренно остаётся в файле обычным
+   * markdown — заметка обязана осмысленно открываться чужим редактором.
+   *
+   * Дефект, ради которого метод появился: метку никто не прятал, и на экране
+   * оставалось «> [!note] Текст» — заказчик описал это как «результат работы
+   * выноски отображается с лишними символами». Сам маркер цитаты `>` при этом
+   * схлопывался, отчего строка читалась ещё страннее.
+   *
+   * Сразу скажу про центрирование, потому что здесь расхождение с каноном: ни
+   * в Obsidian, ни в GitHub выноска по горизонтали не центрируется — она
+   * занимает всю ширину колонки и опознаётся полосой слева. Центрирование
+   * сделано по прямой просьбе заказчика и живёт в теме (`.cm-z-callout`), а
+   * не в разметке файла: в `.md` остаётся канонический markdown.
+   */
+  private blockquote(from: number, to: number): void {
+    const first = this.state.doc.lineAt(from);
+    const label = /^>[\t ]*(\[![^\]\n]*\])[\t ]?/.exec(first.text);
+    if (!label) {
+      this.lines(from, to, 'cm-z-quote');
+      return;
+    }
+
+    this.lines(from, to, 'cm-z-callout', 'cm-z-callout-first', 'cm-z-callout-last');
+
+    /* Метка прячется вместе с отбивкой — по тому же правилу, что и блочные
+       маркеры: иначе на её месте останется дыра в начале строки. */
+    const tag = label[1] as string;
+    const at = first.text.indexOf(tag);
+    const start = first.from + at;
+    const spaced = ' \t'.includes(first.text[at + tag.length] ?? '');
+    this.fade(start, start + tag.length + (spaced ? 1 : 0), this.isActive(first.from, first.to));
+  }
+
   private widget(pos: number, deco: Decoration): void {
     this.out.push(deco.range(pos));
   }
@@ -256,7 +320,7 @@ class LivePreviewBuilder {
     if (FADING_MARKS.has(name)) {
       const owner = this.parent();
       const active = owner ? this.isActive(owner.from, owner.to) : this.isActive(from, to);
-      this.fade(from, to, active);
+      this.fade(from, this.markEnd(name, from, to), active);
       return;
     }
 
@@ -307,7 +371,7 @@ class LivePreviewBuilder {
 
     switch (name) {
       case 'Blockquote':
-        this.lines(from, to, 'cm-z-quote');
+        this.blockquote(from, to);
         return;
       case 'FencedCode':
       case 'CodeBlock':

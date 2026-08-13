@@ -182,15 +182,33 @@ export const toggleQuote: StateCommand = applyBlockMarker(
 // Вставки
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Ctrl+Shift+C — код-блок. */
+/**
+ * Ctrl+Shift+C — код-блок.
+ *
+ * Без выделения блок встаёт СВОЕЙ строкой после текущей, а не в позицию
+ * курсора. Дефект, ради которого это переписано: курсор стоял в середине
+ * набранной строки, и вставка разрывала её пополам — открывающая ограда
+ * оказывалась приклеена к тексту слева, закрывающая улетала к тексту справа.
+ * Дальше человек жал Enter, ограды переставали быть парой, и «в блок кода
+ * захватывало всё, что идёт ниже», до конца заметки.
+ *
+ * С выделением поведение другое и остаётся прежним: кодом становится тот
+ * абзац, который выделен, — этого заказчик и ждёт.
+ */
 export const insertCodeBlock: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   if (range.empty) {
-    const insert = '```\n\n```';
+    const line = state.doc.lineAt(range.head);
+    /* Пустая строка — блок встаёт прямо в неё; непустую не трогаем и
+       отбиваем блок пустой строкой, иначе markdown приклеит ограду к абзацу. */
+    const prefix = line.text.trim().length ? '\n\n' : '';
+    const at = line.to;
+    const insert = `${prefix}\`\`\`\n\n\`\`\``;
     dispatch(
       state.update({
-        changes: { from: range.head, insert },
-        selection: { anchor: range.head + 4 },
+        changes: { from: at, insert },
+        /* Курсор — в пустую строку внутри блока: писать будут там. */
+        selection: { anchor: at + prefix.length + 4 },
         scrollIntoView: true,
         userEvent: 'input.format',
       }),

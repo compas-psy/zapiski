@@ -10,7 +10,7 @@
  */
 import type { StateCommand } from '@codemirror/state';
 
-import { splitLine } from './formatting.js';
+import { splitLine, toggleWrap } from './formatting.js';
 
 /**
  * Выноска — крупная врезка внутри текста.
@@ -40,8 +40,22 @@ export const insertCallout: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
-/** Мелкий текст — 13 px, для сносок и подписей. */
-export const insertSmall: StateCommand = ({ state, dispatch }) => {
+/**
+ * Мелкий текст — 13 px, для сносок и подписей.
+ *
+ * С выделением оборачивается ИМЕННО ВЫДЕЛЕННОЕ. Дефект, ради которого это
+ * дописано: заказчик выделил один символ в строке `22**2=8`, а получил
+ * `<small>22*2=8</small>` — мелким становилась вся строка целиком, что бы он
+ * ни выделил. Команда просто не смотрела на выделение и всегда работала со
+ * строкой.
+ *
+ * Без выделения работа по строке остаётся: «сделать эту подпись мелкой» —
+ * нормальное намерение, и требовать для него выделения незачем.
+ */
+export const insertSmall: StateCommand = (target) => {
+  const { state, dispatch } = target;
+  if (!state.selection.main.empty) return toggleWrap('<small>', '</small>')(target);
+
   const line = state.doc.lineAt(state.selection.main.head);
   const marked = /^\s*<small>([\s\S]*?)<\/small>\s*$/.exec(line.text);
   const next = marked ? (marked[1] as string) : `<small>${line.text}</small>`;

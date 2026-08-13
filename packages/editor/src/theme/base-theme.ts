@@ -65,6 +65,10 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     '--z-block-gap': '0.6em',
     '--z-pad-y': '36px',
     '--z-pad-x': '32px',
+    /* Насколько выноска ýже колонки текста с каждой стороны. Отступ, а не
+       ширина: строка редактора — не блочный контейнер, `margin: auto` на ней
+       не работает, и «по центру» получается именно симметричным отступом. */
+    '--z-callout-inset': '24px',
     backgroundColor: 'var(--bg)',
     color: 'var(--text)',
     fontFamily: 'var(--z-face)',
@@ -180,6 +184,31 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     fontStyle: 'italic',
     color: 'var(--text-secondary)',
   },
+
+  /*
+   * Выноска (`> [!note] …`) — не цитата, хотя в файле записана как цитата.
+   *
+   * Заказчик просил центрировать её по горизонтали, и это осознанное
+   * расхождение с каноном: ни в Obsidian, ни в GitHub выноска не центрируется
+   * — она занимает всю ширину колонки и опознаётся полосой слева. Здесь она
+   * ýже колонки и стоит по центру, поэтому читается как врезка, а не как
+   * продолжение текста. В файле при этом остаётся канонический markdown:
+   * центрирование — способ показа, а не разметка.
+   */
+  '.cm-z-callout': {
+    /* Отступы по бокам делают блок ýже колонки, а `auto` по горизонтали —
+       ставят его по центру. Ширину задаём отступами, а не `max-width`:
+       строка редактора не блочный контейнер, и `margin: auto` на ней не
+       сработает. */
+    paddingLeft: 'var(--z-callout-inset)',
+    paddingRight: 'var(--z-callout-inset)',
+    background: 'var(--surface-alt)',
+    borderRadius: 'var(--r-card)',
+    color: 'var(--text)',
+    fontStyle: 'normal',
+  },
+  '.cm-z-callout-first': { paddingTop: '10px' },
+  '.cm-z-callout-last': { paddingBottom: '10px' },
 
   '.cm-z-hr': { position: 'relative' },
   '.cm-z-hr::after': {
