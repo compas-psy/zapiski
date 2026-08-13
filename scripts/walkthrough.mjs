@@ -30,49 +30,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
+import { findChrome } from './find-chrome.mjs';
 
 const PORT = process.env.ZAPISKI_PORT ?? '4173';
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
 
-/**
- * Где искать браузер.
- *
- * Жёсткий путь тут был бы ошибкой: у разработчика, в песочнице и на раннере CI
- * браузер лежит в трёх разных местах, а со `--strict` ненайденный браузер
- * роняет выкладку. Поэтому список кандидатов, а `ZAPISKI_CHROME` — последнее
- * слово, если ни один не подошёл.
- */
-function findChrome() {
-  /* Заданный вручную путь тоже проверяется: иначе опечатка в переменной даёт
-     не понятное сообщение, а стек из глубины Playwright. */
-  if (process.env.ZAPISKI_CHROME) {
-    return existsSync(process.env.ZAPISKI_CHROME) ? process.env.ZAPISKI_CHROME : null;
-  }
-
-  /* Браузеры Playwright: версия в имени каталога меняется от обновления к
-     обновлению, поэтому каталог перебирается, а не прописывается. */
-  const pool = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
-  if (existsSync(pool)) {
-    for (const entry of readdirSync(pool).sort().reverse()) {
-      for (const tail of ['chrome-linux/chrome', 'chrome-linux/headless_shell']) {
-        const candidate = join(pool, entry, tail);
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-  }
-
-  /* Системные сборки — то, что есть на раннерах GitHub. */
-  for (const candidate of [
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/microsoft-edge',
-  ]) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
 
 const CHROME = findChrome();
 

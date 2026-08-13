@@ -18,25 +18,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
+import { findChrome } from './find-chrome.mjs';
 
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
 const PORT = process.env.ZAPISKI_PORT ?? '4191';
 
-function findChrome() {
-  const pool = process.env.PLAYWRIGHT_BROWSERS_PATH ?? '/opt/pw-browsers';
-  if (existsSync(pool)) {
-    for (const entry of readdirSync(pool).sort().reverse()) {
-      for (const tail of ['chrome-linux/chrome', 'chrome-linux/headless_shell']) {
-        const candidate = join(pool, entry, tail);
-        if (existsSync(candidate)) return candidate;
-      }
-    }
-  }
-  for (const candidate of ['/usr/bin/google-chrome', '/usr/bin/chromium']) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
 
 /**
  * Сочетания, которые в окне браузера принадлежат браузеру.

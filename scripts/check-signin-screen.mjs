@@ -22,11 +22,14 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { findChrome } from './find-chrome.mjs';
 import { serveDist } from './static-server.mjs';
 
 const ROOT = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const DIST = path.join(ROOT, 'apps/web/dist');
-const CHROME = process.env['ZAPISKI_CHROME'] ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+/* Поиск браузера общий для всех прогонов: жёсткий путь знал только про
+   песочницу и в CI ронял выкладку сообщением «нет браузера». */
+const CHROME = findChrome();
 const PORT = Number(process.env['ZAPISKI_PORT'] ?? 4183);
 const STRICT = process.argv.includes('--strict') || process.env['ZAPISKI_WALKTHROUGH_STRICT'] === '1';
 
@@ -41,7 +44,7 @@ try {
 } catch {
   skip('нет playwright-core');
 }
-await access(CHROME).catch(() => skip(`нет браузера по пути ${CHROME}`));
+if (CHROME === null) skip('браузер не найден — поставьте Chromium или задайте ZAPISKI_CHROME');
 await access(path.join(DIST, 'index.html')).catch(() =>
   skip('нет собранной статики (pnpm --filter "@zapiski/web..." build)'),
 );
