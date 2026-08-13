@@ -153,7 +153,14 @@ function AppShell(): ReactNode {
       } else if (key === "n") {
         handled();
         void app.createNote();
-      } else if (key === "k" || (key === "p" && !event.shiftKey)) {
+      } else if (key === "k") {
+        /* Ctrl+K — поиск, а не палитра. Так его читают Linear, Notion и Slack,
+           и так он подписан у поля поиска в колонке списка. Палитра осталась
+           на Ctrl+P и Ctrl+Shift+P: она никуда не делась, просто перестала
+           занимать сочетание, которое все ищут для поиска. */
+        handled();
+        app.navigate({ name: "search" });
+      } else if (key === "p" && !event.shiftKey) {
         handled();
         app.togglePalette();
       } else if (key === "s" && event.shiftKey) {

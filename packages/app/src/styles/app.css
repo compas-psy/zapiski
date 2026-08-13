@@ -1466,3 +1466,57 @@
     transition: none;
   }
 }
+
+/* ── Поиск в колонке списка (Windows и десктопный веб) ────────────────────────
+   До этого поиска на широком экране не было видно вовсе: пилюля рисуется
+   только на телефоне, а с клавиатуры поиск открывался сочетанием, которое надо
+   было знать. Поле стоит там, где его ищут, — первым в колонке, над списком.
+
+   Подпись сочетания приглушена и набрана моно: она читается как справка, а не
+   как вторая кнопка рядом с полем. */
+.za-listsearch {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex: none;
+  margin: var(--sp-8) var(--sp-16) var(--sp-4);
+  padding-inline: var(--sp-12);
+  block-size: 36px;
+  border-radius: var(--r-full);
+  background-color: var(--sunken);
+  color: var(--text-tertiary);
+  transition: box-shadow var(--dur-press) var(--ease-out);
+}
+.za-listsearch:focus-within {
+  box-shadow: 0 0 0 var(--ring-w) var(--field-ring);
+}
+.za-listsearch__input {
+  flex: 1;
+  min-inline-size: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+  outline: none;
+}
+.za-listsearch__input::placeholder {
+  color: var(--text-tertiary);
+}
+/* Крестик очистки от движка: он рисуется чужим и не следует теме. Очистка
+   живёт на экране результатов, где ей и место. */
+.za-listsearch__input::-webkit-search-cancel-button {
+  display: none;
+}
+.za-listsearch__key {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .za-listsearch {
+    transition: none;
+  }
+}

@@ -159,6 +159,50 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
         </div>
       </div>
 
+      {/*
+        Поиск на широком экране — постоянное поле вверху колонки списка.
+
+        До этой строки на Windows поиска не было видно вовсе: пилюля рисуется
+        только на телефоне (`isMobile` ниже), а с клавиатуры он открывался
+        сочетанием, которое надо было знать. Заказчик так и написал: «Windows
+        очень не хватает поиска по заметкам».
+
+        Поле настоящее, а не кнопка: набранное сразу уходит в поиск, и человек
+        не теряет первые символы. Подпись сочетания — не украшение, а способ
+        научить: она показывает, чем открыть поиск, не отрывая рук.
+      */}
+      {!isMobile && !embedded ? (
+        <div className="za-listsearch">
+          <IconSearch size={15} />
+          <input
+            className="za-listsearch__input"
+            type="search"
+            value={state.query}
+            placeholder={strings.list.searchPlaceholder}
+            aria-label={strings.search.title}
+            onChange={(event) => {
+              app.setQuery(event.target.value);
+              /* Первый же символ уводит на экран результатов: искать, оставаясь
+                 в списке, — значит показывать человеку не то, что он ищет. */
+              if (event.target.value.trim() !== '') app.navigate({ name: 'search' });
+            }}
+            onFocus={() => {
+              if (state.query.trim() !== '') app.navigate({ name: 'search' });
+            }}
+            onKeyDown={(event) => {
+              /* Esc возвращает к списку и очищает запрос: поле остаётся на
+                 месте, а человек — там, откуда начал. */
+              if (event.key === 'Escape') {
+                app.setQuery('');
+                app.navigate({ name: 'list' });
+                event.currentTarget.blur();
+              }
+            }}
+          />
+          <kbd className="za-listsearch__key">{strings.list.searchHotkey}</kbd>
+        </div>
+      ) : null}
+
       <div
         className={`za-scroll${isMobile && !embedded ? ' za-scroll--bottom-bar' : ''}`}
         onScroll={virtual.onScroll}
