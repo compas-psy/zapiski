@@ -98,6 +98,7 @@ export const en: AppCatalog = {
     pinnedSection: 'PINNED',
     newNote: 'New note',
     searchPlaceholder: 'Search notes',
+    searchHotkey: 'Ctrl + K',
     listLabel: 'Notes',
     encrypted: 'Encrypted',
     pin: 'Pin',

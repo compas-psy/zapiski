@@ -110,6 +110,8 @@ export const ru = {
     pinnedSection: 'ЗАКРЕПЛЁННЫЕ',
     newNote: 'Новая заметка',
     searchPlaceholder: 'Поиск по заметкам',
+    /* Подпись сочетания у поля поиска: не украшение, а способ научить. */
+    searchHotkey: 'Ctrl + K',
     listLabel: 'Заметки',
     encrypted: 'Зашифровано',
     pin: 'Закрепить',

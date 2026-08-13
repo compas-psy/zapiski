@@ -289,6 +289,7 @@ class LivePreviewBuilder {
     const label = /^>[\t ]*(\[![^\]\n]*\])[\t ]?/.exec(first.text);
     if (!label) {
       this.lines(from, to, 'cm-z-quote');
+      this.quoteAuthor(from, to);
       return;
     }
 
@@ -367,6 +368,29 @@ class LivePreviewBuilder {
       if (this.seenLines.has(key)) continue;
       this.seenLines.add(key);
       this.out.push(lineDeco('cm-z-collapsed').range(line.from));
+    }
+  }
+
+  /**
+   * Строка атрибуции в цитате — `> — Автор` (замечание 4).
+   *
+   * Оформляется мельче и вторичным цветом, как подпись. Пустая — та, где
+   * кроме тире ничего нет, — не показывается вовсе: «если пользователь не
+   * вбивает автора, место под него в просмотре не должно оставаться». Пока
+   * курсор в этой строке, она видна: иначе автора не дописать.
+   */
+  private quoteAuthor(from: number, to: number): void {
+    const doc = this.state.doc;
+    for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n += 1) {
+      const line = doc.line(n);
+      const author = /^\s*>\s*—\s*(.*)$/.exec(line.text);
+      if (!author) continue;
+      const filled = (author[1] ?? '').trim() !== '';
+      if (!filled && !this.isActive(line.from, line.to)) {
+        this.lines(line.from, line.from, 'cm-z-collapsed');
+        continue;
+      }
+      this.lines(line.from, line.from, 'cm-z-quote-author');
     }
   }
 
