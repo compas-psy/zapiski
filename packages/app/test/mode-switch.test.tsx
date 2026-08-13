@@ -59,7 +59,7 @@ describe('переключатель режимов', () => {
     fireEvent.click(screen.getByRole('button'));
     fireEvent.click(screen.getAllByRole('button')[1] as HTMLElement);
 
-    expect(app.state.rawMode).toBe(true);
+    expect(app.getState().rawMode).toBe(true);
   });
 
   it('возврат в простой режим гасит показ разметки', () => {
@@ -68,10 +68,10 @@ describe('переключатель режимов', () => {
     const app = mount();
     fireEvent.click(screen.getByRole('button'));
     fireEvent.click(screen.getAllByRole('button')[1] as HTMLElement);
-    expect(app.state.rawMode).toBe(true);
+    expect(app.getState().rawMode).toBe(true);
 
     fireEvent.click(screen.getAllByRole('button')[0] as HTMLElement);
-    expect(app.state.rawMode).toBe(false);
+    expect(app.getState().rawMode).toBe(false);
   });
 
   it('у каждой кнопки есть слова, а не только символ', () => {

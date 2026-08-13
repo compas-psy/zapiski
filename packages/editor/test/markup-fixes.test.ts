@@ -176,3 +176,35 @@ describe('замечания 9–11: списки', () => {
     expect(decos.map((deco) => deco.class ?? '').join(' ')).toContain('cm-z-list');
   });
 });
+
+describe('замечание 14: ссылка показывается текстом, а не разметкой', () => {
+  it('адрес прячется вместе со скобками — остаётся только подпись', () => {
+    /* Заказчик видел «[CMPAS](https://cmpas.ru)» слитным текстом: скобки
+       схлопывались, а адрес оставался и приклеивался к подписи. */
+    const doc = 'Сайт [CMPAS](https://cmpas.ru) тут';
+    const state = makeState(doc, { selection: { anchor: 0 } });
+    const hiddenText = hiddenRanges(state).map((range) => doc.slice(range.from, range.to));
+
+    expect(hiddenText.join('')).toContain('https://cmpas.ru');
+  });
+
+  it('у автоссылки адрес остаётся видимым', () => {
+    /* Обратная сторона: в `https://…` без подписи адрес — единственное, что
+       есть, и прятать там нечего. */
+    const doc = 'Сайт https://cmpas.ru тут';
+    const state = makeState(doc, { selection: { anchor: 0 } });
+    const hiddenText = hiddenRanges(state).map((range) => doc.slice(range.from, range.to));
+
+    expect(hiddenText.join('')).not.toContain('cmpas.ru');
+  });
+
+  it('курсор внутри ссылки показывает адрес целиком', () => {
+    /* Профессиональный режим: в блоке под курсором разметка обязана быть
+       видна — иначе ссылку не отредактировать. */
+    const doc = 'Сайт [CMPAS](https://cmpas.ru) тут';
+    const state = makeState(doc, { selection: { anchor: doc.indexOf('CMPAS') + 2 } });
+    const hiddenText = hiddenRanges(state).map((range) => doc.slice(range.from, range.to));
+
+    expect(hiddenText.join('')).not.toContain('https://cmpas.ru');
+  });
+});

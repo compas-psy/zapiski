@@ -818,6 +818,10 @@ export function FormatPanel({
         <MenuButton
           label={copy.link}
           expanded={open === 'link'}
+          /* Диалог встаёт у каретки, а не у кнопки: панель может быть далеко
+             внизу у клавиатуры, и «вставить ссылку сюда» превращалось во
+             «всплыло где-то вверху». */
+          anchorToCaret={() => caretRect(view)}
           onPress={
             onLink
               ? () => {
@@ -1019,6 +1023,16 @@ interface MenuButtonProps extends ButtonProps {
   menu: ReactNode;
   /** Куда прижимать меню. Палитре эмодзи — вправо: она у правого края панели. */
   menuPlacement?: 'bottom-start' | 'bottom-end';
+  /**
+   * Прижать меню не к кнопке, а к КУРСОРУ в тексте.
+   *
+   * Нужно диалогу ссылки. Панель форматирования стоит у клавиатуры или под
+   * шапкой — далеко от того места, куда человек вставляет ссылку, — и диалог
+   * открывался «где-то вверху», как заказчик и написал. Возвращает
+   * прямоугольник каретки в координатах окна либо `null`, если каретки нет
+   * (тогда прижимаемся к кнопке, как обычно).
+   */
+  anchorToCaret?: () => DOMRect | null;
   /** Долгое нажатие / правый клик — для кнопок с действием и меню сразу. */
   onLongPress?: () => void;
 }
@@ -1031,6 +1045,7 @@ function MenuButton({
   active,
   menu,
   menuPlacement = 'bottom-start',
+  anchorToCaret,
   children,
 }: MenuButtonProps): ReactElement {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1066,9 +1081,37 @@ function MenuButton({
    * меню за кромку; `autoUpdate` пересчитывает при прокрутке и resize.
    * Порядок middleware обязателен именно такой.
    */
+  /*
+   * Якорь у каретки — виртуальным элементом Floating UI: у него нет узла в
+   * DOM, только прямоугольник. Считается один раз на открытие: пока меню
+   * открыто, курсор не двигается, а пересчёт на каждый рендер гонял бы
+   * позицию туда-сюда.
+   *
+   * Функция-источник держится в ref, потому что приходит инлайновой стрелкой
+   * и была бы новой на каждом рендере — в зависимостях эффекта это дало бы
+   * бесконечный цикл.
+   */
+  const [caretAnchor, setCaretAnchor] = useState<{ getBoundingClientRect: () => DOMRect } | null>(
+    null,
+  );
+  const anchorSource = useRef(anchorToCaret);
+  anchorSource.current = anchorToCaret;
+  useEffect(() => {
+    const make = anchorSource.current;
+    if (!expanded || !make) {
+      setCaretAnchor(null);
+      return;
+    }
+    const rect = make();
+    setCaretAnchor(rect ? { getBoundingClientRect: () => rect } : null);
+  }, [expanded]);
+
   const { refs, floatingStyles, placement } = useFloating({
     placement: menuPlacement,
     strategy: 'fixed',
+    /* Заданный `elements.reference` побеждает `refs.setReference` — так меню
+       и переезжает с кнопки на каретку, не теряя ссылку на саму кнопку. */
+    ...(caretAnchor ? { elements: { reference: caretAnchor } } : {}),
     middleware: [
       offset(8),
       flip({ padding: 8 }),
@@ -1196,6 +1239,20 @@ function Menu({ children }: { children: ReactNode }): ReactElement {
  * набранное. Диапазон замены запомнен там же — по нему вставка и попадает
  * туда, откуда её позвали.
  */
+/**
+ * Прямоугольник каретки в координатах окна.
+ *
+ * `coordsAtPos` отдаёт координаты видимой позиции в документе; если каретки
+ * нет (представление разрушено, позиция вне вьюпорта) — `null`, и тогда
+ * привязка к курсору просто не включается.
+ */
+function caretRect(view: EditorView | null): DOMRect | null {
+  if (!view) return null;
+  const at = view.coordsAtPos(view.state.selection.main.head);
+  if (!at) return null;
+  return new DOMRect(at.left, at.top, 0, at.bottom - at.top);
+}
+
 function LinkDialog({
   copy,
   view,
