@@ -82,8 +82,20 @@ export const insertCollapsible: StateCommand = ({ state, dispatch }) => {
   const line = state.doc.lineAt(state.selection.main.head);
   const { rest } = splitLine(line.text);
   const summary = rest.trim();
-  const insert = `<details>\n<summary>${summary}</summary>\n\n`;
-  const tail = '\n</details>';
+  /*
+   * Пустые строки вокруг тела — не косметика, а условие работы markdown.
+   *
+   * HTML-блок в CommonMark тянется до пустой строки: всё, что идёт сразу за
+   * `<summary>`, остаётся частью html, и разметка внутри не разбирается.
+   * Раньше пустая строка была ровно одна — та самая, куда ставился курсор, —
+   * и первый же набранный символ её съедал. Отсюда «булеты не появляются»:
+   * список внутри блока переставал быть списком, едва его начинали писать.
+   *
+   * Теперь их две: одна отделяет тело от `<summary>` и остаётся пустой, во
+   * второй стоит курсор. Такая же пустая строка — перед закрывающим тегом.
+   */
+  const insert = `<details>\n<summary>${summary}</summary>\n\n\n`;
+  const tail = '\n\n</details>';
 
   dispatch(
     state.update({

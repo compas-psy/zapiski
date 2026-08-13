@@ -7,7 +7,7 @@
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 
-import { insertQuoteAuthor, insertSmall } from '../src/commands/blocks';
+import { insertCollapsible, insertQuoteAuthor, insertSmall } from '../src/commands/blocks';
 import { insertCodeBlock, toggleBulletList, toggleOrderedList } from '../src/commands/formatting';
 import { decorationsOf, hiddenRanges, makeState } from './helpers.js';
 import { toggleCollapsed } from '../src/live-preview/collapsed';
@@ -370,5 +370,26 @@ describe('дефекты со снимков экрана', () => {
       .map((deco) => deco.widget ?? '')
       .join(' ');
     expect(widgets).toContain('FileWidget');
+  });
+});
+
+describe('маркеры внутри сворачиваемого блока', () => {
+  it('тело отделено пустой строкой — иначе markdown внутри не работает', () => {
+    /* HTML-блок тянется до пустой строки: без неё список внутри `<details>`
+       остаётся частью html и списком не становится. Заказчик увидел это как
+       «булеты не появляются». */
+    const text = run('Заголовок|', insertCollapsible);
+    const lines = text.split('\n');
+    const summaryAt = lines.findIndex((line) => line.includes('<summary>'));
+
+    expect(summaryAt).toBeGreaterThan(-1);
+    expect(lines[summaryAt + 1], 'после <summary> нет пустой строки').toBe('');
+    expect(lines[lines.length - 2], 'перед </details> нет пустой строки').toBe('');
+  });
+
+  it('список внутри блока остаётся списком', () => {
+    const doc = '<details>\n<summary>Заголовок</summary>\n\n- Первый\n- Второй\n\n</details>';
+    const decos = decorationsOf(makeState(doc, { selection: { anchor: doc.length } }));
+    expect(decos.map((deco) => deco.class ?? '').join(' ')).toContain('cm-z-list-mark');
   });
 });
