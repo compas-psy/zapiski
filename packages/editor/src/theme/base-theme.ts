@@ -216,6 +216,27 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   '.cm-z-callout-first': { paddingTop: '10px' },
   '.cm-z-callout-last': { paddingBottom: '10px' },
 
+  /*
+   * Сворачиваемый блок (замечание 12). В файле остаётся `<details><summary>`,
+   * на экране — заголовок со стрелкой; тело прячется классом строки, а не
+   * удалением из документа: свёрнутый текст обязан оставаться в поиске.
+   */
+  '.cm-z-summary': { fontWeight: '600' },
+  '.cm-z-summary-arrow': {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    inlineSize: '18px',
+    blockSize: '18px',
+    marginRight: '4px',
+    verticalAlign: '-3px',
+    cursor: 'pointer',
+    color: 'var(--text-secondary)',
+  },
+  '.cm-z-summary-arrow svg': { inlineSize: '16px', blockSize: '16px', fill: 'currentColor' },
+  '.cm-z-summary-arrow-open svg': { transform: 'rotate(90deg)' },
+  '.cm-z-collapsed': { display: 'none' },
+
   '.cm-z-hr': { position: 'relative' },
   '.cm-z-hr::after': {
     content: '""',

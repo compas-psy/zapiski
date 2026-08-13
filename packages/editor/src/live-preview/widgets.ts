@@ -276,3 +276,60 @@ export class AudioWidget extends WidgetType {
     return true;
   }
 }
+
+/**
+ * Стрелка сворачиваемого блока (замечание 12).
+ *
+ * Заказчик: «сворачиваемый блок в принципе не работает, а просто выдаёт xml,
+ * заполняя который ничего не происходит». В файле блок остаётся честным
+ * `<details><summary>` — так его понимают GitHub, Obsidian и любой браузер, —
+ * а на экране от него остаётся заголовок со стрелкой, и он сворачивается.
+ *
+ * `ignoreEvent` возвращает `false`, иначе CodeMirror не пропустит нажатие в
+ * свой конвейер и стрелка окажется мёртвой: `eventBelongsToEditor` идёт от
+ * цели вверх и на первом же виджете с «игнорировать» возвращает `false`.
+ */
+export class SummaryWidget extends WidgetType {
+  constructor(
+    readonly collapsed: boolean,
+    readonly at: number,
+    readonly onToggle: (at: number) => void,
+  ) {
+    super();
+  }
+
+  override eq(other: SummaryWidget): boolean {
+    return other.collapsed === this.collapsed && other.at === this.at;
+  }
+
+  override toDOM(): HTMLElement {
+    const host = document.createElement('span');
+    host.className = 'cm-z-summary-arrow';
+    host.setAttribute('aria-hidden', 'true');
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16');
+    svg.setAttribute('role', 'presentation');
+    const path = document.createElementNS(SVG_NS, 'path');
+    /* Треугольник вправо; развёрнутый блок поворачивает его вниз средствами
+       CSS — так поворот анимируется и не требует второго виджета. */
+    path.setAttribute('d', 'M6 4 L11 8 L6 12 Z');
+    svg.appendChild(path);
+    host.appendChild(svg);
+
+    if (!this.collapsed) host.classList.add('cm-z-summary-arrow-open');
+
+    host.addEventListener('pointerdown', (event) => {
+      /* Нажатие не должно уводить курсор в текст заголовка: человек кликает
+         по стрелке, а не ставит каретку. */
+      event.preventDefault();
+      this.onToggle(this.at);
+    });
+
+    return host;
+  }
+
+  override ignoreEvent(): boolean {
+    return false;
+  }
+}

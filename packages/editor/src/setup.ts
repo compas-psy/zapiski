@@ -20,6 +20,7 @@ import type { Extension } from '@codemirror/state';
 import { drawSelection, dropCursor, EditorView, keymap, placeholder } from '@codemirror/view';
 
 import { editorRuntime, noopRuntime } from './runtime.js';
+import { collapsible } from './live-preview/collapsed.js';
 import type { EditorRuntime } from './runtime.js';
 import { editorStrings, ru } from './i18n.js';
 import type { EditorStrings } from './i18n.js';
@@ -77,6 +78,9 @@ export function zapiskiEditor(options: ZapiskiEditorOptions = {}): Extension[] {
     syntaxHighlighting(zapiskiCodeHighlight),
 
     livePreview,
+    /* Какие сворачиваемые блоки свёрнуты. Поле, а не правка текста:
+       в файле `<details>` всегда записан целиком (замечание 12). */
+    collapsible,
     markupInteractions,
     autoformat,
     smartPaste,

@@ -72,6 +72,14 @@ export interface EditorRuntime {
    * приложение: редактор не знает ни про оболочку, ни про просмотрщик.
    */
   openAttachment(src: string): void;
+
+  /**
+   * Свернуть/развернуть блок `<details>`, начинающийся в этой позиции.
+   *
+   * Живёт в рантайме, а не в виджете, потому что виджет не имеет доступа к
+   * представлению: он получает готовый обработчик и только зовёт его.
+   */
+  toggleCollapsed(at: number): void;
 }
 
 /** Заглушка: редактор полностью работоспособен и без приложения вокруг. */
@@ -88,6 +96,7 @@ export const noopRuntime: EditorRuntime = {
   resolveAttachment: () => null,
   attachmentSize: () => '',
   openAttachment: () => {},
+  toggleCollapsed: () => {},
 };
 
 /**

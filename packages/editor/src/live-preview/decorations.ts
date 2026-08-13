@@ -52,7 +52,8 @@ import { hidesMarkup } from './editor-mode.js';
 import type { SyntaxNodeRef } from '@lezer/common';
 import { editorRuntime } from '../runtime.js';
 import type { EditorRuntime } from '../runtime.js';
-import { AudioWidget, FileWidget, ImageWidget, TaskBoxWidget } from './widgets.js';
+import { AudioWidget, FileWidget, ImageWidget, SummaryWidget, TaskBoxWidget } from './widgets.js';
+import { isCollapsed } from './collapsed.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Кэш деклараций: одинаковый класс → один и тот же объект `Decoration`.
@@ -302,6 +303,73 @@ class LivePreviewBuilder {
     this.fade(start, start + tag.length + (spaced ? 1 : 0), this.isActive(first.from, first.to));
   }
 
+  /**
+   * `<details>` и `<summary>` — заголовок со стрелкой вместо голой разметки.
+   *
+   * Заказчик: «сворачиваемый блок в принципе не работает, а просто выдаёт xml,
+   * заполняя который ничего не происходит». В файле блок остаётся честным
+   * html — так его понимают GitHub, Obsidian и браузер, — прячется только
+   * показ: сами теги. Заголовок получает стрелку, и она сворачивает тело.
+   *
+   * Разметка видна, когда курсор внутри блока: иначе её не отредактировать.
+   */
+  private htmlBlock(from: number, to: number): void {
+    const text = this.state.doc.sliceString(from, to);
+    if (!/<\/?(details|summary)\b/i.test(text)) return;
+
+    const active = this.isActive(from, to);
+    const open = /<details[^>]*>/i.exec(text);
+    const summary = /<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(text);
+
+    /* Закрывающий блок — только тег: прячем его целиком. */
+    if (!open && !summary) {
+      const close = /<\/details\s*>/i.exec(text);
+      if (close) this.fade(from + (close.index ?? 0), from + (close.index ?? 0) + close[0].length, active);
+      return;
+    }
+
+    if (open) this.fade(from + open.index, from + open.index + open[0].length, active);
+
+    if (!summary) return;
+    const head = from + summary.index;
+    const inner = summary[1] ?? '';
+    const openTagLength = summary[0].length - inner.length - '</summary>'.length;
+
+    this.lines(head, head, 'cm-z-summary');
+    /* Стрелка ставится ПЕРЕД заголовком и замещает открывающий тег: так у неё
+       есть своё место, а курсор перешагивает её целиком. */
+    const collapsed = isCollapsed(this.state, from);
+    const arrow = Decoration.replace({
+      widget: new SummaryWidget(collapsed, from, (at) => this.runtime.toggleCollapsed(at)),
+    }).range(head, head + openTagLength);
+    this.out.push(arrow);
+    this.hidden.push(arrow);
+    this.fade(head + openTagLength + inner.length, head + summary[0].length, active);
+
+    if (collapsed) this.collapseBody(to);
+  }
+
+  /**
+   * Спрятать тело свёрнутого блока — строки от заголовка до `</details>`.
+   *
+   * Тело разбирается как обычный markdown отдельными узлами, поэтому его
+   * границы здесь неизвестны: ищем закрывающий тег построчно. Прячем классом
+   * строки, а не `replace`: содержимое остаётся в документе и в поиске, просто
+   * не показывается — как и должно быть у свёрнутого блока.
+   */
+  private collapseBody(afterHead: number): void {
+    const doc = this.state.doc;
+    const first = doc.lineAt(afterHead).number + 1;
+    for (let n = first; n <= doc.lines; n += 1) {
+      const line = doc.line(n);
+      if (/<\/details\s*>/i.test(line.text)) return;
+      const key = `${line.from}:cm-z-collapsed`;
+      if (this.seenLines.has(key)) continue;
+      this.seenLines.add(key);
+      this.out.push(lineDeco('cm-z-collapsed').range(line.from));
+    }
+  }
+
   private widget(pos: number, deco: Decoration): void {
     this.out.push(deco.range(pos));
   }
@@ -437,6 +505,17 @@ class LivePreviewBuilder {
       case 'FencedCode':
       case 'CodeBlock':
         this.lines(from, to, 'cm-z-code', 'cm-z-code-first', 'cm-z-code-last');
+        return;
+      /*
+       * Сворачиваемый блок (замечание 12): `<details>` / `<summary>`.
+       *
+       * Парсер отдаёт его двумя HTML-блоками — открывающим (вместе с
+       * заголовком) и закрывающим, — а тело между ними разбирает как обычный
+       * markdown. Это удобно: тело остаётся живым текстом со своим
+       * форматированием, а прячем мы только теги.
+       */
+      case 'HTMLBlock':
+        this.htmlBlock(from, to);
         return;
       case 'HorizontalRule':
         this.lines(from, to, 'cm-z-hr');
