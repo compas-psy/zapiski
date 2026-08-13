@@ -863,6 +863,39 @@ export class AppController {
     });
   }
 
+  /**
+   * Пересмотреть папку: не появилось ли в ней файлов помимо нас.
+   *
+   * Заказчик: «если приложение ЗАПИСКИ открыто, то добавленные папки
+   * отображаются сразу, а файлы только после перезагрузки приложения».
+   * Расхождение объяснялось буквально одной строкой в `refresh()`: папки там
+   * берутся с диска (`vault.folders()`), а заметки — из индекса в памяти
+   * (`vault.notes()`). Индекс же пересобирается только при открытии
+   * хранилища, то есть при запуске приложения.
+   *
+   * Следить за папкой постоянно мы не можем: у веба этого нет вовсе, а на
+   * Android папка живёт за системным провайдером, где уведомлений об
+   * изменениях не предусмотрено. Зато есть момент, когда пересмотр и нужен, —
+   * человек ушёл в файловый менеджер, скопировал дерево и вернулся. На
+   * возвращении и смотрим.
+   *
+   * Сравниваются наборы путей, а не содержимое: полная пересборка индекса
+   * читает каждый файл, и делать её на каждое переключение окна нельзя.
+   */
+  async rescanVault(): Promise<boolean> {
+    const vault = this.vault;
+    if (!vault) return false;
+    const onDisk = await vault.notePaths().catch(() => null);
+    if (onDisk === null) return false;
+    const known = new Set(vault.notes().map((note) => note.path));
+    const changed =
+      onDisk.length !== known.size || onDisk.some((path) => !known.has(path));
+    if (!changed) return false;
+    await vault.rebuild();
+    await this.refresh();
+    return true;
+  }
+
   get vaultRef(): Vault | null {
     return this.vault;
   }

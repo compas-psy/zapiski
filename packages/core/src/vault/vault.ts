@@ -476,10 +476,29 @@ export class Vault {
     const fmTags = fm ? fm.getList('tags').map((tag) => tag.replace(/^#/, '')) : [];
     const tags = [...new Set([...fmTags, ...parsed.tags])];
     const fromFrontmatter = parsed.title === '' ? fm?.getString('title') : undefined;
-    const title = parsed.title || fromFrontmatter || this.strings.notes.untitled;
-    /* Заголовка нет ни в тексте, ни в frontmatter — список назовёт заметку
-       «Без названия» приглушённым цветом (ITERATION-1 §1). */
-    const untitled = parsed.title === '' && !fromFrontmatter;
+    /*
+     * Третий источник имени — САМ ФАЙЛ.
+     *
+     * Заказчик скопировал в папку ЗАПИСОК дерево из Obsidian: «копируются без
+     * заголовков самих заметок». Так и было — и это не про копирование. У
+     * Obsidian имя заметки это имя файла, а `# Заголовок` в тексте не
+     * обязателен; мы же смотрели только в текст и во frontmatter, поэтому весь
+     * чужой архив приезжал списком «Без названия».
+     *
+     * Порядок именно такой: заголовок в тексте — наша договорённость
+     * (BEHAVIOR §2.2 держит имя файла в согласии с ним), frontmatter — вторая
+     * договорённость, а имя файла — то, что в чужих архивах и есть название.
+     * Ниже него остаётся только «Без названия».
+     */
+    const fromFileName = stemOf(path);
+    const title = parsed.title || fromFrontmatter || fromFileName || this.strings.notes.untitled;
+    /* «Без названия» приглушённым цветом (ITERATION-1 §1) — только когда имени
+       действительно нет НИГДЕ. Файл, который так и называется, тоже считается
+       безымянным: это наша же заметка, созданная без заголовка. */
+    const untitled =
+      parsed.title === '' &&
+      !fromFrontmatter &&
+      (fromFileName === '' || fromFileName === this.strings.notes.untitled);
 
     // Идентификатор из frontmatter'а имеет приоритет — так заметка не теряет
     // себя при переносе между устройствами (ТЗ §3.2).

@@ -72,6 +72,35 @@ export function AppProvider({ host, locale, children, controller }: AppProviderP
     return () => document.removeEventListener('visibilitychange', onHidden);
   }, [app]);
 
+  /*
+   * Возвращение к приложению — момент пересмотреть папку.
+   *
+   * Заказчик: «если приложение ЗАПИСКИ открыто, то добавленные папки
+   * отображаются сразу, а файлы только после перезагрузки приложения». Файлы
+   * приезжали из индекса в памяти, а он собирается один раз, при открытии
+   * хранилища. Следить за папкой постоянно нельзя — ни в вебе, ни за
+   * системным провайдером Android уведомлений об изменениях нет, — но есть
+   * ровно тот момент, когда пересмотр и нужен: человек скопировал дерево
+   * файловым менеджером и вернулся сюда.
+   *
+   * Оба события, а не одно: `visibilitychange` ловит переключение задач на
+   * телефоне, `focus` — переключение окон на Windows, где вкладка видима
+   * всё время.
+   */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onBack = (): void => {
+      if (document.visibilityState === 'hidden') return;
+      void app.rescanVault();
+    };
+    document.addEventListener('visibilitychange', onBack);
+    window.addEventListener('focus', onBack);
+    return () => {
+      document.removeEventListener('visibilitychange', onBack);
+      window.removeEventListener('focus', onBack);
+    };
+  }, [app]);
+
   return <ControllerContext.Provider value={app}>{children}</ControllerContext.Provider>;
 }
 
