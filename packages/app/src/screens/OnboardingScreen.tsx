@@ -123,7 +123,24 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
       let storage = null;
       let refused = false;
       try {
-        storage = await app.host.platform.pickVaultDirectory();
+        /* Сначала — настоящий системный выбор, если платформа его объявила.
+           На Android это существенно: там `pickVaultDirectory` молча отдаёт
+           каталог приложения, диалога человек не видит вовсе, и получается
+           ровно то, на что жаловался заказчик, — «не выбирается папка, где
+           хранить заметки». Системный выбор живёт в отдельном порте
+           (`vaultFolders`), потому что на Android за него платят атомарностью
+           записи, и об этой цене приложение говорит вслух.
+
+           На Windows порта нет, а `pickVaultDirectory` и так открывает
+           нативный диалог — там ветка ниже отрабатывает как прежде. */
+        const picker = app.host.platform.vaultFolders;
+        if (picker) {
+          const chosen = await picker.chooseFolder();
+          storage = chosen?.storage ?? null;
+        }
+        /* Отмена — не отказ: человек вправе не выбирать, и тогда заметки
+           ложатся в каталог приложения, надёжный путь с атомарной записью. */
+        storage ??= await app.host.platform.pickVaultDirectory();
       } catch {
         refused = true;
       }

@@ -15,7 +15,7 @@
     "android:overlay": "node scripts/apply-android-overlay.mjs",
     "android:overlay:selftest": "node scripts/apply-android-overlay.mjs --self-test",
     "android:build": "tauri android build",
-    "test": "node scripts/apply-android-overlay.mjs --self-test",
+    "test": "node scripts/apply-android-overlay.mjs --self-test && vitest run",
     "android:kotlin:check": "node scripts/check-kotlin-imports.mjs"
   },
   "dependencies": {
@@ -35,6 +35,7 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.0.5",
     "typescript": "^5.9.3",
-    "vite": "^8.2.1"
+    "vite": "^8.2.1",
+    "vitest": "^3.2.7"
   }
 }

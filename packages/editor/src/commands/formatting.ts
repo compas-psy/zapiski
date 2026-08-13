@@ -114,14 +114,25 @@ function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boo
     const parts = lineNumbers.map((n) => splitLine(state.doc.line(n).text));
     const allMarked = parts.every((p) => matches(p.marker));
 
+    /*
+     * Меняется ТОЛЬКО маркер, а не строка целиком.
+     *
+     * Дефект, ради которого это переписано: «при вставке списка добавляется
+     * `-`, но курсор встаёт перед ним». Раньше строка заменялась целиком
+     * (`from: line.from, to: line.to`), и позиция курсора внутри заменённого
+     * куска схлопывалась к его началу — то есть перед только что добавленным
+     * маркером. Точечная правка отображает позиции сама: текст остаётся на
+     * месте, курсор едет вместе с ним.
+     */
     const changes: ChangeSpec[] = [];
     lineNumbers.forEach((n, i) => {
       const line = state.doc.line(n);
       const part = parts[i];
       if (!part) return;
       const marker = allMarked ? '' : markerFor(part, i);
-      const next = `${part.indent}${marker}${part.rest}`;
-      if (next !== line.text) changes.push({ from: line.from, to: line.to, insert: next });
+      if (marker === part.marker) return;
+      const at = line.from + part.indent.length;
+      changes.push({ from: at, to: at + part.marker.length, insert: marker });
     });
     if (!changes.length) return false;
 
@@ -182,15 +193,33 @@ export const toggleQuote: StateCommand = applyBlockMarker(
 // Вставки
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Ctrl+Shift+C — код-блок. */
+/**
+ * Ctrl+Shift+C — код-блок.
+ *
+ * Без выделения блок встаёт СВОЕЙ строкой после текущей, а не в позицию
+ * курсора. Дефект, ради которого это переписано: курсор стоял в середине
+ * набранной строки, и вставка разрывала её пополам — открывающая ограда
+ * оказывалась приклеена к тексту слева, закрывающая улетала к тексту справа.
+ * Дальше человек жал Enter, ограды переставали быть парой, и «в блок кода
+ * захватывало всё, что идёт ниже», до конца заметки.
+ *
+ * С выделением поведение другое и остаётся прежним: кодом становится тот
+ * абзац, который выделен, — этого заказчик и ждёт.
+ */
 export const insertCodeBlock: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   if (range.empty) {
-    const insert = '```\n\n```';
+    const line = state.doc.lineAt(range.head);
+    /* Пустая строка — блок встаёт прямо в неё; непустую не трогаем и
+       отбиваем блок пустой строкой, иначе markdown приклеит ограду к абзацу. */
+    const prefix = line.text.trim().length ? '\n\n' : '';
+    const at = line.to;
+    const insert = `${prefix}\`\`\`\n\n\`\`\``;
     dispatch(
       state.update({
-        changes: { from: range.head, insert },
-        selection: { anchor: range.head + 4 },
+        changes: { from: at, insert },
+        /* Курсор — в пустую строку внутри блока: писать будут там. */
+        selection: { anchor: at + prefix.length + 4 },
         scrollIntoView: true,
         userEvent: 'input.format',
       }),
