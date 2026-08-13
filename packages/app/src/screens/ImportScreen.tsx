@@ -12,6 +12,7 @@ import {
   importEvernote,
   importFolder,
   importNotionFiles,
+  unzip,
   type ImportBundle,
   type ImportReport,
 } from '@zapiski/core';
@@ -26,6 +27,7 @@ export function ImportScreen(): ReactNode {
   const strings = useStrings();
   const copy = strings.importer;
   const fileInput = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState(0);
   const [source, setSource] = useState<Source>('obsidian');
@@ -105,6 +107,20 @@ export function ImportScreen(): ReactNode {
         {step === 1 ? (
           <>
             <Section>{copy.steps[1]}</Section>
+            {/*
+              Два входа, а не один.
+
+              Obsidian и «папка с .md» приезжают ПАПКОЙ с вложенностью, и
+              выбрать её обычным выбором файлов нельзя: человек либо тыкал в
+              отдельные файлы, теряя структуру, либо не мог выбрать ничего.
+              `webkitdirectory` — единственный способ отдать браузеру каталог;
+              относительные пути приходят в `webkitRelativePath`, и разбор их
+              уже ждал.
+
+              Bear, Notion и Evernote отдают архив либо один файл — им нужен
+              обычный выбор. Показываем оба входа: угадывать за человека, что
+              у него на диске, мы не можем.
+            */}
             <input
               ref={fileInput}
               type="file"
@@ -113,9 +129,25 @@ export function ImportScreen(): ReactNode {
               aria-label={copy.pick}
               onChange={(event) => void pick(event.target.files)}
             />
-            <Button fullWidth onClick={() => fileInput.current?.click()}>
+            <input
+              ref={folderInput}
+              type="file"
+              multiple
+              // @ts-expect-error нестандартный атрибут: другого способа
+              // отдать браузеру каталог нет, и он поддержан везде, где мы
+              // работаем.
+              webkitdirectory=""
+              className="z-visually-hidden"
+              aria-label={copy.pickFolder}
+              onChange={(event) => void pick(event.target.files)}
+            />
+            <Button fullWidth onClick={() => folderInput.current?.click()}>
+              {copy.pickFolder}
+            </Button>
+            <Button variant="secondary" fullWidth onClick={() => fileInput.current?.click()}>
               {copy.pick}
             </Button>
+            <p className="za-muted za-hint">{copy.pickHint}</p>
             <InfoNote>{copy.neverOverwrites}</InfoNote>
           </>
         ) : null}
@@ -185,20 +217,65 @@ export function ImportScreen(): ReactNode {
   );
 }
 
-/** Разбор выбранных файлов конкретным импортёром ядра. */
+/**
+ * Разбор выбранных файлов конкретным импортёром ядра.
+ *
+ * ── Почему архив разворачивается ЗДЕСЬ ──────────────────────────────────────
+ *
+ * Заказчик: «Импорт… не должен быть просто декорацией». Декорацией он и был, и
+ * по одной причине: Notion, Bear и Evernote отдают выгрузку АРХИВОМ. Человек
+ * выбирал `Export.zip`, сюда приезжал один бинарный файл, импортёр не находил
+ * в нём ни одной заметки и рапортовал «импортировано: 0». Всё остальное —
+ * разбор markdown, вложения, защита от перезаписи — было на месте и работало
+ * вхолостую, потому что до него не доходило содержимое.
+ *
+ * Распаковка в ядре была с самого начала (`unzip`, `importBear(zip)`,
+ * `importNotion(zip)`, `importFolderZip`) — её просто никто не звал.
+ */
 function buildBundle(source: Source, files: Map<string, Uint8Array>): ImportBundle {
+  const expanded = expandArchives(files);
   switch (source) {
     case 'bear':
-      return importBearFiles(files);
+      return importBearFiles(expanded);
     case 'notion':
-      return importNotionFiles(files);
+      return importNotionFiles(expanded);
     case 'evernote': {
-      const first = [...files.values()][0];
-      return importEvernote(first ?? new Uint8Array());
+      /* `.enex` — единственный формат Evernote, и он не архив. Но выгрузку
+         часто присылают завёрнутой в zip, поэтому берём первый `.enex` из
+         того, что получилось после разворачивания. */
+      const enex =
+        [...expanded.entries()].find(([name]) => /\.enex$/i.test(name))?.[1] ??
+        [...expanded.values()][0];
+      return importEvernote(enex ?? new Uint8Array());
     }
     case 'obsidian':
     case 'folder':
     default:
-      return importFolder(files);
+      return importFolder(expanded);
   }
+}
+
+/**
+ * Развернуть выбранные архивы в обычные файлы.
+ *
+ * Архив может быть один (обычный случай) или лежать среди прочего — разбираем
+ * все. Битый архив не роняет импорт: он остаётся в наборе как есть, и
+ * импортёр просто не найдёт в нём заметок.
+ */
+function expandArchives(files: Map<string, Uint8Array>): Map<string, Uint8Array> {
+  if (![...files.keys()].some((name) => /\.zip$/i.test(name))) return files;
+
+  const out = new Map<string, Uint8Array>();
+  for (const [name, bytes] of files) {
+    if (!/\.zip$/i.test(name)) {
+      out.set(name, bytes);
+      continue;
+    }
+    try {
+      for (const [inner, data] of unzip(bytes)) out.set(inner, data);
+    } catch {
+      out.set(name, bytes);
+    }
+  }
+  return out;
 }

@@ -602,6 +602,9 @@ export const en: AppCatalog = {
       folder: 'Just a folder with .md',
     },
     pick: 'Choose files',
+    pickFolder: 'Choose a folder',
+    pickHint:
+      'Pick a folder for Obsidian and plain .md — that keeps the nesting. Bear, Notion and Evernote export an archive or a single file: pick it as a file, the archive is unpacked here',
     picked: (count: number): string => `Files chosen: ${count}`,
     preview: (notes: number, assets: number, folders: number): string =>
       `Found: ${notes} ${pl(notes, 'note', 'notes')}, ${assets} ${pl(assets, 'attachment', 'attachments')}, ${folders} ${pl(folders, 'folder', 'folders')}`,

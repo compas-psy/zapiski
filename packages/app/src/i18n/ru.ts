@@ -696,6 +696,9 @@ export const ru = {
       folder: 'Просто папка с .md',
     },
     pick: 'Выбрать файлы',
+    pickFolder: 'Выбрать папку',
+    pickHint:
+      'Obsidian и папку с .md выбирайте папкой — так сохранится вложенность. Bear, Notion и Evernote отдают архив или один файл: их выбирайте файлом, архив приложение развернёт само',
     picked: (count: number): string => `Выбрано файлов: ${count}`,
     preview: (notes: number, assets: number, folders: number): string =>
       `Найдено: ${notes} ${plural(notes, 'заметка', 'заметки', 'заметок')}, ${assets} ${plural(assets, 'вложение', 'вложения', 'вложений')}, ${folders} ${plural(folders, 'папка', 'папки', 'папок')}`,
