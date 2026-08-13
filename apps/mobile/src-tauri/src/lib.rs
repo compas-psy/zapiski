@@ -42,6 +42,7 @@ pub fn run() {
             saf::saf_write,
             saf::saf_stat,
             saf::saf_mkdir,
+            saf::saf_open,
             saf::saf_remove,
             saf::saf_rename,
             platform::secure_flag,

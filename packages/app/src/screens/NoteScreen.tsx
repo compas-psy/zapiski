@@ -467,12 +467,28 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
                  остальное — системное приложение. Разделение здесь, а не в
                  редакторе: про оболочку знает приложение. */
               onOpenAttachment={(src) => {
-                const url = /^(https?:)?\/\//i.test(src)
-                  ? src
-                  : (attachments.current?.resolve(src) ?? null);
-                if (!url) return;
-                if (isImageAttachment(src)) setViewing({ src: url, alt: src });
-                else void app.host.openExternal(url);
+                const external = /^(https?:)?\/\//i.test(src);
+                if (isImageAttachment(src)) {
+                  const url = external ? src : (attachments.current?.resolve(src) ?? null);
+                  if (url) setViewing({ src: url, alt: src });
+                  return;
+                }
+                if (external) {
+                  void app.host.openExternal(src);
+                  return;
+                }
+                /*
+                 * Файл из хранилища отдаём СИСТЕМЕ, а не браузеру (замечание
+                 * 16). `blob:`-адрес, которым это работало в вебе, Android и
+                 * Windows бесполезен: им нужен настоящий путь или
+                 * `content://`. Поэтому сперва порт оболочки, и только если
+                 * она не смогла — прежний путь: в вебе другого и нет.
+                 */
+                void (async () => {
+                  if (await app.host.openAttachment?.(src as never).catch(() => false)) return;
+                  const url = attachments.current?.resolve(src) ?? null;
+                  if (url) await app.host.openExternal(url);
+                })();
               }}
               wikiExists={(target) =>
                 state.notes.some((item) => item.title.toLowerCase() === target.toLowerCase())

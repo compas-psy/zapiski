@@ -142,3 +142,14 @@ export function pickSafTree(): Promise<SafTree | null> {
 export function probeSafTree(tree: string): Promise<SafTree | null> {
   return call<SafTree | null>(COMMANDS.safProbe, { tree });
 }
+
+/**
+ * Открыть вложение системным приложением (замечание 16).
+ *
+ * `false` — открывать нечем: на устройстве нет приложения для такого типа
+ * файла, либо файла больше нет. Это ответ, а не сбой, поэтому исключения тут
+ * не бросаются.
+ */
+export function openSafFile(tree: string, path: string): Promise<boolean> {
+  return call<boolean>(COMMANDS.safOpen, { tree, path });
+}

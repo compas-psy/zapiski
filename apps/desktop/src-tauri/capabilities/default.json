@@ -19,6 +19,7 @@
     "dialog:allow-ask",
 
     "opener:allow-open-url",
+    "opener:allow-open-path",
     "opener:allow-default-urls",
 
     "store:default",

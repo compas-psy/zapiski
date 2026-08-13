@@ -21,6 +21,7 @@ export const COMMANDS = {
   safWrite: 'saf_write',
   safStat: 'saf_stat',
   safMkdir: 'saf_mkdir',
+  safOpen: 'saf_open',
   safRemove: 'saf_remove',
   safRename: 'saf_rename',
   secureFlag: 'secure_flag',
