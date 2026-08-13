@@ -90,6 +90,21 @@ export class AttachmentUrls {
     return this.bytes.get(clean) ?? null;
   }
 
+  /**
+   * Забыть вложение: файл на диске изменился, и кэш держит прежние байты.
+   *
+   * Нужно после обрезки (замечание 2): без этого на экране остаётся картинка
+   * до обрезки, и человек решает, что ничего не произошло.
+   */
+  forget(path: string): void {
+    const clean = path.split('#')[0]?.split('?')[0] ?? path;
+    const url = this.urls.get(clean);
+    if (url !== undefined) URL.revokeObjectURL(url);
+    this.urls.delete(clean);
+    this.bytes.delete(clean);
+    this.loading.delete(clean);
+  }
+
   private async load(path: VaultPath): Promise<void> {
     const storage = this.storage;
     if (!storage) return;

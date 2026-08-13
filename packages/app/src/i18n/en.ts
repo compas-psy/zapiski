@@ -184,6 +184,12 @@ export const en: AppCatalog = {
 
   attachments: {
     title: 'Attachments',
+    narrower: 'Narrower',
+    wider: 'Wider',
+    sizeReset: 'Original size',
+    crop: 'Crop',
+    cropApply: 'Apply',
+    cropFailed: 'Could not crop this image',
     folder: 'Attachment folder',
     placement: {
       shared: 'Shared, at the root',
