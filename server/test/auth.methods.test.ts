@@ -52,3 +52,57 @@ describe.skipIf(noDatabase())('способы входа', () => {
     expect(response.statusCode).toBe(404);
   });
 });
+
+/**
+ * Перебор попыток входа обязан отвечать «подождите», а не «сейчас не
+ * получилось».
+ *
+ * У входа свой, более жёсткий лимит: 20 запросов за 5 минут. Ограничитель
+ * получал `errorResponseBuilder: () => errors.tooManyAttempts(30).toBody()` —
+ * то есть ПРОСТОЙ ОБЪЕКТ, а плагин делает `throw` того, что вернули. Наш
+ * обработчик ошибок узнаёт ответ по `instanceof ApiError`, простой объект не
+ * узнавал и отвечал 500 «Сейчас не получилось. Попробуйте ещё раз» — без
+ * `retry-after` и без единого намёка, что надо просто подождать.
+ *
+ * Било это ровно по тому месту, на которое жаловался заказчик: человек,
+ * который несколько раз подряд попросил письмо (а он просит, когда письмо не
+ * пришло), получал не «подождите», а «сейчас не получилось». Вход переставал
+ * работать именно тогда, когда человек старался.
+ */
+describe.skipIf(noDatabase())('перебор попыток входа', () => {
+  let harness: Harness;
+
+  beforeAll(async () => {
+    harness = await createHarness();
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  it('на 21-й попытке — 429 с текстом реестра и retry-after', async () => {
+    let limited: Awaited<ReturnType<typeof harness.app.inject>> | null = null;
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const response = await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/magic-link',
+        payload: {
+          email: `flood${attempt}.${process.pid}@example.test`,
+          deviceId: 'device-flood-one',
+          platform: 'web',
+        },
+      });
+      if (response.statusCode !== 202) {
+        limited = response;
+        break;
+      }
+    }
+
+    expect(limited, 'ограничитель не сработал за 25 попыток').not.toBeNull();
+    expect(limited!.statusCode, 'перебор ответил не «подождите», а поломкой').toBe(429);
+    expect(limited!.headers['retry-after']).toBeDefined();
+    const body = limited!.json() as { error: { code: string; message: string } };
+    expect(body.error.code).toBe('too_many_attempts');
+    expect(body.error.message).toBe('Попробуйте через 30 секунд');
+  });
+});

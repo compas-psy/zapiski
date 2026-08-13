@@ -169,6 +169,35 @@ container_state() {
   docker inspect -f '{{ .State.Status }}' "$1" 2>/dev/null || echo 'missing'
 }
 
+# Отвечает ли релей, через который уходят письма со ссылкой для входа.
+#
+# Проверяем ИЗ КОНТЕЙНЕРА API, а не с хоста: адрес docker0 у контейнера свой,
+# и «с хоста видно» ничего не доказывает. Ответ SMTP начинается с «220».
+#
+# Деплой не валим никогда: почта не мешает работать с заметками, а падение
+# выкладки из-за чужого postfix'а было бы хуже самой поломки.
+check_mail_relay() {
+  local host port banner
+  host="$(grep '^EMAIL_SERVER_HOST=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+  port="$(grep '^EMAIL_SERVER_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
+  host="${host:-172.17.0.1}"
+  port="${port:-25}"
+
+  banner="$(docker exec "${API_CONTAINER}" sh -c \
+    "timeout 5 sh -c 'exec 3<>/dev/tcp/${host}/${port}; head -n 1 <&3'" 2>/dev/null || true)"
+
+  case "${banner}" in
+    220*)
+      log "Почтовый релей ${host}:${port} отвечает — письма со ссылкой для входа уйдут."
+      ;;
+    *)
+      log "ВНИМАНИЕ: почтовый релей ${host}:${port} не ответил."
+      log '  Вход по почте не работает: приложение скажет «письмо ушло», а письма не будет.'
+      log '  Проверьте postfix и EMAIL_SERVER_HOST/EMAIL_SERVER_PORT в deploy/.env.'
+      ;;
+  esac
+}
+
 health_state() {
   docker inspect -f '{{ if .State.Health }}{{ .State.Health.Status }}{{ else }}none{{ end }}' \
     "$1" 2>/dev/null || echo 'missing'
@@ -340,6 +369,16 @@ main() {
     dump_diagnostics
     fail "Стек поднялся, но снаружи ${PUBLIC_URL} не обслуживается. Смотрите vhost и docroot; сам API при этом здоров."
   fi
+
+  # Вход по почте — единственный путь в аккаунт без Яндекса, и держится он на
+  # чужом postfix'е по адресу docker0. Если релей не отвечает, письма не
+  # уходят: приложение честно говорит «письмо ушло», а его нет. Отсюда
+  # «авторизация через email в принципе ничего не делает».
+  #
+  # Деплой из-за этого не валим — почта не мешает работе с заметками, — но
+  # молчать нельзя: без этой строки недоступный релей обнаруживает только
+  # пользователь.
+  check_mail_relay
 
   log 'Готово. Состояние стека:'
   dc ps 2>&1 || true

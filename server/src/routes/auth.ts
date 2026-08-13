@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 import type { AppContext } from '../context.ts';
 import { sha256Hex } from '../lib/crypto.ts';
-import { errors } from '../lib/errors.ts';
+import { ApiError, errors } from '../lib/errors.ts';
 import { signJwt, verifyJwt } from '../lib/jwt.ts';
 import { mailSent } from '../lib/messages.ts';
 import { isValidDeviceKey } from '../lib/vaultPath.ts';
@@ -24,6 +24,7 @@ import {
 import { ensureSubscription } from '../services/subscription.ts';
 import { ensureQuotaRow } from '../services/quota.ts';
 import { YandexOAuthError } from '../services/yandex.ts';
+import { renderAuthPage } from '../views/authPage.ts';
 
 /**
  * Вход в аккаунт (ТЗ §5.5).
@@ -34,6 +35,60 @@ import { YandexOAuthError } from '../services/yandex.ts';
  */
 
 const PLATFORMS = ['web', 'windows', 'android'] as const;
+
+/**
+ * Ручка, которую открывает БРАУЗЕР, а не приложение.
+ *
+ * Таких три: `/auth/yandex`, `/auth/yandex/callback` и ссылка из письма
+ * `/auth/magic-link/callback`. Всё, что они отвечают, человек видит глазами —
+ * а отвечали они JSON. На истёкшей ссылке, на ссылке, открытой с другого
+ * устройства, на невыданном client_id во весь экран показывалось
+ * `{"error":{"code":"magic_link_expired", …}}`. Со стороны это ровно то, на
+ * что жаловался заказчик: «авторизация через email в принципе ничего не
+ * делает». Она делала — и говорила об этом на машинном языке.
+ *
+ * Обёртка переводит ошибку в страницу на языке продукта: текст берётся из того
+ * же реестра BEHAVIOR §11, что и в приложении, и рядом ставится дорога назад.
+ * Код ответа не меняется: сервер по-прежнему честно отвечает 410 или 400, и
+ * тот, кто зовёт ручку программой, разбирает его как раньше.
+ */
+function browser(
+  ctx: AppContext,
+  title: string,
+  handler: (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>,
+): (request: FastifyRequest, reply: FastifyReply) => Promise<unknown> {
+  return async (request, reply) => {
+    try {
+      return await handler(request, reply);
+    } catch (error) {
+      if (!(error instanceof ApiError)) throw error;
+      /* `format=json` шлёт ПРИЛОЖЕНИЕ — ему нужен разбираемый ответ, а не
+         страница. Условие то же, что у успешного ответа (`respondWithSession`),
+         и другого различителя тут не надо: браузер этого параметра не ставит
+         никогда, потому что ссылку собирает сервер. */
+      const format = (request.query as { format?: unknown } | undefined)?.format;
+      if (format === 'json') throw error;
+      for (const [name, value] of Object.entries(error.headers)) reply.header(name, value);
+      return reply
+        .code(error.statusCode)
+        .type('text/html; charset=utf-8')
+        .send(
+          renderAuthPage({
+            title,
+            body: error.message,
+            action: backToApp(ctx),
+          }),
+        );
+    }
+  };
+}
+
+/** Дорога назад со страницы возврата. `null` — некуда, и кнопки тогда нет. */
+function backToApp(ctx: AppContext): { href: string; label: string } | null {
+  const base = ctx.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
+  if (base.length === 0) return null;
+  return { href: `${base}/`, label: 'Открыть ЗАПИСКИ' };
+}
 
 const magicLinkBody = z.object({
   email: z.string().trim().min(3).max(254).email(),
@@ -132,7 +187,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     });
   });
 
-  app.get('/api/v1/auth/magic-link/callback', async (request, reply) => {
+  app.get('/api/v1/auth/magic-link/callback', browser(ctx, 'Ссылка не сработала', async (request, reply) => {
     const parsed = callbackQuery.safeParse(request.query);
     if (!parsed.success) throw errors.badRequest('bad_token');
 
@@ -157,7 +212,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const user = await upsertUserByEmail(ctx.db, result.email);
     const session = await issueSession(ctx, user.id, deviceKey, result.platform);
     return respondWithSession(ctx, reply, session, parsed.data.format, result.platform);
-  });
+  }));
 
   // ───────────────────────────────────────────────────────────────────────────
   // Яндекс ID — основной путь входа
@@ -186,7 +241,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }),
   );
 
-  app.get('/api/v1/auth/yandex', async (request, reply) => {
+  app.get('/api/v1/auth/yandex', browser(ctx, 'Вход через Яндекс не удался', async (request, reply) => {
     const yandex = ctx.yandex;
     if (yandex === null) throw errors.notFound('yandex_not_configured');
 
@@ -209,9 +264,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     );
 
     return reply.redirect(yandex.authorizeUrl(state), 302);
-  });
+  }));
 
-  app.get('/api/v1/auth/yandex/callback', async (request, reply) => {
+  app.get('/api/v1/auth/yandex/callback', browser(ctx, 'Вход через Яндекс не удался', async (request, reply) => {
     const yandex = ctx.yandex;
     if (yandex === null) throw errors.notFound('yandex_not_configured');
 
@@ -243,7 +298,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const user = await upsertUserByYandex(ctx.db, identity.id, identity.email);
     const session = await issueSession(ctx, user.id, deviceKey, platform);
     return respondWithSession(ctx, reply, session, undefined, platform);
-  });
+  }));
 
   // ───────────────────────────────────────────────────────────────────────────
   // Сессии
@@ -397,6 +452,28 @@ function respondWithSession(
       expires_in: String(session.expiresIn),
     });
     return reply.redirect(`${redirect}#${fragment.toString()}`, 302);
+  }
+  /*
+   * Адреса возврата нет, а спрашивал БРАУЗЕР — значит, `reply.send(session)`
+   * напечатал бы человеку на весь экран его собственные токены доступа.
+   * Показывать их нельзя никогда: экран фотографируют, вкладку показывают
+   * коллеге, адрес попадает в историю. Вместо этого — страница «вернитесь в
+   * приложение»: вход состоялся, приложение заберёт сессию само.
+   *
+   * JSON остаётся ровно там, где его и ждут: при `format=json`, то есть когда
+   * ручку зовёт не браузер, а приложение.
+   */
+  if (format !== 'json') {
+    return reply
+      .code(200)
+      .type('text/html; charset=utf-8')
+      .send(
+        renderAuthPage({
+          title: 'Вы вошли',
+          body: 'Вернитесь в ЗАПИСКИ — приложение продолжит само.',
+          action: backToApp(ctx),
+        }),
+      );
   }
   return reply.send(session);
 }

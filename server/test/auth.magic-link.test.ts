@@ -9,6 +9,14 @@ import { createHarness, noDatabase, type Harness } from './helpers/app.ts';
  * без Яндекса, и дыра в любом из них открывает чужой аккаунт.
  *
  * Дополнительно: SCREENS §2 — повторное письмо не раньше чем через 60 секунд.
+ *
+ * ── Про `format=json` ───────────────────────────────────────────────────────
+ *
+ * Ручку обмена зовут двое: ПРИЛОЖЕНИЕ (с `format=json`, ему нужен разбираемый
+ * ответ) и БРАУЗЕР по ссылке из письма (без параметра — ссылку собирает
+ * сервер). Ответы у них разные, и это не украшение: браузеру раньше
+ * показывался голый JSON, а на успехе — собственные токены доступа человека
+ * во весь экран. Поэтому ниже проверяются ОБА пути.
  */
 
 describe.skipIf(noDatabase())('magic-link', () => {
@@ -46,7 +54,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const callback = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-one`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-one&format=json`,
     });
     expect(callback.statusCode).toBe(200);
 
@@ -61,13 +69,13 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const first = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-two`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-two&format=json`,
     });
     expect(first.statusCode).toBe(200);
 
     const second = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-two`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-two&format=json`,
     });
     expect(second.statusCode).toBe(410);
 
@@ -87,7 +95,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const response = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-three`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-three&format=json`,
     });
     expect(response.statusCode).toBe(410);
 
@@ -104,7 +112,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const response = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-four`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-four&format=json`,
     });
     expect(response.statusCode).toBe(200);
   });
@@ -115,7 +123,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const wrongDevice = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-other`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-other&format=json`,
     });
     expect(wrongDevice.statusCode).toBe(410);
     const error = wrongDevice.json() as { error: { code: string; message: string } };
@@ -125,7 +133,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
     // И при этом токен не сгорел — своё устройство им ещё воспользуется.
     const rightDevice = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-five`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&device_id=device-magic-five&format=json`,
     });
     expect(rightDevice.statusCode).toBe(200);
   });
@@ -136,7 +144,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
 
     const response = await harness.app.inject({
       method: 'GET',
-      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}`,
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token as string)}&format=json`,
     });
     expect(response.statusCode).toBe(400);
     expect((response.json() as { error: { code: string } }).error.code).toBe('device_id_required');
@@ -186,7 +194,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
   it('несуществующий токен даёт тот же текст реестра', async () => {
     const response = await harness.app.inject({
       method: 'GET',
-      url: '/api/v1/auth/magic-link/callback?token=nosuchtokenatallnosuchtoken&device_id=device-magic-nine',
+      url: '/api/v1/auth/magic-link/callback?token=nosuchtokenatallnosuchtoken&device_id=device-magic-nine&format=json',
     });
     expect(response.statusCode).toBe(410);
     expect((response.json() as { error: { message: string } }).error.message).toBe(
@@ -295,5 +303,88 @@ describe.skipIf(noDatabase())('magic-link: возврат по платформ�
     });
     expect(response.statusCode).toBe(200);
     expect((response.json() as { accessToken: string }).accessToken).toBeTruthy();
+  });
+});
+
+/**
+ * Что видит ЧЕЛОВЕК, а не приложение.
+ *
+ * Ссылку из письма открывает браузер, и всё, что ответит сервер, показывается
+ * на весь экран. Отвечал он JSON: на мёртвой ссылке —
+ * `{"error":{"code":"magic_link_expired"…}}`, а на успехе без настроенного
+ * адреса возврата — собственные токены доступа человека. Заказчик описал это
+ * как «авторизация через email в принципе ничего не делает»: она делала и
+ * говорила об этом на машинном языке.
+ *
+ * Свой стенд, потому что у входа отдельный, более жёсткий лимит запросов
+ * (20 за 5 минут), и эти проверки не должны его доедать за соседями.
+ */
+describe.skipIf(noDatabase())('magic-link: страница вместо JSON', () => {
+  let harness: Harness;
+
+  beforeAll(async () => {
+    harness = await createHarness();
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  async function requestLink(email: string, deviceId: string): Promise<string> {
+    harness.mailer.reset();
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/magic-link',
+      payload: { email, deviceId, platform: 'web' },
+    });
+    expect(response.statusCode).toBe(202);
+    const sent = harness.mailer.last();
+    expect(sent).toBeDefined();
+    return new URL(sent!.url).searchParams.get('token') as string;
+  }
+
+  /**
+   * Тот же отказ, но открытый БРАУЗЕРОМ.
+   *
+   * Заказчик: «авторизация через email в принципе ничего не делает». Она
+   * делала — и говорила об этом на машинном языке: по мёртвой ссылке из письма
+   * человек получал на весь экран `{"error":{"code":"magic_link_expired"…}}`.
+   * Прочитать это нельзя, сделать по этому нечего.
+   */
+  it('по мёртвой ссылке из письма браузер получает страницу, а не JSON', async () => {
+    const response = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/auth/magic-link/callback?token=nosuchtokenatallnosuchtoken&device_id=device-magic-ten',
+    });
+    /* Код ответа прежний: тот, кто зовёт ручку программой, разбирает его
+       так же, как раньше. Меняется только то, что видит человек. */
+    expect(response.statusCode).toBe(410);
+    expect(response.headers['content-type']).toContain('text/html');
+    /* Текст — из того же реестра BEHAVIOR §11, что и в приложении. */
+    expect(response.body).toContain(REGISTRY.magicLinkExpired);
+    expect(response.body, 'человеку показали машинный код').not.toContain('magic_link_expired');
+    /* И дорога назад: иначе страница — тупик. */
+    expect(response.body).toContain('Открыть ЗАПИСКИ');
+  });
+
+  /**
+   * Успех без настроенного адреса возврата.
+   *
+   * Здесь `reply.send(session)` печатал человеку на весь экран его
+   * собственные токены доступа. Экран фотографируют, вкладку показывают
+   * коллеге, адрес попадает в историю — показывать их нельзя никогда.
+   */
+  it('успех в браузере не печатает токены', async () => {
+    const email = `magic10.${process.pid}@example.test`;
+    const token = await requestLink(email, 'device-magic-eleven');
+
+    const response = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/auth/magic-link/callback?token=${encodeURIComponent(token)}&device_id=device-magic-eleven`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/html');
+    expect(response.body, 'токен доступа показан человеку').not.toContain('accessToken');
+    expect(response.body).not.toContain('eyJ');
   });
 });

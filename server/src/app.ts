@@ -111,7 +111,21 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     keyGenerator: (request) => request.ip,
     // Синк — это много мелких запросов; не душим его вместе с логином.
     allowList: () => false,
-    errorResponseBuilder: () => errors.tooManyAttempts(30).toBody(),
+    /*
+     * Возвращать нужно САМУ ошибку, а не её тело.
+     *
+     * Плагин делает `throw params.errorResponseBuilder(...)`, а наш
+     * обработчик ошибок узнаёт ответ по `instanceof ApiError`. С `.toBody()`
+     * летел простой объект без `statusCode` и без класса — обработчик его не
+     * узнавал и отвечал 500 «Сейчас не получилось» вместо 429 «Попробуйте
+     * через 30 секунд», да ещё и без `retry-after`.
+     *
+     * Больнее всего это било по входу: у него свой, более жёсткий лимит (20
+     * запросов за 5 минут, ниже), и человек, который несколько раз подряд
+     * попросил письмо, получал не «подождите», а «сейчас не получилось». То
+     * есть вход переставал работать ровно тогда, когда человек старался.
+     */
+    errorResponseBuilder: () => errors.tooManyAttempts(30),
   });
 
   // ── Заголовки безопасности ────────────────────────────────────────────────
@@ -179,7 +193,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       max: 20,
       timeWindow: '5 minutes',
       keyGenerator: (request) => request.ip,
-      errorResponseBuilder: () => errors.tooManyAttempts(30).toBody(),
+      /* Сама ошибка, а не её тело — см. пояснение у глобального лимита. */
+      errorResponseBuilder: () => errors.tooManyAttempts(30),
     });
     await registerAuthRoutes(scope);
   });
