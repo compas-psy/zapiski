@@ -8,11 +8,13 @@ import {
   EDITOR_COLUMN_WIDTHS,
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
+  PANEL_PLACEMENTS,
   THEME_PREFERENCES,
   migrateAccent,
   migrateTheme,
   resolveTheme,
   type AppearanceState,
+  type PanelSpot,
   type Theme,
 } from './types';
 
@@ -60,7 +62,33 @@ export function parseAppearance(raw: unknown): AppearanceState {
       listIndent: includes(['none', 'normal', 'wide'] as const, editorSrc['listIndent'])
         ? editorSrc['listIndent']
         : DEFAULT_EDITOR_PREFERENCES.listIndent,
+      panelPlacement: includes(PANEL_PLACEMENTS, editorSrc['panelPlacement'])
+        ? editorSrc['panelPlacement']
+        : DEFAULT_EDITOR_PREFERENCES.panelPlacement,
+      panelSpot: parsePanelSpot(editorSrc['panelSpot']),
     },
+  };
+}
+
+/**
+ * Куда человек поставил плавающую панель. Мусор — это `null`, а не отказ
+ * разбирать настройки целиком: положение панели вторично, и портить из-за
+ * него всё остальное оформление нельзя.
+ */
+function parsePanelSpot(raw: unknown): PanelSpot | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const src = raw as Record<string, unknown>;
+  const side = src['side'] === 'end' ? 'end' : src['side'] === 'start' ? 'start' : null;
+  const block = src['block'] === 'end' ? 'end' : src['block'] === 'start' ? 'start' : null;
+  const inline = src['inline'];
+  const offset = src['offset'];
+  if (side === null || block === null) return null;
+  if (!Number.isFinite(inline) || !Number.isFinite(offset)) return null;
+  return {
+    side,
+    block,
+    inline: Math.max(0, inline as number),
+    offset: Math.max(0, offset as number),
   };
 }
 

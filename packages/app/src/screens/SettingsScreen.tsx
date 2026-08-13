@@ -26,6 +26,7 @@ import {
   useTheme,
   type Accent,
   type EditorColumnWidth,
+  type PanelPlacement,
   type ThemePreference,
 } from '@zapiski/ui';
 import {
@@ -328,6 +329,7 @@ function AttachmentsSection(): ReactNode {
  * поверх режима означала бы два переключателя об одном и том же.
  */
 function EditorSection(): ReactNode {
+  const app = useApp();
   const strings = useStrings();
   const theme = useTheme();
   const copy = strings.settings.editor;
@@ -390,6 +392,33 @@ function EditorSection(): ReactNode {
           { value: 'wide', label: copy.listIndents.wide },
         ]}
       />
+
+      {/*
+        Где стоит панель форматирования (§4).
+
+        Умолчание — внизу по центру: там она не отнимает полосу у текста и не
+        встаёт между хлебными крошками и названием заметки. «Плавающая» есть
+        только там, где ею можно распорядиться — в оболочках Windows и Android;
+        в браузере окно принадлежит вкладке, и плавающая панель поверх чужого
+        хрома обещала бы больше, чем даёт. Отсутствующая возможность СКРЫТА, а
+        не выключена (BEHAVIOR §5.1).
+      */}
+      <Section>{copy.panelPlacement}</Section>
+      <SegmentedControl<PanelPlacement>
+        label={copy.panelPlacement}
+        value={theme.editor.panelPlacement}
+        onChange={(value) => theme.setEditor({ panelPlacement: value })}
+        options={[
+          { value: 'bottom', label: copy.panelPlacements.bottom },
+          { value: 'top', label: copy.panelPlacements.top },
+          ...(app.host.platform.kind === 'web'
+            ? []
+            : [{ value: 'floating' as const, label: copy.panelPlacements.floating }]),
+        ]}
+      />
+      {app.host.platform.kind === 'web' ? null : (
+        <p className="za-muted">{copy.panelPlacementHint}</p>
+      )}
 
       {/* Typewriter-скролл — опция, по умолчанию выключена (BEHAVIOR §2.8). */}
       <div className="za-field-row">

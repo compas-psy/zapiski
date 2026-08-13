@@ -48,6 +48,8 @@ async function mountWith(editor: Partial<EditorPreferences>) {
           listIndent: 'normal',
           spellcheck: false,
           mode: 'simple' as const,
+          panelPlacement: 'bottom' as const,
+          panelSpot: null,
           ...editor,
         },
       }}

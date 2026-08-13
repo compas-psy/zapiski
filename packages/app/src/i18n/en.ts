@@ -445,6 +445,15 @@ export const en: AppCatalog = {
       listMarkColors: { muted: 'Muted', text: 'Same as text', accent: 'Accent' },
       listIndent: 'List indent',
       listIndents: { none: 'None', normal: 'Normal', wide: 'Wide' },
+      panelPlacement: 'Formatting panel',
+      panelPlacements: {
+        bottom: 'Bottom, centred',
+        top: 'Top, under the header',
+        floating: 'Floating',
+      },
+      panelPlacementHint:
+        'Drag the floating panel by the grip on its left — it stays at the edge you put it next to',
+      panelMove: 'Move the panel',
     },
     sync: {
       statusSynced: 'Synchronised',

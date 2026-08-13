@@ -189,6 +189,36 @@ const state = async () => ({
 
 const title = page.locator('.za-editor__title');
 check((await title.count()) > 0, 'поля названия заметки нет (ITERATION-1 §1)');
+
+/* Порядок сверху вниз: хлебные крошки → название → текст, а панель внизу.
+   Заказчик: «Меню форматирования отображается фиксированно над заголовком,
+   отнимая место у области редактирования. На дизайнах заголовок заметки
+   должен быть уместно вверху под хлебными крошками». Проверяется координатами
+   на экране, а не порядком в разметке: разметка одна на все места панели,
+   переставляет её `order`, и именно он и был неверным. */
+const stack = await page.evaluate(() => {
+  const top = (selector) => {
+    const node = document.querySelector(selector);
+    return node ? Math.round(node.getBoundingClientRect().top) : null;
+  };
+  return {
+    header: top('.za-editor__host > .za-header'),
+    title: top('.za-editor__title'),
+    text: top('.cm-content'),
+    panel: top('.za-editor__panel'),
+  };
+});
+check(
+  stack.header !== null && stack.title !== null && stack.title > stack.header,
+  'название заметки не под шапкой',
+  JSON.stringify(stack),
+);
+check(
+  stack.panel !== null && stack.text !== null && stack.panel > stack.text,
+  'панель форматирования снова стоит над текстом и отнимает у него место',
+  JSON.stringify(stack),
+);
+
 if (await title.count()) {
   await title.click();
   await page.keyboard.type('Привет!', { delay: 20 });

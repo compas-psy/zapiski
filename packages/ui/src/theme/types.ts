@@ -70,6 +70,41 @@ export type Density = 'comfortable' | 'compact';
 export const BASE_FONT_SIZE = 16;
 export const BASE_LINE_HEIGHT = 1.65;
 
+/**
+ * Где стоит панель форматирования (ITERATION-1 §4).
+ *
+ * `bottom` — умолчание: внизу области редактора, по центру по горизонтали.
+ *            Так панель не отнимает место у текста сверху и не встаёт между
+ *            хлебными крошками и названием заметки;
+ * `top`     — под шапкой редактора, над текстом;
+ * `floating` — человек ставит её сам, перетаскивая. Есть только там, где
+ *            это имеет смысл: Windows и Android. В браузере окно и так
+ *            принадлежит не нам, а вкладке.
+ */
+export const PANEL_PLACEMENTS = ['bottom', 'top', 'floating'] as const;
+export type PanelPlacement = (typeof PANEL_PLACEMENTS)[number];
+
+/**
+ * Положение плавающей панели — от БЛИЖАЙШИХ краёв, а не в координатах.
+ *
+ * Так это делают все, кто держит перетаскиваемый элемент поверх меняющегося
+ * окна (пузырь звонка Android, AssistiveTouch): запоминается сторона, к
+ * которой человек панель поставил, и отступ от неё. Тогда при изменении
+ * размера окна панель остаётся там, где её оставили, — у того же края, а не
+ * уезжает за пределы экрана вместе с абсолютной координатой.
+ *
+ * Отступы в пикселях от названных сторон; при восстановлении они ужимаются
+ * под нынешний размер области, поэтому уменьшение окна панель переживает.
+ */
+export interface PanelSpot {
+  side: 'start' | 'end';
+  block: 'start' | 'end';
+  /** Отступ от названной стороны по горизонтали, px. */
+  inline: number;
+  /** Отступ от названной стороны по вертикали, px. */
+  offset: number;
+}
+
 export interface EditorPreferences {
   fontSize: EditorFontSize;
   lineHeight: EditorLineHeight;
@@ -98,6 +133,10 @@ export interface EditorPreferences {
    * `pro` — проявляется у курсора, доступен raw и wiki-ссылки.
    */
   mode: 'simple' | 'pro';
+  /** Где стоит панель форматирования (§4). */
+  panelPlacement: PanelPlacement;
+  /** Куда её поставили руками. `null` — ещё не ставили. */
+  panelSpot: PanelSpot | null;
 }
 
 export interface AppearanceState {
@@ -126,6 +165,10 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
      спрашиваем: вопрос про режим человеку, который ещё не написал ни строчки,
      ответить нечем. */
   mode: 'simple',
+  /* Внизу по центру: панель не отнимает место у текста и не встаёт между
+     хлебными крошками и названием заметки. */
+  panelPlacement: 'bottom',
+  panelSpot: null,
 };
 
 export const DEFAULT_APPEARANCE: AppearanceState = {

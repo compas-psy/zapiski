@@ -60,6 +60,7 @@ import { NoteMenu } from './NoteMenu.js';
 import { formatBytes, relativeTime } from '../lib/format.js';
 import { AttachmentUrls } from '../lib/attachment-urls.js';
 import { ImageViewer } from '../components/ImageViewer.js';
+import { FormatPanelSlot } from '../components/FormatPanelSlot.js';
 import { imageWidthOf, setImageWidth } from '@zapiski/editor';
 import { ModeSwitch } from '../components/ModeSwitch.js';
 
@@ -576,7 +577,12 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
           форматирования в него просто не влезала.
         */}
         {!state.focusMode ? (
-          <div className={isMobile ? 'za-editor__panel za-editor__panel--keyboard' : 'za-editor__panel'}>
+          <FormatPanelSlot
+            placement={theme.editor.panelPlacement}
+            spot={theme.editor.panelSpot}
+            mobile={isMobile}
+            onMove={(spot) => theme.setEditor({ panelSpot: spot })}
+          >
             <FormatPanel
               /* Символ маркера — из настроек: он попадает в текст файла. */
               bulletMarker={theme.editor.listMarker}
@@ -601,7 +607,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
                 imageInput.current?.click();
               }}
             />
-          </div>
+          </FormatPanelSlot>
         ) : null}
 
         {/* Статус-строка: «изменено только что · N слов · автосохранение — всегда» */}

@@ -527,6 +527,15 @@ export const ru = {
       listMarkColors: { muted: 'Приглушённый', text: 'Как текст', accent: 'Акцентный' },
       listIndent: 'Сдвиг списка вправо',
       listIndents: { none: 'Нет', normal: 'Обычный', wide: 'Широкий' },
+      panelPlacement: 'Панель форматирования',
+      panelPlacements: {
+        bottom: 'Внизу по центру',
+        top: 'Вверху под шапкой',
+        floating: 'Плавающая',
+      },
+      panelPlacementHint:
+        'Плавающую панель можно перетащить за ручку слева — она останется у того края, к которому вы её поставили',
+      panelMove: 'Передвинуть панель',
     },
     sync: {
       statusSynced: 'Синхронизировано',
