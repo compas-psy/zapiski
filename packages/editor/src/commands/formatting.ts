@@ -114,14 +114,25 @@ function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boo
     const parts = lineNumbers.map((n) => splitLine(state.doc.line(n).text));
     const allMarked = parts.every((p) => matches(p.marker));
 
+    /*
+     * Меняется ТОЛЬКО маркер, а не строка целиком.
+     *
+     * Дефект, ради которого это переписано: «при вставке списка добавляется
+     * `-`, но курсор встаёт перед ним». Раньше строка заменялась целиком
+     * (`from: line.from, to: line.to`), и позиция курсора внутри заменённого
+     * куска схлопывалась к его началу — то есть перед только что добавленным
+     * маркером. Точечная правка отображает позиции сама: текст остаётся на
+     * месте, курсор едет вместе с ним.
+     */
     const changes: ChangeSpec[] = [];
     lineNumbers.forEach((n, i) => {
       const line = state.doc.line(n);
       const part = parts[i];
       if (!part) return;
       const marker = allMarked ? '' : markerFor(part, i);
-      const next = `${part.indent}${marker}${part.rest}`;
-      if (next !== line.text) changes.push({ from: line.from, to: line.to, insert: next });
+      if (marker === part.marker) return;
+      const at = line.from + part.indent.length;
+      changes.push({ from: at, to: at + part.marker.length, insert: marker });
     });
     if (!changes.length) return false;
 

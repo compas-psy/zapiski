@@ -8,7 +8,7 @@ import { EditorSelection, EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
 
 import { insertSmall } from '../src/commands/blocks';
-import { insertCodeBlock } from '../src/commands/formatting';
+import { insertCodeBlock, toggleBulletList, toggleOrderedList } from '../src/commands/formatting';
 import { decorationsOf, hiddenRanges, makeState } from './helpers.js';
 
 /** Состояние с курсором или выделением; `|` — курсор, `[…]` — выделение. */
@@ -121,5 +121,58 @@ describe('замечание 5: выноска без лишних символ�
 
     expect(classes).toContain('cm-z-quote');
     expect(classes).not.toContain('cm-z-callout');
+  });
+});
+
+describe('замечания 9–11: списки', () => {
+  /** Прогоняет команду и отдаёт «текст с курсором», где `|` — позиция курсора. */
+  function withCursor(source: string, command: (target: never) => boolean): string {
+    let state = stateOf(source);
+    const target = {
+      state,
+      dispatch: (tr: { state: EditorState }) => {
+        state = tr.state;
+      },
+    };
+    command(target as never);
+    const at = state.selection.main.head;
+    const text = state.doc.toString();
+    return `${text.slice(0, at)}|${text.slice(at)}`;
+  }
+
+  it('маркерный список: курсор остаётся при тексте, а не перед дефисом', () => {
+    /* Заказчик: «добавляется `-`, но курсор встаёт перед этим символом».
+       Строка заменялась целиком, и позиция курсора схлопывалась к её началу. */
+    expect(withCursor('Пункт|', toggleBulletList)).toBe('- Пункт|');
+  });
+
+  it('нумерованный список ведёт себя так же', () => {
+    expect(withCursor('Пункт|', toggleOrderedList)).toBe('1. Пункт|');
+  });
+
+  it('снятие списка тоже не роняет курсор в начало строки', () => {
+    expect(withCursor('- Пункт|', toggleBulletList)).toBe('Пункт|');
+  });
+
+  it('у задачи дефис перед квадратом не показывается', () => {
+    /* В файле пункт остаётся каноническим `- [ ] …`, а на экране роль маркера
+       играет сам квадрат — дефис рядом с ним лишний. */
+    const doc = '- [ ] Задача\n\nдалее';
+    const hidden = hiddenRanges(makeState(doc, { selection: { anchor: doc.length - 1 } }));
+    expect(hidden.map((range) => doc.slice(range.from, range.to))).toContain('- ');
+  });
+
+  it('у обычного пункта дефис остаётся видимым', () => {
+    /* Обратная сторона: прятать маркер у всех списков нельзя — тогда пункты
+       перестанут отличаться от абзацев. */
+    const doc = '- Пункт\n\nдалее';
+    const hidden = hiddenRanges(makeState(doc, { selection: { anchor: doc.length - 1 } }));
+    expect(hidden.map((range) => doc.slice(range.from, range.to))).not.toContain('- ');
+  });
+
+  it('список получает свой класс — от него идёт сдвиг вправо', () => {
+    const doc = '- Пункт\n- Второй\n\nдалее';
+    const decos = decorationsOf(makeState(doc, { selection: { anchor: doc.length - 1 } }));
+    expect(decos.map((deco) => deco.class ?? '').join(' ')).toContain('cm-z-list');
   });
 });

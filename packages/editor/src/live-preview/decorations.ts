@@ -240,6 +240,21 @@ class LivePreviewBuilder {
    * решёток (`## Текст ##`) справа пробелов нет, а инлайновые `*` и `` ` ``
    * окружены обычным текстом, который трогать нельзя.
    */
+  /** Позиция за пробелами, идущими сразу после `at` (в пределах строки). */
+  private spaceAfter(at: number): number {
+    const line = this.state.doc.lineAt(at);
+    let end = at;
+    while (end < line.to && ' \t'.includes(this.state.doc.sliceString(end, end + 1))) end += 1;
+    return end;
+  }
+
+  /** Идёт ли сразу за маркером списка квадрат задачи — `- [ ] …`. */
+  private startsTask(afterMark: number): boolean {
+    const line = this.state.doc.lineAt(afterMark);
+    const rest = this.state.doc.sliceString(this.spaceAfter(afterMark), line.to);
+    return /^\[[ xX]\]/.test(rest);
+  }
+
   private markEnd(name: string, from: number, to: number): number {
     if (name !== 'HeaderMark' && name !== 'QuoteMark') return to;
     const line = this.state.doc.lineAt(from);
@@ -352,6 +367,17 @@ class LivePreviewBuilder {
 
     // ── Маркеры списков: акцент, деликатно; НЕ фейдятся ─────────────────────
     if (name === 'ListMark') {
+      /*
+       * У задачи маркер списка прячется. В файле пункт записан как
+       * `- [ ] текст` — это канонический GFM, и трогать его нельзя. Но на
+       * экране дефис перед квадратом лишний: заказчик так и написал — «при
+       * добавлении чеклиста перед текстбоксом появляется `-`, что лишнее».
+       * Роль маркера здесь уже играет сам квадрат.
+       */
+      if (this.startsTask(to)) {
+        this.fade(from, this.spaceAfter(to), false);
+        return;
+      }
       this.mark(from, to, 'cm-z-list-mark');
       return;
     }
@@ -370,6 +396,17 @@ class LivePreviewBuilder {
     }
 
     switch (name) {
+      /*
+       * Список отбивается влево-вправо как блок. Заказчик: «не происходит
+       * сдвига вправо, что ожидается при добавлении списка» — и он прав:
+       * маркер должен висеть в поле, а текст пунктов идти по своей оси.
+       * До сих пор у списков не было ни своего класса, ни отступа, и пункты
+       * стояли вровень с обычными абзацами.
+       */
+      case 'BulletList':
+      case 'OrderedList':
+        this.lines(from, to, 'cm-z-list');
+        return;
       case 'Blockquote':
         this.blockquote(from, to);
         return;
