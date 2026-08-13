@@ -36,6 +36,11 @@ const MIME: Record<string, string> = {
   opus: 'audio/ogg',
   wav: 'audio/wav',
   m4a: 'audio/mp4',
+  /* Плеер считает звуком и эти два (`AUDIO_ATTACHMENT` в decorations.ts).
+     Без строчки здесь blob получал `application/octet-stream`, и движок,
+     который не досматривает содержимое, отказывался их играть. */
+  aac: 'audio/aac',
+  flac: 'audio/flac',
   pdf: 'application/pdf',
 };
 

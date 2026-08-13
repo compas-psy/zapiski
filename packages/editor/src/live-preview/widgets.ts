@@ -213,7 +213,13 @@ export class FileWidget extends WidgetType {
  *
  * Стандартный `<audio controls>` не годится: его рисует система, и он выглядит
  * чужим в каждой из трёх оболочек по-своему. Здесь ровно то, что нужно, —
- * кнопка, полоса и длительность.
+ * название, кнопка, полоса, время и скорость.
+ *
+ * Заказчик про прежний вид: «пустой аудио-плеер — есть воспроизведение, но
+ * нужна длительность и название трека». Оба замечания про одно: плеер не
+ * говорил, ЧТО он играет и СКОЛЬКО это длится. Название теперь стоит строкой
+ * над полосой (раньше оно было только в `aria-label`, то есть видно лишь
+ * экранному диктору), а время печатается как «прошло / всего».
  *
  * Виджет не грузит файл заранее: `preload="metadata"` даёт длительность, не
  * вытягивая в память сам звук. Заметка с десятком записей иначе тянула бы
@@ -228,7 +234,7 @@ export class AudioWidget extends WidgetType {
   }
 
   override eq(other: AudioWidget): boolean {
-    return other.src === this.src;
+    return other.src === this.src && other.name === this.name;
   }
 
   override toDOM(): HTMLElement {
@@ -236,62 +242,246 @@ export class AudioWidget extends WidgetType {
     host.className = 'cm-z-audio';
 
     const audio = document.createElement('audio');
-    audio.src = this.src;
     audio.preload = 'metadata';
+    audio.src = this.src;
 
     const play = document.createElement('button');
     play.type = 'button';
     play.className = 'cm-z-audio__play';
     play.setAttribute('aria-label', this.name);
-    play.textContent = '▶';
+    play.setAttribute('aria-pressed', 'false');
+    play.append(glyph(false));
 
+    const body = document.createElement('span');
+    body.className = 'cm-z-audio__body';
+
+    const name = document.createElement('span');
+    name.className = 'cm-z-audio__name';
+    name.textContent = this.name;
+    /* Длинное имя обрезается многоточием, но полное остаётся во всплывающей
+       подсказке: у записей с телефона имя длиннее любой колонки текста. */
+    name.title = this.name;
+
+    const row = document.createElement('span');
+    row.className = 'cm-z-audio__row';
+
+    /* Полоса лежит в обёртке с вертикальным полем: сама она 3 px по §8, а
+       попасть пальцем в 3 px нельзя — нажимается обёртка. */
+    const seek = document.createElement('span');
+    seek.className = 'cm-z-audio__seek';
     const track = document.createElement('span');
     track.className = 'cm-z-audio__track';
     const fill = document.createElement('span');
     fill.className = 'cm-z-audio__fill';
     track.appendChild(fill);
+    seek.appendChild(track);
 
     const time = document.createElement('span');
     time.className = 'cm-z-audio__time';
-    time.textContent = '--:--';
+
+    const rate = document.createElement('button');
+    rate.type = 'button';
+    rate.className = 'cm-z-audio__rate';
+    rate.textContent = '1×';
+
+    /* Скорость стоит в одной строке со временем, а не сбоку карточки: сбоку
+       она висела на десяток пикселей выше цифр и читалась как чужая. */
+    row.append(seek, time, rate);
+    body.append(name, row);
+    host.append(play, body, audio);
+
+    // ─── время ───────────────────────────────────────────────────────────────
 
     const clock = (seconds: number): string => {
-      if (!Number.isFinite(seconds)) return '--:--';
-      const whole = Math.floor(seconds);
+      const whole = Math.max(0, Math.floor(seconds));
       return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
     };
 
+    /*
+     * Длительность показывается, только когда она известна.
+     *
+     * Прежний плеер печатал `--:--` и оставался с ним навсегда, если
+     * метаданные не пришли, — ровно то, что заказчик назвал пустым плеером.
+     * Теперь неизвестная длительность даёт «0:00», а не прочерки: время
+     * воспроизведения известно всегда, и врать про него нечем.
+     */
+    const known = (): boolean => Number.isFinite(audio.duration) && audio.duration > 0;
+    const showTime = (): void => {
+      time.textContent = known()
+        ? `${clock(audio.currentTime)} / ${clock(audio.duration)}`
+        : clock(audio.currentTime);
+    };
+    const showFill = (): void => {
+      const ratio = known() ? audio.currentTime / audio.duration : 0;
+      fill.style.inlineSize = `${(Math.min(1, Math.max(0, ratio)) * 100).toFixed(2)}%`;
+    };
+    showTime();
+
+    /*
+     * Добыча длительности, когда её не отдали сразу.
+     *
+     * Два случая, и оба встречаются на настоящих файлах, а не в теории.
+     *
+     * 1. В контейнере длительности нет. Так пишут потоковые кодировщики:
+     *    голосовое сообщение из мессенджера (ogg/opus) и запись с
+     *    `MediaRecorder` приходят с `duration === Infinity`. Приём против
+     *    этого один и он общеизвестен: перемотать заведомо за конец —
+     *    браузер при этом вынужден досчитать длину и присылает
+     *    `durationchange` с настоящим значением, после чего возвращаемся в
+     *    начало.
+     * 2. Оболочка проигнорировала `preload`. Мобильные webview так делают
+     *    ради трафика, и `loadedmetadata` не приходит вовсе, пока не нажмут
+     *    «играть». Для нас экономии тут нет никакой: байты уже прочитаны в
+     *    память ради `blob:`-адреса. Поэтому, если через 1.2 с не загружено
+     *    ничего (`readyState === 0`), просим громче: `preload="auto"` и явный
+     *    `load()`.
+     *
+     *    Честно про доказательства: первый случай воспроизведён в настоящем
+     *    Chromium и без перемотки даёт «0:00» вместо «0:00 / 0:07». Второй
+     *    отсюда не воспроизводится — своё решение webview принимает сам, и
+     *    подделать его со стороны страницы нельзя. Поэтому это защита, а не
+     *    доказанное лечение; вреда от неё нет, потому что в здоровом браузере
+     *    `readyState` к этому моменту уже не нулевой.
+     */
+    let probing = false;
+    const seekProbe = (): void => {
+      if (probing || known()) return;
+      probing = true;
+      try {
+        audio.currentTime = 1e101;
+      } catch {
+        /* Некоторые движки отказываются перематывать до метаданных — тогда
+           длительность просто останется неизвестной, и это честнее прочерков. */
+        probing = false;
+      }
+    };
+
     audio.addEventListener('loadedmetadata', () => {
-      time.textContent = clock(audio.duration);
+      seekProbe();
+      showTime();
+    });
+    audio.addEventListener('durationchange', () => {
+      if (probing && known()) {
+        probing = false;
+        audio.currentTime = 0;
+      }
+      showTime();
+      showFill();
     });
     audio.addEventListener('timeupdate', () => {
-      const ratio = audio.duration > 0 ? audio.currentTime / audio.duration : 0;
-      fill.style.inlineSize = `${Math.round(ratio * 100)}%`;
-      time.textContent = clock(audio.duration - audio.currentTime);
+      /* Пока идёт перемотка за конец, `currentTime` — служебный: показывать
+         его значит мигать чужими цифрами. */
+      if (probing) return;
+      showTime();
+      showFill();
     });
     audio.addEventListener('ended', () => {
-      play.textContent = '▶';
-      fill.style.inlineSize = '0%';
+      setPlaying(false);
+      audio.currentTime = 0;
+      showTime();
+      showFill();
     });
 
-    play.addEventListener('mousedown', (event) => {
+    const nudge = window.setTimeout(() => {
+      if (known() || audio.readyState !== 0) return;
+      audio.preload = 'auto';
+      audio.load();
+    }, 1200);
+    timers.set(host, nudge);
+
+    // ─── кнопки ──────────────────────────────────────────────────────────────
+
+    const setPlaying = (playing: boolean): void => {
+      play.replaceChildren(glyph(playing));
+      play.setAttribute('aria-pressed', String(playing));
+    };
+    audio.addEventListener('play', () => setPlaying(true));
+    audio.addEventListener('pause', () => setPlaying(false));
+
+    /* `pointerdown`, а не `mousedown`: на тач-устройстве браузер досылает
+       совместимостный `mousedown` после `touchend`, и одно нажатие
+       срабатывало дважды — тем же дефектом болела панель форматирования. */
+    play.addEventListener('pointerdown', (event) => {
       event.preventDefault();
-      if (audio.paused) {
-        void audio.play();
-        play.textContent = '■';
-      } else {
-        audio.pause();
-        play.textContent = '▶';
+      if (audio.paused) void audio.play();
+      else audio.pause();
+    });
+
+    const RATES = [1, 1.25, 1.5, 2, 0.75];
+    rate.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      const next = RATES[(RATES.indexOf(audio.playbackRate) + 1) % RATES.length] ?? 1;
+      audio.playbackRate = next;
+      rate.textContent = `${String(next).replace('.', ',')}×`;
+    });
+
+    // ─── перемотка ───────────────────────────────────────────────────────────
+
+    const seekTo = (clientX: number): void => {
+      if (!known()) return;
+      const box = track.getBoundingClientRect();
+      if (box.width === 0) return;
+      const ratio = Math.min(1, Math.max(0, (clientX - box.left) / box.width));
+      audio.currentTime = ratio * audio.duration;
+      showTime();
+      showFill();
+    };
+    seek.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      /* Перемотка ПЕРВОЙ, захват после: захват — про продолжение жеста, и его
+         отказ не должен отменять само нажатие. */
+      seekTo(event.clientX);
+      try {
+        seek.setPointerCapture(event.pointerId);
+      } catch {
+        /* Указателя уже нет — тянуть нечего, разовое нажатие сработало. */
       }
     });
+    seek.addEventListener('pointermove', (event) => {
+      if (seek.hasPointerCapture(event.pointerId)) seekTo(event.clientX);
+    });
+    seek.addEventListener('pointerup', (event) => {
+      if (seek.hasPointerCapture(event.pointerId)) seek.releasePointerCapture(event.pointerId);
+    });
 
-    host.append(play, track, time, audio);
     return host;
+  }
+
+  /**
+   * Виджет строится только для видимых строк: стоит увести заметку прокруткой,
+   * и его DOM уничтожается. Открепление `<audio>` от документа воспроизведение
+   * НЕ останавливает — звук продолжал бы идти, а кнопки, которой его выключают,
+   * на экране больше нет. Поэтому останавливаем явно.
+   */
+  override destroy(dom: HTMLElement): void {
+    const timer = timers.get(dom);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timers.delete(dom);
+    }
+    dom.querySelector('audio')?.pause();
   }
 
   override ignoreEvent(): boolean {
     return true;
   }
+}
+
+/** Отложенная попытка догрузить метаданные — снимается вместе с виджетом. */
+const timers = new WeakMap<HTMLElement, number>();
+
+/** Треугольник или две полосы — рисуем сами, системный глиф везде разный. */
+function glyph(playing: boolean): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('role', 'presentation');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const d of playing ? ['M9 6v12', 'M15 6v12'] : ['M8 5.5 19 12 8 18.5z']) {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  }
+  return svg;
 }
 
 /**

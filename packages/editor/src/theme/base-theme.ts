@@ -480,18 +480,25 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     color: 'var(--text-tertiary)',
   },
 
+  // Карточка по COMPONENTS §8: `--surface-alt`, рамка 1 px, радиус 14,
+  // кнопка 34 круглая акцентом, прогресс 3 px, тайминги моно, скорость справа
+  // текстом. Название трека — строкой над полосой: без него плеер не говорит,
+  // что именно он играет.
   '.cm-z-audio': {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
     margin: '8px 0',
     padding: '10px 14px',
-    borderRadius: '12px',
+    borderRadius: '14px',
     border: '1px solid var(--line)',
-    backgroundColor: 'var(--surface)',
+    backgroundColor: 'var(--surface-alt)',
   },
   '.cm-z-audio__play': {
     flex: '0 0 auto',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     width: '34px',
     height: '34px',
     padding: '0',
@@ -499,14 +506,48 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     border: 'none',
     backgroundColor: 'var(--accent)',
     color: 'var(--on-accent)',
-    fontSize: '13px',
-    lineHeight: '34px',
     cursor: 'pointer',
   },
-  // Полоса — 3 px, как в COMPONENTS §8. Заливка растёт по `inline-size`, а не
-  // `transform`: масштабированная полоса размывает края на дробном пикселе.
-  '.cm-z-audio__track': {
+  '.cm-z-audio__play svg': {
+    width: '18px',
+    height: '18px',
+    fill: 'currentColor',
+    stroke: 'currentColor',
+    strokeWidth: '2',
+    strokeLinecap: 'round',
+  },
+  // Колонка «название + полоса»: `min-width: 0` обязателен, иначе длинное имя
+  // распирает флекс-строку и полоса схлопывается в точку.
+  '.cm-z-audio__body': {
     flex: '1 1 auto',
+    minWidth: '0',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  '.cm-z-audio__name': {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontSize: '13px',
+    lineHeight: '18px',
+    color: 'var(--text)',
+  },
+  '.cm-z-audio__row': {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+  },
+  // Полоса — 3 px, как в COMPONENTS §8, но нажимается обёртка высотой 15:
+  // в три пикселя пальцем не попадают.
+  '.cm-z-audio__seek': {
+    flex: '1 1 auto',
+    padding: '6px 0',
+    cursor: 'pointer',
+    touchAction: 'none',
+  },
+  '.cm-z-audio__track': {
+    display: 'block',
     height: '3px',
     borderRadius: '2px',
     backgroundColor: 'var(--surface-sunken)',
@@ -527,6 +568,18 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
     color: 'var(--text-tertiary)',
     fontVariantNumeric: 'tabular-nums',
   },
+  '.cm-z-audio__rate': {
+    flex: '0 0 auto',
+    padding: '2px 6px',
+    border: 'none',
+    borderRadius: '8px',
+    backgroundColor: 'transparent',
+    fontFamily: fontFamily.mono,
+    fontSize: '11px',
+    color: 'var(--text-tertiary)',
+    cursor: 'pointer',
+  },
+  '.cm-z-audio__rate:hover': { backgroundColor: 'var(--surface-sunken)' },
   // Сам `<audio>` не показываем: элементов управления у него свои, системные,
   // и в каждой из трёх оболочек они выглядят по-разному.
   '.cm-z-audio audio': { display: 'none' },
