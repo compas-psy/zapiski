@@ -127,6 +127,7 @@ export {
   toggleHighlight,
   toggleStrike,
   toggleInlineCode,
+  bulletListWith,
   toggleBulletList,
   toggleOrderedList,
   toggleTaskList,

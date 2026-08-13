@@ -264,6 +264,8 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       column: theme.editor.columnWidth,
       family: theme.editor.typeface,
       compact: theme.editor.compact,
+      listIndent: theme.editor.listIndent,
+      listMarkColor: theme.editor.listMarkColor,
     }),
     [
       theme.editor.fontSize,
@@ -271,6 +273,8 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       theme.editor.columnWidth,
       theme.editor.typeface,
       theme.editor.compact,
+      theme.editor.listIndent,
+      theme.editor.listMarkColor,
     ],
   );
 
@@ -557,6 +561,8 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         {!state.focusMode ? (
           <div className={isMobile ? 'za-editor__panel za-editor__panel--keyboard' : 'za-editor__panel'}>
             <FormatPanel
+              /* Символ маркера — из настроек: он попадает в текст файла. */
+              bulletMarker={theme.editor.listMarker}
               view={panelView}
               strings={editorStrings}
               /* Удаление строки и столбца таблицы — ОО (§4): тост «Строка

@@ -169,10 +169,18 @@ export const cycleHeading: StateCommand = (target) => {
   return setHeading(next)(target);
 };
 
-export const toggleBulletList: StateCommand = applyBlockMarker(
-  () => '- ',
-  (marker) => /^[-*+][\t ]+$/.test(marker),
-);
+/**
+ * Маркерный список. Символ маркера настраивается (замечание 10): все три
+ * варианта — канонический markdown, и выбор меняет ТЕКСТ файла, а не показ.
+ */
+export function bulletListWith(marker: '-' | '*' | '+'): StateCommand {
+  return applyBlockMarker(
+    () => `${marker} `,
+    (found) => /^[-*+][\t ]+$/.test(found),
+  );
+}
+
+export const toggleBulletList: StateCommand = bulletListWith('-');
 
 export const toggleOrderedList: StateCommand = applyBlockMarker(
   (_parts, index) => `${index + 1}. `,

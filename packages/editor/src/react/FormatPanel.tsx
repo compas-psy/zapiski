@@ -54,6 +54,7 @@ import {
   insertTable,
   setHeading,
   toggleBold,
+  bulletListWith,
   toggleBulletList,
   toggleHighlight,
   toggleInlineCode,
@@ -301,6 +302,27 @@ const styles = new StyleModule({
     gap: '2px',
     minWidth: '0',
   },
+  /* Вкладки наборов — во всю ширину палитры, отдельной строкой над сеткой. */
+  '.zp-panel__emoji-tabs': {
+    gridColumn: '1 / -1',
+    display: 'flex',
+    gap: '2px',
+    paddingBottom: '4px',
+    marginBottom: '2px',
+    borderBottom: '1px solid var(--line)',
+  },
+  '.zp-panel__emoji-tab': {
+    flex: '1',
+    border: '0',
+    background: 'transparent',
+    borderRadius: '8px',
+    padding: '4px 0',
+    fontSize: '16px',
+    lineHeight: '1',
+    cursor: 'pointer',
+    opacity: '0.55',
+  },
+  '.zp-panel__emoji-tab--on': { opacity: '1', backgroundColor: 'var(--surface-alt)' },
   '.zp-panel__emoji': {
     width: '34px',
     height: '34px',
@@ -375,6 +397,12 @@ function ensureStyles(): void {
 export interface FormatPanelProps {
   /** Представление редактора; пока его нет, панель неактивна. */
   view: EditorView | null;
+  /**
+   * Символ маркерного списка из настроек (замечание 10). Меняет ТЕКСТ файла,
+   * поэтому приходит из приложения, а не из темы редактора: тема отвечает за
+   * показ, а это разметка.
+   */
+  bulletMarker?: '-' | '*' | '+';
   strings?: EditorStrings;
   /** Вложения (§5). Пункт скрывается, если обработчика нет. */
   onAttach?: (kind: 'image' | 'file' | 'audio') => void;
@@ -414,11 +442,15 @@ export function FormatPanel({
   onFormula,
   onEmoji,
   onUndoable,
+  bulletMarker = '-',
   className,
 }: FormatPanelProps): ReactElement {
   ensureStyles();
   const copy = strings.panel;
   const [open, setOpen] = useState<OpenMenu>(null);
+  /* Какая группа эмодзи открыта. Держится между открытиями палитры: человек
+     обычно берёт символы из одного набора подряд. */
+  const [emojiGroup, setEmojiGroup] = useState(0);
   const [tick, setTick] = useState(0);
   const root = useRef<HTMLDivElement>(null);
 
@@ -704,7 +736,7 @@ export function FormatPanel({
                   glyph="listBullet"
                   hotkey={copy.hotkeys.bullet}
                   checked={list === 'bullet'}
-                  onPress={run(toggleBulletList)}
+                  onPress={run(bulletListWith(bulletMarker))}
                 />
                 <MenuItem
                   label={copy.listKinds.ordered}
@@ -925,7 +957,24 @@ export function FormatPanel({
           menu={
             open === 'emoji' ? (
               <div className="zp-panel__menu zp-panel__menu--emoji" role="menu">
-                {EMOJI.map((symbol) => (
+                <div className="zp-panel__emoji-tabs">
+                  {EMOJI_GROUPS.map((group, index) => (
+                    <button
+                      key={group.tab}
+                      type="button"
+                      className={`zp-panel__emoji-tab${index === emojiGroup ? ' zp-panel__emoji-tab--on' : ''}`}
+                      aria-pressed={index === emojiGroup}
+                      aria-label={copy.emojiGroup(index + 1)}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        setEmojiGroup(index);
+                      }}
+                    >
+                      {group.tab}
+                    </button>
+                  ))}
+                </div>
+                {(EMOJI_GROUPS[emojiGroup] ?? EMOJI_GROUPS[0]).items.map((symbol) => (
                   <button
                     key={symbol}
                     type="button"
@@ -959,10 +1008,70 @@ export function FormatPanel({
  * системный выбор с поиском и категориями сюда не тянем: в вебе его нет, а
  * своя копия таблицы Unicode весит больше, чем стоит.
  */
-const EMOJI = [
-  '✅', '❗', '❓', '⭐', '🔥', '💡', '📌', '📎',
-  '📅', '⏰', '📈', '📉', '💰', '🎯', '🧩', '🔒',
-  '🙂', '😐', '😕', '👍', '👎', '🙏', '💬', '🤔',
+/**
+ * Эмодзи по группам (замечание 15).
+ *
+ * Было двадцать четыре штуки одним рядом — заказчик справедливо назвал набор
+ * скудным и попросил «подгрузку пакетов, как в Telegram».
+ *
+ * Пакетов из сети здесь не будет, и это осознанно: приложение обязано
+ * работать в самолёте (ТЗ §10), а догружаемый набор — это либо запрос к
+ * чужому серверу в момент, когда человек просто хочет поставить смайлик, либо
+ * молчаливый отказ. Вместо этого набор вырос вшестеро и разложен по группам с
+ * вкладками — то, ради чего пакеты и нужны: найти нужное быстро.
+ *
+ * Порядок групп — от рабочего к личному: заметки чаще про дела, чем про
+ * настроение.
+ */
+const EMOJI_GROUPS = [
+  {
+    tab: '✅',
+    items: [
+      '✅', '❌', '❗', '❓', '⭐', '🔥', '💡', '📌',
+      '📎', '📅', '⏰', '🎯', '🧩', '🔒', '🔑', '⚡',
+      '✔️', '➕', '➖', '🔁', '⏳', '🚩', '🏁', '📍',
+    ],
+  },
+  {
+    tab: '📈',
+    items: [
+      '📈', '📉', '📊', '💰', '💳', '🧾', '📦', '🛒',
+      '🏦', '💼', '📁', '📂', '🗂️', '📝', '📄', '📋',
+      '🖇️', '📚', '🔍', '🧮', '⚖️', '🏷️', '📬', '🗃️',
+    ],
+  },
+  {
+    tab: '🙂',
+    items: [
+      '🙂', '😀', '😄', '😅', '😂', '😉', '😊', '😍',
+      '🤩', '😎', '🤗', '🤔', '😐', '😕', '😢', '😭',
+      '😤', '😳', '🥱', '😴', '🤒', '🤯', '🥳', '😇',
+    ],
+  },
+  {
+    tab: '👍',
+    items: [
+      '👍', '👎', '👌', '✌️', '🤝', '🙏', '👏', '💪',
+      '🫶', '👀', '🧠', '❤️', '💔', '💬', '🗣️', '👋',
+      '🤞', '☝️', '✍️', '🫡', '🙌', '🤲', '💯', '🎉',
+    ],
+  },
+  {
+    tab: '🌿',
+    items: [
+      '🌿', '🌱', '🌳', '🌸', '🌞', '🌙', '⛅', '🌧️',
+      '❄️', '🌊', '🔥', '🏔️', '🐈', '🐕', '🐦', '🦋',
+      '🍎', '🍞', '☕', '🍵', '🍷', '🍫', '🥗', '🍲',
+    ],
+  },
+  {
+    tab: '🎵',
+    items: [
+      '🎵', '🎧', '🎬', '📷', '🎨', '✏️', '📖', '🎓',
+      '🏃', '🚲', '✈️', '🚗', '🏠', '🛏️', '🧘', '🎁',
+      '🕐', '📞', '💻', '📱', '🖨️', '🔋', '🛠️', '🧹',
+    ],
+  },
 ] as const;
 
 /** Индексы уровней в подменю заголовков: H₁…H₆. */

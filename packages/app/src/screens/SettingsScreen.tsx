@@ -349,6 +349,48 @@ function EditorSection(): ReactNode {
       />
       <p className="za-muted">{copy.modeHint}</p>
 
+      {/*
+        Оформление списков (замечание 10 из отзыва). Маркер меняет ТЕКСТ файла —
+        все три символа канонический markdown; цвет и сдвиг — только показ.
+        Дефис первым: он единственный не спорит с курсивом при чтении сырого
+        файла, где `*пункт*` читается как выделение.
+      */}
+      <Section>{copy.listMarker}</Section>
+      <SegmentedControl<'-' | '*' | '+'>
+        label={copy.listMarker}
+        value={theme.editor.listMarker}
+        onChange={(value) => theme.setEditor({ listMarker: value })}
+        options={[
+          { value: '-', label: '—' },
+          { value: '*', label: '∗' },
+          { value: '+', label: '+' },
+        ]}
+      />
+
+      <Section>{copy.listMarkColor}</Section>
+      <SegmentedControl<'muted' | 'text' | 'accent'>
+        label={copy.listMarkColor}
+        value={theme.editor.listMarkColor}
+        onChange={(value) => theme.setEditor({ listMarkColor: value })}
+        options={[
+          { value: 'muted', label: copy.listMarkColors.muted },
+          { value: 'text', label: copy.listMarkColors.text },
+          { value: 'accent', label: copy.listMarkColors.accent },
+        ]}
+      />
+
+      <Section>{copy.listIndent}</Section>
+      <SegmentedControl<'none' | 'normal' | 'wide'>
+        label={copy.listIndent}
+        value={theme.editor.listIndent}
+        onChange={(value) => theme.setEditor({ listIndent: value })}
+        options={[
+          { value: 'none', label: copy.listIndents.none },
+          { value: 'normal', label: copy.listIndents.normal },
+          { value: 'wide', label: copy.listIndents.wide },
+        ]}
+      />
+
       {/* Typewriter-скролл — опция, по умолчанию выключена (BEHAVIOR §2.8). */}
       <div className="za-field-row">
         <Switch
