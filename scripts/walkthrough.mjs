@@ -449,6 +449,44 @@ for (const [name, viewport] of [
     check(false, `${name}: в открытом меню нет ни одного пункта`);
   }
 
+  /* ── Касание со сносом пальца ────────────────────────────────────────────
+     Заказчик: «появление виджета редактирования таблицы нестабильно». Причина
+     оказалась не в таблице, а в самой кнопке: касание, при котором палец
+     сместился на 16 px и больше, приходило как `pointerdown` +
+     `pointercancel`, без `pointerup` и без `click`. Браузер отдавал жест
+     прокрутке, потому что панель объявлена скролл-контейнером (`overflow-x:
+     auto`) — прокручивать при этом нечего. 16 px на плотности 3 — это
+     полтора миллиметра пути пальца, то есть обычное нажатие.
+
+     Проверяем именно так, как палец и промахивается: касание с протяжкой.
+     `tap()` из Playwright идеально ровный и этот класс отказов не ловит. */
+  await screen.keyboard.press('Escape');
+  await screen.waitForTimeout(200);
+  const drifting = screen.locator('button[aria-label="Стиль абзаца"]').first();
+  const driftBox = await drifting.boundingBox();
+  if (driftBox) {
+    const session = await touch.newCDPSession(screen);
+    const x = driftBox.x + driftBox.width / 2;
+    const y = driftBox.y + driftBox.height / 2;
+    await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+    for (let step = 4; step <= 24; step += 4) {
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x: x - step, y }],
+      });
+    }
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await session.detach();
+    await screen.waitForTimeout(400);
+    check(
+      (await screen.locator('.zp-panel__layer').count()) > 0,
+      `${name}: касание со сносом пальца на 24 px не сработало`,
+      'браузер отдал жест прокрутке — кнопке нужен touch-action',
+    );
+    await screen.keyboard.press('Escape');
+    await screen.waitForTimeout(200);
+  }
+
   /* ── Библиотека: её пункты обязаны нажиматься ────────────────────────────
      У `--z-drawer` стояло 40 при `--z-scrim` 50 — выдвижная библиотека лежала
      под собственным затемнением, и оно съедало каждое нажатие. Архив, Корзина,
