@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { insertSmall } from '../src/commands/blocks';
 import { insertCodeBlock, toggleBulletList, toggleOrderedList } from '../src/commands/formatting';
 import { decorationsOf, hiddenRanges, makeState } from './helpers.js';
+import { toggleCollapsed } from '../src/live-preview/collapsed';
 
 /** Состояние с курсором или выделением; `|` — курсор, `[…]` — выделение. */
 function stateOf(source: string): EditorState {
@@ -206,5 +207,89 @@ describe('замечание 14: ссылка показывается текс�
     const hiddenText = hiddenRanges(state).map((range) => doc.slice(range.from, range.to));
 
     expect(hiddenText.join('')).not.toContain('https://cmpas.ru');
+  });
+});
+
+describe('замечание 12: сворачиваемый блок работает, а не выдаёт xml', () => {
+  const DOC = '<details>\n<summary>Заголовок</summary>\n\nТело\n\n</details>';
+
+  it('теги прячутся — на экране остаётся заголовок', () => {
+    /* Заказчик: «просто выдаёт xml, заполняя который ничего не происходит». */
+    const state = makeState(DOC, { selection: { anchor: DOC.length } });
+    const hiddenText = hiddenRanges(state).map((range) => DOC.slice(range.from, range.to));
+
+    expect(hiddenText.join('')).toContain('<details>');
+    expect(hiddenText.join('')).toContain('<summary>');
+    expect(hiddenText.join('')).toContain('</summary>');
+  });
+
+  it('строка заголовка помечена — от неё идёт стрелка', () => {
+    const state = makeState(DOC, { selection: { anchor: DOC.length } });
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-summary');
+  });
+
+  it('свёрнутый блок прячет тело, не трогая текст', () => {
+    /* Свёрнутость — состояние показа: в файле `<details>` всегда записан
+       целиком, и заметка открывается в чужом редакторе так же. */
+    const state = makeState(DOC, { selection: { anchor: DOC.length } });
+    const collapsed = state.update({ effects: toggleCollapsed.of(0) }).state;
+
+    const classes = decorationsOf(collapsed)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-collapsed');
+    /* Текст документа при этом не изменился ни на символ. */
+    expect(collapsed.doc.toString()).toBe(DOC);
+  });
+
+  it('повторное переключение разворачивает обратно', () => {
+    const state = makeState(DOC, { selection: { anchor: DOC.length } });
+    const once = state.update({ effects: toggleCollapsed.of(0) }).state;
+    const twice = once.update({ effects: toggleCollapsed.of(0) }).state;
+
+    const classes = decorationsOf(twice)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).not.toContain('cm-z-collapsed');
+  });
+});
+
+describe('замечание 13: таблица читается колонками, а не каркасом', () => {
+  const DOC = '| Колонка | Колонка |\n| --- | --- |\n| раз | два |\n\nдалее';
+
+  it('служебная строка `| --- |` не показывается', () => {
+    /* Она нужна разбору, а не читателю: без неё markdown перестаёт считать
+       это таблицей, поэтому в файле она остаётся. */
+    const state = makeState(DOC, { selection: { anchor: DOC.length - 1 } });
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-table-rule');
+  });
+
+  it('палки между ячейками спрятаны, а ячейки помечены', () => {
+    const state = makeState(DOC, { selection: { anchor: DOC.length - 1 } });
+    const hiddenText = hiddenRanges(state).map((range) => DOC.slice(range.from, range.to));
+    expect(hiddenText).toContain('|');
+
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).toContain('cm-z-table-cell');
+  });
+
+  it('курсор в таблице возвращает разметку целиком', () => {
+    /* Иначе таблицу не отредактировать: границы ячеек — это и есть палки. */
+    const state = makeState(DOC, { selection: { anchor: DOC.indexOf('раз') } });
+    const hiddenText = hiddenRanges(state).map((range) => DOC.slice(range.from, range.to));
+    expect(hiddenText).not.toContain('|');
+
+    const classes = decorationsOf(state)
+      .map((deco) => deco.class ?? '')
+      .join(' ');
+    expect(classes).not.toContain('cm-z-table-rule');
   });
 });
