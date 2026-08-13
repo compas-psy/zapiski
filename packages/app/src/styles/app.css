@@ -1680,3 +1680,27 @@
   text-align: start;
   cursor: pointer;
 }
+
+/* Согласие: галочка и текст в одну строку, текст переносится под галочкой, а
+   не под ней самой. Цель нажатия — вся строка целиком: закон требует
+   осознанного действия, а не попадания в квадрат 13×13. */
+.za-consent {
+  display: flex;
+  gap: var(--sp-8);
+  align-items: start;
+  padding-block: var(--sp-4);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+.za-consent input {
+  flex: none;
+  inline-size: 18px;
+  block-size: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+.za-consent a {
+  color: var(--accent);
+}

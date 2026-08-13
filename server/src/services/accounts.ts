@@ -15,10 +15,54 @@ export interface UserRow {
   email: string;
   yandex_id: string | null;
   analytics_opt_in: boolean;
+  /** Редакция принятого пользовательского соглашения. `null` — не принимал. */
+  terms_version: string | null;
+  terms_accepted_at: Date | null;
+  /** Добровольное согласие на рекламные письма. Отзывается в любой момент. */
+  marketing_opt_in: boolean;
   created_at: Date;
 }
 
-const USER_COLUMNS = 'id, email, yandex_id, analytics_opt_in, created_at';
+const USER_COLUMNS =
+  'id, email, yandex_id, analytics_opt_in, terms_version, terms_accepted_at, marketing_opt_in, created_at';
+
+/**
+ * Согласия, данные при входе.
+ *
+ * Два РАЗНЫХ согласия, и складывать их в одно нельзя: обработка персональных
+ * данных обязательна (без неё аккаунта нет), рассылка добровольна и даётся
+ * отдельным действием. Рекламное согласие «в нагрузку» к обязательному — это
+ * ровно то, что закон запрещает.
+ */
+export interface Consents {
+  /** Редакция принятого соглашения. `null` — человек его сейчас не принимал. */
+  termsVersion: string | null;
+  /** Согласие на рекламные письма. `undefined` — не трогали, оставить как было. */
+  marketingOptIn?: boolean | undefined;
+}
+
+/**
+ * Записать согласия. Обязательное только проставляется, рекламное — и
+ * проставляется, и снимается: отозвать согласие человек вправе всегда.
+ */
+export async function recordConsents(
+  db: Db | DbClient,
+  userId: string,
+  consents: Consents,
+  now: Date = new Date(),
+): Promise<void> {
+  await db.query(
+    `UPDATE users SET
+       terms_version     = COALESCE($2, terms_version),
+       terms_accepted_at = CASE WHEN $2::text IS NULL THEN terms_accepted_at ELSE $4 END,
+       marketing_opt_in  = COALESCE($3, marketing_opt_in),
+       marketing_version = CASE WHEN $3::boolean IS NULL THEN marketing_version ELSE $2 END,
+       marketing_at      = CASE WHEN $3::boolean IS NULL THEN marketing_at ELSE $4 END,
+       updated_at        = now()
+     WHERE id = $1`,
+    [userId, consents.termsVersion, consents.marketingOptIn ?? null, now],
+  );
+}
 
 /** Почта нормализуется к нижнему регистру: `Marina@Ya.ru` и `marina@ya.ru` — один аккаунт. */
 export function normalizeEmail(email: string): string {
@@ -133,21 +177,49 @@ export async function lastMagicTokenAt(db: Db | DbClient, email: string): Promis
 
 export async function createMagicToken(
   db: Db | DbClient,
-  input: { email: string; deviceKey: string; platform: string | null; ttlSeconds: number },
+  input: {
+    email: string;
+    deviceKey: string;
+    platform: string | null;
+    ttlSeconds: number;
+    /* Согласия даются здесь, а аккаунт заводится при переходе по ссылке.
+       Между этими моментами им негде жить, кроме как рядом с токеном. */
+    termsVersion?: string | null;
+    marketingOptIn?: boolean | null;
+  },
   now: Date = new Date(),
 ): Promise<IssuedMagicToken> {
   const token = randomToken(32);
   const expiresAt = new Date(now.getTime() + input.ttlSeconds * 1000);
   await db.query(
-    `INSERT INTO magic_tokens (email, token_hash, device_key, platform, created_at, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [normalizeEmail(input.email), sha256Hex(token), input.deviceKey, input.platform, now, expiresAt],
+    `INSERT INTO magic_tokens
+       (email, token_hash, device_key, platform, created_at, expires_at,
+        terms_version, marketing_opt_in)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      normalizeEmail(input.email),
+      sha256Hex(token),
+      input.deviceKey,
+      input.platform,
+      now,
+      expiresAt,
+      input.termsVersion ?? null,
+      input.marketingOptIn ?? null,
+    ],
   );
   return { token, expiresAt };
 }
 
 export type MagicConsumeResult =
-  | { ok: true; email: string; deviceKey: string; platform: string | null }
+  | {
+      ok: true;
+      email: string;
+      deviceKey: string;
+      platform: string | null;
+      /** Согласия, данные в момент запроса ссылки. */
+      termsVersion: string | null;
+      marketingOptIn: boolean | null;
+    }
   | { ok: false; reason: 'unknown' | 'expired' | 'used' | 'device_mismatch' };
 
 /**
@@ -166,6 +238,8 @@ export async function consumeMagicToken(
   const tokenHash = sha256Hex(token);
   return withTransaction(db, async (client) => {
     const { rows } = await client.query<{
+      terms_version: string | null;
+      marketing_opt_in: boolean | null;
       id: string;
       email: string;
       device_key: string;
@@ -173,7 +247,8 @@ export async function consumeMagicToken(
       expires_at: Date;
       used_at: Date | null;
     }>(
-      `SELECT id, email, device_key, platform, expires_at, used_at
+      `SELECT id, email, device_key, platform, expires_at, used_at,
+              terms_version, marketing_opt_in
          FROM magic_tokens WHERE token_hash = $1 FOR UPDATE`,
       [tokenHash],
     );
@@ -185,7 +260,14 @@ export async function consumeMagicToken(
     if (row.device_key !== deviceKey) return { ok: false, reason: 'device_mismatch' };
 
     await client.query(`UPDATE magic_tokens SET used_at = $2 WHERE id = $1`, [row.id, now]);
-    return { ok: true, email: row.email, deviceKey: row.device_key, platform: row.platform };
+    return {
+      ok: true,
+      email: row.email,
+      deviceKey: row.device_key,
+      platform: row.platform,
+      termsVersion: row.terms_version,
+      marketingOptIn: row.marketing_opt_in,
+    };
   });
 }
 

@@ -10,6 +10,7 @@
  *  • сессия обновляется сама по истечении access-токена;
  *  • пути ядра переведены в пути сервера.
  */
+import { LEGAL_VERSION } from '@zapiski/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -204,11 +205,15 @@ describe('сессия облака', () => {
       },
     });
 
-    await session.requestMagicLink('marina@ya.ru');
+    await session.requestMagicLink('marina@ya.ru', { marketing: false });
     const sent = JSON.parse(bodies[0] as string) as Record<string, string>;
     expect(sent['email']).toBe('marina@ya.ru');
     expect(sent['deviceId']).toMatch(/^[A-Za-z0-9_.:-]{8,128}$/);
     expect(sent['platform']).toBe('web');
+    /* Согласия едут вместе с запросом: редакция принятого соглашения и
+       отдельное, добровольное — на рассылку. */
+    expect(sent['acceptedTerms']).toBe(LEGAL_VERSION);
+    expect(sent['marketingOptIn'] as unknown).toBe(false);
   });
 
   it('устройство одно и то же от запроса письма до обмена', async () => {

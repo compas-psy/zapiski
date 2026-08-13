@@ -14,7 +14,19 @@
  *  • отсутствие сессии не мешает работать локально — аккаунт нужен ТОЛЬКО
  *    для облака.
  */
+import { LEGAL_VERSION } from '@zapiski/core';
+
 import type { AppHost, AuthCallback } from '../contract.js';
+
+/**
+ * Согласия, с которыми человек входит.
+ *
+ * Обязательного здесь нет намеренно: без него до входа дело не доходит вовсе
+ * — кнопка неактивна. Поле одно, и это добровольное согласие на рассылку.
+ */
+export interface Consents {
+  marketing: boolean;
+}
 
 /** Ключи в `PreferencesStore`. Значения — вне vault'а, как и прочие настройки. */
 export const AUTH_PREF = {
@@ -47,6 +59,8 @@ export class AuthError extends Error {
 
 /** Сессия, как она лежит в `prefs`. Ничего лишнего: только то, что нужно. */
 export interface CloudSession {
+  /** Согласие на рекламные письма — как оно записано на сервере. */
+  marketingOptIn?: boolean;
   accessToken: string;
   refreshToken: string;
   /** Абсолютный момент истечения access-токена, мс эпохи. */
@@ -141,21 +155,34 @@ export class SessionStore {
    * Письмо со ссылкой. `deviceId` обязателен: сервер привязывает токен к
    * устройству инициации, и без него ссылка не обменяется ни на одном экране.
    */
-  async requestMagicLink(email: string): Promise<void> {
+  async requestMagicLink(email: string, consents: Consents): Promise<void> {
     const deviceId = await this.deviceId();
     const response = await this.send(`${this.base}/auth/magic-link`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, deviceId, platform: this.platform }),
+      body: JSON.stringify({
+        email,
+        deviceId,
+        platform: this.platform,
+        /* Редакция, а не «да»: согласие даётся на конкретный текст, и
+           показанная человеку редакция обязана совпасть с отправленной. */
+        acceptedTerms: LEGAL_VERSION,
+        marketingOptIn: consents.marketing,
+      }),
     });
     if (response.status === 429) throw new AuthError('too_soon');
     if (!response.ok) throw new AuthError('server');
   }
 
   /** Адрес, который оболочка открывает во внешнем браузере для Яндекс ID. */
-  async yandexUrl(): Promise<string> {
+  async yandexUrl(consents: Consents): Promise<string> {
     const deviceId = await this.deviceId();
-    const query = new URLSearchParams({ device_id: deviceId, platform: this.platform });
+    const query = new URLSearchParams({
+      device_id: deviceId,
+      platform: this.platform,
+      terms: LEGAL_VERSION,
+      marketing: consents.marketing ? '1' : '0',
+    });
     return `${this.base}/auth/yandex?${query.toString()}`;
   }
 
@@ -177,6 +204,23 @@ export class SessionStore {
     } catch {
       return true;
     }
+  }
+
+  /**
+   * Дать или отозвать согласие на рекламные письма. Возвращает то, что
+   * записано на сервере, а не то, что нажали: тумблер обязан показывать факт.
+   */
+  async setMarketingConsent(optIn: boolean): Promise<boolean> {
+    const token = await this.accessToken();
+    if (token === null) throw new AuthError('server');
+    const response = await this.send(`${this.base}/auth/marketing-consent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ optIn }),
+    });
+    if (!response.ok) throw new AuthError('server');
+    const body = (await response.json()) as { marketingOptIn?: unknown };
+    return body.marketingOptIn === true;
   }
 
   /**
@@ -327,12 +371,18 @@ export class SessionStore {
         },
       });
       if (!response.ok) return session;
-      const body = await json<{ id?: string; email?: string; device?: { id?: string } }>(response);
+      const body = await json<{
+        id?: string;
+        email?: string;
+        device?: { id?: string };
+        marketingOptIn?: unknown;
+      }>(response);
       return {
         ...session,
         userId: body.id ?? session.userId,
         email: body.email ?? session.email,
         deviceId: body.device?.id ?? session.deviceId,
+        marketingOptIn: body.marketingOptIn === true,
       };
     } catch {
       return session;

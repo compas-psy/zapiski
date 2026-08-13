@@ -18,6 +18,7 @@ import {
   revokeAllSessions,
   revokeByRefreshToken,
   rotateRefreshToken,
+  recordConsents,
   upsertUserByEmail,
   upsertUserByYandex,
 } from '../services/accounts.ts';
@@ -93,6 +94,20 @@ function backToApp(ctx: AppContext): { href: string; label: string } | null {
 const magicLinkBody = z.object({
   email: z.string().trim().min(3).max(254).email(),
   deviceId: z.string().refine(isValidDeviceKey, 'некорректный идентификатор устройства'),
+  /**
+   * Редакция принятого пользовательского соглашения и политики ПДн.
+   *
+   * ОБЯЗАТЕЛЬНО: аккаунт — это обработка персональных данных, и без согласия
+   * заводить его нельзя. Хранится именно редакция, а не «да»: согласие даётся
+   * на конкретный текст, и после его изменения прежнее согласие не становится
+   * согласием на новый.
+   */
+  acceptedTerms: z.string().trim().min(1).max(64),
+  /**
+   * Рекламные письма — ОТДЕЛЬНОЕ и добровольное согласие. Необязательное поле
+   * с умолчанием `false`: молчание согласием не является.
+   */
+  marketingOptIn: z.boolean().optional(),
   platform: z.enum(PLATFORMS).optional(),
 });
 
@@ -105,6 +120,11 @@ const callbackQuery = z.object({
 const yandexStartQuery = z.object({
   device_id: z.string().refine(isValidDeviceKey, 'некорректный идентификатор устройства'),
   platform: z.enum(PLATFORMS).optional(),
+  /* Те же два согласия, что и у входа по почте. Едут в подписанном `state`:
+     подменить их из браузера нельзя, а другого места между началом и
+     возвратом у них нет. */
+  terms: z.string().trim().min(1).max(64),
+  marketing: z.enum(['0', '1']).optional(),
 });
 
 const yandexCallbackQuery = z.object({
@@ -115,6 +135,8 @@ const yandexCallbackQuery = z.object({
 
 const refreshBody = z.object({ refreshToken: z.string().min(16).max(512) });
 const analyticsBody = z.object({ optIn: z.boolean() });
+/** Рекламное согласие: `false` — отзыв, и он обязан работать всегда. */
+const marketingBody = z.object({ optIn: z.boolean() });
 
 export interface SessionResponse {
   accessToken: string;
@@ -136,7 +158,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/magic-link', async (request, reply) => {
     const parsed = magicLinkBody.safeParse(request.body);
     if (!parsed.success) throw errors.badRequest('bad_email_or_device');
-    const { email, deviceId, platform } = parsed.data;
+    const { email, deviceId, platform, acceptedTerms, marketingOptIn } = parsed.data;
 
     const now = ctx.now();
     const cooldown = ctx.env.MAGIC_LINK_COOLDOWN_SECONDS;
@@ -157,6 +179,10 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         deviceKey: deviceId,
         platform: platform ?? null,
         ttlSeconds: ctx.env.MAGIC_LINK_TTL_SECONDS,
+        /* Согласия едут вместе с токеном: аккаунт заведётся при переходе по
+           ссылке, и записать их раньше некуда — пользователя ещё нет. */
+        termsVersion: acceptedTerms,
+        marketingOptIn: marketingOptIn ?? false,
       },
       now,
     );
@@ -210,6 +236,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const user = await upsertUserByEmail(ctx.db, result.email);
+    /* Согласия, данные при запросе ссылки, становятся фактом ровно здесь —
+       когда аккаунт существует. Момент фиксируется наш, серверный. */
+    await recordConsents(
+      ctx.db,
+      user.id,
+      { termsVersion: result.termsVersion, marketingOptIn: result.marketingOptIn ?? undefined },
+      ctx.now(),
+    );
     const session = await issueSession(ctx, user.id, deviceKey, result.platform);
     return respondWithSession(ctx, reply, session, parsed.data.format, result.platform);
   }));
@@ -253,6 +287,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const state = signJwt(
       {
         sub: 'oauth',
+        terms: parsed.data.terms,
+        marketing: parsed.data.marketing === '1',
         sid: 'oauth',
         did: parsed.data.device_id,
         typ: 'oauth_state',
@@ -296,6 +332,15 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const user = await upsertUserByYandex(ctx.db, identity.id, identity.email);
+    await recordConsents(
+      ctx.db,
+      user.id,
+      {
+        termsVersion: typeof state.claims['terms'] === 'string' ? state.claims['terms'] : null,
+        marketingOptIn: state.claims['marketing'] === true,
+      },
+      ctx.now(),
+    );
     const session = await issueSession(ctx, user.id, deviceKey, platform);
     return respondWithSession(ctx, reply, session, undefined, platform);
   }));
@@ -363,10 +408,38 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       id: user.id,
       email: user.email,
       analyticsOptIn: user.analytics_opt_in,
+      /* Согласия видны человеку: он вправе знать, что и когда дал, и отозвать
+         добровольное. Без этого «отзыв в любой момент» — пустые слова. */
+      termsVersion: user.terms_version,
+      termsAcceptedAt: user.terms_accepted_at?.toISOString() ?? null,
+      marketingOptIn: user.marketing_opt_in,
       createdAt: user.created_at.toISOString(),
       device: { id: auth.deviceId },
     });
   });
+
+  /**
+   * Рекламное согласие: дать и ОТОЗВАТЬ.
+   *
+   * Отзыв обязателен по закону и обязателен по-человечески: согласие, которое
+   * нельзя снять, — не согласие. Ручка та же на оба действия, разница в теле.
+   */
+  app.post(
+    '/api/v1/auth/marketing-consent',
+    { preHandler: app.requireAuth },
+    async (request, reply) => {
+      const parsed = marketingBody.safeParse(request.body);
+      if (!parsed.success) throw errors.badRequest('bad_consent');
+      const auth = authOf(request);
+      await recordConsents(
+        ctx.db,
+        auth.userId,
+        { termsVersion: null, marketingOptIn: parsed.data.optIn },
+        ctx.now(),
+      );
+      return reply.send({ marketingOptIn: parsed.data.optIn });
+    },
+  );
 
   /** ТЗ §6: аналитика opt-in. Выключена, пока пользователь не согласился. */
   app.post(

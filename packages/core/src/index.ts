@@ -49,6 +49,8 @@ export type {
 
 // ── Порт хранилища в памяти ────────────────────────────────────────────────
 export { MemoryVaultStorage, type MemoryVaultStorageOptions } from './memory-storage.js';
+/* Редакция документов, на которые даётся согласие при регистрации. */
+export { LEGAL_URLS, LEGAL_VERSION } from './legal.js';
 
 // ── Утилиты путей и текста ─────────────────────────────────────────────────
 export {

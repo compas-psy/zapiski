@@ -90,6 +90,7 @@ describe.skipIf(noDatabase())('перебор попыток входа', () => 
           email: `flood${attempt}.${process.pid}@example.test`,
           deviceId: 'device-flood-one',
           platform: 'web',
+          acceptedTerms: '2026-08-13',
         },
       });
       if (response.statusCode !== 202) {

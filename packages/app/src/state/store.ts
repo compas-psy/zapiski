@@ -70,7 +70,7 @@ import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } fr
 import { cropImage, type CropRect } from '../lib/crop.js';
 import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
-import { AuthError, SessionStore, type AuthErrorCode } from './session.js';
+import { AuthError, SessionStore, type AuthErrorCode, type Consents } from './session.js';
 
 /** Сортировка списка. Запоминается НА ПАПКУ, не глобально (BEHAVIOR §1.2). */
 export type SortMode = 'updated' | 'created' | 'title' | 'manual';
@@ -110,6 +110,11 @@ export const MATRIX: Record<MatrixScreen, Record<Exclude<ScreenState, 'normal'>,
 export interface AccountState {
   email: string | null;
   plan: 'free' | 'plus';
+  /**
+   * Добровольное согласие на рекламные письма. Живёт рядом с аккаунтом,
+   * потому что и отзывается там же — в настройках, а не в переписке с нами.
+   */
+  marketingOptIn?: boolean;
 }
 
 /** Расшифрованная заметка живёт ТОЛЬКО в памяти (ТЗ §3.3, BEHAVIOR §5.3). */
@@ -690,7 +695,13 @@ export class AppController {
   private async restoreSession(): Promise<void> {
     const session = await this.session.load().catch(() => null);
     if (session === null) return;
-    this.patch({ account: { email: session.email, plan: this.state.account?.plan ?? 'free' } });
+    this.patch({
+      account: {
+        email: session.email,
+        plan: this.state.account?.plan ?? 'free',
+        marketingOptIn: session.marketingOptIn === true,
+      },
+    });
   }
 
   /**
@@ -720,10 +731,10 @@ export class AppController {
   }
 
   /** Письмо со ссылкой (SCREENS §2). Ошибку показывает экран, не модалка. */
-  async sendMagicLink(email: string): Promise<boolean> {
+  async sendMagicLink(email: string, consents: Consents): Promise<boolean> {
     this.patch({ authError: null });
     try {
-      await this.session.requestMagicLink(email);
+      await this.session.requestMagicLink(email, consents);
       return true;
     } catch (error) {
       /* 429 — письмо уже ушло меньше минуты назад. Это не отказ: экран
@@ -743,10 +754,10 @@ export class AppController {
   }
 
   /** Яндекс ID — основной путь входа. Открывается системным браузером. */
-  async startYandexSignIn(): Promise<void> {
+  async startYandexSignIn(consents: Consents): Promise<void> {
     this.patch({ authError: null });
     try {
-      await this.host.openExternal(await this.session.yandexUrl());
+      await this.host.openExternal(await this.session.yandexUrl(consents));
     } catch (error) {
       this.patch({ authError: this.authMessage(error) });
     }
@@ -760,7 +771,13 @@ export class AppController {
     this.patch({ authBusy: true, authError: null });
     try {
       const session = await this.session.adopt(callback);
-      this.setAccount({ email: session.email, plan: this.state.account?.plan ?? 'free' });
+      this.setAccount({
+        email: session.email,
+        plan: this.state.account?.plan ?? 'free',
+        /* Согласие приезжает из `/auth/me`: настройки обязаны показывать то,
+           что записано на сервере, а не то, что человек нажимал год назад. */
+        marketingOptIn: session.marketingOptIn === true,
+      });
       this.patch({ authBusy: false });
       await this.connectCloud();
       const back = this.afterSignIn;
@@ -824,6 +841,24 @@ export class AppController {
     if (this.session.current() === null) return;
     if (stored !== null && stored !== 'zapiski') return;
     await this.connectCloud();
+  }
+
+  /**
+   * Отозвать или снова дать согласие на рекламные письма.
+   *
+   * Отзыв обязан работать всегда и из одного понятного места: согласие,
+   * которое нельзя снять, — не согласие. Ответ сервера кладём в состояние,
+   * чтобы тумблер показывал то, что записано на сервере, а не то, что нажали.
+   */
+  async setMarketingConsent(optIn: boolean): Promise<boolean> {
+    const applied = await this.session.setMarketingConsent(optIn).catch(() => null);
+    if (applied === null) {
+      this.toast({ message: this.strings.errors.syncFailed });
+      return this.state.account?.marketingOptIn ?? false;
+    }
+    const account = this.state.account;
+    if (account) this.patch({ account: { ...account, marketingOptIn: applied } });
+    return applied;
   }
 
   /** Выход из аккаунта — одно из ТРЁХ мест с диалогом подтверждения. */

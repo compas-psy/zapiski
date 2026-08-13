@@ -38,7 +38,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
     const response = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email, deviceId, platform: 'web' },
+      payload: { email, deviceId, platform: 'web', acceptedTerms: '2026-08-13' },
     });
     const sent = harness.mailer.last();
     const token =
@@ -159,7 +159,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
     const tooSoon = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email, deviceId: 'device-magic-seven' },
+      payload: { email, deviceId: 'device-magic-seven', acceptedTerms: '2026-08-13' },
     });
     expect(tooSoon.statusCode).toBe(429);
     expect(tooSoon.headers['retry-after']).toBeDefined();
@@ -171,7 +171,7 @@ describe.skipIf(noDatabase())('magic-link', () => {
     const allowed = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email, deviceId: 'device-magic-seven' },
+      payload: { email, deviceId: 'device-magic-seven', acceptedTerms: '2026-08-13' },
     });
     expect(allowed.statusCode).toBe(202);
   });
@@ -235,7 +235,7 @@ describe.skipIf(noDatabase())('magic-link: возврат по платформ�
     const response = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email, deviceId, platform },
+      payload: { email, deviceId, platform, acceptedTerms: '2026-08-13' },
     });
     expect(response.statusCode).toBe(202);
     const sent = harness.mailer.last();
@@ -335,7 +335,7 @@ describe.skipIf(noDatabase())('magic-link: страница вместо JSON', 
     const response = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email, deviceId, platform: 'web' },
+      payload: { email, deviceId, platform: 'web', acceptedTerms: '2026-08-13' },
     });
     expect(response.statusCode).toBe(202);
     const sent = harness.mailer.last();

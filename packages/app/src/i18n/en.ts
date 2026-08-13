@@ -75,6 +75,12 @@ export const en: AppCatalog = {
   },
 
   signIn: {
+    consentTerms: 'I accept the terms of use and the personal data policy',
+    consentTermsRequired: 'No account without it: an account means processing your data',
+    consentMarketing: 'Send me letters about updates and offers',
+    consentMarketingHint: 'Optional. You can withdraw it at any time in account settings',
+    termsLink: 'Terms of use',
+    privacyLink: 'Personal data policy',
     title: 'An account is only needed for the cloud',
     subtitle: 'Local notes work without one',
     yandex: 'Sign in with Yandex ID',

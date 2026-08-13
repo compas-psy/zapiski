@@ -391,12 +391,16 @@ describe.skipIf(noDatabase())('периметр: magic-link', () => {
     const first = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email: known.email, deviceId: 'device-enum-abcdef' },
+      payload: { email: known.email, deviceId: 'device-enum-abcdef', acceptedTerms: '2026-08-13' },
     });
     const second = await harness.app.inject({
       method: 'POST',
       url: '/api/v1/auth/magic-link',
-      payload: { email: `no-such-user.${Date.now()}@example.test`, deviceId: 'device-enum-abcdef' },
+      payload: {
+        email: `no-such-user.${Date.now()}@example.test`,
+        deviceId: 'device-enum-abcdef',
+        acceptedTerms: '2026-08-13',
+      },
     });
     expect(first.statusCode).toBe(second.statusCode);
     const strip = (body: string): string => body.replace(/"[^"]*@[^"]*"/g, '"[почта]"').replace(/"expiresAt":"[^"]*"/, '');

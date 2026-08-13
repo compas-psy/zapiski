@@ -1072,6 +1072,22 @@ function AccountSection(): ReactNode {
           {state.account.plan === 'plus' ? copy.planPlus : copy.planFree}
         </span>
       </div>
+      {/*
+        Отзыв рекламного согласия — здесь, и это не вежливость, а обязанность:
+        согласие, которое нельзя снять, согласием не является. Тумблер
+        показывает то, что записано на СЕРВЕРЕ (ответ ручки), а не то, что
+        нажали: иначе неудачный запрос оставил бы человека в уверенности, что
+        он отписался.
+      */}
+      <div className="za-field-row">
+        <Switch
+          label={strings.signIn.consentMarketing}
+          checked={state.account.marketingOptIn === true}
+          onChange={(event) => void app.setMarketingConsent(event.target.checked)}
+        />
+      </div>
+      <p className="za-muted za-hint">{strings.signIn.consentMarketingHint}</p>
+
       <Button variant="secondary" onClick={() => setConfirm(true)}>
         {copy.signOut}
       </Button>

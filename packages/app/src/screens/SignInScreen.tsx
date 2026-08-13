@@ -8,6 +8,7 @@
  * необязателен, вернуться к заметкам можно в любой момент.
  */
 import { useEffect, useState, type ReactNode } from 'react';
+import { LEGAL_URLS } from '@zapiski/core';
 import { Button, IconArrowLeft, IconButton, IconCheck, InfoNote, TextField } from '@zapiski/ui';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 
@@ -31,6 +32,19 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
   const [email, setEmail] = useState('');
   const [stage, setStage] = useState<Stage>(initialStage);
   const [cooldown, setCooldown] = useState(0);
+  /**
+   * Два согласия, и они разные по природе.
+   *
+   * Заказчик: «согласия на рекламу (отдельное согласие, непреднажатое и
+   * необязательное) и обработку ПДн (пользовательское соглашение)».
+   *
+   * Обязательное держит кнопку: без согласия на обработку данных аккаунта не
+   * бывает — аккаунт и есть обработка. Добровольное не влияет ни на что, и
+   * обе галочки сняты изначально: преднажатая галочка согласием не является
+   * ни по закону, ни по совести.
+   */
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [marketing, setMarketing] = useState(false);
   const [busy, setBusy] = useState(false);
   /**
    * Умеет ли сервер вход через Яндекс. `null` — ещё не спросили.
@@ -64,7 +78,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
 
   const sendLink = async (): Promise<void> => {
     setBusy(true);
-    const sent = await app.sendMagicLink(email);
+    const sent = await app.sendMagicLink(email, { marketing });
     setBusy(false);
     if (!sent) return;
     setStage('sent');
@@ -109,6 +123,40 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
           </>
         ) : (
           <>
+            {/* Согласия ВЫШЕ кнопок входа: сначала условия, потом действие.
+                Галочка под кнопкой — это согласие, о котором узнают после. */}
+            <label className="za-consent">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(event) => setAcceptedTerms(event.target.checked)}
+              />
+              <span>
+                {strings.signIn.consentTerms}
+                {' — '}
+                <a href={LEGAL_URLS.terms} target="_blank" rel="noreferrer">
+                  {strings.signIn.termsLink}
+                </a>
+                {', '}
+                <a href={LEGAL_URLS.privacy} target="_blank" rel="noreferrer">
+                  {strings.signIn.privacyLink}
+                </a>
+              </span>
+            </label>
+            {!acceptedTerms ? (
+              <p className="za-muted za-hint">{strings.signIn.consentTermsRequired}</p>
+            ) : null}
+
+            <label className="za-consent">
+              <input
+                type="checkbox"
+                checked={marketing}
+                onChange={(event) => setMarketing(event.target.checked)}
+              />
+              <span>{strings.signIn.consentMarketing}</span>
+            </label>
+            <p className="za-muted za-hint">{strings.signIn.consentMarketingHint}</p>
+
             {yandexReady !== false ? (
               <>
                 <Button
@@ -123,7 +171,8 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
                       height={20}
                     />
                   }
-                  onClick={() => void app.startYandexSignIn()}
+                  disabled={!acceptedTerms}
+                  onClick={() => void app.startYandexSignIn({ marketing })}
                 >
                   {strings.signIn.yandex}
                 </Button>
@@ -145,7 +194,7 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
               variant="secondary"
               fullWidth
               loading={busy || state.authBusy}
-              disabled={!email.includes('@')}
+              disabled={!email.includes('@') || !acceptedTerms}
               onClick={() => void sendLink()}
             >
               {strings.signIn.sendLink}

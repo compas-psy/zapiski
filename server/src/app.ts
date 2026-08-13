@@ -10,6 +10,7 @@ import { registerAuth } from './plugins/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBillingRoutes } from './routes/billing.ts';
 import { registerHealthRoutes } from './routes/health.ts';
+import { registerLegalRoutes } from './routes/legal.ts';
 import { registerLiveRoute } from './routes/live.ts';
 import { registerPublishRoutes } from './routes/publish.ts';
 import { registerUpdateRoutes } from './routes/updates.ts';
@@ -134,9 +135,25 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     reply.header('x-content-type-options', 'nosniff');
     reply.header('referrer-policy', 'no-referrer');
     // Публичная страница ставит свою CSP; API отдаёт запрещающую.
-    if (!request.url.startsWith('/p/')) {
-      reply.header('content-security-policy', "default-src 'none'; frame-ancestors 'none'");
-    }
+    if (request.url.startsWith('/p/')) return payload;
+
+    /*
+     * Наши СТРАНИЦЫ (документы для согласий, возврат после входа) — тоже HTML
+     * и тоже со своим `<style>`. Под `default-src 'none'` этот стиль
+     * блокируется, и человек получает голый текст без оформления: страница
+     * работает, но выглядит поломкой продукта.
+     *
+     * Скриптов на них нет ни одного, поэтому послабление ровно одно —
+     * инлайновый стиль. `script-src` в политике отсутствует вовсе, то есть
+     * при `default-src 'none'` скрипт не выполнится, даже если появится.
+     */
+    const html = String(reply.getHeader('content-type') ?? '').includes('text/html');
+    reply.header(
+      'content-security-policy',
+      html
+        ? "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+        : "default-src 'none'; frame-ancestors 'none'",
+    );
     return payload;
   });
 
@@ -200,6 +217,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   });
 
   await registerHealthRoutes(app);
+  /* Документы для согласий: `/terms` и `/privacy`. Их открывает браузер по
+     ссылке с экрана входа, поэтому они вне `/api` и без аутентификации. */
+  await registerLegalRoutes(app);
   await registerVaultRoutes(app);
   await registerVersionRoutes(app);
   await registerLiveRoute(app);
