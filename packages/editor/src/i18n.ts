@@ -83,6 +83,7 @@ export interface EditorStrings {
     formulaBroken: string;
     done: string;
     emoji: string;
+    emojiGroup: (index: number) => string;
     hotkeys: Record<
       'bold' | 'italic' | 'text' | 'quote' | 'code' | 'bullet' | 'ordered' | 'task',
       string
@@ -185,6 +186,7 @@ export const ru: EditorStrings = {
     formulaBroken: 'Не удалось разобрать формулу',
     done: 'Готово',
     emoji: 'Эмодзи',
+    emojiGroup: (index: number): string => `Набор эмодзи ${index}`,
     hotkeys: {
       bold: 'Ctrl+B',
       italic: 'Ctrl+I',
@@ -292,6 +294,7 @@ export const en: EditorStrings = {
     formulaBroken: 'Could not parse the formula',
     done: 'Done',
     emoji: 'Emoji',
+    emojiGroup: (index: number): string => `Emoji set ${index}`,
     hotkeys: {
       bold: 'Ctrl+B',
       italic: 'Ctrl+I',
