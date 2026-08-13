@@ -29,10 +29,18 @@ async function boot(prefs: Record<string, unknown> = {}): Promise<AppController>
 }
 
 describe('куда ложится вложение', () => {
-  it('по умолчанию — общая папка в корне', async () => {
+  it('по умолчанию — папка по типу вложения, в корне', async () => {
+    /* Замечание 6: три папки в корне — `Images`, `Audio`, `Other files`.
+       Раньше всё сваливалось в одну `attachments/`. */
     const app = await boot();
-    const result = await app.attachImage(file('снимок.png'), 'Проекты/Идея.md');
-    expect(result?.path).toMatch(/^attachments\//);
+    const image = await app.attachImage(file('снимок.png'), 'Проекты/Идея.md');
+    expect(image?.path).toMatch(/^Images\//);
+
+    const sound = await app.attachImage(file('запись.m4a'), 'Проекты/Идея.md');
+    expect(sound?.path).toMatch(/^Audio\//);
+
+    const other = await app.attachImage(file('смета.pdf'), 'Проекты/Идея.md');
+    expect(other?.path).toMatch(/^Other files\//);
   });
 
   it('«рядом с заметкой» — в папку самой заметки', async () => {
@@ -40,7 +48,7 @@ describe('куда ложится вложение', () => {
     await app.setAttachmentPlacement('beside');
     const result = await app.attachImage(file('снимок.png'), 'Проекты/Идея.md');
     expect(result?.path).toMatch(/^Проекты\//);
-    expect(result?.path).not.toContain('attachments/');
+    expect(result?.path).not.toContain('Images/');
   });
 
   it('«рядом» с заметкой из корня кладёт в корень, а не в подпапку', async () => {
@@ -66,7 +74,8 @@ describe('куда ложится вложение', () => {
     await app.setAttachmentPlacement('custom');
     await app.setAttachmentFolder('   ');
     const result = await app.attachImage(file('снимок.png'), 'Проекты/Идея.md');
-    expect(result?.path).toMatch(/^attachments\//);
+    /* Откат — к умолчанию, а умолчание теперь папка по типу вложения. */
+    expect(result?.path).toMatch(/^Images\//);
   });
 });
 
@@ -76,7 +85,7 @@ describe('под каким именем', () => {
        как угодно, и хранилище не обязано это повторять. */
     const app = await boot();
     const result = await app.attachImage(file('Отпуск в Сочи.png'), 'Проекты/Идея.md');
-    expect(result?.path).toMatch(/^attachments\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/);
+    expect(result?.path).toMatch(/^Images\/\d{4}-\d{2}-\d{2}_[0-9a-f]+\.png$/);
     expect(result?.path).not.toContain('Сочи');
   });
 
@@ -92,7 +101,7 @@ describe('под каким именем', () => {
     const app = await boot();
     await app.setAttachmentNaming('date-original');
     const result = await app.attachImage(file('схема.png'), 'Проекты/Идея.md');
-    expect(result?.path).toMatch(/^attachments\/\d{4}-\d{2}-\d{2}_схема\.png$/);
+    expect(result?.path).toMatch(/^Images\/\d{4}-\d{2}-\d{2}_схема\.png$/);
   });
 
   it('одинаковые файлы при имени от хеша не плодят копий', async () => {

@@ -31,6 +31,7 @@ import {
   readJson,
   rewriteToCurrentVersion,
   ATTACHMENTS_DIR,
+  attachmentDirFor,
   stemOf,
   storedLocale,
   toBase64,
@@ -954,6 +955,12 @@ export class AppController {
         options.folder = nearNote.includes('/') ? nearNote.slice(0, nearNote.lastIndexOf('/')) : '';
       } else if (this.attachmentPlacement === 'custom' && this.attachmentFolder !== '') {
         options.folder = this.attachmentFolder;
+      } else {
+        /* Общая папка — это ТРИ папки в корне: Images, Audio, Other files
+           (замечание 6). Разбор по расширению, а не по кнопке, которой файл
+           выбрали: картинку можно приложить и через «файл», и лечь она должна
+           к картинкам. */
+        options.folder = attachmentDirFor(extension);
       }
       if (file.name !== '') options.originalName = file.name;
 
