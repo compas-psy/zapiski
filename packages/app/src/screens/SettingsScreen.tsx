@@ -49,7 +49,6 @@ const SECTIONS: SettingsSection[] = [
   'sync',
   'security',
   'transfer',
-  'storage',
   'account',
   'plus',
   'about',
@@ -95,10 +94,13 @@ export function SettingsScreen({ section }: SettingsScreenProps): ReactNode {
             {section === 'appearance' ? <AppearanceSection /> : null}
             {section === 'editor' ? <EditorSection /> : null}
             {section === 'attachments' ? <AttachmentsSection /> : null}
-            {section === 'sync' ? <SyncSection /> : null}
+            {/* «Хранилище» и «Синхронизация» — один раздел: место у заметок
+                одно, и разносить его по двум пунктам значило обещать, что их
+                можно набрать себе несколько. Старый адрес продолжает работать
+                и ведёт сюда же. */}
+            {section === 'sync' || section === 'storage' ? <SyncSection /> : null}
             {section === 'security' ? <SecuritySection /> : null}
             {section === 'transfer' ? <TransferSection /> : null}
-            {section === 'storage' ? <StorageSection /> : null}
             {section === 'account' ? <AccountSection /> : null}
             {section === 'plus' ? <PlusSection /> : null}
             {section === 'about' ? <AboutSection /> : null}
@@ -455,6 +457,10 @@ function SyncSection(): ReactNode {
   const copy = strings.settings.sync;
   const [webdav, setWebdav] = useState({ url: '', user: '', password: '' });
   const [yandexToken, setYandexToken] = useState('');
+  /* Какой режим человек раскрыл, чтобы ввести данные. Раскрытый — ещё не
+     выбранный: выбор случается по кнопке «Подключить», когда есть что
+     подключать. */
+  const [openMode, setOpenMode] = useState<SyncBackend['id'] | null>(null);
 
   /**
    * Заметки-копии, которые синк оставил при расхождении версий.
@@ -483,12 +489,14 @@ function SyncSection(): ReactNode {
     if (id === 'local') {
       /* Вторая папка на устройстве (флешка, папка облачного клиента). */
       void app.host.platform.pickVaultDirectory().then((storage) => {
-        if (storage) app.attachBackend(new LocalFolderBackend(storage, { title: copy.localFolder }));
+        if (storage) {
+          void app.switchBackend(new LocalFolderBackend(storage, { title: copy.localFolder }));
+        }
       });
       return;
     }
     if (id === 'webdav') {
-      app.attachBackend(
+      void app.switchBackend(
         new WebDAVBackend({ baseUrl: webdav.url, username: webdav.user, password: webdav.password }),
       );
       return;
@@ -540,78 +548,110 @@ function SyncSection(): ReactNode {
         {copy.syncNow}
       </Button>
 
+      {/*
+        ОДНА развилка вместо двух разделов.
+
+        Заказчик: «отдельные настройки синхронизации (WebDav и Облако) и
+        отдельно есть пункт про Хранилище. Такое разнесение фрустрирует, так
+        как непонятно, могу я хранить всё в папке и одновременно в
+        WebDav/Облаке. По факту, это должны быть взаимоисключающие вещи, но с
+        бережностью при переключении».
+
+        Взаимоисключающими они и были: движок синхронизации ровно один, и
+        подключение нового заменяет прежний. Но два независимых раздела
+        обещали обратное — что можно набрать себе и то, и другое. Теперь это
+        один список с отметкой «сейчас», а поля появляются только у
+        выбранного режима: четыре одновременно открытые формы и создавали
+        ощущение, что всё это складывается.
+
+        Бережность — в `switchBackend`: перед уходом с хранилища досылается
+        то, что не успело уйти (автосинк идёт с задержкой 5 с).
+      */}
       <Section>{copy.backends}</Section>
+      <p className="za-muted">{copy.whereHint}</p>
 
-      <div className={`za-card${state.backendId === 'local' ? ' za-card--selected' : ''}`}>
-        <span className="za-row-between">
-          <span className="za-card__title">{copy.localFolder}</span>
-          {state.backendId === 'local' ? <Badge tone="success">{copy.connected}</Badge> : null}
-        </span>
-        <Button variant="text" size="compact" onClick={() => connect('local')}>
+      <ModeCard
+        id={null}
+        title={copy.modeLocalOnly}
+        hint={copy.modeLocalOnlyHint}
+        current={state.backendId}
+        onChoose={() => void app.switchBackend(null)}
+      />
+
+      {/* Копия в другой папке есть там, где платформа умеет её выбрать. */}
+      <ModeCard
+        id="local"
+        title={copy.modeCopy}
+        hint={copy.modeCopyHint}
+        current={state.backendId}
+        onChoose={() => connect('local')}
+      />
+
+      <ModeCard
+        id="yandex"
+        title={copy.yandex}
+        current={state.backendId}
+        onChoose={() => setOpenMode('yandex')}
+        open={openMode === 'yandex'}
+      >
+        <TextField
+          type="password"
+          mono
+          label={copy.yandexToken}
+          value={yandexToken}
+          onChange={(event) => setYandexToken(event.target.value)}
+        />
+        <p className="za-muted">{copy.yandexHint}</p>
+        <Button
+          variant="secondary"
+          disabled={yandexToken.trim() === ''}
+          onClick={() => connect('yandex')}
+        >
           {copy.connect}
         </Button>
-      </div>
+      </ModeCard>
 
-      <div className={`za-card${state.backendId === 'yandex' ? ' za-card--selected' : ''}`}>
-        <span className="za-row-between">
-          <span className="za-card__title">{copy.yandex}</span>
-          {state.backendId === 'yandex' ? <Badge tone="success">{copy.connected}</Badge> : null}
-        </span>
-        <div className="za-stack za-stack--tight" style={{ paddingBlockStart: 12 }}>
-          <TextField
-            type="password"
-            mono
-            label={copy.yandexToken}
-            value={yandexToken}
-            onChange={(event) => setYandexToken(event.target.value)}
-          />
-          <p className="za-muted">{copy.yandexHint}</p>
-          <Button
-            variant="text"
-            size="compact"
-            disabled={yandexToken.trim() === ''}
-            onClick={() => connect('yandex')}
-          >
-            {copy.connect}
-          </Button>
-        </div>
-      </div>
-
-      <div className="za-card za-card--dashed za-card--static">
-        <span className="za-card__title">{copy.webdavCard}</span>
-        <div className="za-stack za-stack--tight" style={{ paddingBlockStart: 12 }}>
-          <TextField
-            mono
-            label={copy.webdavUrl}
-            value={webdav.url}
-            onChange={(event) => setWebdav({ ...webdav, url: event.target.value })}
-          />
-          <TextField
-            label={copy.webdavUser}
-            value={webdav.user}
-            onChange={(event) => setWebdav({ ...webdav, user: event.target.value })}
-          />
-          <TextField
-            type="password"
-            label={copy.webdavPassword}
-            value={webdav.password}
-            onChange={(event) => setWebdav({ ...webdav, password: event.target.value })}
-          />
-          <Button variant="secondary" disabled={webdav.url === ''} onClick={() => connect('webdav')}>
-            {copy.connect}
-          </Button>
-        </div>
-      </div>
-
-      <div className="za-card za-card--static">
-        <span className="za-row-between">
-          <span className="za-card__title">{copy.cloud}</span>
-          <Badge tone="warning">{copy.cloudBadge}</Badge>
-        </span>
-        <Button variant="text" size="compact" onClick={() => connect('zapiski')}>
+      <ModeCard
+        id="webdav"
+        title={copy.webdavCard}
+        hint={copy.webdavHint}
+        current={state.backendId}
+        onChoose={() => setOpenMode('webdav')}
+        open={openMode === 'webdav'}
+      >
+        <TextField
+          mono
+          label={copy.webdavUrl}
+          value={webdav.url}
+          onChange={(event) => setWebdav({ ...webdav, url: event.target.value })}
+        />
+        <TextField
+          label={copy.webdavUser}
+          value={webdav.user}
+          onChange={(event) => setWebdav({ ...webdav, user: event.target.value })}
+        />
+        <TextField
+          type="password"
+          label={copy.webdavPassword}
+          value={webdav.password}
+          onChange={(event) => setWebdav({ ...webdav, password: event.target.value })}
+        />
+        <Button variant="secondary" disabled={webdav.url === ''} onClick={() => connect('webdav')}>
           {copy.connect}
         </Button>
-      </div>
+      </ModeCard>
+
+      <ModeCard
+        id="zapiski"
+        title={copy.cloud}
+        badge={copy.cloudBadge}
+        current={state.backendId}
+        onChoose={() => connect('zapiski')}
+      />
+
+      {/* Где лежит сама папка — часть того же вопроса, а не отдельный раздел. */}
+      <VaultLocationChoice />
+      <StorageHousekeeping />
 
       {/*
         Конфликты (SCREENS §8). Экрана «выберите файл» не существует — ссылка
@@ -818,7 +858,7 @@ function TransferSection(): ReactNode {
   }
 }
 
-function StorageSection(): ReactNode {
+function StorageHousekeeping(): ReactNode {
   const app = useApp();
   const state = useAppState();
   const strings = useStrings();
@@ -827,6 +867,9 @@ function StorageSection(): ReactNode {
 
   return (
     <>
+      {/* Сама папка и уборка в ней — продолжение того же вопроса «где живут
+          заметки», поэтому и раздел общий, а не соседний пункт навигации. */}
+      <Section>{copy.pathLabel}</Section>
       <div className="za-info__row">
         <span>{copy.filesLabel}</span>
         <span className="za-info__value">{state.notes.length}</span>
@@ -858,8 +901,6 @@ function StorageSection(): ReactNode {
       </Button>
       <p className="za-muted">{copy.changeFolderHint}</p>
 
-      <VaultLocationChoice />
-
       <Button
         variant="secondary"
         onClick={() => {
@@ -876,6 +917,64 @@ function StorageSection(): ReactNode {
       </Button>
       <p className="za-muted">{copy.rebuildHint}</p>
     </>
+  );
+}
+
+/**
+ * Один режим хранения в общем списке.
+ *
+ * Режимы взаимоисключающие, поэтому и выглядят как выбор из списка, а не как
+ * набор независимых карточек с кнопками «Подключить» у каждой. Отметка
+ * «сейчас» стоит ровно у одного.
+ *
+ * Режим с полями (WebDAV, Яндекс.Диск) сперва раскрывается, и только кнопка
+ * внутри него переключает: подключить хранилище, не зная адреса и пароля,
+ * всё равно нельзя, а четыре одновременно открытые формы и создавали то самое
+ * ощущение, что всё это складывается друг с другом.
+ */
+function ModeCard({
+  id,
+  title,
+  hint,
+  badge,
+  current,
+  open = false,
+  onChoose,
+  children,
+}: {
+  id: SyncBackend['id'] | null;
+  title: string;
+  hint?: string;
+  badge?: string;
+  current: SyncBackend['id'] | null;
+  open?: boolean;
+  onChoose: () => void;
+  children?: ReactNode;
+}): ReactNode {
+  const strings = useStrings();
+  const copy = strings.settings.sync;
+  const chosen = current === id;
+
+  return (
+    <div className={`za-card${chosen ? ' za-card--selected' : ''}`}>
+      <button
+        type="button"
+        className="za-row-between za-card__choose"
+        role="radio"
+        aria-checked={chosen}
+        onClick={onChoose}
+      >
+        <span className="za-card__title">{title}</span>
+        {chosen ? <Badge tone="success">{copy.current}</Badge> : null}
+        {!chosen && badge ? <Badge tone="warning">{badge}</Badge> : null}
+      </button>
+      {hint ? <p className="za-muted">{hint}</p> : null}
+      {open && children ? (
+        <div className="za-stack za-stack--tight" style={{ paddingBlockStart: 12 }}>
+          {children}
+        </div>
+      ) : null}
+    </div>
   );
 }
 

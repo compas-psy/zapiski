@@ -1061,7 +1061,11 @@
   font-weight: var(--fw-control);
   text-align: start;
   cursor: pointer;
-  white-space: nowrap;
+  /* Раньше стояло `nowrap`, и «Хранилище и синхронизация» упиралось в кромку
+     колонки, обрезаясь на полуслове. Имя раздела важнее одной строки:
+     переносим по словам. На узком экране навигация всё равно прокручивается
+     вбок — там перенос не мешает, потому что колонка одна. */
+  white-space: normal;
 }
 .za-settings__nav-item--active {
   background-color: var(--accent-soft);
@@ -1661,4 +1665,18 @@
      цвета здесь был бы единственным в проекте. */
   box-shadow: 0 0 0 9999px var(--scrim);
   pointer-events: none;
+}
+
+/* Выбор режима хранения: вся строка карточки — цель нажатия, а не мелкая
+   кнопка «Подключить» в углу. Режимы взаимоисключающие, поэтому и роль у
+   строки радио-кнопочная. */
+.za-card__choose {
+  inline-size: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
 }
