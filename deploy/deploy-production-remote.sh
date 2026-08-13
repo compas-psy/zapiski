@@ -172,10 +172,17 @@ container_state() {
 # Отвечает ли релей, через который уходят письма со ссылкой для входа.
 #
 # Проверяем ИЗ КОНТЕЙНЕРА API, а не с хоста: адрес docker0 у контейнера свой,
-# и «с хоста видно» ничего не доказывает. Ответ SMTP начинается с «220».
+# и «с хоста видно» ничего не доказывает.
 #
-# Деплой не валим никогда: почта не мешает работать с заметками, а падение
-# выкладки из-за чужого postfix'а было бы хуже самой поломки.
+# Стучимся НОДОЙ, а не `/dev/tcp`. Образ — node:22-alpine, оболочка там
+# BusyBox ash, и `/dev/tcp` она не поддерживает вовсе: проверка на нём
+# отвечала бы «релей молчит» при любом живом релее. Такой сторож хуже
+# отсутствующего — он врёт с уверенным видом. Нода в образе есть по
+# определению, `net.connect` работает одинаково везде.
+#
+# Ответ SMTP начинается с «220». Деплой не валим никогда: почта не мешает
+# работать с заметками, а падение выкладки из-за чужого postfix'а было бы
+# хуже самой поломки.
 check_mail_relay() {
   local host port banner
   host="$(grep '^EMAIL_SERVER_HOST=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
@@ -183,8 +190,23 @@ check_mail_relay() {
   host="${host:-172.17.0.1}"
   port="${port:-25}"
 
-  banner="$(docker exec "${API_CONTAINER}" sh -c \
-    "timeout 5 sh -c 'exec 3<>/dev/tcp/${host}/${port}; head -n 1 <&3'" 2>/dev/null || true)"
+  banner="$(docker exec -e "RELAY_HOST=${host}" -e "RELAY_PORT=${port}" "${API_CONTAINER}" \
+    node -e '
+      const net = require("node:net");
+      const socket = net.connect({
+        host: process.env.RELAY_HOST,
+        port: Number(process.env.RELAY_PORT),
+      });
+      socket.setTimeout(5000);
+      const bail = () => { socket.destroy(); process.exit(1); };
+      socket.on("error", bail);
+      socket.on("timeout", bail);
+      socket.on("data", (chunk) => {
+        process.stdout.write(String(chunk).slice(0, 3));
+        socket.destroy();
+        process.exit(0);
+      });
+    ' 2>/dev/null || true)"
 
   case "${banner}" in
     220*)
