@@ -33,7 +33,33 @@ pub fn run() {
             auth::forward_arguments(app, &argv);
         }))
         // Положение и размер окна между запусками (требование задачи).
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        //
+        // ВАЖНО: без `DECORATIONS` и `VISIBLE`. `Builder::default()` берёт
+        // `StateFlags::all()`, а среди них есть `DECORATIONS` — плагин
+        // записывает состояние рамки в `.window-state.json` и восстанавливает
+        // его при старте ПОВЕРХ `"decorations": false` из `tauri.conf.json`.
+        //
+        // Дефект отсюда ровно такой, каким его увидел заказчик: у тех, кто
+        // запускал версию до перехода на свою строку заголовка, в файле
+        // состояния лежит `decorations: true`. После обновления плагин
+        // возвращает системную рамку, а наша полоса рисуется своим чередом —
+        // и в окне оказывается ДВА ряда кнопок «свернуть/развернуть/закрыть».
+        // На чистой установке этого не видно, поэтому дефект и переживает
+        // сборки: он есть только у обновившихся.
+        //
+        // `VISIBLE` убран по смежной причине: окно объявлено `visible: false`
+        // и показывается вручную (`platform::show_main_window`), чтобы не
+        // мигать белым до первого кадра. Закрытие в трей прячет окно, плагин
+        // сохранил бы «невидимо» — и следующий запуск начинался бы с окна,
+        // которого нет.
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(tauri_plugin_window_state::StateFlags::all().difference(
+                    tauri_plugin_window_state::StateFlags::DECORATIONS
+                        | tauri_plugin_window_state::StateFlags::VISIBLE,
+                ))
+                .build(),
+        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

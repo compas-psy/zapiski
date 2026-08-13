@@ -81,6 +81,11 @@ step 'Размеры против эталона' node scripts/check-measurement
 # Браузером это не ловится: связка «HTML + Tauri» существует только на
 # устройстве, а веб-сборка той же политики не получает.
 step 'CSP оболочек против стилей редактора' node scripts/check-csp.mjs
+# Своя строка заголовка не должна соседствовать с системной. Плагин состояния
+# окна восстанавливает StateFlags::all(), включая DECORATIONS, — и у всех, кто
+# обновился с версии с системной рамкой, кнопок окна становится два ряда.
+# На чистой установке этого не видно никогда.
+step 'Хром окна: одна строка заголовка' node scripts/check-window-chrome.mjs
 step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
 # Отладочный ключ подписи должен раскодироваться и содержать нужный алиас: без
