@@ -75,6 +75,26 @@ describe('ворота веба', () => {
     await waitFor(() => expect(screen.queryByText(ru.signIn.gateReason)).toBeNull());
   });
 
+  it('заметки, написанные в этом браузере раньше, никуда не делись', async () => {
+    /* Ворота появились у людей, которые уже пользовались веб-версией без
+       аккаунта. Их заметки лежат в браузере, и после входа обязаны быть на
+       месте: «войдите» не может означать «начните заново». */
+    const host = createTestHost({
+      files: { 'Старая заметка.md': '# Старая заметка\n\nнаписана до ворот\n' },
+      prefs: { onboarded: true, ...SIGNED_IN },
+    });
+    (host.platform as { kind: string }).kind = 'web';
+    render(
+      <ThemeProvider persist={false}>
+        <ToastProvider>
+          <App host={host} locale="ru" />
+        </ToastProvider>
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText('Старая заметка')).toBeTruthy());
+  });
+
   for (const kind of ['windows', 'android'] as const) {
     it(`в оболочке ${kind} ворот нет: папка на устройстве видна и понятна`, async () => {
       mount(kind);
