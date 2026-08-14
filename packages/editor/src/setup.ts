@@ -31,6 +31,7 @@ import { livePreview } from './live-preview/plugin.js';
 import { tableAutoFormat } from './live-preview/table-format.js';
 import { markupInteractions } from './live-preview/interactions.js';
 import { autoformat } from './input/autoformat.js';
+import { tailClick } from './input/block-start.js';
 import { smartPaste } from './paste/smart-paste.js';
 import { tagCompletionSource, wikiCompletionSource, COMPLETION_LIMIT } from './completion/sources.js';
 import { findPanel } from './search/panel.js';
@@ -88,6 +89,9 @@ export function zapiskiEditor(options: ZapiskiEditorOptions = {}): Extension[] {
     markupInteractions,
     autoformat,
     smartPaste,
+    /* Ткнуть ниже последней строки — значит продолжить писать: под картинкой
+       в конце заметки места иначе нет вовсе (см. `input/block-start.ts`). */
+    tailClick,
     findPanel,
     focusMode,
     autosave,
