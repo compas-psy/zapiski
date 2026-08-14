@@ -81,7 +81,7 @@ describe('шаг 2: выбор места для заметок', () => {
       ...base,
       platform: {
         ...base.platform,
-        kind: 'desktop' as const,
+        kind: 'windows' as const,
         vaultFolders: undefined,
         pickVaultDirectory: pick,
       },

@@ -86,9 +86,9 @@ describe('онбординг в браузере', () => {
     app.dispose();
   });
 
-  it('в оболочке выбор папки остаётся — там он и уместен', async () => {
+  it('в оболочке (Windows) выбор папки остаётся — там он и уместен', async () => {
     const host = createTestHost();
-    (host.platform as { kind: string }).kind = 'desktop';
+    (host.platform as { kind: string }).kind = 'windows';
     const picker = vi.fn(async () => null);
     (host.platform as unknown as { pickVaultDirectory: () => Promise<null> }).pickVaultDirectory =
       picker;
