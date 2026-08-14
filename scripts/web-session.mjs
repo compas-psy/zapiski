@@ -16,27 +16,42 @@
  * восстановленная сессия просто заполняет аккаунт.
  */
 
-/** Ключ настроек веба: `NAMESPACE` из apps/web/src/prefs.ts + имя из AUTH_PREF. */
+/** Ключи настроек веба: `NAMESPACE` из apps/web/src/prefs.ts + имена из кода. */
 const SESSION_KEY = 'zapiski.prefs.auth.session';
+/**
+ * Выбранный бэкенд синхронизации.
+ *
+ * Ставится в `local` намеренно. С сессией и БЕЗ этой записи приложение на
+ * старте подключает Облако Записок, а сервера рядом нет: раз в несколько
+ * секунд идёт неудачный синк, всплывает тост и пересчитывается состояние.
+ * Прогон редактора от этого начал мигать — «Чек-лист ничего не сделал» на
+ * ровном месте. Продукт тут ни при чём: человек с настоящим аккаунтом и без
+ * сети видит ровно то же самое, но проверять в такой обстановке горячие
+ * клавиши бессмысленно.
+ */
+const BACKEND_KEY = 'zapiski.prefs.sync.backend';
 
 export async function seedWebSession(page, email = 'progon@example.test') {
   await page.addInitScript(
-    ([key, value]) => {
+    (entries) => {
       try {
-        window.localStorage.setItem(key, value);
+        for (const [key, value] of entries) window.localStorage.setItem(key, value);
       } catch {
         /* Приватный режим — прогон тогда упрётся в ворота и честно упадёт. */
       }
     },
     [
-      SESSION_KEY,
-      JSON.stringify({
-        accessToken: 'progon-access-token',
-        refreshToken: 'progon-refresh-token',
-        deviceId: 'progon-device-0001',
-        email,
-        expiresAt: Date.now() + 3600_000,
-      }),
+      [
+        SESSION_KEY,
+        JSON.stringify({
+          accessToken: 'progon-access-token',
+          refreshToken: 'progon-refresh-token',
+          deviceId: 'progon-device-0001',
+          email,
+          expiresAt: Date.now() + 3600_000,
+        }),
+      ],
+      [BACKEND_KEY, JSON.stringify('local')],
     ],
   );
 }
