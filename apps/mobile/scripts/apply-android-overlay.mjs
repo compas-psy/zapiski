@@ -435,6 +435,22 @@ function apply() {
   writeFileSync(manifestPath, patchManifest(source), 'utf8');
   console.log(`оверлей: манифест пропатчен → ${manifestPath}`);
 
+  /*
+    Наш `MainActivity.kt` ложится ПОВЕРХ шаблонного — иначе перехватить
+    системное «назад» негде: `TauriActivity` выключает у себя обработчик
+    (`handleBackNavigation = false`), и жест уходит системе как «закрыть
+    приложение». Наш класс наследуется от `TauriActivity`, который генерирует
+    сам Tauri, поэтому его пропажа означает смену шаблона — и Kotlin упадёт
+    через четыре минуты сборки на невнятной ошибке. Лучше сказать сейчас.
+  */
+  const base = join(GENERATED_MAIN, 'java', ...'ru.cmpas.zapiski'.split('.'), 'TauriActivity.kt');
+  if (!existsSync(base)) {
+    console.log(
+      '::warning::в сгенерированном проекте нет TauriActivity.kt — ' +
+        'проверьте, от чего наследуется MainActivity в новой версии Tauri',
+    );
+  }
+
   // FileProvider приходит из androidx.core, а тот — транзитивно из appcompat,
   // который есть в шаблоне Tauri. Если шаблон изменится, сборка упадёт на
   // непонятной ошибке компиляции; лучше сказать об этом заранее.

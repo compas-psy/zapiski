@@ -60,12 +60,18 @@ services:
       PORT: "3100"
       PUBLIC_BASE_URL: https://zapiski.cmpas.ru
       CORS_ORIGINS: https://zapiski.cmpas.ru
-      # Куда вернуть браузер после входа. Значений два, потому что платформы
-      # ловят возврат по-разному: веб и Android — обычной страницей (у Android
-      # она же App Link), настольное приложение — только своей схемой.
+      # Куда вернуть браузер после входа. Значений два, потому что веб и родные
+      # приложения ловят возврат по-разному: вебу нужна обычная страница, а
+      # Windows и Android — своя схема, которую система отдаёт приложению.
+      #
+      # Android раньше стоял на https в расчёте на App Links. Проверку владения
+      # доменом (`assetlinks.json`) никто не выкладывал, поэтому Chrome честно
+      # показывал сайт, и человек оставался в браузере: «переадресует на сайт и
+      # не возвращается в приложение».
+      #
       # Токены уезжают во фрагменте, поэтому в логи nginx они не попадают.
       AUTH_SUCCESS_REDIRECT: https://zapiski.cmpas.ru/auth/callback
-      AUTH_SUCCESS_REDIRECT_DESKTOP: zapiski://auth/callback
+      AUTH_SUCCESS_REDIRECT_APP: zapiski://auth/callback
       # nginx терминирует TLS и ставит X-Forwarded-*; без этого сервер будет
       # видеть адрес контейнера вместо адреса клиента.
       #

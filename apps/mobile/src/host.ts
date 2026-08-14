@@ -6,6 +6,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
+import { onSystemBack } from './platform/back';
 import { chosenSafTree, createPlatform, PREF_SAF_TREE } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
@@ -42,6 +43,9 @@ export function createHost(): AppHost {
     /** Возврат после входа: `zapiski://` и App Links (см. `platform/auth.ts`). */
     takeInitialAuthCallback,
     onAuthCallback,
+
+    /** Системная кнопка и жест «назад» (см. `platform/back.ts`). */
+    onSystemBack,
 
     /**
      * Где лежат заметки. Порядок такой:

@@ -513,11 +513,7 @@ function respondWithSession(
   format: 'json' | 'redirect' | undefined,
   platform: string | null,
 ): FastifyReply {
-  const desktop = ctx.env.AUTH_SUCCESS_REDIRECT_DESKTOP;
-  const redirect =
-    platform !== null && CANNOT_CATCH_HTTPS.has(platform) && desktop !== undefined && desktop.length > 0
-      ? desktop
-      : ctx.env.AUTH_SUCCESS_REDIRECT;
+  const redirect = authReturnUrl(ctx.env, platform);
   if (format !== 'json' && redirect !== undefined && redirect.length > 0) {
     const fragment = new URLSearchParams({
       access_token: session.accessToken,
@@ -552,11 +548,53 @@ function respondWithSession(
 }
 
 /**
- * Платформы, которые не могут перехватить https-ссылку из письма.
+ * Платформы, куда возвращаются ПО СВОЕЙ СХЕМЕ, а не по https.
  *
- * Android умеет App Links, браузер — сам себе адресная строка; настольное
- * приложение не умеет ни того, ни другого: Windows отдаёт приложению только
- * собственную схему (`zapiski://`), а письмо открывается в браузере.
+ * Родное приложение — Windows и Android — обязано получить человека обратно
+ * само, без участия браузера. Https-адрес это не гарантирует: Windows чужую
+ * ссылку не перехватывает вовсе, а Android перехватывает только после
+ * подтверждения владения доменом (`assetlinks.json` с отпечатком ключа, каким
+ * подписан установленный APK). Пока подтверждения нет — Chrome показывает
+ * сайт, и человек остаётся в браузере с сессией, которая нужна приложению.
+ *
+ * Так вход в родных приложениях и полагается замыкать: RFC 8252 прямо
+ * называет собственную схему адресом возврата для установленного приложения.
+ * Веб остаётся на https — там браузер и есть приложение.
+ */
+const APP_SCHEME_PLATFORMS = new Set<string>(['windows', 'android']);
+
+/**
+ * Куда увести браузер после успешного входа.
+ *
+ * Вынесено отдельной функцией, потому что это единственное решение, в котором
+ * платформы различаются, и его нужно проверять без базы: DB-тесты пропускаются
+ * там, где Postgres нет, а ошибиться здесь — значит снова оставить человека в
+ * браузере.
+ */
+export function authReturnUrl(
+  env: {
+    AUTH_SUCCESS_REDIRECT?: string | undefined;
+    AUTH_SUCCESS_REDIRECT_APP?: string | undefined;
+    AUTH_SUCCESS_REDIRECT_DESKTOP?: string | undefined;
+  },
+  platform: string | null,
+): string | undefined {
+  /* `_DESKTOP` — прежнее имя той же настройки: сервер с не обновлённым
+     окружением обязан продолжать работать. */
+  const app = env.AUTH_SUCCESS_REDIRECT_APP ?? env.AUTH_SUCCESS_REDIRECT_DESKTOP;
+  if (platform !== null && APP_SCHEME_PLATFORMS.has(platform) && app !== undefined && app.length > 0) {
+    return app;
+  }
+  return env.AUTH_SUCCESS_REDIRECT;
+}
+
+/**
+ * Платформы, которые не могут перехватить ссылку ИЗ ПИСЬМА.
+ *
+ * Отдельно от списка выше и намеренно: там речь о возврате, который делает наш
+ * сервер, а здесь — о письме, которое человек открывает где угодно, хоть на
+ * другом устройстве. Windows не перехватывает https ни при каких условиях,
+ * поэтому ссылке для него нужен `device_id` (размен объяснён ниже).
  */
 const CANNOT_CATCH_HTTPS = new Set<string>(['windows']);
 

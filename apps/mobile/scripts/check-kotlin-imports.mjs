@@ -50,6 +50,13 @@ const IMPLICIT = new Set([
  */
 const INHERITED = new Set(['ActivityLifecycleCallbacks']);
 
+/**
+ * Классы, которые `tauri android init` кладёт в НАШ пакет: в репозитории их
+ * нет (сгенерированный проект в `.gitignore`), а в сборке они рядом и видны
+ * без импорта. Список короткий и растёт только по факту.
+ */
+const GENERATED = new Set(['TauriActivity']);
+
 /** Файлы нашей оболочки. Сгенерированное Tauri сюда не попадает. */
 function kotlinFiles(dir) {
   const out = [];
@@ -114,7 +121,7 @@ for (const file of files) {
   for (const name of used) {
     /* Однобуквенные — параметры-обобщения (`fun <T> …`), а не типы. */
     if (name.length === 1) continue;
-    if (INHERITED.has(name)) continue;
+    if (INHERITED.has(name) || GENERATED.has(name)) continue;
     if (imported.has(name) || declaredHere.has(name) || ours.has(name) || IMPLICIT.has(name)) continue;
     problems.push(`${relative(process.cwd(), file)}: имя ${name} используется, но не импортировано`);
   }
