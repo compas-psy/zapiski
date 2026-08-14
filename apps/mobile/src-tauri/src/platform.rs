@@ -307,7 +307,7 @@ pub fn secure_flag(on: bool) -> Result<(), String> {
 /// кнопкой. Отмена в системном окне сюда не доходит вовсе — она случается
 /// после того, как окно уже открылось, и отказом не является.
 #[tauri::command(async)]
-pub fn share_text(title: Option<String>, body: String) -> Result<bool, String> {
+pub fn share_text(title: Option<String>, body: String) -> Result<String, String> {
     crate::android::share_text(title.as_deref().unwrap_or(""), &body)
 }
 

@@ -41,7 +41,9 @@ async function boot(options: { android: boolean; accepts?: boolean }): Promise<{
     (host.platform as unknown as { shareOut: unknown }).shareOut = {
       text: vi.fn(async (payload: Shared) => {
         shared.push(payload);
-        return options.accepts ?? true;
+        return options.accepts === false
+          ? { kind: 'failed' as const, reason: 'ActivityNotFoundException' }
+          : { kind: 'shared' as const };
       }),
     };
   }
@@ -84,6 +86,35 @@ describe('кнопка «Поделиться»', () => {
     app.dispose();
   });
 
+  it('окна не случилось, но текст в буфере — говорим именно это', async () => {
+    const host = createTestHost({ files: { 'Планы.md': NOTE }, prefs: { onboarded: true } });
+    (host.platform as { kind: string }).kind = 'android';
+    (host.platform as unknown as { shareOut: unknown }).shareOut = {
+      text: async () => ({ kind: 'copied' as const }),
+    };
+    const app = new AppController(host);
+    await app.boot();
+    await app.refresh();
+    render(
+      <ThemeProvider persist={false}>
+        <ToastProvider>
+          <AppProvider host={app.host} controller={app}>
+            <NoteScreen path="Планы.md" />
+          </AppProvider>
+        </ToastProvider>
+      </ThemeProvider>,
+    );
+
+    await screen.findByRole('button', { name: ru.note.share });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: ru.note.share }).isConnected).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: ru.note.share }));
+
+    await waitFor(() => expect(screen.getByText(ru.note.shareCopied)).toBeTruthy());
+    app.dispose();
+  });
+
   it('в вебе кнопки нет вовсе — системного окна там не существует', async () => {
     const { app } = await boot({ android: false });
     await screen.findByLabelText(/Название заметки/i);
@@ -94,7 +125,7 @@ describe('кнопка «Поделиться»', () => {
     app.dispose();
   });
 
-  it('если принять текст некому — говорит словами, а не молчит', async () => {
+  it('отказ показывает причину системы, а не нашу догадку', async () => {
     const { app, shared } = await boot({ android: true, accepts: false });
 
     await screen.findByRole('button', { name: ru.note.share });
@@ -104,7 +135,12 @@ describe('кнопка «Поделиться»', () => {
     fireEvent.click(screen.getByRole('button', { name: ru.note.share }));
 
     await waitFor(() => expect(shared).toHaveLength(1));
-    await waitFor(() => expect(screen.getByText(ru.note.shareFailed)).toBeTruthy());
+    /* Настоящая причина, а не «ни одно приложение не принимает текст»: именно
+       такой уверенный и ложный тост увидел заказчик на телефоне, где
+       приложений полно. */
+    await waitFor(() =>
+      expect(screen.getByText(ru.note.shareFailed('ActivityNotFoundException'))).toBeTruthy(),
+    );
     app.dispose();
   });
 });

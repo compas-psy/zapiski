@@ -13,7 +13,12 @@
  * `share_take()` для «приложение только что стартовало». Подписка забирает
  * очередь сразу, иначе первый же холодный share терялся бы.
  */
-import type { SharedPayload, ShareOutProvider, ShareTargetProvider } from '@zapiski/core';
+import type {
+  SharedPayload,
+  ShareOutcome,
+  ShareOutProvider,
+  ShareTargetProvider,
+} from '@zapiski/core';
 
 import { COMMANDS, EVENTS, call, on } from './ipc';
 
@@ -76,14 +81,23 @@ export function createShareTarget(): ShareTargetProvider {
  */
 export function createShareOut(): ShareOutProvider {
   return {
-    async text(payload: { title?: string; text: string }): Promise<boolean> {
-      /* `false` — принять текст оказалось некому: ни одного приложения с
-         обработчиком `text/plain`. Отмена в открывшемся окне сюда не
-         доходит — она случается уже после успеха и отказом не является. */
-      return call<boolean>(COMMANDS.shareText, {
+    async text(payload: { title?: string; text: string }): Promise<ShareOutcome> {
+      /*
+        Java отвечает словом: `shared`, `copied` или `error: …`. Пересказывать
+        его своими словами нельзя — именно так и появился тост «ни одно
+        приложение не принимает текст» на телефоне, где приложений полно.
+        Отмена в уже открывшемся окне сюда не доходит: она случается после
+        успеха и отказом не является.
+      */
+      const answer = await call<string>(COMMANDS.shareText, {
         title: payload.title ?? '',
         body: payload.text,
-      }).catch(() => false);
+      }).catch((error: unknown) => `error: ${error instanceof Error ? error.message : String(error)}`);
+
+      if (answer === 'shared') return { kind: 'shared' };
+      if (answer === 'copied') return { kind: 'copied' };
+      const reason = answer.startsWith('error: ') ? answer.slice('error: '.length) : answer;
+      return { kind: 'failed', reason };
     },
   };
 }

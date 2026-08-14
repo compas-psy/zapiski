@@ -780,10 +780,19 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     const provider = app.host.platform.shareOut;
     if (!provider) return;
     const shown = title === '' ? inheritedTitle : title;
-    const ok = await provider
+    const outcome = await provider
       .text({ ...(shown === '' ? {} : { title: shown }), text: joinTitle(shown, editorBody) })
-      .catch(() => false);
-    if (!ok) app.toast({ message: strings.note.shareFailed });
+      .catch((error: unknown) => ({
+        kind: 'failed' as const,
+        reason: error instanceof Error ? error.message : undefined,
+      }));
+    /* Открылось системное окно — говорить нечего, человек уже в нём. */
+    if (outcome.kind === 'shared') return;
+    if (outcome.kind === 'copied') {
+      app.toast({ message: strings.note.shareCopied });
+      return;
+    }
+    app.toast({ message: strings.note.shareFailed(outcome.reason) });
   }
 
   async function attachAndInsert(file: File): Promise<void> {

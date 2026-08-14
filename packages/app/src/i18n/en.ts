@@ -149,7 +149,9 @@ export const en: AppCatalog = {
     focusHint: 'focus · Esc to leave',
     lockNow: 'Lock now',
     share: 'Share',
-    shareFailed: 'No app can accept the note — nothing here takes plain text',
+    shareCopied: 'Copied — paste it into the app you need',
+    shareFailed: (reason?: string): string =>
+      reason ? `Could not share · ${reason}` : 'Could not share',
     backlinksTitle: (count: number): string => `↩ LINKS TO THIS NOTE · ${count}`,
     statusChanged: 'edited just now',
     statusAutosave: 'autosave — always',

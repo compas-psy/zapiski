@@ -562,8 +562,13 @@ mod api {
         saf_action("safRename", tree, from, Some(to))
     }
 
-    /// Отдать текст системному «Поделиться». `false` — принять его некому.
-    pub fn share_text(title: &str, body: &str) -> Result<bool, String> {
+    /// Отдать текст системному «Поделиться».
+    ///
+    /// Возвращает то, что ответила Java: `shared`, `copied` либо строку с
+    /// ошибкой. Булев ответ здесь был ошибкой: любая беда превращалась в
+    /// `false`, а приложение объявляло её «принять некому» — и человек искал
+    /// причину не там.
+    pub fn share_text(title: &str, body: &str) -> Result<String, String> {
         with_env(|env| {
             let title = env.new_string(title)?;
             let body = env.new_string(body)?;
@@ -571,11 +576,12 @@ mod api {
                 .call_static_method(
                     BRIDGE,
                     "shareText",
-                    "(Ljava/lang/String;Ljava/lang/String;)Z",
+                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
                     &[JValue::Object(&title), JValue::Object(&body)],
                 )?
-                .z()?;
-            Ok(value)
+                .l()?;
+            let text: String = env.get_string(&JString::from(value))?.into();
+            Ok(text)
         })
     }
 
@@ -827,8 +833,8 @@ mod api {
     pub fn saf_rename(_tree: &str, _from: &str, _to: &str) -> Result<(), String> {
         only_android("папка через SAF")
     }
-    pub fn share_text(_title: &str, _body: &str) -> Result<bool, String> {
-        Ok(false)
+    pub fn share_text(_title: &str, _body: &str) -> Result<String, String> {
+        Ok(String::from("error: системного «Поделиться» нет на этой платформе"))
     }
 }
 

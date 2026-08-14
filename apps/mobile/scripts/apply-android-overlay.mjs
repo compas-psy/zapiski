@@ -53,6 +53,29 @@ const PERMISSIONS = [
   'android.permission.REQUEST_INSTALL_PACKAGES',
 ];
 
+/**
+ * `<queries>` — кого наше приложение имеет право ВИДЕТЬ (Android 11+).
+ *
+ * С Android 11 приложение по умолчанию не видит чужие пакеты. Для «Поделиться»
+ * это значит вот что: `Intent.createChooser` резолвит цели заранее, и когда
+ * видимых целей нет, попытка открыть окно кончается `ActivityNotFoundException`
+ * — на телефоне, где мессенджеров и почты полно.
+ *
+ * Ровно это и увидел заказчик: тап по «Поделиться» и тост «ни одно приложение
+ * не принимает текст». Приложения были; их не было видно НАМ.
+ *
+ * Объявляем ровно то, что отправляем, — отправку текста. Права «видеть все
+ * пакеты» (`QUERY_ALL_PACKAGES`) не просим: это разрешение под особым надзором
+ * магазинов, и для одной кнопки оно несоразмерно.
+ */
+const QUERIES = `
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+    </queries>`;
+
 /** Всё, что добавляется внутрь <application>. */
 const APPLICATION_CHILDREN = `
     <!--
@@ -258,6 +281,16 @@ export function patchManifest(source) {
       .map((name) => `    <uses-permission android:name="${name}" />`)
       .join('\n');
     manifest = insertBefore(manifest, /<application\b/, `${BEGIN}\n${block}\n    ${END}\n    `);
+  }
+
+  // 2b. Кого мы имеем право видеть (Android 11+). Без этого блока системное
+  //     «Поделиться» не находит ни одной цели — см. комментарий у QUERIES.
+  if (!manifest.includes('<queries>')) {
+    manifest = insertBefore(
+      manifest,
+      /<application\b/,
+      `${BEGIN}${QUERIES}\n    ${END}\n    `,
+    );
   }
 
   // 3. Свой Application-класс: он знает текущую активность и контекст.
@@ -494,6 +527,13 @@ const EXPECTATIONS = [
   ['виджет «Закреплённая»', 'android:name=".PinnedWidget"'],
   ['приёмник тапов', 'android:name=".ZapiskiWidgetReceiver"'],
   ['сохранена активность Tauri', 'android:name=".MainActivity"'],
+  /*
+    Видимость чужих приложений (Android 11+). Без этого блока системное
+    «Поделиться» не находит ни одной цели: заказчик получил тост «ни одно
+    приложение не принимает текст» на телефоне, где их полно.
+  */
+  ['видимость: блок queries', '<queries>'],
+  ['видимость: отправка текста', '<action android:name="android.intent.action.SEND" />'],
   ['клавиатура ужимает окно', 'android:windowSoftInputMode="adjustResize"'],
   ['рисуем под вырезом', 'android:windowLayoutInDisplayCutoutMode="shortEdges"'],
   ['сохранён LAUNCHER', 'android.intent.category.LAUNCHER'],
