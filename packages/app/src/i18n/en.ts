@@ -451,6 +451,13 @@ export const en: AppCatalog = {
       typeface: 'Typeface',
       typefaceValues: { sans: 'Geist', serif: 'Serif' },
       compact: 'Compact mode',
+      subfolderNotes: 'Notes in a folder',
+      subfolderNotesValues: {
+        own: 'This folder only',
+        nested: 'Include subfolders',
+      },
+      subfolderNotesHint:
+        'With «this folder only» an open folder shows its own contents, like a file manager. With «include subfolders» notes from nested folders appear too, each labelled with the folder it lives in.',
     },
     editor: {
       mode: 'Editor mode',

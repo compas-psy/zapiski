@@ -287,6 +287,8 @@ const PREF = {
   attachmentDownscale: 'attachments.downscale',
   /** Показывать ли служебные папки вложений в дереве библиотеки. */
   attachmentFoldersShown: 'attachments.showFolders',
+  /** Показывать ли в папке заметки из вложенных папок. */
+  subfolderNotes: 'list.subfolderNotes',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -358,6 +360,14 @@ export class AppController {
    * которые завёл он сам; выключатель — для тех, кому и этого много.
    */
   private attachmentFoldersShown = true;
+  /**
+   * Показывать ли в открытой папке заметки из вложенных.
+   *
+   * Выключено по умолчанию: открыл папку — видишь её содержимое, как в любом
+   * файловом менеджере. Прежнее поведение (всё вместе, без признаков) читалось
+   * как беспорядок и порождало ложный вывод «перенос оставил копию».
+   */
+  private subfolderNotes = false;
   /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
@@ -470,6 +480,7 @@ export class AppController {
       savedFolder,
       savedDownscale,
       savedFoldersShown,
+      savedSubfolderNotes,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -485,6 +496,7 @@ export class AppController {
       this.host.prefs.get<string>(PREF.attachmentFolder, ''),
       this.host.prefs.get<boolean>(PREF.attachmentDownscale, true),
       this.host.prefs.get<boolean>(PREF.attachmentFoldersShown, true),
+      this.host.prefs.get<boolean>(PREF.subfolderNotes, false),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -503,6 +515,7 @@ export class AppController {
     this.attachmentFolder = savedFolder;
     this.attachmentDownscale = savedDownscale;
     this.attachmentFoldersShown = savedFoldersShown;
+    this.subfolderNotes = savedSubfolderNotes;
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -1346,6 +1359,17 @@ export class AppController {
   /** Показывать ли служебные папки вложений в дереве библиотеки. */
   attachmentFoldersShownValue(): boolean {
     return this.attachmentFoldersShown;
+  }
+
+  /** Показывать ли в открытой папке заметки из вложенных папок. */
+  subfolderNotesValue(): boolean {
+    return this.subfolderNotes;
+  }
+
+  async setSubfolderNotes(value: boolean): Promise<void> {
+    this.subfolderNotes = value;
+    await this.host.prefs.set(PREF.subfolderNotes, value);
+    this.patch({});
   }
 
   async setAttachmentFoldersShown(value: boolean): Promise<void> {

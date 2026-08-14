@@ -229,6 +229,23 @@ function AppearanceSection(): ReactNode {
         />
       </div>
 
+      {/*
+        Что показывает открытая папка. Живёт во «Внешнем виде», потому что это
+        про вид списка, а не про место хранения: файлы на диске от переключателя
+        не двигаются.
+      */}
+      <Section>{copy.subfolderNotes}</Section>
+      <SegmentedControl<'own' | 'nested'>
+        label={copy.subfolderNotes}
+        value={app.subfolderNotesValue() ? 'nested' : 'own'}
+        onChange={(value) => void app.setSubfolderNotes(value === 'nested')}
+        options={[
+          { value: 'own', label: copy.subfolderNotesValues.own },
+          { value: 'nested', label: copy.subfolderNotesValues.nested },
+        ]}
+      />
+      <p className="za-muted">{copy.subfolderNotesHint}</p>
+
       <Button variant="text" iconStart={<IconBug size={16} />} onClick={() => app.toggleDebug(true)}>
         {strings.settings.debugMenu}
       </Button>

@@ -375,6 +375,18 @@
   font-size: var(--fs-mono-xs);
   color: var(--text-tertiary);
 }
+/*
+  Папка в метастроке: значок и имя подпапки, когда список показывает и
+  вложенные. Значок 11 — на кегль метастроки; без него имя папки читается
+  как часть даты.
+*/
+.za-row__folder {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  vertical-align: -1px;
+  font-family: var(--font-sans);
+}
 
 .za-section {
   padding: var(--sp-16) var(--pad-row-inline) 6px;

@@ -7,7 +7,7 @@
  */
 import { useMemo, type ReactNode } from 'react';
 import type { NoteMeta } from '@zapiski/core';
-import { IconLock, IconPaperclip, IconPin } from '@zapiski/ui';
+import { IconFolder, IconLock, IconPaperclip, IconPin } from '@zapiski/ui';
 import { useSwipe, useLongPress, type Haptic } from '../lib/gestures.js';
 import { relativeTime } from '../lib/format.js';
 import { useStrings } from '../state/context.js';
@@ -40,6 +40,14 @@ export interface NoteRowProps {
    * правильно: тащить пальцем через две панели невозможно.
    */
   draggable?: boolean;
+  /**
+   * Из какой вложенной папки заметка, если список показывает и их.
+   *
+   * Заказчик: «когда отображается так, то не понятно, находятся ли заметки в
+   * корневой папке, которая открыта, или в подпапке». Подпись отвечает на это
+   * прямо в строке — там же, где человек и смотрит.
+   */
+  folderHint?: string;
 }
 
 export function NoteRow({
@@ -54,6 +62,7 @@ export function NoteRow({
   rightLabel,
   leftLabel,
   draggable = false,
+  folderHint,
 }: NoteRowProps): ReactNode {
   const strings = useStrings();
   const swipe = useSwipe({
@@ -143,7 +152,18 @@ export function NoteRow({
           ) : (
             <span className="za-row__snippet">{note.snippet}</span>
           )}
-          <span className="za-row__meta">{meta}</span>
+          <span className="za-row__meta">
+            {/* Папка идёт первой: она отвечает на вопрос «где это лежит», а
+                время и объём — на «насколько свежее». */}
+            {folderHint ? (
+              <span className="za-row__folder">
+                <IconFolder size={11} aria-hidden="true" />
+                {folderHint}
+              </span>
+            ) : null}
+            {folderHint ? ' · ' : ''}
+            {meta}
+          </span>
         </span>
       </button>
     </div>

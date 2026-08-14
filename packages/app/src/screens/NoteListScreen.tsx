@@ -56,8 +56,18 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
     ? app.host.platform.haptics.impact.bind(app.host.platform.haptics)
     : undefined;
 
-  const filter = { scope: state.scope, folder: state.folder, tag: state.tag };
-  const notes = useMemo(() => selectNotes(state.notes, filter), [state.notes, filter.scope, filter.folder, filter.tag]);
+  /* Заметки из вложенных папок — по настройке (см. `ListFilter`). */
+  const includeSubfolders = app.subfolderNotesValue();
+  const filter = {
+    scope: state.scope,
+    folder: state.folder,
+    tag: state.tag,
+    includeSubfolders,
+  };
+  const notes = useMemo(
+    () => selectNotes(state.notes, filter),
+    [state.notes, filter.scope, filter.folder, filter.tag, includeSubfolders],
+  );
   const sortMode = app.sortModeFor(state.folder);
   const items = useMemo(
     () => flatten(buildSections(notes, sortMode, strings)),
@@ -133,6 +143,12 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
                   haptic={haptic}
                   rightLabel={item.note.pinned ? strings.list.unpin : strings.list.pin}
                   leftLabel={item.note.archived ? strings.list.unarchive : strings.list.archive}
+                  /* Заметка из вложенной папки обязана назвать свою папку:
+                     иначе непонятно, где она лежит, — с этого и начался
+                     разговор про «копию, оставшуюся в старой папке». */
+                  {...(subfolderOf(item.note.path, state.folder)
+                    ? { folderHint: subfolderOf(item.note.path, state.folder) as string }
+                    : {})}
                   /* Тащить можно там, где есть чем: на телефоне мышью не
                      тащат, а через две панели пальцем — тем более. */
                   draggable={!isMobile}
@@ -344,6 +360,17 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
       />
     </div>
   );
+
+  /**
+   * Путь заметки относительно открытой папки — или `null`, если она лежит
+   * прямо в ней (тогда подписывать нечего) либо папка не открыта вовсе.
+   */
+  function subfolderOf(path: string, folder: string | null): string | null {
+    if (folder === null) return null;
+    const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+    if (dir === folder || !dir.startsWith(`${folder}/`)) return null;
+    return dir.slice(folder.length + 1);
+  }
 
   function noteMenuItems(note: NoteMeta): MenuItem[] {
     return [

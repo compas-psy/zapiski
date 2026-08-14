@@ -13,6 +13,23 @@ export interface ListFilter {
   scope: ListScope;
   folder: string | null;
   tag: string | null;
+  /**
+   * Показывать ли заметки из ВЛОЖЕННЫХ папок вместе с содержимым открытой.
+   *
+   * По умолчанию нет, и это перемена. Раньше папка показывала и своё, и всё,
+   * что лежит глубже, без единого признака — заказчик: «непонятно, находятся
+   * ли заметки в корневой папке, которая открыта, или в подпапке». Хуже того,
+   * из этого рождался призрак второго дефекта: перенёс заметку в подпапку, а
+   * она осталась на месте — «после перетаскивания копия остаётся в старой
+   * папке». Копии нет и не было: заметка одна, просто родитель продолжал её
+   * показывать.
+   *
+   * Умолчание «только эта папка» — то, как ведут себя проводник, Finder и
+   * файловые панели: открыл папку — видишь её содержимое. Кому нужен прежний
+   * порядок, включает его в настройках, и тогда у каждой чужой заметки
+   * появляется подпись, из какой она подпапки.
+   */
+  includeSubfolders?: boolean;
 }
 
 export function selectNotes(notes: readonly NoteMeta[], filter: ListFilter): NoteMeta[] {
@@ -25,7 +42,8 @@ export function selectNotes(notes: readonly NoteMeta[], filter: ListFilter): Not
     if (filter.scope === 'pinned' && !note.pinned) return false;
     if (filter.folder !== null) {
       const dir = note.path.includes('/') ? note.path.slice(0, note.path.lastIndexOf('/')) : '';
-      if (dir !== filter.folder && !dir.startsWith(`${filter.folder}/`)) return false;
+      const inside = filter.includeSubfolders === true && dir.startsWith(`${filter.folder}/`);
+      if (dir !== filter.folder && !inside) return false;
     }
     if (filter.tag !== null) {
       /* Вложенные теги: `практика` показывает и `практика/супервизия`. */
