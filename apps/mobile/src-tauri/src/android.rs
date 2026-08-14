@@ -146,12 +146,34 @@ mod api {
 
         // Исключение, оставленное в потоке, «прилипнет» к следующему вызову и
         // уронит его в непонятном месте, поэтому разбираем его здесь же.
+        //
+        // И разбираем ПО-НАСТОЯЩЕМУ: раньше здесь стояло общее «Java-сторона
+        // завершилась исключением», а текст уходил в logcat, до которого у
+        // человека с телефоном доступа нет. Заказчик получил ровно эту фразу
+        // на кнопке «Поделиться» — и починить по ней было нечего. Теперь класс
+        // и сообщение исключения поднимаются наверх и показываются словами.
         if guard.exception_check().unwrap_or(false) {
-            let _ = guard.exception_describe();
-            let _ = guard.exception_clear();
-            return Err("Java-сторона завершилась исключением".to_owned());
+            let described = exception_text(&mut guard);
+            return Err(described.unwrap_or_else(|| "Java-сторона завершилась исключением".to_owned()));
         }
         result.map_err(|error| format!("вызов Java не удался: {error}"))
+    }
+
+    /// Текст висящего исключения: `java.lang.IllegalStateException: …`.
+    ///
+    /// Снимаем исключение ДО любых других вызовов JNI — с висящим исключением
+    /// вызывать `toString()` нельзя, и попытка кончилась бы вторым, уже
+    /// непонятным отказом.
+    fn exception_text(env: &mut JNIEnv) -> Option<String> {
+        let throwable = env.exception_occurred().ok()?;
+        env.exception_clear().ok()?;
+        let value = env
+            .call_method(&throwable, "toString", "()Ljava/lang/String;", &[])
+            .ok()?
+            .l()
+            .ok()?;
+        let text: String = env.get_string(&JString::from(value)).ok()?.into();
+        Some(text)
     }
 
     pub fn set_secure(on: bool) -> Result<(), String> {

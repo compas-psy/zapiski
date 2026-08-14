@@ -36,6 +36,8 @@ const IMPLICIT = new Set([
   'Set', 'Short', 'String', 'StringBuilder', 'Throwable', 'Triple', 'Unit',
   'IllegalArgumentException', 'IllegalStateException', 'IndexOutOfBoundsException',
   'NullPointerException', 'NumberFormatException', 'SecurityException', 'System',
+  /* `java.lang.*` подключается компилятором Kotlin для JVM автоматически. */
+  'InterruptedException',
   'Math', 'Thread', 'Runnable', 'Object', 'Class', 'Boolean', 'Regex', 'JvmStatic',
   'JvmField', 'Volatile', 'Suppress', 'Deprecated', 'Throws', 'Synchronized',
   /* `R` генерируется сборкой в наш же пакет — импорта не требует. */

@@ -318,7 +318,19 @@ object NativeBridge {
      */
     @JvmStatic
     fun shareText(title: String?, body: String): String =
-        ShareOut.text(requireContext(), activity?.get(), title, body)
+        try {
+            ShareOut.text(requireContext(), activity?.get(), title, body)
+        } catch (error: Throwable) {
+            /*
+             * Наружу — строка, никогда исключение.
+             *
+             * Мост зовут по имени из Rust: улетевшее исключение он покажет как
+             * «Java-сторона завершилась исключением», а по такому тексту чинить
+             * нечего. `requireContext()` живёт вне `ShareOut` и бросает, когда
+             * контекст ещё не готов, — поэтому обёртка именно здесь.
+             */
+            "error: ${error.javaClass.simpleName}: ${error.message ?: "без пояснения"}"
+        }
 
     // ── Виджеты ─────────────────────────────────────────────────────────────
 
