@@ -212,13 +212,33 @@ try {
      */
     await page.keyboard.press('Escape');
     await page.waitForTimeout(60);
+    /* Исходный текст обязан НЕ удовлетворять ожиданию: иначе проверка
+       проходит сама собой и о сочетании не говорит ничего. */
+    if (item.expect(item.doc)) {
+      problems.push(`${item.id}: исходный текст уже подходит под ожидание — проверка пустая`);
+    }
     await setDoc(item.doc, item.caret);
     const focusBefore = await page.evaluate(
       () => document.activeElement?.className || document.activeElement?.tagName || '?',
     );
+    /*
+      Ждём РЕЗУЛЬТАТА, а не фиксированные 80 мс.
+
+      Пауза в 80 мс — это ставка на то, что раннер успеет. Один раз он не
+      успел: в CI «Подсветка» и «Обычный текст» отчитались как «ничего не
+      сделали», хотя оба работают и локально проходят подряд. Отчёт при этом
+      обвинял продукт, а причина была в спешке прогона — тот самый класс
+      дефекта, за которым уже приходили: сторож, врущий о причине.
+
+      Опрос до срока: как только текст стал ожидаемым — идём дальше (обычно с
+      первой же попытки), не стал за полторы секунды — это настоящее падение.
+    */
     await page.keyboard.press(item.keys);
-    await page.waitForTimeout(80);
-    const text = await readDoc();
+    let text = await readDoc();
+    for (let waited = 0; waited < 1500 && !item.expect(text); waited += 50) {
+      await page.waitForTimeout(50);
+      text = await readDoc();
+    }
     const ok = item.expect(text);
     if (!ok) problems.push(`  фокус перед нажатием: ${focusBefore}`);
     const reserved = RESERVED.has(item.keys) ? ' (в окне браузера сочетание занято)' : '';
@@ -233,8 +253,13 @@ try {
     await page.waitForTimeout(120);
     await page.locator('.cm-content').click();
     await page.keyboard.press(item.keys);
-    await page.waitForTimeout(250);
-    const ok = (await page.locator(item.selector).count()) > 0;
+    /* Та же причина, что и выше: ждём появления панели, а не отмеренной
+       четверти секунды. */
+    let ok = false;
+    for (let waited = 0; waited < 1500 && !ok; waited += 50) {
+      ok = (await page.locator(item.selector).count()) > 0;
+      if (!ok) await page.waitForTimeout(50);
+    }
     console.log(`${ok ? '  ✓' : '  ✗'} ${item.id} — ${item.keys}`);
     if (!ok) problems.push(`${item.id} (${item.keys}) не изменил экран`);
   }
