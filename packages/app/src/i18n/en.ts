@@ -76,6 +76,8 @@ export const en: AppCatalog = {
 
   signIn: {
     consentByAction: 'By signing in you accept the',
+    andNotesTerms: 'and the',
+    notesTermsLink: 'Special Terms for ZAPISKI',
     privacyNotice: 'What happens to your data is in the',
     consentMarketing: 'Send me letters about updates and offers',
     consentMarketingHint: 'Optional. You can withdraw it at any time in account settings',
@@ -525,6 +527,11 @@ export const en: AppCatalog = {
       publisher: 'Publisher',
       publisherName: 'SIMPAS',
       version: 'Version',
+      legal: 'Legal documents',
+      legalTerms: 'Terms of use',
+      legalNotes: 'Special Terms for ZAPISKI',
+      legalPrivacy: 'Personal data policy',
+      legalMarketing: 'Advertising consent',
       licenses: 'Open-source components this application is built from:',
       licenseItems: [
         'Golos Text, JetBrains Mono, Source Serif 4 — SIL Open Font License 1.1',

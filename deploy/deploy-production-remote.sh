@@ -403,7 +403,10 @@ verify_app_origin() {
 # API, и обёртка `<main class="sheet">` есть только у неё.
 verify_documents() {
   local page code body
-  for page in terms privacy; do
+  # Прежние адреса — их знают выложенные сборки — и новые адреса пакета, на
+  # которые ссылается приложение с этой версии. Пропустить вторые значило бы
+  # проверять то, чем человек уже не пользуется.
+  for page in terms privacy legal/terms legal/privacy legal/notes legal/consent/marketing; do
     body="$(curl -sS --max-time 10 "${PUBLIC_URL}/${page}" 2>/dev/null || true)"
     code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
       "${PUBLIC_URL}/${page}" 2>/dev/null || true)"

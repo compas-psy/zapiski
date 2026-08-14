@@ -35,6 +35,7 @@ import {
   WebDAVBackend,
   type AttachmentNaming,
   type SyncBackend,
+  LEGAL_URLS,
 } from '@zapiski/core';
 import type { AttachmentPlacement, SettingsSection } from '../contract.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
@@ -1287,6 +1288,37 @@ function AboutSection(): ReactNode {
             и переписывают в письмо, а не просматривают. */}
         <span className="za-info__value za-info__value--mono">{app.host.platform.version}</span>
       </div>
+
+      {/*
+        Юридические документы — постоянный доступ из настроек.
+
+        Требование пакета (§2 таблицы размещения): Политика ПДн обязана быть
+        доступна не только в момент регистрации, но и всегда. Раз уж список
+        есть, в нём и остальные три документа: соглашение, особые условия
+        ЗАПИСОК и текст рекламного согласия — того самого, которое человек
+        включает и выключает тумблером в разделе «Аккаунт».
+      */}
+      <Section>{copy.legal}</Section>
+      <ul className="za-list-plain">
+        {(
+          [
+            ['terms', copy.legalTerms],
+            ['notes', copy.legalNotes],
+            ['privacy', copy.legalPrivacy],
+            ['marketing', copy.legalMarketing],
+          ] as Array<[keyof typeof LEGAL_URLS, string]>
+        ).map(([key, label]) => (
+          <li key={key}>
+            <Button
+              variant="text"
+              size="compact"
+              onClick={() => void app.host.openExternal(LEGAL_URLS[key])}
+            >
+              {label}
+            </Button>
+          </li>
+        ))}
+      </ul>
 
       <p className="za-muted">{copy.licenses}</p>
       <ul className="za-list-plain">

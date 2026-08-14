@@ -161,6 +161,14 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
               <a href={LEGAL_URLS.terms} target="_blank" rel="noreferrer">
                 {strings.signIn.termsLink}
               </a>
+              {' '}
+              {strings.signIn.andNotesTerms}{' '}
+              {/* Особые условия ЗАПИСОК — отдельный документ пакета
+                  (ДОКУМЕНТ 5, §7.1): принимаются при первом подключении
+                  сервиса тем же однозначным действием. */}
+              <a href={LEGAL_URLS.notes} target="_blank" rel="noreferrer">
+                {strings.signIn.notesTermsLink}
+              </a>
               {'. '}
               {strings.signIn.privacyNotice}{' '}
               <a href={LEGAL_URLS.privacy} target="_blank" rel="noreferrer">
