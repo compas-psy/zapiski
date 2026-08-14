@@ -76,6 +76,16 @@ jobs:
     name: Проверки и сборка PWA
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    # Русские имена файлов обязаны работать в браузерных прогонах.
+    #
+    # В окружении с локалью POSIX хранилище браузера (OPFS) отказывается
+    # заводить файл с кириллическим именем: `getFileHandle('Идеи.md')` падает
+    # с TypeMismatchError, хотя `Идеи.md` — обычное имя заметки у нашего
+    # пользователя. Прогон при этом рапортует о поломке продукта, которой нет.
+    # Проверено здесь же: с `C.UTF-8` те же имена заводятся без единой ошибки.
+    env:
+      LC_ALL: C.UTF-8
+      LANG: C.UTF-8
     concurrency:
       group: zapiski-preflight-${{ github.ref }}
       cancel-in-progress: true
