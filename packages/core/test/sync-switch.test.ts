@@ -236,3 +236,54 @@ describe('сколько занято в хранилище', () => {
     expect(entries['Идеи.md']?.base, 'заметка осталась без базы — слияние правок сломается').toBeTruthy();
   });
 });
+
+/**
+ * Приехавшее вложение не притворяется заметкой.
+ *
+ * Заказчик, сразу после первой удачной синхронизации: «в списке появляются
+ * изображения в виде заметок. Они потом прячутся, но сначала фрустрируют —
+ * кажется фейком».
+ *
+ * Так и было. Синхронизация после каждого принесённого файла обновляет
+ * карточку по этому пути, а чтение заметки не спрашивало, заметка ли это
+ * вообще: байты картинки объявлялись markdown-текстом и ложились в индекс.
+ * В списке появлялись «заметки» с именем вложения и телом `PNG IHDR…` на
+ * сотню тысяч «слов». Исчезали они при следующей полной пересборке индекса —
+ * та читает только `.md`, — и человек оставался с ощущением, что приложение
+ * показало ему что-то ненастоящее.
+ */
+describe('вложение — не заметка', () => {
+  it('картинка из облака не попадает в список заметок', async () => {
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    await cloud.write('Идеи.md', new TextEncoder().encode('# Идеи\n\n![](Images/схема.png)\n'));
+    /* Настоящие байты PNG — ровно те, что заказчик увидел текстом. */
+    await cloud.write('Images/схема.png', new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+    const { disk, vault } = await device(now);
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    /* Файл на диске — да; заметка в списке — нет. */
+    expect(Object.keys(disk.snapshot())).toContain('Images/схема.png');
+    const titles = vault.notes().map((note) => note.title);
+    expect(titles, 'картинка показана заметкой сразу после синхронизации').not.toContain('схема');
+    expect(
+      vault.notes().some((note) => note.path === 'Images/схема.png'),
+      'вложение попало в индекс заметок',
+    ).toBe(false);
+  });
+
+  it('и документ тоже: PDF в списке выглядел как заметка на 124 тысячи слов', async () => {
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    await cloud.write('Идеи.md', new TextEncoder().encode('# Идеи\n'));
+    await cloud.write('Other files/2026-08-14_3591d7.pdf', new TextEncoder().encode('%PDF-1.4 …'));
+
+    const { vault } = await device(now);
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    expect(vault.notes().map((note) => note.path)).toEqual(['Идеи.md']);
+  });
+});

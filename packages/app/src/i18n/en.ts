@@ -148,6 +148,8 @@ export const en: AppCatalog = {
     focus: 'Focus',
     focusHint: 'focus · Esc to leave',
     lockNow: 'Lock now',
+    share: 'Share',
+    shareFailed: 'No app can accept the note — nothing here takes plain text',
     backlinksTitle: (count: number): string => `↩ LINKS TO THIS NOTE · ${count}`,
     statusChanged: 'edited just now',
     statusAutosave: 'autosave — always',

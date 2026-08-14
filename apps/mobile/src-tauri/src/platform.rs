@@ -300,6 +300,17 @@ pub fn secure_flag(on: bool) -> Result<(), String> {
     crate::android::set_secure(on)
 }
 
+/// Отдать текст заметки системному «Поделиться» (Android).
+///
+/// Возвращает `false`, когда принять текст оказалось некому: приложение тогда
+/// говорит об этом словами вместо того, чтобы оставить человека с молчащей
+/// кнопкой. Отмена в системном окне сюда не доходит вовсе — она случается
+/// после того, как окно уже открылось, и отказом не является.
+#[tauri::command(async)]
+pub fn share_text(title: Option<String>, body: String) -> Result<bool, String> {
+    crate::android::share_text(title.as_deref().unwrap_or(""), &body)
+}
+
 /// Хэптика (BEHAVIOR §0). Два значения силы, третьего в контракте нет.
 #[tauri::command(async)]
 pub fn haptic_impact(strength: String) -> Result<(), String> {

@@ -13,7 +13,7 @@
  * `share_take()` для «приложение только что стартовало». Подписка забирает
  * очередь сразу, иначе первый же холодный share терялся бы.
  */
-import type { SharedPayload, ShareTargetProvider } from '@zapiski/core';
+import type { SharedPayload, ShareOutProvider, ShareTargetProvider } from '@zapiski/core';
 
 import { COMMANDS, EVENTS, call, on } from './ipc';
 
@@ -60,6 +60,30 @@ export function createShareTarget(): ShareTargetProvider {
         disposed = true;
         unlisten?.();
       };
+    },
+  };
+}
+
+/**
+ * `ShareOutProvider` — отдать заметку системному «Поделиться».
+ *
+ * Обратная сторона того же интерфейса Android: выше приложение принимает
+ * чужое, здесь отдаёт своё. Заказчик просил кнопку в шапке заметки — она
+ * появляется ровно там, где этот порт есть, то есть только на Android.
+ *
+ * Наружу уходит markdown как есть. Telegram разбирает разметку сам, и любая
+ * наша «подготовка» текста ломала бы её принимающей стороне.
+ */
+export function createShareOut(): ShareOutProvider {
+  return {
+    async text(payload: { title?: string; text: string }): Promise<boolean> {
+      /* `false` — принять текст оказалось некому: ни одного приложения с
+         обработчиком `text/plain`. Отмена в открывшемся окне сюда не
+         доходит — она случается уже после успеха и отказом не является. */
+      return call<boolean>(COMMANDS.shareText, {
+        title: payload.title ?? '',
+        body: payload.text,
+      }).catch(() => false);
     },
   };
 }

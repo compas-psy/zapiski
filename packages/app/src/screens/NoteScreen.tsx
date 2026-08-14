@@ -48,6 +48,7 @@ import {
   IconLink,
   IconQuote,
   IconRule,
+  IconShare,
   IconTable,
   IconWikiLink,
 } from '../components/icons.js';
@@ -723,6 +724,23 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
               onClick={() => app.lockNote(path)}
             />
           ) : null}
+          {/*
+            «Поделиться» — там, где у платформы есть системное окно.
+            Порт объявляет только Android, и кнопка появляется ровно там:
+            по правилу BEHAVIOR §5.1 скрытый элемент честнее выключенного, а
+            в вебе и на Windows обмен идёт другими путями.
+
+            Уходит markdown как есть — заголовок строкой `# …` и тело. Тому,
+            кто принимает, виднее: Telegram разбирает разметку сам.
+          */}
+          {app.host.platform.shareOut ? (
+            <IconButton
+              icon={<IconShare size={18} />}
+              label={strings.note.share}
+              tone="ghost"
+              onClick={() => void shareNote()}
+            />
+          ) : null}
           <IconButton
             icon={<IconInfo size={20} />}
             label={strings.note.info}
@@ -746,6 +764,28 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
    * Тост об ошибке поднимает контроллер: он один знает, что копирование не
    * удалось. Здесь остаётся только не вставлять ссылку на файл, которого нет.
    */
+  /**
+   * Отдать заметку системному «Поделиться».
+   *
+   * Уходит то же, что лежит в файле: `# Заголовок` первой строкой и тело.
+   * Никакой «подготовки текста» — принимающая сторона разберётся лучше
+   * (Telegram понимает markdown сам), а всякая наша правка на этом шаге может
+   * только испортить разметку у него.
+   *
+   * Зашифрованная заметка отдаётся расшифрованной — но только та, что человек
+   * уже открыл на этом экране: тянуть ключ ради «поделиться» неправильно, а
+   * отправить шифротекст — бессмысленно.
+   */
+  async function shareNote(): Promise<void> {
+    const provider = app.host.platform.shareOut;
+    if (!provider) return;
+    const shown = title === '' ? inheritedTitle : title;
+    const ok = await provider
+      .text({ ...(shown === '' ? {} : { title: shown }), text: joinTitle(shown, editorBody) })
+      .catch(() => false);
+    if (!ok) app.toast({ message: strings.note.shareFailed });
+  }
+
   async function attachAndInsert(file: File): Promise<void> {
     /* Путь заметки нужен правилу «рядом с заметкой» (ITERATION-1 §5): где
        лежит сама заметка, знает экран, а не контроллер. */

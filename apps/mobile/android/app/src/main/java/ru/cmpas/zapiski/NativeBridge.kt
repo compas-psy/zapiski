@@ -309,6 +309,11 @@ object NativeBridge {
     @JvmStatic
     fun safRename(tree: String, from: String, to: String) = Saf.rename(requireContext(), tree, from, to)
 
+    /** Отдать текст заметки системному «Поделиться». `false` — отдать некому. */
+    @JvmStatic
+    fun shareText(title: String?, body: String): Boolean =
+        ShareOut.text(requireContext(), title, body)
+
     // ── Виджеты ─────────────────────────────────────────────────────────────
 
     @JvmStatic

@@ -35,6 +35,23 @@ function Glyph({ size, children, ...rest }: AppIconProps & { children: ReactNode
   );
 }
 
+/**
+ * «Поделиться» — системный значок Android: три узла и две связи.
+ *
+ * Рисуем свой, а не тянем платформенный: значок обязан следовать тем же
+ * правилам, что и соседи в шапке (обводка `--icon-stroke`, 24 в сетке), иначе
+ * он читается как чужеродная вставка.
+ */
+export const IconShare = (p: AppIconProps): ReactNode => (
+  <Glyph {...p}>
+    <circle cx="18" cy="5" r="3" />
+    <circle cx="6" cy="12" r="3" />
+    <circle cx="18" cy="19" r="3" />
+    <path d="M8.6 10.5 15.4 6.6" />
+    <path d="M8.6 13.5 15.4 17.4" />
+  </Glyph>
+);
+
 /** Бургер — открывает библиотеку (SCREENS §3). */
 export const IconMenu = (p: AppIconProps): ReactNode => (
   <Glyph {...p}>

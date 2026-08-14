@@ -27,6 +27,8 @@ export const COMMANDS = {
   safRemove: 'saf_remove',
   safRename: 'saf_rename',
   secureFlag: 'secure_flag',
+  /* Системное «Поделиться» — `platform.rs::share_text`. */
+  shareText: 'share_text',
   hapticImpact: 'haptic_impact',
   biometricsAvailable: 'biometrics_available',
   biometricsEnroll: 'biometrics_enroll',

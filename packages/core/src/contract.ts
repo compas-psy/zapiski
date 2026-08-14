@@ -179,6 +179,18 @@ export interface VaultFolderPicker {
   current(): Promise<VaultLocationInfo | null>;
 }
 
+/**
+ * Системное «Поделиться».
+ *
+ * Возвращает `false`, если поделиться не вышло, — приложение тогда говорит об
+ * этом словами вместо того, чтобы оставить человека гадать, нажалась ли
+ * кнопка. Отмена человеком отказом НЕ считается: закрыть чужое окно — его
+ * право, и извиняться за это приложению не за что.
+ */
+export interface ShareOutProvider {
+  text(payload: { title?: string; text: string }): Promise<boolean>;
+}
+
 export interface PlatformCapabilities {
   /** `web` | `windows` | `android` — только для телеметрии и мелких различий. */
   readonly kind: 'web' | 'windows' | 'android';
@@ -193,6 +205,19 @@ export interface PlatformCapabilities {
   readonly haptics: HapticProvider | null;
   readonly globalHotkey: GlobalHotkeyProvider | null;
   readonly shareTarget: ShareTargetProvider | null;
+  /**
+   * Отдать заметку системе — «Поделиться» (Android).
+   *
+   * Порт необязателен, и это не формальность: системного окна «Поделиться»
+   * нет ни в Windows-оболочке, ни в вебе, где обмен идёт другими путями.
+   * Экран проверяет наличие порта и без него кнопку не рисует вовсе — по
+   * правилу BEHAVIOR §5.1 «скрытый элемент честнее выключенного».
+   *
+   * Наружу уходит markdown КАК ЕСТЬ: `**жирный**`, списки и заголовки. Тому,
+   * кто принимает, виднее, что с ними делать — Telegram, например, разбирает
+   * разметку сам, и любая наша «подготовка текста» только сломала бы её.
+   */
+  readonly shareOut?: ShareOutProvider | null;
   readonly updater: UpdaterProvider | null;
   /** FLAG_SECURE: скрыть содержимое в превью задач ОС (BEHAVIOR §5.3). */
   secureFlag(on: boolean): void;

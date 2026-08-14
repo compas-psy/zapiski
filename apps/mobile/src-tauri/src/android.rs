@@ -562,6 +562,23 @@ mod api {
         saf_action("safRename", tree, from, Some(to))
     }
 
+    /// Отдать текст системному «Поделиться». `false` — принять его некому.
+    pub fn share_text(title: &str, body: &str) -> Result<bool, String> {
+        with_env(|env| {
+            let title = env.new_string(title)?;
+            let body = env.new_string(body)?;
+            let value = env
+                .call_static_method(
+                    BRIDGE,
+                    "shareText",
+                    "(Ljava/lang/String;Ljava/lang/String;)Z",
+                    &[JValue::Object(&title), JValue::Object(&body)],
+                )?
+                .z()?;
+            Ok(value)
+        })
+    }
+
     /// Положить готовый файл туда, где пользователь его найдёт. Java
     /// возвращает `null` при успехе и текст ошибки иначе.
     pub fn save_to_downloads(name: &str, mime: &str, source: &str) -> Result<(), String> {
@@ -810,6 +827,9 @@ mod api {
     pub fn saf_rename(_tree: &str, _from: &str, _to: &str) -> Result<(), String> {
         only_android("папка через SAF")
     }
+    pub fn share_text(_title: &str, _body: &str) -> Result<bool, String> {
+        Ok(false)
+    }
 }
 
 pub use api::{
@@ -817,5 +837,5 @@ pub use api::{
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
     render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_persisted_trees,
     saf_pick_folder, saf_read, saf_open, saf_release_trees, saf_remove, saf_rename, saf_stat,
-    saf_supports_rename, saf_write, save_to_downloads, set_secure,
+    saf_supports_rename, saf_write, save_to_downloads, set_secure, share_text,
 };

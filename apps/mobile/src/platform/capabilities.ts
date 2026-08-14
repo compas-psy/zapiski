@@ -35,7 +35,7 @@ import {
   writeModeOf,
   type SafTree,
 } from './saf';
-import { createShareTarget } from './share';
+import { createShareOut, createShareTarget } from './share';
 import { createUpdater } from './updater';
 import { defaultVaultRoot, openVault } from './vault';
 
@@ -108,6 +108,8 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
     haptics: createHaptics(),
     globalHotkey: null,
     shareTarget: createShareTarget(),
+    /* Отдать заметку системе — кнопка «Поделиться» в шапке (только Android). */
+    shareOut: createShareOut(),
     updater: createUpdater(),
 
     secureFlag(on: boolean): void {

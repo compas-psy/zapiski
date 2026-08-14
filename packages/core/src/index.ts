@@ -28,6 +28,7 @@ export type {
   SearchHit,
   SearchQuery,
   SharedPayload,
+  ShareOutProvider,
   ShareTargetProvider,
   SyncBackend,
   SyncState,

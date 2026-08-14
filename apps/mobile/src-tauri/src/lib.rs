@@ -49,6 +49,7 @@ pub fn run() {
             saf::saf_rename,
             platform::secure_flag,
             platform::haptic_impact,
+            platform::share_text,
             platform::share_take,
             platform::auth_take,
             biometrics::biometrics_available,
