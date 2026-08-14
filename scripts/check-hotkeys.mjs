@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
 import { findChrome } from './find-chrome.mjs';
+import { seedWebSession } from './web-session.mjs';
 
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
 const PORT = process.env.ZAPISKI_PORT ?? '4191';
@@ -163,6 +164,8 @@ const { chromium } = await import('playwright-core');
 const server = await serveDist(DIST, Number(PORT));
 const browser = await chromium.launch({ executablePath: CHROME });
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+/* Ворота веба: без сессии прогон упрётся в экран входа. */
+await seedWebSession(page);
 const problems = [];
 page.on('pageerror', (error) => problems.push(`ошибка страницы: ${error.message}`));
 

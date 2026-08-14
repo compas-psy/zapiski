@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
 import { findChrome } from './find-chrome.mjs';
+import { seedWebSession } from './web-session.mjs';
 
 const PORT = process.env.ZAPISKI_PORT ?? '4173';
 const DIST = fileURLToPath(new URL('../apps/web/dist', import.meta.url));
@@ -88,6 +89,9 @@ const URL_BASE = served.url;
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU' });
+/* В вебе без аккаунта дальше экрана входа не пройти — прогон проверяет
+   продукт за воротами, а не сами ворота (их проверяет check-signin-screen). */
+await seedWebSession(page);
 
 const problems = [];
 const errors = [];
@@ -396,6 +400,7 @@ for (const [name, viewport] of [
 ]) {
   const touch = await browser.newContext({ viewport, hasTouch: true, locale: 'ru-RU' });
   const screen = await touch.newPage();
+  await seedWebSession(screen);
   await screen.goto(URL_BASE, { waitUntil: 'networkidle' });
   await screen.waitForTimeout(600);
 
@@ -543,6 +548,18 @@ for (const [name, viewport] of [
       check(false, `${name}: в библиотеке нет пункта «${target}»`);
       continue;
     }
+
+    /* Тост живёт у нижней кромки и на телефоне ложится ровно на последний
+       пункт библиотеки. Он временный (шесть секунд) и не имеет отношения к
+       тому, что здесь проверяется — z-index выдвижной панели против скрима.
+       С восстановленной сессией прогон честно получает тост «синхронизация
+       недоступна»: сервера рядом нет. Поэтому ждём, пока он уйдёт сам, и
+       только потом смотрим, что лежит под пальцем. */
+    await screen
+      .locator('.z-toast')
+      .first()
+      .waitFor({ state: 'detached', timeout: 8000 })
+      .catch(() => undefined);
 
     const itemRect = await item.boundingBox();
     if (itemRect) {

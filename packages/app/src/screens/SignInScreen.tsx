@@ -31,9 +31,18 @@ export interface SignInScreenProps {
    * Тон спокойный: текст из реестра §11 и кнопка «Прислать новую».
    */
   initialStage?: Stage;
+  /**
+   * Экран стоит воротами: в вебе без аккаунта дальше нельзя (решение
+   * заказчика — иначе заметки на разных устройствах выглядят потерянными).
+   *
+   * В этом режиме нет кнопки «назад»: возвращаться некуда, а неработающая
+   * стрелка хуже её отсутствия. Вместо неё — строка о том, ЗАЧЕМ аккаунт,
+   * потому что вход без объяснения причины читается как сбор адресов.
+   */
+  gate?: boolean;
 }
 
-export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): ReactNode {
+export function SignInScreen({ initialStage = 'form', gate = false }: SignInScreenProps): ReactNode {
   const app = useApp();
   const state = useAppState();
   const strings = useStrings();
@@ -96,17 +105,19 @@ export function SignInScreen({ initialStage = 'form' }: SignInScreenProps): Reac
   return (
     <div className="za-screen">
       <div className="za-header">
-        <IconButton
-          icon={<IconArrowLeft size={20} />}
-          label={strings.app.back}
-          tone="ghost"
-          onClick={() => app.back()}
-        />
+        {gate ? null : (
+          <IconButton
+            icon={<IconArrowLeft size={20} />}
+            label={strings.app.back}
+            tone="ghost"
+            onClick={() => app.back()}
+          />
+        )}
       </div>
 
       <div className="za-page za-stack">
-        <h1 className="za-h1">{strings.signIn.title}</h1>
-        <p className="za-muted">{strings.signIn.subtitle}</p>
+        <h1 className="za-h1">{gate ? strings.signIn.gateTitle : strings.signIn.title}</h1>
+        <p className="za-muted">{gate ? strings.signIn.gateReason : strings.signIn.subtitle}</p>
 
         {stage === 'sent' ? (
           <>

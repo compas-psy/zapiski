@@ -82,7 +82,10 @@ export const en: AppCatalog = {
     termsLink: 'Terms of use',
     privacyLink: 'Personal data policy',
     title: 'An account is only needed for the cloud',
+    gateTitle: 'An account keeps your notes the same everywhere',
     subtitle: 'Local notes work without one',
+    gateReason:
+      'In a browser your notes live in that browser. Sign in and they will be the same on all your devices',
     yandex: 'Sign in with Yandex ID',
     yandexLogoAlt: 'Yandex',
     divider: 'or by email',
