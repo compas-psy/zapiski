@@ -127,3 +127,60 @@ describe('переезд с папки в облако', () => {
     ).toContain('Черновик.md');
   });
 });
+
+/**
+ * Вложения уезжают вместе с заметками.
+ *
+ * ── Что увидел заказчик ─────────────────────────────────────────────────────
+ *
+ * «Картинки не подгружаются и папок Images, Audio и Other files в принципе
+ * нет» — на втором устройстве, куда только что приехали 75 заметок.
+ *
+ * Причина была в двух местах сразу: движок предлагал к обмену только заметки и
+ * CRDT-логи, а признак вложения требовал старый каталог `attachments/`. Файлы
+ * из `Images`, `Audio` и `Other files` не проходили ни то ни другое — и текст
+ * приезжал со ссылкой на файл, которого на том конце нет.
+ */
+describe('вложения синхронизируются, а не только текст', () => {
+  it('картинка уезжает в облако вместе с заметкой', async () => {
+    const now = clock();
+    const { disk, vault } = await device(now);
+    await vault.write('Идеи.md', '# Идеи\n\n![](Images/схема.png)\n', { scheduleRename: false });
+    await disk.write('Images/схема.png', new Uint8Array([1, 2, 3]));
+
+    const cloud = new MemoryVaultStorage({ now });
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    expect(
+      Object.keys(cloud.snapshot()),
+      'заметка уехала, а картинка осталась — на том конце будет ссылка в никуда',
+    ).toContain('Images/схема.png');
+  });
+
+  it('и приезжает на второе устройство', async () => {
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    await cloud.write('Идеи.md', new TextEncoder().encode('# Идеи\n\n![](Images/схема.png)\n'));
+    await cloud.write('Images/схема.png', new Uint8Array([1, 2, 3]));
+
+    const { disk, vault } = await device(now);
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    expect(Object.keys(disk.snapshot())).toContain('Images/схема.png');
+  });
+
+  it('исполняемое не проходит: белый список — настоящий предохранитель', async () => {
+    const now = clock();
+    const { disk, vault } = await device(now);
+    await vault.write('Идеи.md', '# Идеи\n', { scheduleRename: false });
+    await disk.write('Other files/обновление.apk', new Uint8Array([1]));
+
+    const cloud = new MemoryVaultStorage({ now });
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    expect(Object.keys(cloud.snapshot())).not.toContain('Other files/обновление.apk');
+  });
+});

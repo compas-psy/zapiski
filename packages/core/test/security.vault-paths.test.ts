@@ -173,16 +173,32 @@ describe('SEC-022: .zapiski защищён сравнением строк, а �
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('SEC-023: белый список путей', () => {
-  it('вложение — только внутри attachments/ и только известного вида', () => {
+  it('вложение — файл известного вида, где бы он ни лежал', () => {
+    /*
+     * Каталог перестал быть признаком, и это исправление, а не послабление.
+     * Файлы давно ложатся в `Images`, `Audio` и `Other files`, а настройка
+     * «рядом с заметкой» кладёт их в любую папку человека. Пока признаком был
+     * старый `attachments/`, синхронизация объявляла всё остальное «не
+     * заметкой и не вложением» — и картинки не уезжали никуда. Заказчик
+     * увидел это с двух устройств: заметки приехали, картинки нет.
+     *
+     * Предохранителем был и остаётся белый список расширений.
+     */
     expect(isAttachmentPath('attachments/2026-08-08_1a2b3c.png')).toBe(true);
-    expect(isAttachmentPath('attachments/Практика/Договор.pdf')).toBe(true);
+    expect(isAttachmentPath('Images/2026-08-08_1a2b3c.png')).toBe(true);
+    expect(isAttachmentPath('Audio/сессия.m4a')).toBe(true);
+    expect(isAttachmentPath('Other files/смета.docx')).toBe(true);
+    /* «Рядом с заметкой»: файл лежит в папке человека и всё равно вложение. */
+    expect(isAttachmentPath('Практика/схема.png')).toBe(true);
     /* Регистр не спасает: имя приходит от той стороны, а ФС его не различает. */
     expect(isAttachmentPath('Attachments/Схема.PNG')).toBe(true);
+
+    /* Исполняемое не проходит нигде — ради этого список и заведён. */
     expect(isAttachmentPath('attachments/скрипт.sh')).toBe(false);
-    expect(isAttachmentPath('attachments/обновление.apk')).toBe(false);
-    expect(isAttachmentPath('attachments/автозапуск.desktop')).toBe(false);
-    /* Вне каталога вложений — не вложение, как бы файл ни назывался. */
-    expect(isAttachmentPath('Заметки/картинка.png')).toBe(false);
+    expect(isAttachmentPath('Images/обновление.apk')).toBe(false);
+    expect(isAttachmentPath('Практика/автозапуск.desktop')).toBe(false);
+    /* Служебный каталог вложением не бывает: там журналы и корзина. */
+    expect(isAttachmentPath('.zapiski/crdt/note.png')).toBe(false);
   });
 
   it('CRDT-лог — только `.zapiski/crdt/*.bin` и без вложенности', () => {

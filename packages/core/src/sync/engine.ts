@@ -344,13 +344,38 @@ export class SyncEngine {
     this.onIgnored?.(trimmed, reason);
   }
 
+  /**
+   * Что мы вообще предлагаем к обмену.
+   *
+   * Вложений здесь не было — только заметки и CRDT-логи. То есть картинка,
+   * звук и документ никогда не уезжали в облако: на втором устройстве
+   * приезжал текст со ссылкой на файл, которого там нет. Заказчик так это и
+   * увидел: «картинки не подгружаются и папок Images, Audio и Other files в
+   * принципе нет».
+   *
+   * Обход по файлам, а не по одной известной папке: место вложений человек
+   * выбирает сам (§5 настроек), и жёсткий каталог здесь снова разошёлся бы с
+   * продуктом. Отбор делает `isAttachmentPath` — белый список расширений.
+   */
   private async syncablePaths(): Promise<VaultPath[]> {
     const notes = await this.vault.notePaths();
-    if (!this.syncCrdt) return notes;
+    const attachments = await this.attachmentPaths('');
+    if (!this.syncCrdt) return [...notes, ...attachments];
     const logs = (await this.storage.list(CRDT_DIR).catch(() => []))
       .filter((entry) => !entry.isDirectory)
       .map((entry) => entry.path);
-    return [...notes, ...logs];
+    return [...notes, ...attachments, ...logs];
+  }
+
+  /** Файлы-вложения во всём хранилище, кроме служебного каталога. */
+  private async attachmentPaths(dir: VaultPath): Promise<VaultPath[]> {
+    const out: VaultPath[] = [];
+    for (const entry of await this.storage.list(dir).catch(() => [])) {
+      if (isMetaPath(entry.path)) continue;
+      if (entry.isDirectory) out.push(...(await this.attachmentPaths(entry.path)));
+      else if (isAttachmentPath(entry.path)) out.push(entry.path);
+    }
+    return out;
   }
 
   private async syncOne(
