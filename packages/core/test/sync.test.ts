@@ -412,10 +412,43 @@ describe('движок синка: базовые сценарии', () => {
     backend.list = async () => {
       throw new SyncError('Сервер не отвечает · Повторить', 'unreachable');
     };
-    const engine = new SyncEngine(vault, backend, { deviceName: 'Windows' });
+    /* Сети нет — только тогда слово «оффлайн» правдиво. */
+    const engine = new SyncEngine(vault, backend, {
+      deviceName: 'Windows',
+      isOnline: () => false,
+    });
     await engine.load();
     const outcome = await engine.sync();
     expect(outcome.state).toBe('offline');
     expect(outcome.messages).toContain('Оффлайн · всё сохранено локально');
+  });
+
+  it('сеть есть, а облако молчит — так и говорим, а не «оффлайн»', async () => {
+    /*
+     * Заказчик вошёл через Яндекс ID на телефоне с работающим интернетом и
+     * увидел «Оффлайн · всё сохранено локально»: «фраза фрустрирует — я только
+     * что вошёл, но пишет, что оффлайн». Слово уводило искать причину в
+     * телефоне, а она была на сервере (он не пускал запросы приложения).
+     */
+    const remote = new MemoryVaultStorage();
+    const storage = new MemoryVaultStorage();
+    const vault = await Vault.open(storage, { renameDelayMs: 0 });
+    const backend = new LocalFolderBackend(remote);
+    backend.list = async () => {
+      throw new SyncError('Сервер не отвечает · Повторить', 'unreachable');
+    };
+    const engine = new SyncEngine(vault, backend, {
+      deviceName: 'Android',
+      isOnline: () => true,
+    });
+    await engine.load();
+    const outcome = await engine.sync();
+
+    expect(outcome.messages).toContain('Не удалось соединиться с облаком · Повторить');
+    expect(
+      outcome.messages,
+      'приложение снова объявляет оффлайн там, где сеть есть',
+    ).not.toContain('Оффлайн · всё сохранено локально');
+    expect(outcome.state).toBe('error');
   });
 });

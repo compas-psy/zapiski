@@ -358,6 +358,35 @@ verify_public() {
   esac
 
   verify_documents
+  verify_app_origin
+}
+
+# Приложения обязаны иметь право обратиться к API.
+#
+# Окно Tauri живёт на своём origin (`http://tauri.localhost` на Windows и
+# Android), и если сервер не назвал его в CORS_ORIGINS, движок отбивает каждый
+# запрос ЕЩЁ ДО сервера. Снаружи это выглядит как поломка синхронизации: вход
+# проходит — токен приезжает диплинком, минуя сеть, — а заметки не появляются
+# никогда. В журналах API таких запросов нет вовсе, поэтому искать причину
+# приходится с другого конца; проверка ставит её на место.
+#
+# Смотрим не на код ответа, а на заголовок: 200 без `access-control-allow-origin`
+# для приложения означает «нельзя».
+verify_app_origin() {
+  local origin='http://tauri.localhost' headers
+  headers="$(curl -sS -i --max-time 10 -X OPTIONS \
+    -H "Origin: ${origin}" \
+    -H 'Access-Control-Request-Method: GET' \
+    -H 'Access-Control-Request-Headers: authorization,x-device-id' \
+    "${PUBLIC_URL}/api/v1/auth/methods" 2>/dev/null || true)"
+  case "$(printf '%s' "${headers}" | tr 'A-Z' 'a-z')" in
+    *"access-control-allow-origin: ${origin}"*)
+      log 'CORS: окно приложения допущено к API.' ;;
+    *)
+      log "CORS: origin ${origin} НЕ разрешён — приложения не смогут синхронизироваться."
+      log 'Лечение: CORS_ORIGINS в deploy/docker-compose.yml обязан содержать адреса окон Tauri.'
+      return 1 ;;
+  esac
 }
 
 # Документы для согласий: `/terms` и `/privacy`.

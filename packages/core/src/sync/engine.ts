@@ -107,6 +107,21 @@ export interface SyncEngineOptions {
    * это не показывается: чужие файлы в общей папке — норма, а не сбой.
    */
   onIgnored?: (path: VaultPath, reason: string) => void;
+  /**
+   * Есть ли у устройства сеть. Отвечает оболочка — движок знает только, что
+   * не дозвонился.
+   *
+   * Разница между «нет сети» и «не дозвонился» — не педантизм. Заказчик вошёл
+   * через Яндекс ID на телефоне с работающим интернетом и увидел «Оффлайн ·
+   * всё сохранено локально»: «фраза фрустрирует — я только что вошёл, но
+   * пишет, что оффлайн. Тогда бы понять, что соединение не удалось или что-то
+   * ещё». Он прав дважды: слово было неверным, а причина — в другом месте
+   * (сервер не пускал запросы приложения), и текст уводил от неё.
+   *
+   * Умолчание «сеть есть»: движок вызывают там, где сеть предполагается, и
+   * честнее сказать «не удалось соединиться», чем объявить оффлайн вслепую.
+   */
+  isOnline?: () => boolean;
 }
 
 export interface SyncOutcome extends SyncStatus {
@@ -135,6 +150,8 @@ export class SyncEngine {
   private readonly syncCrdt: boolean;
   /** Куда сообщать о пропущенных путях (SEC-023). */
   private readonly onIgnored: ((path: VaultPath, reason: string) => void) | undefined;
+  /** Есть ли сеть у устройства — знает оболочка, не движок. */
+  private readonly isOnline: () => boolean;
   /** Что пропустили за текущий проход — без повторов. */
   private ignored = new Set<VaultPath>();
   private file: SyncStateFile = { version: STATE_VERSION, remotes: {} };
@@ -155,6 +172,7 @@ export class SyncEngine {
     this.mode = options.mode ?? 'peer';
     this.syncCrdt = options.syncCrdt ?? true;
     this.onIgnored = options.onIgnored;
+    this.isOnline = options.isOnline ?? (() => true);
     this.queue = new ChangeQueue(this.storage, this.now);
     this.versions = new VersionHistory(this.storage, this.now);
     this.crdt = new CrdtStore(this.storage, this.deviceName);
@@ -235,10 +253,23 @@ export class SyncEngine {
     try {
       remote = new Map((await this.backend.list()).map((entry) => [normalizePath(entry.path), entry]));
     } catch (error) {
-      // Ошибка сети не блокирует работу: всё сохранено локально (BEHAVIOR §6).
-      outcome.state = error instanceof SyncError && error.kind === 'unreachable' ? 'offline' : 'error';
-      outcome.error =
-        outcome.state === 'offline' ? this.strings.errors.offline : (error as Error).message || this.strings.errors.syncFailed;
+      /*
+       * Ошибка сети не блокирует работу: всё сохранено локально (BEHAVIOR §6).
+       *
+       * Но сказать об этом надо ТЕМИ словами, которые соответствуют случаю.
+       * «Оффлайн» имеет право звучать, только когда сети действительно нет;
+       * если сеть есть, а до облака мы не дозвонились — так и говорим, иначе
+       * человек ищет причину не там. Ровно на это и пожаловался заказчик,
+       * войдя через Яндекс ID на телефоне с интернетом.
+       */
+      const unreachable = error instanceof SyncError && error.kind === 'unreachable';
+      const offline = unreachable && !this.isOnline();
+      outcome.state = unreachable && offline ? 'offline' : 'error';
+      outcome.error = offline
+        ? this.strings.errors.offline
+        : unreachable
+          ? this.strings.errors.cloudUnreachable
+          : (error as Error).message || this.strings.errors.syncFailed;
       outcome.messages.push(outcome.error);
       return outcome;
     }

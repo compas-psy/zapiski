@@ -2343,7 +2343,14 @@ export class AppController {
   attachBackend(backend: SyncBackend | null): void {
     const changed = backend?.id !== this.state.backendId;
     this.backend = backend;
-    this.engine = backend && this.vault ? new SyncEngine(this.vault, backend) : null;
+    this.engine =
+      backend && this.vault
+        ? new SyncEngine(this.vault, backend, {
+            /* Про сеть знает оболочка, а не движок: без этого «не дозвонились»
+               объявлялось «оффлайном» даже там, где интернет заведомо есть. */
+            isOnline: () => this.state.online,
+          })
+        : null;
     this.patch({ backendId: backend?.id ?? null });
     this.persistPref(PREF.backend, backend?.id ?? null);
     /*

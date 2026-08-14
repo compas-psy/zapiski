@@ -9,6 +9,7 @@ export const en: Catalog = {
   errors: {
     offline: 'Offline · everything is saved locally',
     syncFailed: 'Could not sync · Retry',
+    cloudUnreachable: 'Could not reach the cloud · Retry',
     noSpace: 'The device is out of space. The note is kept in memory — free some space to write it to disk',
     folderUnavailable: 'The folder is unavailable. It may have been moved — please point to its new location',
     settingNotSaved: 'Could not save the setting — it will revert on restart',
