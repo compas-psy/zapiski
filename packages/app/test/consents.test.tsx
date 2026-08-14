@@ -51,37 +51,48 @@ function box(label: string): HTMLInputElement {
 }
 
 describe('согласия на экране входа', () => {
-  it('обе галочки сняты: преднажатая галочка согласием не является', async () => {
-    await mount();
-    expect(box(ru.signIn.consentTerms).checked, 'обязательное преднажато').toBe(false);
-    expect(box(ru.signIn.consentMarketing).checked, 'рекламное преднажато').toBe(false);
+  it('галочки у соглашения нет вовсе: договор принимается действием', () => {
+    /*
+     * Пакет CMPAS §3.3 и §5: центральное соглашение принимается однозначным
+     * действием — нажатием кнопки входа, — а рядом с кнопкой сказано, что
+     * именно принимается, и дана ссылка. Обязательная галочка «ради
+     * юридического UX» пакетом прямо не требуется, а та, что здесь стояла,
+     * нарушала ещё и §3.2: одним флажком принимались СРАЗУ соглашение и
+     * политика.
+     */
+    expect(Object.keys(ru.signIn)).not.toContain('consentTerms');
+    expect(ru.signIn.consentByAction.length).toBeGreaterThan(0);
   });
 
-  it('без обязательного согласия войти нельзя ни одним способом', async () => {
+  it('на экране одна галочка — рекламная, и она снята', async () => {
+    await mount();
+    const boxes = [...document.querySelectorAll('input[type="checkbox"]')];
+    expect(boxes, 'галочек больше одной — соглашение снова просят флажком').toHaveLength(1);
+    expect((boxes[0] as HTMLInputElement).checked, 'рекламное преднажато').toBe(false);
+  });
+
+  it('политика не принимается: рядом с ней нет ни одного флажка', async () => {
+    await mount();
+    const privacy = [...document.querySelectorAll('a')].find(
+      (node) => node.getAttribute('href') === LEGAL_URLS.privacy,
+    );
+    expect(privacy, 'ссылки на политику нет вовсе').toBeTruthy();
+    expect(
+      privacy?.closest('label')?.querySelector('input[type="checkbox"]'),
+      'политику снова принимают галочкой — она документ информационный',
+    ).toBeFalsy();
+  });
+
+  it('войти можно сразу: ничего не держит кнопки', async () => {
     await mount();
     const email = document.querySelector('input[type="email"]') as HTMLInputElement;
     fireEvent.change(email, { target: { value: 'marina@ya.ru' } });
 
     const send = screen.getByRole('button', { name: ru.signIn.sendLink });
-    expect((send as HTMLButtonElement).disabled, 'письмо ушло бы без согласия').toBe(true);
+    expect((send as HTMLButtonElement).disabled).toBe(false);
 
     const yandex = screen.queryByRole('button', { name: ru.signIn.yandex });
-    if (yandex) {
-      expect((yandex as HTMLButtonElement).disabled, 'вход Яндексом без согласия').toBe(true);
-    }
-  });
-
-  it('обязательного согласия достаточно: рекламное ничего не держит', async () => {
-    await mount();
-    const email = document.querySelector('input[type="email"]') as HTMLInputElement;
-    fireEvent.change(email, { target: { value: 'marina@ya.ru' } });
-    fireEvent.click(box(ru.signIn.consentTerms));
-
-    const send = screen.getByRole('button', { name: ru.signIn.sendLink });
-    expect(
-      (send as HTMLButtonElement).disabled,
-      'рекламное согласие оказалось обязательным',
-    ).toBe(false);
+    if (yandex) expect((yandex as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('рекламное согласие уезжает отдельным полем, а не в нагрузку', async () => {
@@ -90,7 +101,6 @@ describe('согласия на экране входа', () => {
 
     const email = document.querySelector('input[type="email"]') as HTMLInputElement;
     fireEvent.change(email, { target: { value: 'marina@ya.ru' } });
-    fireEvent.click(box(ru.signIn.consentTerms));
     fireEvent.click(screen.getByRole('button', { name: ru.signIn.sendLink }));
 
     expect(sent).toHaveBeenCalledWith('marina@ya.ru', { marketing: false });
@@ -98,14 +108,11 @@ describe('согласия на экране входа', () => {
   });
 
   it('поставленное рекламное согласие доезжает как `true`', async () => {
-    /* Отдельная сборка экрана, а не второе нажатие: после первого письма
-       экран переходит в «письмо ушло», и формы там уже нет. */
     const app = await mount();
     const sent = vi.spyOn(app, 'sendMagicLink').mockResolvedValue(true);
 
     const email = document.querySelector('input[type="email"]') as HTMLInputElement;
     fireEvent.change(email, { target: { value: 'marina@ya.ru' } });
-    fireEvent.click(box(ru.signIn.consentTerms));
     fireEvent.click(box(ru.signIn.consentMarketing));
     fireEvent.click(screen.getByRole('button', { name: ru.signIn.sendLink }));
 
@@ -113,7 +120,7 @@ describe('согласия на экране входа', () => {
     app.dispose();
   });
 
-  it('документы даны ссылками: согласие вслепую — не согласие', async () => {
+  it('документы даны ссылками ДО нажатия: согласие вслепую — не согласие', async () => {
     await mount();
     const links = [...document.querySelectorAll('a')].map((node) => node.getAttribute('href'));
     expect(links).toContain(LEGAL_URLS.terms);

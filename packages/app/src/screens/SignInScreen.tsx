@@ -50,17 +50,16 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
   const [stage, setStage] = useState<Stage>(initialStage);
   const [cooldown, setCooldown] = useState(0);
   /**
-   * Два согласия, и они разные по природе.
+   * Единственная галочка на экране — рекламная, и она добровольная.
    *
-   * Заказчик: «согласия на рекламу (отдельное согласие, непреднажатое и
-   * необязательное) и обработку ПДн (пользовательское соглашение)».
+   * Соглашение принимается действием (нажатием кнопки входа), поэтому галочки
+   * у него нет вовсе. Политика не принимается никогда: это документ
+   * информационный, и превращать его в флажок запрещено пакетом прямо
+   * (CMPAS Legal Implementation §3.2, §3.3, §21).
    *
-   * Обязательное держит кнопку: без согласия на обработку данных аккаунта не
-   * бывает — аккаунт и есть обработка. Добровольное не влияет ни на что, и
-   * обе галочки сняты изначально: преднажатая галочка согласием не является
-   * ни по закону, ни по совести.
+   * Рекламная снята изначально и ничего не держит: преднажатая галочка
+   * согласием не является ни по закону, ни по совести (§3.1).
    */
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [marketing, setMarketing] = useState(false);
   const [busy, setBusy] = useState(false);
   /**
@@ -142,29 +141,33 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
           </>
         ) : (
           <>
-            {/* Согласия ВЫШЕ кнопок входа: сначала условия, потом действие.
-                Галочка под кнопкой — это согласие, о котором узнают после. */}
-            <label className="za-consent">
-              <input
-                type="checkbox"
-                checked={acceptedTerms}
-                onChange={(event) => setAcceptedTerms(event.target.checked)}
-              />
-              <span>
-                {strings.signIn.consentTerms}
-                {' — '}
-                <a href={LEGAL_URLS.terms} target="_blank" rel="noreferrer">
-                  {strings.signIn.termsLink}
-                </a>
-                {', '}
-                <a href={LEGAL_URLS.privacy} target="_blank" rel="noreferrer">
-                  {strings.signIn.privacyLink}
-                </a>
-              </span>
-            </label>
-            {!acceptedTerms ? (
-              <p className="za-muted za-hint">{strings.signIn.consentTermsRequired}</p>
-            ) : null}
+            {/*
+              Соглашение принимается ДЕЙСТВИЕМ — нажатием кнопки входа, — а не
+              отдельной галочкой (CMPAS Legal Implementation §3.3, §5).
+
+              Что здесь было и почему это неверно. Стояла одна обязательная
+              галочка «принимаю пользовательское соглашение И политику
+              обработки персональных данных». Так нельзя по двум причинам
+              сразу: политика — документ информационный, её не принимают
+              (§3.2), а сводить два документа в один флажок запрещено прямо
+              (§21). Плюс галочка ради галочки — лишний шаг там, где хватает
+              однозначного действия.
+
+              Текст стоит ВЫШЕ кнопок и ссылки открываются до нажатия: человек
+              обязан иметь возможность прочитать то, что принимает, заранее.
+            */}
+            <p className="za-muted za-hint">
+              {strings.signIn.consentByAction}{' '}
+              <a href={LEGAL_URLS.terms} target="_blank" rel="noreferrer">
+                {strings.signIn.termsLink}
+              </a>
+              {'. '}
+              {strings.signIn.privacyNotice}{' '}
+              <a href={LEGAL_URLS.privacy} target="_blank" rel="noreferrer">
+                {strings.signIn.privacyLink}
+              </a>
+              {'.'}
+            </p>
 
             <label className="za-consent">
               <input
@@ -190,7 +193,6 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
                       height={20}
                     />
                   }
-                  disabled={!acceptedTerms}
                   onClick={() => void app.startYandexSignIn({ marketing })}
                 >
                   {strings.signIn.yandex}
@@ -213,7 +215,7 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
               variant="secondary"
               fullWidth
               loading={busy || state.authBusy}
-              disabled={!email.includes('@') || !acceptedTerms}
+              disabled={!email.includes('@')}
               onClick={() => void sendLink()}
             >
               {strings.signIn.sendLink}

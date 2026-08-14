@@ -75,8 +75,8 @@ export const en: AppCatalog = {
   },
 
   signIn: {
-    consentTerms: 'I accept the terms of use and the personal data policy',
-    consentTermsRequired: 'No account without it: an account means processing your data',
+    consentByAction: 'By signing in you accept the',
+    privacyNotice: 'What happens to your data is in the',
     consentMarketing: 'Send me letters about updates and offers',
     consentMarketingHint: 'Optional. You can withdraw it at any time in account settings',
     termsLink: 'Terms of use',
