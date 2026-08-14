@@ -58,6 +58,11 @@ export class ZapiskiCloudBackend implements SyncBackend {
     this.websocket = options.websocket;
   }
 
+  /** Адрес облака: тестовый стенд и прод — не одно и то же место. */
+  get origin(): string {
+    return this.baseUrl;
+  }
+
   private get strings() {
     return catalog(this.locale);
   }

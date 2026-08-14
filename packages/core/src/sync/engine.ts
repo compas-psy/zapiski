@@ -39,13 +39,38 @@ import { SyncError } from './webdav.js';
 
 const STATE_FILE = `${META_DIR}/sync-state.json`;
 
+/** Побайтовое сравнение: одинаковое содержимое сливать не надо. */
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
+}
+
 /** Заметки синкаются раньше служебных CRDT-логов. */
 function byNotesFirst(a: VaultPath, b: VaultPath): number {
   const left = a.startsWith(`${CRDT_DIR}/`) ? 1 : 0;
   const right = b.startsWith(`${CRDT_DIR}/`) ? 1 : 0;
   return left - right || a.localeCompare(b);
 }
-const STATE_VERSION = 1;
+/**
+ * Версия 2: память разложена по местам синхронизации.
+ *
+ * В первой версии она была одна на весь vault, и при переходе с папки в
+ * облако etag'и папки применялись к облаку. Логика читалась так: «локально не
+ * менялось (хеш совпал), у них другой etag — значит забрать чужое», и чужая
+ * версия по тому же имени молча ложилась поверх своей. Ровно тот случай,
+ * когда человек накопил заметки в папке и подключил облако.
+ *
+ * Файл первой версии не переносится, а отбрасывается — и это осознанно.
+ * Приписать старую память новому месту нельзя (она не про него), а приписать
+ * её старому — значит угадывать, какому именно. Пустая память безопасна: без
+ * общей истории движок никого не считает устаревшим и идёт в слияние, где обе
+ * версии выживают. Для уже сошедшихся сторон слияние ничего не меняет:
+ * одинаковые байты распознаются раньше, чем создаётся копия.
+ */
+const STATE_VERSION = 2;
 
 interface SyncEntryState {
   etag: string;
@@ -55,10 +80,16 @@ interface SyncEntryState {
   syncedAt: number;
 }
 
-interface SyncStateFile {
-  version: number;
+/** Память об одном месте синхронизации. */
+interface RemoteState {
   lastSyncAt: number | null;
   entries: Record<VaultPath, SyncEntryState>;
+}
+
+interface SyncStateFile {
+  version: number;
+  /** Ключ — `id` бэкенда и его `origin`: два WebDAV-сервера не одно и то же. */
+  remotes: Record<string, RemoteState>;
 }
 
 export type SyncMode = 'hybrid' | 'peer';
@@ -106,7 +137,9 @@ export class SyncEngine {
   private readonly onIgnored: ((path: VaultPath, reason: string) => void) | undefined;
   /** Что пропустили за текущий проход — без повторов. */
   private ignored = new Set<VaultPath>();
-  private state: SyncStateFile = { version: STATE_VERSION, lastSyncAt: null, entries: {} };
+  private file: SyncStateFile = { version: STATE_VERSION, remotes: {} };
+  /** Память о ТЕКУЩЕМ месте синхронизации. */
+  private state: RemoteState = { lastSyncAt: null, entries: {} };
   private loaded = false;
   private running: Promise<SyncOutcome> | null = null;
 
@@ -131,16 +164,25 @@ export class SyncEngine {
     return catalog(this.locale);
   }
 
+  /** Кого именно мы помним: место, а не просто вид бэкенда. */
+  private get remoteKey(): string {
+    return `${this.backend.id}:${this.backend.origin ?? ''}`;
+  }
+
   async load(): Promise<void> {
     if (this.loaded) return;
     await this.queue.load();
     const file = await readJson<SyncStateFile>(this.storage, STATE_FILE);
-    if (file && file.version === STATE_VERSION && file.entries) this.state = file;
+    /* Файл прежней версии не переносим: чья это память, из него не следует.
+       Пустая память безопаснее угаданной — см. пояснение у STATE_VERSION. */
+    if (file && file.version === STATE_VERSION && file.remotes) this.file = file;
+    this.state = this.file.remotes[this.remoteKey] ?? { lastSyncAt: null, entries: {} };
     this.loaded = true;
   }
 
   private async saveState(): Promise<void> {
-    await writeJsonAtomic(this.storage, STATE_FILE, this.state);
+    this.file.remotes[this.remoteKey] = this.state;
+    await writeJsonAtomic(this.storage, STATE_FILE, this.file);
   }
 
   /** Регистрация локального изменения (автосохранение → debounce 5 с, BEHAVIOR §6). */
@@ -373,6 +415,17 @@ export class SyncEngine {
       return;
     }
 
+    /* Байты совпали — сливать нечего.
+       Проверка стоит ДО всех веток слияния и нужна ровно при первом
+       соединении с новым местом: общей истории нет, обе стороны считаются
+       изменившимися, и без неё одинаковая зашифрованная заметка получила бы
+       копию «(конфликт)» на пустом месте. */
+    if (sameBytes(localData, fetched.data)) {
+      this.remember(path, fetched.etag, localData);
+      await this.queue.done(path);
+      return;
+    }
+
     // 1. Зашифрованные — автослияние невозможно, сохраняем обе (BEHAVIOR §5.4).
     if (isEncryptedPath(path)) {
       const conflictPath = this.conflictPathFor(path);
@@ -406,6 +459,39 @@ export class SyncEngine {
     const base = state?.base ?? '';
     const meta = this.vault.metaOf(path);
     const noteId: NoteId = meta?.id ?? stemOf(path);
+
+    /*
+     * Первая встреча с этим местом: общей истории у сторон нет.
+     *
+     * Так выглядит ровно тот случай, о котором спрашивают в первую очередь:
+     * человек накопил заметки в папке и подключил облако, а там по тому же
+     * имени лежит другой текст. Сливать нечего — это не две правки одного
+     * текста, а два независимых текста, и построчное слияние склеило бы из
+     * них третий, которого не писал никто.
+     *
+     * Поэтому обе версии остаются видимыми: своя — на своём месте, чужая —
+     * копией рядом, с названием места в имени. Ровно так же продукт уже
+     * поступает с зашифрованными заметками (BEHAVIOR §5.4), и так же ведут
+     * себя все синхронизации, которые человек видел до нас.
+     */
+    if (state === undefined) {
+      const conflictPath = this.conflictPathFor(
+        path,
+        this.strings.notes.conflictPlaceSuffix(this.backend.title),
+      );
+      await writeAtomic(this.storage, conflictPath, fetched.data);
+      const { etag } = await this.backend.put(path, localData);
+      this.remember(path, etag, localData);
+      await this.queue.done(path);
+      await this.vault.refresh(conflictPath);
+      outcome.conflicts += 1;
+      /* Текст реестра о том, что сохранены обе версии: он описывает именно
+         это, а своей формулировки заводить незачем (BEHAVIOR §11). */
+      if (!outcome.messages.includes(this.strings.errors.conflictEncrypted)) {
+        outcome.messages.push(this.strings.errors.conflictEncrypted);
+      }
+      return;
+    }
 
     // Гибридный режим: снапшот локальной версии уходит в историю, облачная
     // версия — главная (ТЗ §4.2).
@@ -462,10 +548,11 @@ export class SyncEngine {
   }
 
   /** «Дневник (конфликт, устройство Windows)» — BEHAVIOR §5.4. */
-  private conflictPathFor(path: VaultPath): VaultPath {
+  private conflictPathFor(path: VaultPath, suffix?: string): VaultPath {
     const dir = dirName(path);
     const extension = path.endsWith('.md.enc') ? '.md.enc' : '.md';
-    const name = `${stemOf(path)} ${this.strings.notes.conflictSuffix(this.deviceName)}${extension}`;
+    const mark = suffix ?? this.strings.notes.conflictSuffix(this.deviceName);
+    const name = `${stemOf(path)} ${mark}${extension}`;
     return dir === '' ? name : `${dir}/${name}`;
   }
 

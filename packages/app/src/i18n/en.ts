@@ -472,6 +472,11 @@ export const en: AppCatalog = {
       backends: 'Where the notes live',
       whereHint:
         'One place at a time: either this device only, or this device plus one chosen storage. Switching loses nothing — pending changes are sent before leaving',
+      firstSyncSummary: (pushed: number, pulled: number, kept: number): string => {
+        const parts = [`Uploaded ${pushed}`, `received ${pulled}`];
+        if (kept > 0) parts.push(`both versions kept: ${kept}`);
+        return parts.join(' · ');
+      },
       modeLocalOnly: 'This device only',
       modeLocalOnlyHint: 'No sync. Notes stay in the folder and go nowhere',
       modeCopy: 'A copy in another folder',

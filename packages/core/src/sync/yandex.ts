@@ -39,6 +39,8 @@ interface YandexResource {
 export class YandexDiskBackend implements SyncBackend {
   readonly id = 'yandex' as const;
   readonly title = 'Яндекс.Диск';
+  /** Диск у аккаунта один; место различать не по чему, и не нужно. */
+  readonly origin = 'yandex-disk';
   private readonly token: string;
   private readonly root: string;
   private readonly fetchImpl: FetchLike;

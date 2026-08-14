@@ -39,6 +39,10 @@ export class SyncError extends Error {
 
 export class WebDAVBackend implements SyncBackend {
   readonly id = 'webdav' as const;
+  /** Адрес сервера: два разных WebDAV — два разных места, память не общая. */
+  get origin(): string {
+    return this.baseUrl;
+  }
   readonly title: string;
   protected readonly baseUrl: string;
   protected readonly fetchImpl: FetchLike;

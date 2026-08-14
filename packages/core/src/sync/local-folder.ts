@@ -10,11 +10,20 @@ export interface LocalFolderOptions {
   title?: string;
   /** Синкать ли служебные CRDT-логи — нужно для three-way merge (ТЗ §4.2). */
   includeCrdt?: boolean;
+  /** Постоянный признак ЭТОЙ папки: путь или иной устойчивый ключ. */
+  origin?: string;
 }
 
 export class LocalFolderBackend implements SyncBackend {
   readonly id = 'local' as const;
   readonly title: string;
+  /**
+   * Какая именно папка. Память синка привязана к месту, и две разные папки —
+   * это два разных места: применить etag'и одной ко второй значит объявить
+   * чужие файлы устаревшими. По умолчанию берётся название папки — то же,
+   * что человек видит в настройках.
+   */
+  readonly origin: string;
   private readonly includeCrdt: boolean;
 
   constructor(
@@ -22,6 +31,7 @@ export class LocalFolderBackend implements SyncBackend {
     options: LocalFolderOptions = {},
   ) {
     this.title = options.title ?? 'Локальная папка';
+    this.origin = options.origin ?? this.title;
     this.includeCrdt = options.includeCrdt ?? true;
   }
 

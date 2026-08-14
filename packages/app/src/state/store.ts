@@ -2159,11 +2159,22 @@ export class AppController {
   }
 
   attachBackend(backend: SyncBackend | null): void {
+    const changed = backend?.id !== this.state.backendId;
     this.backend = backend;
     this.engine = backend && this.vault ? new SyncEngine(this.vault, backend) : null;
     this.patch({ backendId: backend?.id ?? null });
     this.persistPref(PREF.backend, backend?.id ?? null);
-    if (this.engine) void this.syncNow();
+    /*
+     * Первый обмен с новым местом заканчивается тостом с числами.
+     *
+     * Подсказка в настройках обещает: накопленное уедет туда, тамошнее
+     * приедет сюда, при расхождении сохранятся обе версии. Обещание надо
+     * закрыть фактом — иначе человек нажал, что-то произошло, и проверять
+     * ему приходится открыванием папки. Особенно это важно из-за копий
+     * «(конфликт, …)»: увидеть их в списке без объяснения — та же паника,
+     * что и от пропажи.
+     */
+    if (this.engine) void this.syncNow({ announce: changed });
   }
 
   /** Автосинк после сохранения — debounce 5 с (BEHAVIOR §6). */
@@ -2178,7 +2189,7 @@ export class AppController {
     }, 5000);
   }
 
-  async syncNow(): Promise<void> {
+  async syncNow(options: { announce?: boolean } = {}): Promise<void> {
     const engine = this.engine;
     if (!engine) return;
     if (!this.state.online) {
@@ -2191,6 +2202,15 @@ export class AppController {
       const outcome = await engine.sync();
       this.patch({ sync: outcome, syncError: outcome.error ?? null });
       for (const message of outcome.messages) this.toast({ message });
+      if (options.announce === true && outcome.error === undefined) {
+        this.toast({
+          message: this.strings.settings.sync.firstSyncSummary(
+            outcome.pushed,
+            outcome.pulled,
+            outcome.conflicts,
+          ),
+        });
+      }
       await this.refresh();
     } catch {
       /* Сетевые ошибки — только в статусе синка, не модалками (BEHAVIOR §0). */

@@ -374,6 +374,18 @@ export interface RemoteEntry {
 export interface SyncBackend {
   readonly id: 'local' | 'webdav' | 'yandex' | 'zapiski';
   readonly title: string;
+  /**
+   * Кто именно на той стороне: адрес сервера, корень папки — что угодно
+   * постоянное для ЭТОГО контрагента.
+   *
+   * Нужно затем, что движок синка помнит по каждому пути `etag` и хеш
+   * последнего согласованного содержимого, а эта память имеет смысл только
+   * рядом с тем, с кем сходились. Без различения двух WebDAV-серверов (у них
+   * общий `id`) память одного применялась бы ко второму: «локально не
+   * менялось, у них etag другой» — и чужая версия молча ложилась бы поверх
+   * своей. Не задан — считаем, что место одно на весь `id`.
+   */
+  readonly origin?: string;
   list(): Promise<RemoteEntry[]>;
   get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null>;
   put(path: VaultPath, data: Uint8Array, ifMatch?: string): Promise<{ etag: string }>;

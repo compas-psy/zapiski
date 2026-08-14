@@ -45,7 +45,9 @@ export const en: Catalog = {
   notes: {
     untitled: 'Untitled',
     encryptedPlaceholder: 'encrypted — contents are not searched',
-    conflictSuffix: (device: string): string => `(conflict, device ${device})`,
+    conflictSuffix: (device: string): string =>
+      device === '' ? '(conflict)' : `(conflict, device ${device})`,
+    conflictPlaceSuffix: (place: string): string => `(conflict, ${place})`,
   },
   empty: {
     list: 'It is quiet here',
