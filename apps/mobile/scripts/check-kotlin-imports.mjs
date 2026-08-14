@@ -70,6 +70,76 @@ function kotlinFiles(dir) {
 
 const files = kotlinFiles(ROOT);
 
+/**
+ * Незакрытый комментарий — из-за ВЛОЖЕННОСТИ.
+ *
+ * В Kotlin блочные комментарии вкладываются друг в друга, в отличие от Java,
+ * C и JavaScript. Значит `/*` внутри комментария — не текст, а начало нового
+ * комментария, и закрывать надо оба. Поймано на живом примере: в KDoc стояло
+ * `android/` со звёздочками, компилятор увидел вложенный комментарий, и файл
+ * «кончился» посреди него — `Unclosed comment` в конце файла и следом
+ * `Unresolved reference: MainActivity` в трёх чужих файлах. Четыре минуты
+ * сборки, а причина — в комментарии.
+ *
+ * Считаем глубину так же, как компилятор: строки и однострочные комментарии
+ * пропускаем, `/*` углубляет, `*` со слэшем выныривает. В конце файла глубина
+ * обязана быть нулевой.
+ */
+function unclosedComment(source) {
+  let depth = 0;
+  let line = 1;
+  let opened = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    const two = source.slice(i, i + 2);
+    if (source[i] === '\n') line += 1;
+    if (depth === 0) {
+      if (two === '//') {
+        while (i < source.length && source[i] !== '\n') i += 1;
+        line += 1;
+        continue;
+      }
+      if (source[i] === '"') {
+        /* Строка: внутри неё комментариев нет. Тройные кавычки закрываются
+           той же проверкой — вложенных `"` в них не бывает без экранирования. */
+        i += 1;
+        while (i < source.length && source[i] !== '"') {
+          if (source[i] === '\\') i += 1;
+          if (source[i] === '\n') line += 1;
+          i += 1;
+        }
+        continue;
+      }
+    }
+    if (two === '/*') {
+      if (depth === 0) opened = line;
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (two === '*/' && depth > 0) {
+      depth -= 1;
+      i += 1;
+    }
+  }
+  return depth > 0 ? opened : 0;
+}
+
+const unclosed = [];
+for (const file of files) {
+  const line = unclosedComment(readFileSync(file, 'utf8'));
+  if (line > 0) {
+    unclosed.push(
+      `${relative(process.cwd(), file)}:${line}: комментарий не закрыт — ` +
+        'скорее всего, внутри него есть «/*»: в Kotlin комментарии вкладываются',
+    );
+  }
+}
+if (unclosed.length > 0) {
+  console.error('kotlin-imports: незакрытые комментарии');
+  for (const problem of unclosed) console.error(`  · ${problem}`);
+  process.exit(1);
+}
+
 /** Всё, что объявлено в нашем пакете: такие имена видны без импорта. */
 const ours = new Set();
 for (const file of files) {
