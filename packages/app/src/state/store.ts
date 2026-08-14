@@ -168,6 +168,16 @@ export interface AppState {
   backendId: SyncBackend['id'] | null;
   online: boolean;
 
+  /**
+   * Раскрытые узлы дерева папок.
+   *
+   * Живёт здесь, а не внутри `Tree`, из-за телефона: там библиотека — ящик, и
+   * выбор папки его закрывает. `Drawer` при закрытии размонтируется полностью,
+   * вместе с внутренним состоянием дерева, — значит раскрытая папка сворачивалась
+   * обратно, и подпапка не появлялась никогда, сколько по ней ни тапай.
+   */
+  expandedFolders: string[];
+
   libraryOpen: boolean;
   paletteOpen: boolean;
   infoOpen: boolean;
@@ -245,6 +255,7 @@ function initialState(locale: Locale): AppState {
     sync: { state: 'offline', lastSyncAt: null, noteCount: 0, bytes: 0 },
     backendId: null,
     online: true,
+    expandedFolders: [],
     libraryOpen: false,
     paletteOpen: false,
     infoOpen: false,
@@ -1121,12 +1132,45 @@ export class AppController {
     return false;
   }
 
+  /**
+   * Раскрыть или свернуть узел дерева папок.
+   *
+   * Состояние общее для всех показов библиотеки: на телефоне дерево живёт в
+   * ящике, который закрывается на каждом выборе папки, и хранить раскрытие
+   * внутри компонента значит терять его при каждом закрытии.
+   */
+  toggleFolderExpanded(path: string, expanded: boolean): void {
+    const current = this.state.expandedFolders;
+    if (expanded === current.includes(path)) return;
+    this.patch({
+      expandedFolders: expanded
+        ? [...current, path]
+        : current.filter((item) => item !== path),
+    });
+  }
+
   openFolder(folder: string | null): void {
     /* Прежние файлы гасим сразу: список, оставшийся от предыдущей папки,
        успевает мигнуть в новой и выглядит как чужие файлы внутри неё. */
     this.patch({ folder, tag: null, scope: 'all', folderFiles: [] });
+    /* Открытая папка раскрыта вместе со всеми предками: вернувшись в
+       библиотеку, человек видит, где он находится, и видит соседние подпапки —
+       а не свёрнутый корень, из которого дорогу надо прокладывать заново. */
+    if (folder !== null && folder !== '') this.expandAncestors(folder);
     this.navigate(folder ? { name: 'list', folder } : { name: 'list' });
     if (folder !== null && isAttachmentDir(folder)) void this.loadFolderFiles(folder);
+  }
+
+  /** Раскрыть путь целиком: `Практика/Супервизия/2026` — три узла. */
+  private expandAncestors(folder: string): void {
+    const parts = folder.split('/').filter(Boolean);
+    const paths: string[] = [];
+    for (let index = 1; index <= parts.length; index += 1) {
+      paths.push(parts.slice(0, index).join('/'));
+    }
+    const missing = paths.filter((path) => !this.state.expandedFolders.includes(path));
+    if (missing.length === 0) return;
+    this.patch({ expandedFolders: [...this.state.expandedFolders, ...missing] });
   }
 
   /**

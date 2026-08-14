@@ -251,6 +251,12 @@ export function LibraryPanel(): ReactNode {
                 nodes={folderNodes}
                 label={strings.library.folders}
                 selectedId={state.folder ?? undefined}
+                /* Раскрытие держит контроллер: на телефоне выбор папки
+                   закрывает ящик, а с ним размонтируется и дерево — своё
+                   состояние оно бы потеряло, и подпапка исчезала бы сразу
+                   после того, как её раскрыли. */
+                expandedIds={state.expandedFolders}
+                onToggle={(id, expanded) => app.toggleFolderExpanded(id, expanded)}
                 onSelect={(id) => app.openFolder(id)}
                 nodeProps={(id) => ({
                   ...nodePropsFor(pressedFolder, folderPress)(id),

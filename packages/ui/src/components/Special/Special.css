@@ -316,12 +316,20 @@
 .z-tree__item--muted.z-tree__item--selected {
   color: var(--accent-on-soft);
 }
+/* Шеврон — самостоятельная цель для пальца, а не значок 16 px: по нему
+   раскрывают папку, не уходя из библиотеки (см. `Tree.tsx`). Ширина и высота
+   взяты по строке дерева; больше сделать нельзя, не разогнав список, меньше —
+   значит снова не попасть. Отрицательные поля съедают часть отступа строки,
+   чтобы зона выросла, а разметка не поехала. */
 .z-tree__chevron {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  inline-size: 16px;
+  inline-size: 28px;
+  min-block-size: 34px;
+  margin-block: calc(-1 * var(--sp-4));
+  margin-inline-start: calc(-1 * var(--sp-4));
   color: var(--text-tertiary);
   transition: transform var(--dur-base) var(--ease-out);
 }
