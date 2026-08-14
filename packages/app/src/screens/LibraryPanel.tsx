@@ -84,7 +84,22 @@ export function LibraryPanel(): ReactNode {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const pressedFolder = useRef<string | null>(null);
   const pressedTag = useRef<string | null>(null);
-  const openFolderMenu = useCallback(() => setFolderMenu(pressedFolder.current), []);
+  /** Пути служебных папок вложений — их создаёт приложение. */
+  const systemFolders = useMemo(
+    () => new Set(state.folders.filter((node) => node.system).map((node) => node.path)),
+    [state.folders],
+  );
+  /*
+    Меню папки вложений не открывается вовсе. «Переименовать» и «Переместить»
+    там означали бы разрыв: новые файлы всё равно лягут в `Images`, а ссылки в
+    заметках указывают на прежний путь. Спрятать такую папку можно настройкой —
+    это обратимо и ничего не ломает.
+  */
+  const openFolderMenu = useCallback(() => {
+    const path = pressedFolder.current;
+    if (path === null || systemFolders.has(path)) return;
+    setFolderMenu(path);
+  }, [systemFolders]);
   const openTagMenu = useCallback(() => setTagMenu(pressedTag.current), []);
   const folderPress = useLongPress(openFolderMenu, haptic);
   const tagPress = useLongPress(openTagMenu, haptic);
@@ -136,7 +151,19 @@ export function LibraryPanel(): ReactNode {
 
   const screenState = app.screenState('library', state.folders.length === 0);
 
-  const folderNodes = useMemo(() => state.folders.map(toTreeNode), [state.folders]);
+  /*
+    Служебные папки вложений можно спрятать (заказчик: «должно быть можно
+    скрыть»). Прячется только показ в дереве: файлы остаются на месте, вложения
+    в заметках продолжают открываться, папки видны в файловом менеджере.
+  */
+  const showAttachmentFolders = app.attachmentFoldersShownValue();
+  const folderNodes = useMemo(
+    () =>
+      state.folders
+        .filter((node) => showAttachmentFolders || !node.system)
+        .map(toTreeNode),
+    [state.folders, showAttachmentFolders],
+  );
   const folderPaths = useMemo(() => flattenFolders(state.folders), [state.folders]);
   const tagNodes = useMemo(() => buildTagTree(state.tags), [state.tags]);
 
@@ -227,7 +254,9 @@ export function LibraryPanel(): ReactNode {
                 onSelect={(id) => app.openFolder(id)}
                 nodeProps={(id) => ({
                   ...nodePropsFor(pressedFolder, folderPress)(id),
-                  ...dropPropsFor(id),
+                  /* Папка вложений заметку не принимает: заметка в `Images`
+                     потерялась бы среди файлов, а найти её было бы негде. */
+                  ...(systemFolders.has(id) ? {} : dropPropsFor(id)),
                 })}
               />
               {/*
@@ -401,6 +430,9 @@ function toTreeNode(node: FolderNode): TreeNode {
     icon: <IconFolder size={15} />,
     // REBUILD §1.12: ноль не отображается вовсе.
     count: node.count > 0 ? node.count : undefined,
+    /* Папку вложений создало приложение — она читается вторым планом
+       (заказчик: «так как это "системные" папки — они должны быть серыми»). */
+    ...(node.system ? { muted: true } : {}),
     ...(node.children.length > 0 ? { children: node.children.map(toTreeNode) } : {}),
   };
 }

@@ -299,6 +299,23 @@
   background-color: var(--accent-soft);
   color: var(--accent-on-soft);
 }
+/*
+  Служебный узел — папка, которую создало приложение, а не человек: `Images`,
+  `Audio`, `Other files`. Он остаётся полноценной строкой (открывается, считает
+  файлы), но в столбце папок читается вторым планом — иначе три служебные папки
+  спорят за внимание с папками, которые человек завёл сам.
+
+  Приглушается вся строка, а не только подпись: подпись серым при чёрном
+  счётчике выглядит поломкой, а не замыслом. Выбранное состояние сильнее —
+  открытая папка обязана быть видна.
+*/
+.z-tree__item--muted,
+.z-tree__item--muted .z-tree__count {
+  color: var(--text-secondary);
+}
+.z-tree__item--muted.z-tree__item--selected {
+  color: var(--accent-on-soft);
+}
 .z-tree__chevron {
   display: inline-flex;
   flex: none;

@@ -113,8 +113,15 @@ describe('под каким именем', () => {
 });
 
 describe('фактический путь виден человеку', () => {
-  it('общая папка', async () => {
-    expect((await boot()).attachmentPathHint()).toBe('attachments');
+  it('общая папка — это три папки по типу файла, а не одна attachments', async () => {
+    /* Здесь печаталось `attachments`, и это была неправда: файлы уже давно
+       ложатся в `Images`, `Audio` и `Other files` (`attachmentDirFor`). То
+       есть настройка отправляла человека искать вложения по пути, которого у
+       него нет. Проверка держит соответствие подписи и поведения. */
+    const hint = (await boot()).attachmentPathHint();
+    expect(hint).toContain('Images');
+    expect(hint).toContain('Audio');
+    expect(hint).toContain('Other files');
   });
 
   it('своя папка показывает именно её', async () => {

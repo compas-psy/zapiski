@@ -32,6 +32,23 @@ export const ATTACHMENT_DIRS = {
   other: 'Other files',
 } as const;
 
+/**
+ * Папка вложений — та, которую создало приложение, а не человек.
+ *
+ * Проверка только по КОРНЮ хранилища: своя папка «Images» внутри «Практики» —
+ * папка человека, и обращаться с ней как со служебной нельзя. Старая единая
+ * `attachments/` тоже считается системной: там вложения прежней раскладки.
+ *
+ * Признак нужен интерфейсу: такие папки показываются серым, счёт в них идёт по
+ * файлам, а не по заметкам, их можно спрятать и в них нельзя перенести заметку.
+ */
+export function isAttachmentDir(path: VaultPath): boolean {
+  const normalized = normalizePath(path);
+  if (normalized === '' || normalized.includes('/')) return false;
+  const known: string[] = [...Object.values(ATTACHMENT_DIRS), ATTACHMENTS_DIR];
+  return known.includes(normalized);
+}
+
 /** Расширения, которые кладём в `Audio`. Остальное аудио редкое и идёт в «прочее». */
 const AUDIO_EXTENSIONS = new Set(['mp3', 'ogg', 'opus', 'wav', 'm4a', 'aac', 'flac']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'heic', 'bmp']);

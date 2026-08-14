@@ -223,6 +223,17 @@ export const en: AppCatalog = {
       'A camera photo is 4000 px and several megabytes; a note shows it at column width. GIF and SVG are left alone.',
     actualPath: 'Files go here',
     findOrphans: 'Find unused attachments',
+    sharedHint: 'Images · Audio · Other files — by file type',
+    systemFolders: 'Attachment folders in the library',
+    systemFolderValues: {
+      show: 'Show',
+      hide: 'Hide',
+    },
+    systemFoldersHint:
+      'Images, Audio and Other files are created by the app, so the folder list shows them greyed out. You can hide them — the files stay where they are and attachments keep working.',
+    emptyFolder: 'No files in this folder yet',
+    systemFolderNote: 'This folder holds attachments of your notes, not the notes themselves.',
+    openFailed: 'Could not open this file',
   },
 
   help: {

@@ -14,6 +14,13 @@ export interface TreeNode {
   icon?: ReactNode;
   /** Счётчик — моно 11, без бейджей-кружков. */
   count?: ReactNode;
+  /**
+   * Служебный узел: строка приглушена.
+   *
+   * Заведено для папок вложений (`Images`, `Audio`, `Other files`) — их создаёт
+   * приложение, и в дереве они не должны выглядеть наравне с папками человека.
+   */
+  muted?: boolean;
   children?: readonly TreeNode[];
 }
 
@@ -85,7 +92,11 @@ export function Tree({
             aria-level={level + 1}
             aria-expanded={hasChildren ? isOpen : undefined}
             aria-selected={isSelected}
-            className={cx('z-tree__item', isSelected && 'z-tree__item--selected')}
+            className={cx(
+              'z-tree__item',
+              isSelected && 'z-tree__item--selected',
+              node.muted && 'z-tree__item--muted',
+            )}
             style={{ '--z-tree-level': level } as CSSProperties}
             onClick={() => {
               if (hasChildren) toggle(node.id);

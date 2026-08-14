@@ -312,6 +312,28 @@ function AttachmentsSection(): ReactNode {
       <Section>{copy.actualPath}</Section>
       <p className="za-tertiary-mono">{app.attachmentPathHint()}</p>
 
+      {/*
+        Служебные папки в библиотеке (замечание заказчика: «так как это
+        "системные" папки — они должны быть серыми и в настройках и должно
+        быть можно скрыть»).
+
+        Показывать по умолчанию: спрятанная папка означала бы, что человек не
+        найдёт в приложении свои же файлы. Серый вид в дереве отделяет их от
+        папок, которые он завёл сам, а выключатель — для тех, кому и этого
+        много. Скрытие ничего не удаляет, и это сказано прямо под выбором.
+      */}
+      <Section>{copy.systemFolders}</Section>
+      <SegmentedControl<'show' | 'hide'>
+        label={copy.systemFolders}
+        value={app.attachmentFoldersShownValue() ? 'show' : 'hide'}
+        onChange={(value) => void app.setAttachmentFoldersShown(value === 'show')}
+        options={[
+          { value: 'show', label: copy.systemFolderValues.show },
+          { value: 'hide', label: copy.systemFolderValues.hide },
+        ]}
+      />
+      <p className="za-muted">{copy.systemFoldersHint}</p>
+
       <Button
         variant="secondary"
         onClick={() => void app.vaultRef?.orphanAttachments().then((list) => setOrphans(list.length))}

@@ -32,6 +32,7 @@ import {
   rewriteToCurrentVersion,
   ATTACHMENTS_DIR,
   attachmentDirFor,
+  isAttachmentDir,
   stemOf,
   storedLocale,
   toBase64,
@@ -40,6 +41,7 @@ import {
   writeJsonAtomic,
   type FolderNode,
   type AddAttachmentOptions,
+  type AttachmentEntry,
   type AttachmentNaming,
   type MasterKey,
   type Note,
@@ -67,6 +69,7 @@ import type {
   SettingsSection,
 } from '../contract.js';
 import { strings as buildStrings, DEFAULT_LOCALE, type Locale, type Strings } from '../i18n/index.js';
+import { attachmentMime } from '../lib/attachment-urls.js';
 import { cropImage, type CropRect } from '../lib/crop.js';
 import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
@@ -140,6 +143,15 @@ export interface AppState {
   folders: FolderNode[];
   tags: Array<{ tag: string; count: number }>;
   trash: TrashEntry[];
+  /**
+   * Файлы открытой папки вложений — `Images`, `Audio`, `Other files`.
+   *
+   * Заказчик: «файлы по факту в папках есть, но они не отображаются
+   * приложением». Так и было: список показывает заметки, а в этих папках лежат
+   * файлы, поэтому открытая папка выглядела пустой при полной папке на диске.
+   * Пусто, когда открыта не папка вложений.
+   */
+  folderFiles: AttachmentEntry[];
 
   scope: ListScope;
   folder: string | null;
@@ -221,6 +233,7 @@ function initialState(locale: Locale): AppState {
     folders: [],
     tags: [],
     trash: [],
+    folderFiles: [],
     scope: 'all',
     folder: null,
     tag: null,
@@ -272,6 +285,8 @@ const PREF = {
   attachmentNaming: 'attachments.naming',
   attachmentFolder: 'attachments.folder',
   attachmentDownscale: 'attachments.downscale',
+  /** Показывать ли служебные папки вложений в дереве библиотеки. */
+  attachmentFoldersShown: 'attachments.showFolders',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -335,6 +350,14 @@ export class AppController {
   private attachmentFolder = '';
   /** Ужимать ли крупные изображения. Умолчание из §5 — да. */
   private attachmentDownscale = true;
+  /**
+   * Показывать папки вложений в библиотеке.
+   *
+   * По умолчанию — да: спрятанная по умолчанию папка означала бы, что человек
+   * не найдёт свои файлы вовсе, а они его. Серый вид уже отделяет их от папок,
+   * которые завёл он сам; выключатель — для тех, кому и этого много.
+   */
+  private attachmentFoldersShown = true;
   /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
@@ -446,6 +469,7 @@ export class AppController {
       savedNaming,
       savedFolder,
       savedDownscale,
+      savedFoldersShown,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -460,6 +484,7 @@ export class AppController {
       this.host.prefs.get<unknown>(PREF.attachmentNaming, null),
       this.host.prefs.get<string>(PREF.attachmentFolder, ''),
       this.host.prefs.get<boolean>(PREF.attachmentDownscale, true),
+      this.host.prefs.get<boolean>(PREF.attachmentFoldersShown, true),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -477,6 +502,7 @@ export class AppController {
     }
     this.attachmentFolder = savedFolder;
     this.attachmentDownscale = savedDownscale;
+    this.attachmentFoldersShown = savedFoldersShown;
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -896,6 +922,10 @@ export class AppController {
       trash: vault.listTrash(),
       sync: this.engine ? this.engine.status() : this.state.sync,
     });
+    /* Открыта папка вложений — перечитываем и её содержимое: вложение только
+       что положили туда именно этим действием, и список обязан это показать. */
+    const open = this.state.folder;
+    if (open !== null && isAttachmentDir(open)) await this.loadFolderFiles(open);
   }
 
   /**
@@ -1000,8 +1030,61 @@ export class AppController {
   }
 
   openFolder(folder: string | null): void {
-    this.patch({ folder, tag: null, scope: 'all' });
+    /* Прежние файлы гасим сразу: список, оставшийся от предыдущей папки,
+       успевает мигнуть в новой и выглядит как чужие файлы внутри неё. */
+    this.patch({ folder, tag: null, scope: 'all', folderFiles: [] });
     this.navigate(folder ? { name: 'list', folder } : { name: 'list' });
+    if (folder !== null && isAttachmentDir(folder)) void this.loadFolderFiles(folder);
+  }
+
+  /**
+   * Прочитать файлы папки вложений в состояние.
+   *
+   * Чтение отдельным шагом, а не частью `refresh()` для всех папок: `stat` на
+   * каждый файл — обращение к диску, а на Android ещё и к системному
+   * провайдеру. Делать это на каждое обновление списка ради папки, которая не
+   * открыта, незачем.
+   */
+  private async loadFolderFiles(folder: string): Promise<void> {
+    const vault = this.vault;
+    if (!vault) return;
+    const files = await vault.attachmentsIn(folder).catch(() => []);
+    /* За время чтения человек мог уйти в другую папку — тогда его список
+       перезаписывать нельзя. */
+    if (this.state.folder === folder) this.patch({ folderFiles: files });
+  }
+
+  /**
+   * Открыть файл вложения тем, чем его открывает система.
+   *
+   * Порядок тот же, что у вложения в тексте (§5): сперва оболочка — ей
+   * доступен настоящий путь или `content://`, — и только если она не смогла,
+   * `blob:` через браузер. В вебе другого пути нет вовсе.
+   */
+  async openAttachmentFile(path: VaultPath): Promise<boolean> {
+    const vault = this.vault;
+    if (!vault) return false;
+    if (await this.host.openAttachment?.(path).catch(() => false)) return true;
+    const bytes = await vault.storage.read(path).catch(() => null);
+    if (!bytes) {
+      this.toast({ message: this.strings.attachments.openFailed });
+      return false;
+    }
+    /* Копия в свой буфер: `Uint8Array` из порта может смотреть в общий пул. */
+    const blob = new Blob([bytes.slice() as unknown as BlobPart], { type: attachmentMime(path) });
+    const url = URL.createObjectURL(blob);
+    try {
+      await this.host.openExternal(url);
+      return true;
+    } catch {
+      this.toast({ message: this.strings.attachments.openFailed });
+      return false;
+    } finally {
+      /* Адрес нужен ровно до того, как его подхватит открывшая сторона.
+         Отзыв сразу закрыл бы файл у неё под руками, поэтому с задержкой —
+         иначе байты каждого открытого файла живут до конца сеанса. */
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   }
 
   openTag(tag: string): void {
@@ -1181,6 +1264,22 @@ export class AppController {
     this.patch({});
   }
 
+  /** Показывать ли служебные папки вложений в дереве библиотеки. */
+  attachmentFoldersShownValue(): boolean {
+    return this.attachmentFoldersShown;
+  }
+
+  async setAttachmentFoldersShown(value: boolean): Promise<void> {
+    this.attachmentFoldersShown = value;
+    await this.host.prefs.set(PREF.attachmentFoldersShown, value);
+    /* Спрятали папку, в которой человек сейчас стоит, — уводим его к списку
+       заметок. Иначе он остаётся на экране папки, которой в дереве больше нет,
+       и вернуться в неё нечем. */
+    const open = this.state.folder;
+    if (!value && open !== null && isAttachmentDir(open)) this.openFolder(null);
+    else this.patch({});
+  }
+
   /**
    * Фактический путь, куда сейчас попадёт вложение, — то, что показывается
    * моноширинным внизу раздела настроек. Без него настройка остаётся
@@ -1191,7 +1290,11 @@ export class AppController {
     if (this.attachmentPlacement === 'custom') {
       return this.attachmentFolder === '' ? ATTACHMENTS_DIR : this.attachmentFolder;
     }
-    return ATTACHMENTS_DIR;
+    /* «Общая в корне» — это три папки по типу файла, а не одна `attachments`.
+       Здесь до сих пор печаталось старое имя, то есть настройка показывала
+       путь, по которому вложений уже давно нет: человек шёл искать файлы не
+       туда и не находил. */
+    return this.strings.attachments.sharedHint;
   }
 
   // ── Папки (BEHAVIOR, дерево папок) ─────────────────────────────────────────

@@ -19,11 +19,16 @@ import { useStrings } from '../state/context.js';
 /**
  * Плоский список путей всех папок — для выбора получателя при переносе.
  * Лежит здесь, а не в экране: получателя выбирают и для папки, и для заметки.
+ *
+ * Служебные папки вложений (`Images`, `Audio`, `Other files`) в список не
+ * попадают: они для файлов, а не для заметок, и предлагать их как место для
+ * заметки значит предлагать заведомо неудачный выбор.
  */
 export function flattenFolders(nodes: readonly FolderNode[]): string[] {
   const out: string[] = [];
   const walk = (list: readonly FolderNode[]): void => {
     for (const node of list) {
+      if (node.system) continue;
       out.push(node.path);
       walk(node.children);
     }

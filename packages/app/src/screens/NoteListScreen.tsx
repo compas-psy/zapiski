@@ -7,7 +7,7 @@
  * экрана.
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import type { NoteMeta } from '@zapiski/core';
+import { isAttachmentDir, type NoteMeta } from '@zapiski/core';
 import { Button, Fab, IconButton, IconPlus, IconSearch } from '@zapiski/ui';
 import { useApp, useAppState, useLayout, useStrings } from '../state/context.js';
 import { IconMenu } from '../components/icons.js';
@@ -15,6 +15,7 @@ import { NoteRow } from '../components/NoteRow.js';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
 import { flattenFolders, FolderPickerDialog } from '../components/FolderDialogs.js';
+import { AttachmentFolderView } from './AttachmentFolderView.js';
 import { EncryptSheet } from './EncryptSheet.js';
 import {
   EmptyBlock,
@@ -63,6 +64,14 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
     [notes, sortMode, strings],
   );
 
+  /*
+    Открыта служебная папка вложений — показываем файлы, а не заметки.
+    Заказчик: «файлы по факту в папках есть, но они не отображаются
+    приложением». Их и не могло быть видно: список умеет только заметки, а
+    заметок в `Images`, `Audio` и `Other files` не бывает.
+  */
+  const attachmentFolder = state.folder !== null && isAttachmentDir(state.folder);
+
   const screenState = app.screenState(state.folder || state.tag ? 'folder' : 'list', notes.length === 0);
   const rowHeight = compactRows ? ROW_HEIGHT_COMPACT : ROW_HEIGHT;
   const virtual = useVirtualWindow(items.length, rowHeight);
@@ -82,6 +91,7 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
   const isMobile = layout === 'mobile' || layout === 'compact';
 
   const body = ((): ReactNode => {
+    if (attachmentFolder && screenState !== 'loading') return <AttachmentFolderView />;
     switch (screenState) {
       case 'loading':
         return <ListSkeleton />;
@@ -168,7 +178,9 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
             Место выбрано по правилу колонки: действие относится к списку,
             значит живёт в его шапке, а не в общей навигации слева.
           */}
-          {!isMobile ? (
+          {/* В папке вложений заметку не создаём: она легла бы между
+              картинками и мешала бы и здесь, и в списке. */}
+          {!isMobile && !attachmentFolder ? (
             <IconButton
               icon={<IconPlus size={18} />}
               label={strings.list.newNote}
@@ -263,11 +275,13 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
               <IconSearch size={15} />
               {strings.list.searchPlaceholder}
             </button>
-            <Fab
-              icon={<IconPlus size={22} />}
-              label={strings.list.newNote}
-              onClick={() => void app.createNote(state.folder ?? undefined)}
-            />
+            {!attachmentFolder ? (
+              <Fab
+                icon={<IconPlus size={22} />}
+                label={strings.list.newNote}
+                onClick={() => void app.createNote(state.folder ?? undefined)}
+              />
+            ) : null}
           </div>
         </>
       ) : null}

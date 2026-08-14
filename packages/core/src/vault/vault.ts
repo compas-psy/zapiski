@@ -16,6 +16,7 @@ import {
   baseName,
   dirName,
   INDEX_FILE,
+  isAttachmentDir,
   isEncryptedPath,
   isMetaPath,
   isNotePath,
@@ -138,6 +139,27 @@ export interface FolderNode {
   children: FolderNode[];
   /** Количество не-архивных заметок внутри, включая подпапки (BEHAVIOR §3). */
   count: number;
+  /**
+   * Папка вложений — `Images`, `Audio`, `Other files`.
+   *
+   * Их создаёт приложение, а не человек, и заметок в них не бывает по
+   * определению. Раньше они шли в библиотеке наравне с папками заметок и
+   * всегда выглядели пустыми: список показывает заметки, а внутри файлы.
+   * Человек открывал папку, видел ничто и делал единственный возможный
+   * вывод — «вложения не сохранились», хотя файлы лежали на месте.
+   *
+   * Отсюда признак: интерфейс рисует такие папки иначе (серым), считает в них
+   * ФАЙЛЫ, а не заметки, и умеет их скрыть по настройке.
+   */
+  system?: boolean;
+}
+
+/** Файл вложения так, как его показывают человеку. */
+export interface AttachmentEntry {
+  path: VaultPath;
+  name: string;
+  size: number;
+  mtime: number;
 }
 
 export class Vault {
@@ -252,10 +274,23 @@ export class Vault {
       return node;
     };
     const seen = new Set<VaultPath>();
+    /* Подпапки внутри старой единой `attachments/` не показываем: там раскладка
+       прежних версий, и отдельной веткой дерева она человеку ничего не говорит.
+       Сама папка при этом остаётся видимой — файлы в ней есть, и прятать их
+       значило бы утверждать, что вложений нет. */
     for (const entry of await this.listDirsRecursive('')) {
-      if (entry === ATTACHMENTS_DIR || entry.startsWith(`${ATTACHMENTS_DIR}/`)) continue;
+      if (entry.startsWith(`${ATTACHMENTS_DIR}/`)) continue;
       ensure(entry);
       seen.add(entry);
+    }
+
+    /* Папки вложений помечаем системными и считаем в них ФАЙЛЫ: заметок там не
+       бывает, поэтому обычный счёт всегда показывал ноль, а открытая папка
+       выглядела пустой. */
+    for (const node of roots.values()) {
+      if (!isAttachmentDir(node.path)) continue;
+      node.system = true;
+      node.count = (await this.attachmentsIn(node.path)).length;
     }
     for (const note of notes) {
       if (note.archived) continue;
@@ -268,6 +303,30 @@ export class Vault {
     return [...roots.values()]
       .filter((node) => dirName(node.path) === '')
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  }
+
+  /**
+   * Файлы внутри папки вложений — то, что человек и хочет увидеть, открыв её.
+   *
+   * Список заметок здесь бесполезен: заметок в этих папках нет. Поэтому
+   * приложение показывает файлы, и берёт их отсюда.
+   */
+  async attachmentsIn(dir: VaultPath): Promise<AttachmentEntry[]> {
+    const entries = await this.storage.list(normalizePath(dir)).catch(() => []);
+    const out: AttachmentEntry[] = [];
+    for (const entry of entries) {
+      if (entry.isDirectory || isMetaPath(entry.path)) continue;
+      const stat = await this.storage.stat(entry.path).catch(() => null);
+      out.push({
+        path: entry.path,
+        name: baseName(entry.path),
+        size: stat?.size ?? 0,
+        mtime: stat?.mtime ?? 0,
+      });
+    }
+    /* Новые сверху: имена вложений начинаются с даты, но полагаться на имя
+       нельзя — человек мог переименовать файл в файловом менеджере. */
+    return out.sort((a, b) => b.mtime - a.mtime || a.name.localeCompare(b.name, 'ru'));
   }
 
   private async listDirsRecursive(dir: VaultPath): Promise<VaultPath[]> {

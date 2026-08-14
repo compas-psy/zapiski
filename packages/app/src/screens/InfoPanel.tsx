@@ -110,13 +110,41 @@ export function InfoPanel({ note, backlinks }: InfoPanelProps): ReactNode {
   );
 }
 
-/** Пути вложений из тела: `![](attachments/…)` и `[](attachments/…)`. */
+/**
+ * Пути вложений из тела заметки.
+ *
+ * Прежняя версия искала строго `attachments/…` — папку прежней раскладки. С тех
+ * пор файлы кладутся в `Images`, `Audio` и `Other files`, а имя с пробелом
+ * («Other files/смета.docx») markdown обязывает обернуть в угловые скобки. Обе
+ * вещи мимо старого выражения: панель «Инфо» показывала «вложений нет» у
+ * заметки с картинкой, звуком и документом.
+ *
+ * Поэтому берётся любая ссылка на местный файл. Исключены внешние адреса,
+ * `data:`, якоря и ссылки на другие заметки (`.md`) — последние показываются
+ * обратными ссылками и вложением не являются.
+ */
 function extractAttachments(body: string): string[] {
   const found = new Set<string>();
-  const pattern = /!?\[[^\]]*\]\((attachments\/[^)\s]+)\)/g;
+  const pattern = /!?\[[^\]]*\]\(\s*(<[^>]+>|[^)\s]+)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(body)) !== null) {
-    if (match[1]) found.add(match[1]);
+    const raw = match[1];
+    if (raw === undefined) continue;
+    const target = raw.startsWith('<') ? raw.slice(1, -1) : raw;
+    if (target === '') continue;
+    if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//')) continue;
+    if (target.startsWith('#')) continue;
+    if (/\.md$/i.test(target)) continue;
+    /* Пробелы в путях экранируют как `%20`; человеку показываем имя файла, а
+       не его запись. Битую последовательность оставляем как есть — панель
+       «Инфо» не место, где спотыкаются об один странный символ. */
+    let decoded = target;
+    try {
+      decoded = decodeURI(target);
+    } catch {
+      /* оставляем как есть */
+    }
+    found.add(decoded);
   }
   return [...found];
 }

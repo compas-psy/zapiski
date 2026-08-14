@@ -44,11 +44,21 @@ const MIME: Record<string, string> = {
   pdf: 'application/pdf',
 };
 
-function mimeOf(path: string): string {
+/**
+ * Тип содержимого по расширению.
+ *
+ * Экспортируется, потому что тем же вопросом задаётся список файлов в папке
+ * вложений: он тоже отдаёт файл наружу через `blob:`, и без типа браузер
+ * покажет пустоту вместо PDF или картинки. Две таблицы MIME в одном
+ * приложении разошлись бы на первом же добавленном формате.
+ */
+export function attachmentMime(path: string): string {
   const dot = path.lastIndexOf('.');
   const ext = dot > 0 ? path.slice(dot + 1).toLowerCase() : '';
   return MIME[ext] ?? 'application/octet-stream';
 }
+
+const mimeOf = attachmentMime;
 
 export class AttachmentUrls {
   private readonly urls = new Map<VaultPath, string>();
