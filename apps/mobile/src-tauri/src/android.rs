@@ -118,13 +118,45 @@ mod api {
     use super::{complete, forget, register, wait, Outcome, DOWNLOAD, SLOW};
     use crate::{platform, widgets};
 
-    use jni::objects::{JByteArray, JObject, JString, JValue};
+    use jni::objects::{GlobalRef, JByteArray, JObject, JString, JValue, JValueOwned};
     use jni::sys::{jboolean, jlong};
     use jni::{JNIEnv, JavaVM};
     use std::sync::OnceLock;
 
     /// Класс со всеми статическими методами Java-стороны.
     const BRIDGE: &str = "ru/cmpas/zapiski/NativeBridge";
+
+    /// Класс моста, найденный ЗАГРУЗЧИКОМ ПРИЛОЖЕНИЯ и сохранённый навсегда.
+    ///
+    /// Без него оболочка носила скрытую мину. `FindClass` ищет класс тем
+    /// загрузчиком, который принадлежит текущему потоку, а поток, прикреплённый
+    /// к виртуальной машине из нативного кода (`AttachCurrentThread`), получает
+    /// СИСТЕМНЫЙ загрузчик — тот не знает ни одного класса приложения. Команды
+    /// Tauri выполняются в пуле, и попадание в такой поток — вопрос удачи.
+    ///
+    /// Заказчик вытащил мину наружу кнопкой «Поделиться»:
+    /// `ClassNotFoundException: Didn't find class "ru.cmpas.zapiski.NativeBridge"`.
+    /// Ровно это могло случиться с любым другим вызовом — папкой, биометрией,
+    /// виджетами, — просто там раньше везло.
+    ///
+    /// Ссылку берём в `nativeInit`: его зовёт САМА Java, и загрузчик там
+    /// правильный. Глобальная ссылка живёт вечно и работает в любом потоке.
+    static BRIDGE_CLASS: OnceLock<GlobalRef> = OnceLock::new();
+
+    /// Статический метод моста. Класс — из кеша, пока он есть.
+    fn call_bridge<'local>(
+        env: &mut JNIEnv<'local>,
+        method: &str,
+        signature: &str,
+        args: &[JValue],
+    ) -> Result<JValueOwned<'local>, jni::errors::Error> {
+        match BRIDGE_CLASS.get() {
+            Some(class) => env.call_static_method(class, method, signature, args),
+            /* Кеша нет — значит `nativeInit` ещё не отработал. Ищем по имени:
+            в потоке, пришедшем из Java, это сработает. */
+            None => env.call_static_method(BRIDGE, method, signature, args),
+        }
+    }
 
     /// Виртуальная машина. Её отдаёт первый вызов из Java — `nativeInit`,
     /// который `MainActivity` делает в `onCreate`, уже после загрузки
@@ -154,7 +186,9 @@ mod api {
         // и сообщение исключения поднимаются наверх и показываются словами.
         if guard.exception_check().unwrap_or(false) {
             let described = exception_text(&mut guard);
-            return Err(described.unwrap_or_else(|| "Java-сторона завершилась исключением".to_owned()));
+            return Err(
+                described.unwrap_or_else(|| "Java-сторона завершилась исключением".to_owned())
+            );
         }
         result.map_err(|error| format!("вызов Java не удался: {error}"))
     }
@@ -178,14 +212,14 @@ mod api {
 
     pub fn set_secure(on: bool) -> Result<(), String> {
         with_env(|env| {
-            env.call_static_method(BRIDGE, "setSecure", "(Z)V", &[JValue::Bool(u8::from(on))])?;
+            call_bridge(env, "setSecure", "(Z)V", &[JValue::Bool(u8::from(on))])?;
             Ok(())
         })
     }
 
     pub fn haptic(strength: i32) -> Result<(), String> {
         with_env(|env| {
-            env.call_static_method(BRIDGE, "haptic", "(I)V", &[JValue::Int(strength)])?;
+            call_bridge(env, "haptic", "(I)V", &[JValue::Int(strength)])?;
             Ok(())
         })
     }
@@ -193,9 +227,7 @@ mod api {
     /// Строковый результат метода без аргументов. `None` — Java вернула `null`.
     fn string_getter(method: &str) -> Result<Option<String>, String> {
         with_env(|env| {
-            let value = env
-                .call_static_method(BRIDGE, method, "()Ljava/lang/String;", &[])?
-                .l()?;
+            let value = call_bridge(env, method, "()Ljava/lang/String;", &[])?.l()?;
             if value.is_null() {
                 return Ok(None);
             }
@@ -217,10 +249,7 @@ mod api {
     }
 
     pub fn biometrics_available() -> Result<bool, String> {
-        with_env(|env| {
-            env.call_static_method(BRIDGE, "biometricsAvailable", "()Z", &[])?
-                .z()
-        })
+        with_env(|env| call_bridge(env, "biometricsAvailable", "()Z", &[])?.z())
     }
 
     pub fn biometrics_enroll(key_id: &str, secret: &[u8]) -> Result<(), String> {
@@ -232,7 +261,11 @@ mod api {
                 BRIDGE,
                 "biometricsEnroll",
                 "(JLjava/lang/String;[B)V",
-                &[JValue::Long(id), JValue::Object(&key), JValue::Object(&data)],
+                &[
+                    JValue::Long(id),
+                    JValue::Object(&key),
+                    JValue::Object(&data),
+                ],
             )?;
             Ok(())
         });
@@ -306,14 +339,13 @@ mod api {
     pub fn http_get(url: &str) -> Result<String, String> {
         with_env(|env| {
             let target = env.new_string(url)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "httpGet",
-                    "(Ljava/lang/String;)Ljava/lang/String;",
-                    &[JValue::Object(&target)],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                "httpGet",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&target)],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(String::new());
             }
@@ -361,7 +393,7 @@ mod api {
 
     pub fn refresh_widgets() -> Result<(), String> {
         with_env(|env| {
-            env.call_static_method(BRIDGE, "refreshWidgets", "()V", &[])?;
+            call_bridge(env, "refreshWidgets", "()V", &[])?;
             Ok(())
         })
     }
@@ -376,7 +408,7 @@ mod api {
     pub fn saf_pick_folder() -> Result<Option<String>, String> {
         let (id, rx) = register();
         let started = with_env(|env| {
-            env.call_static_method(BRIDGE, "safPickFolder", "(J)V", &[JValue::Long(id)])?;
+            call_bridge(env, "safPickFolder", "(J)V", &[JValue::Long(id)])?;
             Ok(())
         });
         if let Err(error) = started {
@@ -397,14 +429,13 @@ mod api {
     fn saf_string(method: &str, tree: &str) -> Result<Option<String>, String> {
         with_env(|env| {
             let argument = env.new_string(tree)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    method,
-                    "(Ljava/lang/String;)Ljava/lang/String;",
-                    &[JValue::Object(&argument)],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                method,
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&argument)],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(None);
             }
@@ -416,8 +447,13 @@ mod api {
     fn saf_bool(method: &str, tree: &str) -> Result<bool, String> {
         with_env(|env| {
             let argument = env.new_string(tree)?;
-            env.call_static_method(BRIDGE, method, "(Ljava/lang/String;)Z", &[JValue::Object(&argument)])?
-                .z()
+            call_bridge(
+                env,
+                method,
+                "(Ljava/lang/String;)Z",
+                &[JValue::Object(&argument)],
+            )?
+            .z()
         })
     }
 
@@ -441,7 +477,7 @@ mod api {
     /// Отпустить разрешения на все деревья — возврат в каталог приложения.
     pub fn saf_release_trees() -> Result<(), String> {
         with_env(|env| {
-            env.call_static_method(BRIDGE, "safReleaseTrees", "()V", &[])?;
+            call_bridge(env, "safReleaseTrees", "()V", &[])?;
             Ok(())
         })
     }
@@ -451,14 +487,13 @@ mod api {
         with_env(|env| {
             let tree = env.new_string(tree)?;
             let path = env.new_string(path)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    method,
-                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-                    &[JValue::Object(&tree), JValue::Object(&path)],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                method,
+                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&tree), JValue::Object(&path)],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(None);
             }
@@ -468,8 +503,7 @@ mod api {
     }
 
     pub fn saf_list(tree: &str, path: &str) -> Result<String, String> {
-        saf_path_string("safList", tree, path)?
-            .ok_or_else(|| format!("каталога нет: {path}"))
+        saf_path_string("safList", tree, path)?.ok_or_else(|| format!("каталога нет: {path}"))
     }
 
     pub fn saf_stat(tree: &str, path: &str) -> Result<Option<String>, String> {
@@ -480,14 +514,13 @@ mod api {
         with_env(|env| {
             let tree = env.new_string(tree)?;
             let path = env.new_string(path)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "safRead",
-                    "(Ljava/lang/String;Ljava/lang/String;)[B",
-                    &[JValue::Object(&tree), JValue::Object(&path)],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                "safRead",
+                "(Ljava/lang/String;Ljava/lang/String;)[B",
+                &[JValue::Object(&tree), JValue::Object(&path)],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(None);
             }
@@ -503,18 +536,17 @@ mod api {
             let tree = env.new_string(tree)?;
             let path = env.new_string(path)?;
             let bytes = env.byte_array_from_slice(data)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "safWrite",
-                    "(Ljava/lang/String;Ljava/lang/String;[B)Ljava/lang/String;",
-                    &[
-                        JValue::Object(&tree),
-                        JValue::Object(&path),
-                        JValue::Object(&bytes),
-                    ],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                "safWrite",
+                "(Ljava/lang/String;Ljava/lang/String;[B)Ljava/lang/String;",
+                &[
+                    JValue::Object(&tree),
+                    JValue::Object(&path),
+                    JValue::Object(&bytes),
+                ],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(String::new());
             }
@@ -524,7 +556,12 @@ mod api {
     }
 
     /// Действие без результата: неудача приходит исключением Java-стороны.
-    fn saf_action(method: &str, tree: &str, first: &str, second: Option<&str>) -> Result<(), String> {
+    fn saf_action(
+        method: &str,
+        tree: &str,
+        first: &str,
+        second: Option<&str>,
+    ) -> Result<(), String> {
         with_env(|env| {
             let tree = env.new_string(tree)?;
             let first = env.new_string(first)?;
@@ -568,14 +605,13 @@ mod api {
         with_env(|env| {
             let tree = env.new_string(tree)?;
             let path = env.new_string(path)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "safOpen",
-                    "(Ljava/lang/String;Ljava/lang/String;)Z",
-                    &[JValue::Object(&tree), JValue::Object(&path)],
-                )?
-                .z()?;
+            let value = call_bridge(
+                env,
+                "safOpen",
+                "(Ljava/lang/String;Ljava/lang/String;)Z",
+                &[JValue::Object(&tree), JValue::Object(&path)],
+            )?
+            .z()?;
             Ok(value)
         })
     }
@@ -594,14 +630,13 @@ mod api {
         with_env(|env| {
             let title = env.new_string(title)?;
             let body = env.new_string(body)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "shareText",
-                    "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-                    &[JValue::Object(&title), JValue::Object(&body)],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                "shareText",
+                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&title), JValue::Object(&body)],
+            )?
+            .l()?;
             let text: String = env.get_string(&JString::from(value))?.into();
             Ok(text)
         })
@@ -614,18 +649,17 @@ mod api {
             let name = env.new_string(name)?;
             let mime = env.new_string(mime)?;
             let source = env.new_string(source)?;
-            let value = env
-                .call_static_method(
-                    BRIDGE,
-                    "saveToDownloads",
-                    "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-                    &[
-                        JValue::Object(&name),
-                        JValue::Object(&mime),
-                        JValue::Object(&source),
-                    ],
-                )?
-                .l()?;
+            let value = call_bridge(
+                env,
+                "saveToDownloads",
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[
+                    JValue::Object(&name),
+                    JValue::Object(&mime),
+                    JValue::Object(&source),
+                ],
+            )?
+            .l()?;
             if value.is_null() {
                 return Ok(None);
             }
@@ -644,11 +678,19 @@ mod api {
     /// Первый вызов из `MainActivity.onCreate`: запоминаем виртуальную машину.
     #[no_mangle]
     pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeInit(
-        env: JNIEnv,
+        mut env: JNIEnv,
         _this: JObject,
     ) {
         if let Ok(machine) = env.get_java_vm() {
             let _ = VM.set(machine);
+        }
+        /* Здесь — и только здесь — загрузчик классов принадлежит приложению:
+        вызов пришёл из Java. Дальше нативные потоки будут искать класс
+        системным загрузчиком и не найдут (см. BRIDGE_CLASS). */
+        if let Ok(class) = env.find_class(BRIDGE) {
+            if let Ok(global) = env.new_global_ref(class) {
+                let _ = BRIDGE_CLASS.set(global);
+            }
         }
     }
 
@@ -856,14 +898,16 @@ mod api {
         only_android("папка через SAF")
     }
     pub fn share_text(_title: &str, _body: &str) -> Result<String, String> {
-        Ok(String::from("error: системного «Поделиться» нет на этой платформе"))
+        Ok(String::from(
+            "error: системного «Поделиться» нет на этой платформе",
+        ))
     }
 }
 
 pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
-    render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_persisted_trees,
-    saf_pick_folder, saf_read, saf_open, saf_release_trees, saf_remove, saf_rename, saf_stat,
+    render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_open, saf_persisted_trees,
+    saf_pick_folder, saf_read, saf_release_trees, saf_remove, saf_rename, saf_stat,
     saf_supports_rename, saf_write, save_to_downloads, set_secure, share_text,
 };
