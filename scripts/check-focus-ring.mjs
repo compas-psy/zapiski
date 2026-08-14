@@ -12,6 +12,7 @@
  *   node scripts/check-focus-ring.mjs
  */
 import { serveDist } from './static-server.mjs';
+import { seedWebSession } from './web-session.mjs';
 import { chromium } from 'playwright-core';
 import { existsSync } from 'node:fs';
 
@@ -31,13 +32,22 @@ const server = await serveDist('apps/web/dist', PORT).catch((error) => {
 });
 const browser = await chromium.launch({ executablePath: CHROME, args:['--no-sandbox'] });
 const page = await browser.newPage({ viewport:{width:1280,height:820}, locale:'ru-RU' });
+/* В вебе вход обязателен: без аккаунта заметки остались бы в одном браузере.
+   Прогон проверяет не ворота, а поле за ними, поэтому сессия подставляется
+   так же, как в остальных браузерных проверках. Без этой строки скрипт
+   упирался в экран входа и печатал «колец 0» — жалобу на продукт вместо
+   жалобы на то, что до поля он не дошёл. */
+await seedWebSession(page);
 await page.goto(URL_BASE, { waitUntil:'networkidle' });
 const click = async (re) => { const b = page.getByRole('button',{name:re}).first();
   if ((await b.count())>0) await b.click({force:true}).catch(()=>undefined); await page.waitForTimeout(450); };
 await click(/Начать/); await click(/Дальше/); await page.waitForTimeout(800);
 await click(/Новая папка/); await page.waitForTimeout(500);
-const rings = await page.evaluate(() => {
+const measured = await page.evaluate(() => {
   const input = document.querySelector('.z-field__input') ?? document.querySelector('input');
+  /* Кольцо рисуется только у поля В ФОКУСЕ. Если под руками оказалось чужое
+     поле — скажем об этом прямо, а не отчитаемся об отсутствии колец. */
+  const focused = input !== null && document.activeElement === input;
   const out = [];
   /* Только сам input и его обёртки поля: тень модалки — это тень карточки,
      а не кольцо фокуса, и считать её было бы ложной тревогой. */
@@ -54,8 +64,19 @@ const rings = await page.evaluate(() => {
     });
     el = el.parentElement;
   }
-  return out;
+  return { rings: out, focused };
 });
+const rings = measured.rings;
+/* До поля не дошли или оно не в фокусе — мерить нечего, и говорить надо именно
+   это. «Колец 0» здесь было бы отчётом о дефекте, которого никто не видел: так
+   проверка и соврала, когда веб закрылся входом и до диалога она не доходила,
+   а под руку ей попалось поле почты на экране входа. */
+if (rings.length === 0 || !measured.focused) {
+  await browser.close();
+  server.close();
+  console.error('фокус: ПРОВЕРИТЬ НЕ УДАЛОСЬ — до поля в фокусе не дошли, мерить нечего');
+  process.exit(1);
+}
 const drawn = rings.filter(
   (e) => e.shadow !== 'none' || (e.outline !== '' && !e.outline.startsWith('0px')),
 );
