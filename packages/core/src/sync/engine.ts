@@ -78,6 +78,12 @@ interface SyncEntryState {
   base?: string;
   baseHash: number;
   syncedAt: number;
+  /**
+   * Сколько байт занимает файл. Нужен для честного «в хранилище столько-то»:
+   * длина базы этого не скажет — у вложений базы нет вовсе, а у заметки длина
+   * строки и число байт расходятся на каждой кириллической букве вдвое.
+   */
+  size?: number;
 }
 
 /** Память об одном месте синхронизации. */
@@ -196,6 +202,28 @@ export class SyncEngine {
     if (file && file.version === STATE_VERSION && file.remotes) this.file = file;
     this.state = this.file.remotes[this.remoteKey] ?? { lastSyncAt: null, entries: {} };
     this.loaded = true;
+    await this.fillMissingSizes();
+  }
+
+  /**
+   * Дописать размеры файлам, о которых помним со старой сборки.
+   *
+   * Размер начали запоминать только сейчас, а память о синхронизации живёт
+   * между версиями. Без этого шага человек, обновивший приложение, увидел бы
+   * «0 Б» до следующего прохода — то есть снова неправду, просто другую.
+   *
+   * Спрашиваем только у тех записей, у которых размера нет, и только один раз
+   * за запуск: на Android каждый `stat` — обращение к системному провайдеру.
+   */
+  private async fillMissingSizes(): Promise<void> {
+    const missing = Object.entries(this.state.entries).filter(([, entry]) => entry.size === undefined);
+    if (missing.length === 0) return;
+    for (const [path, entry] of missing) {
+      const stat = await this.storage.stat(path).catch(() => null);
+      /* Файла нет — размер остаётся неизвестным, а не выдуманным нулём:
+         запись всё равно уйдёт при следующем проходе. */
+      if (stat) entry.size = stat.size;
+    }
   }
 
   private async saveState(): Promise<void> {
@@ -220,8 +248,26 @@ export class SyncEngine {
       state: this.queue.size > 0 ? 'syncing' : 'synced',
       lastSyncAt: this.state.lastSyncAt,
       noteCount: notes.length,
-      bytes: Object.keys(this.state.entries).length,
+      bytes: this.knownBytes(),
     };
+  }
+
+  /**
+   * Сколько байт занимает засинхронизированное — заметки и вложения вместе.
+   *
+   * Заказчик: «показывает 75 заметок и 79 Б». Число было не объёмом, а
+   * количеством записей в памяти синхронизации: `Object.keys(entries).length`
+   * с подписью «Б». Второе место считало сумму длин строк — тоже не байты:
+   * кириллица в UTF-8 занимает по два байта на букву, а вложения в этой сумме
+   * не участвовали вовсе, потому что у них базы нет.
+   *
+   * Теперь размер каждого файла запоминается при обмене (`remember`), и здесь
+   * они просто складываются. Файлы, о которых память осталась от прежней
+   * версии формата, размера не имеют — они добавятся к сумме после первого
+   * же прохода, а не соврут о нём.
+   */
+  private knownBytes(): number {
+    return Object.values(this.state.entries).reduce((sum, entry) => sum + (entry.size ?? 0), 0);
   }
 
   /** Один проход синка. Параллельные вызовы разделяют один проход. */
@@ -295,7 +341,7 @@ export class SyncEngine {
     await this.saveState();
     const notes = this.vault.notes();
     outcome.noteCount = notes.length;
-    outcome.bytes = Object.values(this.state.entries).reduce((sum, entry) => sum + (entry.base?.length ?? 0), 0);
+    outcome.bytes = this.knownBytes();
     outcome.lastSyncAt = this.state.lastSyncAt;
     outcome.ignored = [...this.ignored];
     if (outcome.state === 'synced' && this.queue.size > 0) outcome.state = 'syncing';
@@ -444,9 +490,24 @@ export class SyncEngine {
       etag,
       baseHash: fnv1a(data),
       syncedAt: this.now(),
+      size: data.byteLength,
     };
-    // Базу для diff3 держим только для текстовых заметок: бинарь ей не нужен.
-    if (!isEncryptedPath(path) && !path.startsWith(`${CRDT_DIR}/`)) entry.base = fromUtf8(data);
+    /*
+     * Базу для diff3 держим только для ОТКРЫТЫХ ЗАМЕТОК.
+     *
+     * Условие раньше было «не зашифровано и не CRDT-лог», то есть база
+     * заводилась и для вложений: картинка на два мегабайта прогонялась через
+     * `fromUtf8` и ложилась строкой в файл состояния синхронизации. Дважды
+     * неправильно. Во-первых, состояние распухало на размер всех вложений и
+     * перечитывалось при каждом проходе. Во-вторых, при расхождении версий
+     * такая «база» шла в трёхстороннее слияние текста — а слить два JPEG
+     * построчно нельзя, можно только испортить.
+     *
+     * Заметка остаётся текстом, и для неё база по-прежнему нужна: без неё
+     * одновременная правка с двух устройств давала бы две копии вместо
+     * слияния.
+     */
+    if (isNotePath(path) && !isEncryptedPath(path)) entry.base = fromUtf8(data);
     this.state.entries[path] = entry;
   }
 

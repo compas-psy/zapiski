@@ -90,8 +90,12 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
           })}
 
           <p className="za-muted">{strings.onboarding.step2.footnote}</p>
+          {/* В браузере кнопка всегда «Дальше»: папку сайт не спрашивает, и
+              обещать выбор папки, которого не будет, нельзя. */}
           <Button fullWidth loading={busy} onClick={() => void proceed()}>
-            {choice === 'local' ? strings.onboarding.step2.next : strings.onboarding.step2.pickFolder}
+            {choice === 'local' || app.host.platform.kind === 'web'
+              ? strings.onboarding.step2.next
+              : strings.onboarding.step2.pickFolder}
           </Button>
         </div>
       </div>
@@ -122,6 +126,26 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
          всё равно пускаем внутрь: ошибка не должна блокировать ввод (C5). */
       let storage = null;
       let refused = false;
+      /*
+       * В браузере папки не спрашиваем ВООБЩЕ.
+       *
+       * Человек с Android открыл zapiski.cmpas.ru, выбрал «На этом
+       * устройстве» — и получил системный выбор папки, а после выбора экран
+       * замер на «Дальше» насовсем. Дважды неправильно. Во-первых, сайту
+       * папка не нужна: его хранилище — хранилище браузера, и человек про
+       * «выберите папку» не просил. Во-вторых, проверка выбранной папки на
+       * запись идёт через провайдер Android, который умеет не ответить
+       * никогда, — а спиннер в кнопке ждёт его вечно.
+       *
+       * Выбор папки в вебе остаётся, но там, где он и уместен: в настройках
+       * хранилища, по явной просьбе, на десктопе. Первый экран обязан
+       * заканчиваться заметкой, а не диалогом файловой системы.
+       */
+      const inBrowser = app.host.platform.kind === 'web';
+      if (inBrowser) {
+        storage = await app.host.restoreVault().catch(() => null);
+        if (!storage) app.toast({ message: strings.errors.browserStorageUnavailable });
+      }
       try {
         /* Сначала — настоящий системный выбор, если платформа его объявила.
            На Android это существенно: там `pickVaultDirectory` молча отдаёт
@@ -133,14 +157,14 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
 
            На Windows порта нет, а `pickVaultDirectory` и так открывает
            нативный диалог — там ветка ниже отрабатывает как прежде. */
-        const picker = app.host.platform.vaultFolders;
+        const picker = inBrowser ? null : app.host.platform.vaultFolders;
         if (picker) {
           const chosen = await picker.chooseFolder();
           storage = chosen?.storage ?? null;
         }
         /* Отмена — не отказ: человек вправе не выбирать, и тогда заметки
            ложатся в каталог приложения, надёжный путь с атомарной записью. */
-        storage ??= await app.host.platform.pickVaultDirectory();
+        if (!inBrowser) storage ??= await app.host.platform.pickVaultDirectory();
       } catch {
         refused = true;
       }

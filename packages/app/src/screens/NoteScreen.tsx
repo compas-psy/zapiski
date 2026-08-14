@@ -159,6 +159,21 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
    * бы позицию.
    */
   const [title, setTitle] = useState('');
+  /**
+   * Название, унаследованное от ИМЕНИ ФАЙЛА, — для заметок без строки `# …`.
+   *
+   * Заказчик: «заметки .md, перенесённые из Obsidian, не подхватывают название
+   * файла в виде заголовка заметки». В списке они назывались правильно (там
+   * имя файла давно третий источник имени), а в открытой заметке поле
+   * названия было пустым — то есть приложение противоречило само себе.
+   *
+   * Отдельным состоянием, а не в `title`, ради чужого архива: `title`
+   * участвует в сохранении, и подставь мы туда имя файла, простое ОТКРЫТИЕ
+   * заметки дописало бы в чужой файл строку `# Название`. Здесь имя только
+   * показывается; в файл оно попадёт, когда человек тронет поле сам — то
+   * есть по его решению, а не по нашему.
+   */
+  const [inheritedTitle, setInheritedTitle] = useState('');
   const [editorBody, setEditorBody] = useState('');
   const titleInput = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
@@ -201,6 +216,13 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       if (cancelled) return;
       const split = splitTitle(text ?? loaded?.body ?? '');
       setTitle(split.title);
+      /* Строки `# …` в файле нет — показываем имя файла, как это делает
+         список. «Без названия» не наследуем: так называется наша же заметка,
+         у которой имени действительно нет. */
+      const stem = stemOf(path);
+      setInheritedTitle(
+        split.title === '' && stem !== strings.notes.untitled ? stem : '',
+      );
       setEditorBody(split.body);
       setLoading(false);
     });
@@ -395,13 +417,17 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
                 ref={titleInput}
                 className="za-editor__title"
                 type="text"
-                value={title}
+                value={title === '' ? inheritedTitle : title}
                 placeholder={strings.note.titlePlaceholder}
                 aria-label={strings.note.titlePlaceholder}
                 spellCheck={false}
                 /* Новая заметка: курсор сразу в названии, а не в теле. */
                 autoFocus={body === ''}
                 onChange={(event) => {
+                  /* Человек тронул поле — унаследованное имя больше не
+                     подсказка, а его собственный заголовок: с этого момента
+                     оно живёт в тексте файла. */
+                  setInheritedTitle('');
                   setTitle(event.target.value);
                   if (encrypted) app.touchLock(path);
                 }}

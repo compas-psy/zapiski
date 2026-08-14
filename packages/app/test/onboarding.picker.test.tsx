@@ -14,6 +14,10 @@
  *
  * Правило: если платформа объявила системный выбор, онбординг обязан его
  * показать, а не назначать место за человека.
+ *
+ * Правило действует В ОБОЛОЧКАХ. В браузере всё наоборот: папки у сайта нет,
+ * а системный диалог на Android после выбора не отвечал — экран замирал на
+ * «Дальше» насовсем. Это отдельная проверка, `web-onboarding.test.tsx`.
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import { fireEvent } from '@testing-library/dom';
@@ -38,6 +42,11 @@ describe('шаг 2: выбор места для заметок', () => {
       ...base,
       platform: {
         ...base.platform,
+        /* Именно Android, а не веб: в браузере папку не спрашивают вовсе —
+           у сайта её нет, и системный диалог там кончался зависанием
+           (`web-onboarding.test.tsx`). Прежде тестовый хост объявлял себя
+           вебом, и правило проверялось не на той платформе. */
+        kind: 'android' as const,
         vaultFolders: { chooseFolder, useAppFolder: async () => null, current: async () => null },
       },
     };
@@ -70,7 +79,12 @@ describe('шаг 2: выбор места для заметок', () => {
     const pick = vi.fn(async () => null);
     const host = {
       ...base,
-      platform: { ...base.platform, vaultFolders: undefined, pickVaultDirectory: pick },
+      platform: {
+        ...base.platform,
+        kind: 'desktop' as const,
+        vaultFolders: undefined,
+        pickVaultDirectory: pick,
+      },
     };
 
     const app = new AppController(host);

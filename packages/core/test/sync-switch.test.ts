@@ -184,3 +184,55 @@ describe('вложения синхронизируются, а не тольк�
     expect(Object.keys(cloud.snapshot())).not.toContain('Other files/обновление.apk');
   });
 });
+
+/**
+ * Объём хранилища — байты, а не число записей.
+ *
+ * Заказчик: «показывает 75 заметок и 79 Б». Число было количеством записей в
+ * памяти синхронизации, подписанным как байты. Второй счёт, в результате
+ * прохода, складывал длины строк: кириллица в UTF-8 занимает по два байта на
+ * букву, а вложения в такую сумму не попадали вовсе.
+ */
+describe('сколько занято в хранилище', () => {
+  it('складывает настоящие байты заметок и вложений', async () => {
+    const now = clock();
+    const { disk, vault } = await device(now);
+    const text = '# Идеи\n\nмоя строка\n';
+    await vault.write('Идеи.md', text, { scheduleRename: false });
+    await disk.write('Images/схема.png', new Uint8Array(2048));
+
+    const cloud = new MemoryVaultStorage({ now });
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    const outcome = await engine.sync();
+
+    const noteBytes = new TextEncoder().encode(text).byteLength;
+    expect(
+      outcome.bytes,
+      'объём посчитан не в байтах: кириллица весит вдвое, а вложение весит вообще',
+    ).toBeGreaterThanOrEqual(noteBytes + 2048);
+    /* И это не число файлов, замаскированное под байты. */
+    expect(outcome.bytes).toBeGreaterThan(1000);
+    expect(engine.status().bytes).toBe(outcome.bytes);
+  });
+
+  it('картинка не превращается в текст в памяти синхронизации', async () => {
+    /* База для diff3 нужна заметкам: без неё правка с двух устройств даёт две
+       копии вместо слияния. Вложению она бесполезна и вредна — слить два JPEG
+       построчно нельзя, а весит такая «база» столько же, сколько файл. */
+    const now = clock();
+    const { disk, vault } = await device(now);
+    await vault.write('Идеи.md', '# Идеи\n', { scheduleRename: false });
+    await disk.write('Images/схема.png', new Uint8Array([0xff, 0xd8, 0xff, 0xe0]));
+
+    const cloud = new MemoryVaultStorage({ now });
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    const state = JSON.parse(
+      new TextDecoder().decode((await disk.read('.zapiski/sync-state.json')) as Uint8Array),
+    ) as { remotes: Record<string, { entries: Record<string, { base?: string }> }> };
+    const entries = Object.values(state.remotes)[0]?.entries ?? {};
+    expect(entries['Images/схема.png']?.base, 'байты картинки легли строкой в состояние синка').toBeUndefined();
+    expect(entries['Идеи.md']?.base, 'заметка осталась без базы — слияние правок сломается').toBeTruthy();
+  });
+});

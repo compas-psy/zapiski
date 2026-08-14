@@ -13,6 +13,7 @@ import type { DecorationSet, ViewUpdate } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 import { buildLivePreview, type LivePreviewSets } from './decorations.js';
+import { listMarkTint } from './list-mark-tint.js';
 import { rawMode, rawModeField, setRawMode } from './raw-mode.js';
 import { toggleCollapsed } from './collapsed.js';
 import { imageSelection, selectImage } from './image-select.js';
@@ -106,5 +107,15 @@ const livePreviewPlugin = ViewPlugin.fromClass(LivePreviewPlugin, {
 /**
  * Live-preview целиком: разметка, чекбоксы, картинки, raw-режим и защита IME.
  * Это то, что подключают те, кому нужен голый CodeMirror без React.
+ *
+ * `listMarkTint` стоит рядом намеренно: в режиме «Разметка» набор декораций
+ * выше отдаёт пустоту целиком, а цвет маркера списка — настройка оформления и
+ * обязан действовать в обоих режимах.
  */
-export const livePreview: Extension = [rawMode, imeSupport, imageSelection, livePreviewPlugin];
+export const livePreview: Extension = [
+  rawMode,
+  imeSupport,
+  imageSelection,
+  livePreviewPlugin,
+  listMarkTint,
+];

@@ -252,3 +252,72 @@ describe.skipIf(noDatabase())('blob-синк', () => {
     }
   });
 });
+
+/**
+ * Вложения проходят через сервер так же, как заметки.
+ *
+ * Заказчик: «после синхронизации через облако папки вложений Images, Audio,
+ * Other Files так и не появляются». Клиентскую половину (что вложения вообще
+ * попадают в обмен) держит ядро; здесь проверяется вторая половина — что
+ * сервер не имеет против них ничего: ни против бинарных байтов, ни против
+ * пути с пробелом и кириллицей, ни против расширения, отличного от `.md`.
+ *
+ * Проверка дешёвая, а чинить по симптому «папок нет» без неё пришлось бы
+ * гаданием: клиент и сервер здесь врозь, и молчит обычно тот, кого не
+ * проверяли.
+ */
+describe.skipIf(noDatabase())('вложения через API', () => {
+  let harness: Harness;
+  let user: TestUser;
+
+  beforeAll(async () => {
+    harness = await createHarness();
+    user = await createUser(harness);
+  });
+
+  afterAll(async () => {
+    await harness.close();
+  });
+
+  const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff]);
+
+  it('картинка уезжает и возвращается побайтово', async () => {
+    const path = 'Images/2026-08-14_схема.png';
+    const written = await harness.app.inject({
+      method: 'PUT',
+      url: `/api/v1/vault/blob/${path}`,
+      headers: { ...user.authHeader, 'content-type': 'application/octet-stream' },
+      payload: PNG,
+    });
+    expect(written.statusCode, 'сервер не принял вложение').toBe(200);
+
+    const read = await harness.app.inject({
+      method: 'GET',
+      url: `/api/v1/vault/blob/${path}`,
+      headers: user.authHeader,
+    });
+    expect(read.statusCode).toBe(200);
+    expect(read.rawPayload.equals(PNG), 'байты картинки изменились по дороге').toBe(true);
+  });
+
+  it('путь с пробелом в имени папки не теряется', async () => {
+    /* `Other files` — папка с пробелом, и она у нас не выдумка, а умолчание. */
+    const path = 'Other files/смета.pdf';
+    const written = await harness.app.inject({
+      method: 'PUT',
+      url: `/api/v1/vault/blob/${encodeURI(path)}`,
+      headers: { ...user.authHeader, 'content-type': 'application/octet-stream' },
+      payload: Buffer.from('%PDF-1.7'),
+    });
+    expect(written.statusCode).toBe(200);
+    expect((written.json() as { path: string }).path).toBe(path);
+
+    const list = await harness.app.inject({
+      method: 'GET',
+      url: '/api/v1/vault/manifest',
+      headers: user.authHeader,
+    });
+    const paths = (list.json() as { entries: Array<{ path: string }> }).entries.map((e) => e.path);
+    expect(paths, 'вложение не видно в списке — второе устройство его не заберёт').toContain(path);
+  });
+});

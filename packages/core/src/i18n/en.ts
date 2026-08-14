@@ -12,6 +12,8 @@ export const en: Catalog = {
     cloudUnreachable: 'Could not reach the cloud · Retry',
     noSpace: 'The device is out of space. The note is kept in memory — free some space to write it to disk',
     folderUnavailable: 'The folder is unavailable. It may have been moved — please point to its new location',
+    browserStorageUnavailable:
+      'The browser refused storage for your notes — they will only last until you close the tab. Check private mode and site data permissions',
     settingNotSaved: 'Could not save the setting — it will revert on restart',
     webdavAuth: 'The server did not accept the login or password',
     webdavUnreachable: 'The server is not responding · Retry',

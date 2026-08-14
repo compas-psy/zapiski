@@ -228,7 +228,39 @@ const PROBE = '.zapiski-write-test';
  * (а на телефоне выбор папки идёт через них) умеют отдать каталог, в который
  * записать нельзя, и это выясняется только попыткой.
  */
+/**
+ * Сколько ждём ответа от папки, прежде чем признать её неотвечающей.
+ *
+ * Проверка идёт через провайдер файловой системы, а на Android им может быть
+ * что угодно — облачный клиент, сетевой диск, карта памяти. Такой провайдер
+ * имеет право не ответить НИКОГДА, и тогда обещание «сейчас проверю» висит
+ * вечно: человек с Android выбрал папку в браузере и остался с крутящимся
+ * кружком в кнопке, без единого слова. Десять секунд — заведомо больше любого
+ * честного ответа и заведомо меньше терпения.
+ */
+const PROBE_TIMEOUT_MS = 10_000;
+
+function withTimeout<T>(work: Promise<T>, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new DOMException(message, 'TimeoutError')), PROBE_TIMEOUT_MS);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
 async function assertWritable(handle: FileSystemDirectoryHandle): Promise<void> {
+  await withTimeout(probeWrite(handle), 'папка не ответила на проверку записи');
+}
+
+async function probeWrite(handle: FileSystemDirectoryHandle): Promise<void> {
   const file = await handle.getFileHandle(PROBE, { create: true });
   try {
     /* Самая дешёвая проверка — имя самой ручки. Провайдер, срезавший точку,

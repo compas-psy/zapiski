@@ -1197,6 +1197,30 @@ export class AppController {
    * доступен настоящий путь или `content://`, — и только если она не смогла,
    * `blob:` через браузер. В вебе другого пути нет вовсе.
    */
+  /**
+   * Адрес для показа вложения на экране приложения.
+   *
+   * Нужен папке вложений: картинку там открывает наш просмотрщик, а не чужое
+   * приложение. Заказчик про папку `Images`: «при клике на неё ничего не
+   * происходит» — системе отдавали даже картинку, и когда она отказывалась
+   * (а на Android галерея берётся не за всякий `content://`), не происходило
+   * ровно ничего. Своя картинка должна открываться у себя.
+   *
+   * Возвращает `blob:`-адрес; отзывать его — забота вызвавшего.
+   */
+  async attachmentUrl(path: VaultPath): Promise<string | null> {
+    const vault = this.vault;
+    if (!vault) return null;
+    const bytes = await vault.storage.read(path).catch(() => null);
+    if (!bytes) {
+      this.toast({ message: this.strings.attachments.openFailed });
+      return null;
+    }
+    /* Копия в свой буфер: `Uint8Array` из порта может смотреть в общий пул. */
+    const blob = new Blob([bytes.slice() as unknown as BlobPart], { type: attachmentMime(path) });
+    return URL.createObjectURL(blob);
+  }
+
   async openAttachmentFile(path: VaultPath): Promise<boolean> {
     const vault = this.vault;
     if (!vault) return false;
