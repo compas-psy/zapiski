@@ -6,6 +6,7 @@
  * работает в вебе, на Windows и на Android (ARCHITECTURE §1).
  */
 import {
+  ChangeQueue,
   LEGACY_CONTAINER_VERSION,
   MemoryVaultStorage,
   META_DIR,
@@ -363,6 +364,22 @@ export class AppController {
   private readonly listeners = new Set<Listener>();
   private vault: Vault | null = null;
   private engine: SyncEngine | null = null;
+  /**
+   * Очередь неотправленного. Живёт при ХРАНИЛИЩЕ, а не при облаке.
+   *
+   * Заказчик: «работаем локально, пока облако не подключится. А дальше, если
+   * локально накопились записки/изменения, то после переключения в онлайн в
+   * работу вступает механизм синхронизации».
+   *
+   * Раньше очередь заводил движок синка, а движок существует только при
+   * подключённом месте. Значит всё, что человек писал без облака, нигде не
+   * отмечалось как неотправленное: приложение не могло ни показать «столько-то
+   * ждёт очереди», ни опереться на этот список при возвращении связи —
+   * оставалось сравнивать содержимое и надеяться, что память о прошлом обмене
+   * цела. Теперь очередь заводится вместе с хранилищем, переживает перезапуск
+   * (она на диске, BEHAVIOR §6) и передаётся движку, когда место появляется.
+   */
+  private changes: ChangeQueue | null = null;
   /** История версий доступна и без бэкенда: снапшоты лежат в `.zapiski/`. */
   private versions: VersionHistory | null = null;
   private backend: SyncBackend | null = null;
@@ -603,6 +620,12 @@ export class AppController {
     if (this.lockTimer) clearInterval(this.lockTimer);
     this.vault = vault;
     this.versions = new VersionHistory(storage);
+    /* Очередь неотправленного — вместе с хранилищем: она нужна и тогда, когда
+       синхронизировать некуда. Загружаем с диска, чтобы накопленное в прошлый
+       раз не начиналось с нуля. */
+    const changes = new ChangeQueue(storage);
+    await changes.load();
+    this.changes = changes;
     vault.onChange(() => {
       void this.refresh();
     });
@@ -987,12 +1010,23 @@ export class AppController {
     const vault = this.vault;
     if (!vault) return;
     const folders = await vault.folders();
+    const notes = vault.notes();
+    /*
+     * Статус говорит о хранилище, а не только об облаке.
+     *
+     * Число заметок известно всегда — оно берётся из индекса, а не с той
+     * стороны; и число неотправленных известно всегда — очередь живёт при
+     * хранилище. Без этого экран настроек без подключённого места показывал
+     * «ещё не было · 0 заметок · 0 Б» поверх полной папки — то есть описывал
+     * не хранилище, а отсутствие обмена.
+     */
+    const sync = this.engine ? this.engine.status() : this.state.sync;
     this.patch({
-      notes: vault.notes(),
+      notes,
       folders,
       tags: vault.index.tagFrequencies(),
       trash: vault.listTrash(),
-      sync: this.engine ? this.engine.status() : this.state.sync,
+      sync: { ...sync, noteCount: notes.length, pending: this.pendingCount() },
     });
     /* Открыта папка вложений — перечитываем и её содержимое: вложение только
        что положили туда именно этим действием, и список обязан это показать. */
@@ -1672,6 +1706,7 @@ export class AppController {
       const data = await vault.storage.read(target);
       const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
       if (keyId) this.putUnlocked(target, body, await this.crypto.deriveNoteKey(master, keyId));
+      this.scheduleSync(target);
       this.openNote(target);
       return target;
     }
@@ -1680,6 +1715,10 @@ export class AppController {
       ...(folder ? { folder } : {}),
       ...(title ? { title } : {}),
     });
+    /* Новая заметка — тоже изменение, которое ждёт отправки: без этой строки
+       она попадала в облако только следующей правкой, а до тех пор нигде не
+       числилась. */
+    this.scheduleSync(note.path);
     await this.refresh();
     this.openNote(note.path);
     return note.path;
@@ -2489,6 +2528,9 @@ export class AppController {
             /* Про сеть знает оболочка, а не движок: без этого «не дозвонились»
                объявлялось «оффлайном» даже там, где интернет заведомо есть. */
             isOnline: () => this.state.online,
+            /* Очередь у приложения одна на хранилище: накопленное без облака
+               обязано достаться движку, как только место появилось. */
+            ...(this.changes ? { queue: this.changes } : {}),
           })
         : null;
     this.patch({
@@ -2512,14 +2554,45 @@ export class AppController {
 
   /** Автосинк после сохранения — debounce 5 с (BEHAVIOR §6). */
   private scheduleSync(path: VaultPath): void {
-    const engine = this.engine;
-    if (!engine) return;
-    void engine.markChanged(path);
+    /* Отметка «не отправлено» ставится ВСЕГДА, даже когда отправлять некуда:
+       без облака правка не перестаёт быть правкой. Раньше этот метод при
+       отсутствии движка выходил первой строкой, и накопленное офлайн нигде не
+       числилось. */
+    void this.changes?.enqueue(path).then(() => this.patchPending());
+    if (!this.engine) return;
     if (this.syncTimer) clearTimeout(this.syncTimer);
     this.syncTimer = setTimeout(() => {
       this.syncTimer = null;
       void this.syncNow();
     }, 5000);
+  }
+
+  /** Сколько изменений ждут отправки. Без хранилища — нисколько. */
+  pendingCount(): number {
+    return this.changes?.size ?? 0;
+  }
+
+  /** Показать в состоянии текущее число неотправленных. */
+  private patchPending(): void {
+    const pending = this.pendingCount();
+    if (this.state.sync.pending === pending) return;
+    this.patch({ sync: { ...this.state.sync, pending } });
+  }
+
+  /**
+   * Возвращение к приложению: досылаем накопленное.
+   *
+   * Момент выбран не случайно. Телефон почти всё время спит, и события
+   * `online` может не быть вовсе: сеть была в порядке, недоступно было
+   * облако — или приложение просто свернули на сутки. Зато есть минута, когда
+   * человек снова открыл ЗАПИСКИ, и обещание «накопленное уедет» пора
+   * выполнять именно тогда, а не по нажатию «Синхронизировать сейчас».
+   *
+   * Впустую не ходим: без места и без очереди делать здесь нечего.
+   */
+  async resumeSync(): Promise<void> {
+    if (!this.engine || this.pendingCount() === 0) return;
+    await this.syncNow();
   }
 
   async syncNow(options: { announce?: boolean } = {}): Promise<void> {

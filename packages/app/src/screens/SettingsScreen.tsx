@@ -535,12 +535,33 @@ function SyncSection(): ReactNode {
   const conflicted = state.notes.filter((note) => note.path.includes(conflictMark));
 
   const screenState = app.screenState('settingsSync', false);
+  /*
+   * Что здесь написано — то и есть правда о синхронизации.
+   *
+   * Случаев четыре, и раньше различались два: «оффлайн» и «ошибка». Всё
+   * остальное объявлялось «Синхронизировано», включая главный случай — места
+   * нет вовсе. Заказчик именно в этом состоянии и оказался: вход в облако
+   * истёк за ночь, синхронизации не было ни одной, а экран сообщал, что всё
+   * синхронизировано.
+   *
+   * Порядок проверок — от самого сильного утверждения к самому слабому: сеть,
+   * отказ, отсутствие места, накопленное, и только потом «синхронизировано».
+   */
+  const pending = state.sync.pending ?? 0;
+  const connected = state.backendId !== null;
   const status =
     screenState === 'offline'
       ? strings.syncState.offline
       : screenState === 'error'
         ? strings.syncState.error
-        : copy.statusSynced;
+        : !connected
+          ? copy.statusLocalOnly
+          : pending > 0
+            ? copy.statusPending(pending)
+            : copy.statusSynced;
+  /* Точка рядом со строкой: серая, пока обмена нет, — «оффлайн» здесь значит
+     «не синхронизируется», и это ровно то, что происходит. */
+  const dot = screenState === 'offline' || !connected ? 'offline' : state.sync.state;
 
   const connect = (id: SyncBackend['id']): void => {
     const vault = app.vaultRef;
@@ -583,14 +604,16 @@ function SyncSection(): ReactNode {
     <>
       <div className="za-row-between">
         <span className="za-row-between" style={{ gap: 8 }}>
-          <SyncDot status={screenState === 'offline' ? 'offline' : state.sync.state} label={status} />
+          <SyncDot status={dot} label={status} />
           <span>{status}</span>
         </span>
         <span className="za-tertiary-mono">
           {copy.statusLine(
             state.sync.lastSyncAt ? clockTime(state.sync.lastSyncAt) : strings.sync.never,
             state.sync.noteCount,
-            formatBytes(state.sync.bytes, strings),
+            /* Размер известен только по прошлым обменам: пока их не было,
+               про объём молчим, а не пишем «0 Б» над полной папкой. */
+            state.sync.bytes > 0 ? formatBytes(state.sync.bytes, strings) : null,
           )}
         </span>
       </div>

@@ -91,7 +91,10 @@ export function AppProvider({ host, locale, children, controller }: AppProviderP
     if (typeof document === 'undefined') return;
     const onBack = (): void => {
       if (document.visibilityState === 'hidden') return;
-      void app.rescanVault();
+      /* Заодно досылаем накопленное: пока приложение спало, правки могли
+         остаться неотправленными, а события «сеть вернулась» на телефоне
+         может не случиться вовсе. */
+      void app.rescanVault().then(() => app.resumeSync());
     };
     document.addEventListener('visibilitychange', onBack);
     window.addEventListener('focus', onBack);

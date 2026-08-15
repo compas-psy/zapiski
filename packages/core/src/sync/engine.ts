@@ -128,6 +128,21 @@ export interface SyncEngineOptions {
    * честнее сказать «не удалось соединиться», чем объявить оффлайн вслепую.
    */
   isOnline?: () => boolean;
+  /**
+   * Готовая очередь неотправленного вместо своей.
+   *
+   * Движок живёт рядом с подключённым местом: нет места — нет движка. А
+   * правки человек делает независимо от этого, и очередь обязана переживать
+   * не только перезапуск (BEHAVIOR §6), но и отсутствие облака: заказчик
+   * просил «работаем локально, пока облако не подключится, а дальше
+   * накопленное уходит в синхронизацию».
+   *
+   * Поэтому владельцем очереди может быть приложение: оно заводит её вместе с
+   * хранилищем и передаёт сюда. Переданную очередь движок не перечитывает с
+   * диска — она уже загружена, а повторное чтение затёрло бы то, что легло в
+   * неё, пока места не было.
+   */
+  queue?: ChangeQueue;
 }
 
 export interface SyncOutcome extends SyncStatus {
@@ -168,6 +183,8 @@ export class SyncEngine {
    * ситуации значит не «человек всё удалил», а «мы сейчас не видим файлов».
    */
   private holdDeletions = false;
+  /** Своя ли очередь: чужую перечитывать с диска нельзя (см. `options.queue`). */
+  private readonly ownsQueue: boolean;
   private file: SyncStateFile = { version: STATE_VERSION, remotes: {} };
   /** Память о ТЕКУЩЕМ месте синхронизации. */
   private state: RemoteState = { lastSyncAt: null, entries: {} };
@@ -187,7 +204,8 @@ export class SyncEngine {
     this.syncCrdt = options.syncCrdt ?? true;
     this.onIgnored = options.onIgnored;
     this.isOnline = options.isOnline ?? (() => true);
-    this.queue = new ChangeQueue(this.storage, this.now);
+    this.ownsQueue = options.queue === undefined;
+    this.queue = options.queue ?? new ChangeQueue(this.storage, this.now);
     this.versions = new VersionHistory(this.storage, this.now);
     this.crdt = new CrdtStore(this.storage, this.deviceName);
   }
@@ -203,7 +221,7 @@ export class SyncEngine {
 
   async load(): Promise<void> {
     if (this.loaded) return;
-    await this.queue.load();
+    if (this.ownsQueue) await this.queue.load();
     const file = await readJson<SyncStateFile>(this.storage, STATE_FILE);
     /* Файл прежней версии не переносим: чья это память, из него не следует.
        Пустая память безопаснее угаданной — см. пояснение у STATE_VERSION. */
@@ -257,6 +275,7 @@ export class SyncEngine {
       lastSyncAt: this.state.lastSyncAt,
       noteCount: notes.length,
       bytes: this.knownBytes(),
+      pending: this.queue.size,
     };
   }
 
@@ -295,6 +314,7 @@ export class SyncEngine {
       lastSyncAt: this.state.lastSyncAt,
       noteCount: 0,
       bytes: 0,
+      pending: this.queue.size,
       pushed: 0,
       pulled: 0,
       merged: 0,
@@ -375,6 +395,7 @@ export class SyncEngine {
     const notes = this.vault.notes();
     outcome.noteCount = notes.length;
     outcome.bytes = this.knownBytes();
+    outcome.pending = this.queue.size;
     outcome.lastSyncAt = this.state.lastSyncAt;
     outcome.ignored = [...this.ignored];
     if (outcome.state === 'synced' && this.queue.size > 0) outcome.state = 'syncing';

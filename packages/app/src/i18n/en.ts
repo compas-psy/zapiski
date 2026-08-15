@@ -490,8 +490,13 @@ export const en: AppCatalog = {
     },
     sync: {
       statusSynced: 'Synchronised',
-      statusLine: (time: string, notes: number, size: string): string =>
-        `${time} · ${notes} ${pl(notes, 'note', 'notes')} · ${size}`,
+      statusLocalOnly: 'Sync is not connected',
+      statusPending: (count: number): string =>
+        `${count} ${pl(count, 'change', 'changes')} waiting to be sent`,
+      statusLine: (time: string, notes: number, size: string | null): string =>
+        [time, `${notes} ${pl(notes, 'note', 'notes')}`, size]
+          .filter((part): part is string => part !== null)
+          .join(' · '),
       syncNow: 'Sync now',
       backends: 'Where the notes live',
       whereHint:
