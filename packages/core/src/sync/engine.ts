@@ -160,6 +160,14 @@ export class SyncEngine {
   private readonly isOnline: () => boolean;
   /** Что пропустили за текущий проход — без повторов. */
   private ignored = new Set<VaultPath>();
+  /**
+   * Держим удаления: хранилище выглядит опустевшим целиком.
+   *
+   * Ставится на один проход (см. `runSync`). Пока флаг поднят, движок не
+   * удаляет ничего на той стороне — потому что «локально пусто» в такой
+   * ситуации значит не «человек всё удалил», а «мы сейчас не видим файлов».
+   */
+  private holdDeletions = false;
   private file: SyncStateFile = { version: STATE_VERSION, remotes: {} };
   /** Память о ТЕКУЩЕМ месте синхронизации. */
   private state: RemoteState = { lastSyncAt: null, entries: {} };
@@ -323,6 +331,31 @@ export class SyncEngine {
     const local = new Set<VaultPath>(await this.syncablePaths());
     const paths = new Set<VaultPath>([...local, ...remote.keys(), ...this.queue.list().map((item) => item.path)]);
 
+    /*
+     * Предохранитель: разом опустевшее хранилище — не команда стереть облако.
+     *
+     * Удаление на той стороне выводится из отсутствия файла здесь: «был в
+     * памяти синхронизации, локально нет, у них есть — значит человек его
+     * удалил». Для одной заметки это верно. Для всех сразу — почти наверняка
+     * нет: так выглядит недоступная папка, отозванное разрешение, ещё не
+     * примонтированная карта памяти или открытый не тот корень. Именно этот
+     * случай заказчик и описал — «файлы исчезли», — и цена ошибки здесь
+     * несимметрична: лишняя копия в облаке стоит мегабайт, а стёртый архив
+     * стоит архива.
+     *
+     * Поэтому: если помним больше двух файлов и локально не осталось НИ
+     * ОДНОГО, удаления в этом проходе не выполняются. Забирать чужое сверху
+     * (`pull`) при этом никто не мешает — наоборот, так заметки и вернутся.
+     */
+    const remembered = Object.keys(this.state.entries).length;
+    const vanished = remembered > 2 && local.size === 0;
+    this.holdDeletions = vanished;
+    if (vanished) {
+      outcome.messages.push(this.strings.errors.vaultLooksEmpty);
+      outcome.error = this.strings.errors.vaultLooksEmpty;
+      outcome.state = 'error';
+    }
+
     // Порядок важен: сначала заметки, потом CRDT-логи. Иначе при слиянии
     // локальный лог уже содержал бы чужие правки, и материализация `.md`
     // затёрла бы их (ТЗ §4.2).
@@ -435,6 +468,9 @@ export class SyncEngine {
 
     // Удаление: локально файла нет, но он был засинкан или стоит в очереди.
     if (!hasLocal && (queued?.kind === 'delete' || (state && !remoteEntry))) {
+      /* Опустевшее разом хранилище удалений не заказывает — см. `runSync`.
+         Память о файле сохраняем: она пригодится, когда папка вернётся. */
+      if (this.holdDeletions) return;
       if (remoteEntry) await this.backend.remove(path);
       delete this.state.entries[path];
       await this.queue.done(path);

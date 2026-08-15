@@ -14,6 +14,9 @@ export const en: Catalog = {
     folderUnavailable: 'The folder is unavailable. It may have been moved — please point to its new location',
     browserStorageUnavailable:
       'The browser refused storage for your notes — they will only last until you close the tab. Check private mode and site data permissions',
+    vaultLooksEmpty:
+      'The notes folder is empty right now, though it used to hold files. Nothing is being deleted from the cloud — check access to the folder',
+    cloudSignInAgain: 'Your cloud session expired — sign in again to resume syncing',
     settingNotSaved: 'Could not save the setting — it will revert on restart',
     webdavAuth: 'The server did not accept the login or password',
     webdavUnreachable: 'The server is not responding · Retry',

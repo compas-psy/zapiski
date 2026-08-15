@@ -287,3 +287,94 @@ describe('вложение — не заметка', () => {
     expect(vault.notes().map((note) => note.path)).toEqual(['Идеи.md']);
   });
 });
+
+/**
+ * Опустевшее хранилище не стирает облако.
+ *
+ * Заказчик: «сегодня вновь открыл приложение, и оно само переключилось на
+ * локальную папку, а файлы исчезли… здесь нужен защитный механизм».
+ *
+ * Удаление на той стороне движок выводит из отсутствия файла здесь. Для одной
+ * заметки это верно; для всех сразу — почти наверняка нет: так выглядит
+ * недоступная папка, отозванное разрешение SAF, не примонтированная карта или
+ * открытый не тот корень. Цена ошибки несимметрична — лишняя копия в облаке
+ * стоит мегабайт, стёртый архив стоит архива.
+ */
+describe('предохранитель пустого хранилища', () => {
+  it('локально пусто — в облаке всё остаётся на месте', async () => {
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    const backend = () => new LocalFolderBackend(cloud, { origin: 'облако' });
+
+    /* Первый проход: три заметки уезжают, движок их запоминает. */
+    const first = await device(now);
+    for (const name of ['Первая.md', 'Вторая.md', 'Третья.md']) {
+      await first.vault.write(name, `# ${name}\n`, { scheduleRename: false });
+    }
+    const engine = new SyncEngine(first.vault, backend(), { now });
+    await engine.sync();
+    expect(Object.keys(cloud.snapshot()).filter((p) => p.endsWith('.md'))).toHaveLength(3);
+
+    /* А теперь папка «пропала»: файлов нет ни одного, память синка цела —
+       ровно то состояние, в котором приложение оказалось у заказчика. */
+    for (const name of ['Первая.md', 'Вторая.md', 'Третья.md']) {
+      await first.disk.remove(name);
+    }
+    await first.vault.rebuild();
+    const outcome = await engine.sync();
+
+    const survived = Object.keys(cloud.snapshot()).filter((path) => path.endsWith('.md'));
+    expect(survived, 'облако вычищено вслед за недоступной папкой').toHaveLength(3);
+    expect(outcome.messages.join(' '), 'человеку не сказали, почему ничего не удалено').toContain(
+      'Ничего не удаляем из облака',
+    );
+  });
+
+  it('одна удалённая заметка удаляется как прежде', async () => {
+    /* Обратная сторона: предохранитель не должен запрещать обычное удаление,
+       иначе стёртая человеком заметка возвращалась бы с того света на каждом
+       проходе. Удаление приложением — это `markDeleted`, а не просто
+       исчезнувший файл: пропавшее мимо нас движок считает бедой, а не
+       командой (и возвращает из облака — проверка ниже). */
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    const { vault } = await device(now);
+    for (const name of ['Первая.md', 'Вторая.md', 'Третья.md']) {
+      await vault.write(name, `# ${name}\n`, { scheduleRename: false });
+    }
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    await vault.trash('Вторая.md');
+    await engine.markDeleted('Вторая.md');
+    await engine.sync();
+
+    const left = Object.keys(cloud.snapshot()).filter((path) => path.endsWith('.md')).sort();
+    expect(left).toEqual(['Первая.md', 'Третья.md']);
+  });
+
+  it('вернулась папка — вернулись и заметки', async () => {
+    /* Главное обещание: пропажа локальных файлов не уносит их из облака, а
+       следующий проход приносит их обратно на диск. Ради этого предохранитель
+       и держит удаления — чтобы было чему возвращаться. */
+    const now = clock();
+    const cloud = new MemoryVaultStorage({ now });
+    const { disk, vault } = await device(now);
+    for (const name of ['Первая.md', 'Вторая.md', 'Третья.md']) {
+      await vault.write(name, `# ${name}\n`, { scheduleRename: false });
+    }
+    const engine = new SyncEngine(vault, new LocalFolderBackend(cloud, { origin: 'облако' }), { now });
+    await engine.sync();
+
+    for (const name of ['Первая.md', 'Вторая.md', 'Третья.md']) await disk.remove(name);
+    await vault.rebuild();
+    await engine.sync();
+
+    const back = Object.keys(disk.snapshot()).filter((path) => path.endsWith('.md')).sort();
+    expect(back, 'заметки не вернулись на устройство из облака').toEqual([
+      'Вторая.md',
+      'Первая.md',
+      'Третья.md',
+    ]);
+  });
+});

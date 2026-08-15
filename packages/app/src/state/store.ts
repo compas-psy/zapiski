@@ -166,6 +166,27 @@ export interface AppState {
 
   sync: SyncStatus;
   backendId: SyncBackend['id'] | null;
+  /**
+   * Что человек ВЫБРАЛ, а не что удалось подключить.
+   *
+   * Заказчик: «вчера подключил облако — всё синхронизировал; сегодня открыл, и
+   * оно само переключилось на локальную папку». Переключения не было: выбор
+   * так и лежал в настройках устройства, но подключить облако не вышло
+   * (сессия не восстановилась), а экран показывал только подключённое — то
+   * есть «Только на этом устройстве». Со стороны это неотличимо от того, что
+   * приложение само поменяло решение человека.
+   *
+   * Поэтому выбор и подключение разведены: выбранным показывается выбранное,
+   * а рядом честно говорится, что подключиться не удалось и почему.
+   */
+  backendChoice: SyncBackend['id'] | null;
+  /**
+   * Облако выбрано, но вход не действует: нужен повторный вход.
+   *
+   * Отдельный признак, а не ошибка синхронизации: чинится он не «повторить»,
+   * а «войти», и человеку надо сказать именно это.
+   */
+  cloudNeedsSignIn: boolean;
   online: boolean;
 
   /**
@@ -254,6 +275,8 @@ function initialState(locale: Locale): AppState {
     lastOpened: [],
     sync: { state: 'offline', lastSyncAt: null, noteCount: 0, bytes: 0 },
     backendId: null,
+    backendChoice: null,
+    cloudNeedsSignIn: false,
     online: true,
     expandedFolders: [],
     libraryOpen: false,
@@ -872,7 +895,13 @@ export class AppController {
     return true;
   }
 
-  /** Молчаливое восстановление бэкенда при старте: как было, так и осталось. */
+  /**
+   * Восстановление бэкенда при старте: как было, так и осталось.
+   *
+   * «Молчаливым» оно было раньше и в этом состояла беда: не восстановилось —
+   * и приложение просто выглядело локальным. Теперь выбор человека попадает в
+   * состояние ДО всякой попытки подключиться, а неудача называется вслух.
+   */
   private async resumeCloud(): Promise<void> {
     const raw = await this.host.prefs.get<string | null>(PREF.backend, null);
     /* Прежнее имя нашего облака в настройках устройства. Без переноса человек
@@ -881,6 +910,9 @@ export class AppController {
        переименования. */
     const stored = (raw === 'kompas' ? 'zapiski' : raw) as SyncBackend['id'] | null;
     if (stored !== raw && stored !== null) await this.host.prefs.set(PREF.backend, stored);
+    /* Выбор человека — в состояние сразу: экран обязан показывать его, а не
+       результат попытки подключиться. */
+    this.patch({ backendChoice: stored });
     if (stored === 'yandex') {
       const token = await this.host.prefs.get<string | null>(PREF.yandexToken, null);
       if (token !== null && token !== '') {
@@ -888,8 +920,24 @@ export class AppController {
         return;
       }
     }
-    if (this.session.current() === null) return;
     if (stored !== null && stored !== 'zapiski') return;
+    if (this.session.current() === null) {
+      /*
+       * Облако выбрано, а входа нет: сессия истекла, была отозвана или не
+       * пережила переустановку. Это не повод менять решение человека — это
+       * повод сказать, что нужно войти снова. Заметки при этом на месте: они
+       * лежат в папке, и приложение продолжает работать локально.
+       */
+      if (stored === 'zapiski') {
+        this.patch({ cloudNeedsSignIn: true });
+        this.toast({
+          message: this.strings.errors.cloudSignInAgain,
+          actionLabel: this.strings.settings.account.signIn,
+          onAction: () => this.beginSignIn({ name: 'settings', section: 'sync' }),
+        });
+      }
+      return;
+    }
     await this.connectCloud();
   }
 
@@ -2443,7 +2491,11 @@ export class AppController {
             isOnline: () => this.state.online,
           })
         : null;
-    this.patch({ backendId: backend?.id ?? null });
+    this.patch({
+      backendId: backend?.id ?? null,
+      backendChoice: backend?.id ?? null,
+      cloudNeedsSignIn: false,
+    });
     this.persistPref(PREF.backend, backend?.id ?? null);
     /*
      * Первый обмен с новым местом заканчивается тостом с числами.

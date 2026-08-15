@@ -504,6 +504,16 @@ function SyncSection(): ReactNode {
   const state = useAppState();
   const strings = useStrings();
   const copy = strings.settings.sync;
+  const copyAccount = strings.settings.account;
+  /**
+   * Что показывать выбранным: решение человека, а не итог подключения.
+   *
+   * Подключиться может не выйти — сессия истекла, сервер не ответил, папка
+   * недоступна. Ни один из этих случаев не отменяет выбора, и подсвечивать
+   * в такую минуту «Только на этом устройстве» — значит сообщать человеку
+   * неправду о его же настройках.
+   */
+  const choiceOrBackend = state.backendId ?? state.backendChoice;
   const [webdav, setWebdav] = useState({ url: '', user: '', password: '' });
   const [yandexToken, setYandexToken] = useState('');
   /* Какой режим человек раскрыл, чтобы ввести данные. Раскрытый — ещё не
@@ -621,11 +631,32 @@ function SyncSection(): ReactNode {
       <Section>{copy.backends}</Section>
       <p className="za-muted">{copy.whereHint}</p>
 
+      {/*
+        Отмечено то, что ВЫБРАЛ человек, даже если подключиться сейчас не
+        вышло. Иначе экран выглядит так, будто приложение само сменило место
+        хранения, — ровно это заказчик и увидел утром после того, как вечером
+        подключил облако.
+      */}
+      {state.cloudNeedsSignIn ? (
+        <InfoNote icon={<IconInfo size={15} />}>
+          <span className="za-row-between">
+            {strings.errors.cloudSignInAgain}
+            <Button
+              variant="text"
+              size="compact"
+              onClick={() => app.beginSignIn({ name: 'settings', section: 'sync' })}
+            >
+              {copyAccount.signIn}
+            </Button>
+          </span>
+        </InfoNote>
+      ) : null}
+
       <ModeCard
         id={null}
         title={copy.modeLocalOnly}
         hint={copy.modeLocalOnlyHint}
-        current={state.backendId}
+        current={choiceOrBackend}
         onChoose={() => void app.switchBackend(null)}
       />
 
@@ -634,14 +665,14 @@ function SyncSection(): ReactNode {
         id="local"
         title={copy.modeCopy}
         hint={copy.modeCopyHint}
-        current={state.backendId}
+        current={choiceOrBackend}
         onChoose={() => connect('local')}
       />
 
       <ModeCard
         id="yandex"
         title={copy.yandex}
-        current={state.backendId}
+        current={choiceOrBackend}
         onChoose={() => setOpenMode('yandex')}
         open={openMode === 'yandex'}
       >
@@ -666,7 +697,7 @@ function SyncSection(): ReactNode {
         id="webdav"
         title={copy.webdavCard}
         hint={copy.webdavHint}
-        current={state.backendId}
+        current={choiceOrBackend}
         onChoose={() => setOpenMode('webdav')}
         open={openMode === 'webdav'}
       >
@@ -696,7 +727,7 @@ function SyncSection(): ReactNode {
         id="zapiski"
         title={copy.cloud}
         badge={copy.cloudBadge}
-        current={state.backendId}
+        current={choiceOrBackend}
         onChoose={() => connect('zapiski')}
       />
 
@@ -1008,18 +1039,28 @@ function ModeCard({
 
   return (
     <div className={`za-card${chosen ? ' za-card--selected' : ''}`}>
+      {/*
+        Нажимается ВСЯ карточка, а не строка заголовка.
+
+        Заказчик: «кнопка Облако Записок не нажимается». Кнопка работала —
+        только занимала одну верхнюю строку, а описание под ней («E2E-шифрование,
+        история версий…») к нажатию отношения не имело. На телефоне карточка
+        высотой в треть экрана, и попасть мимо цели проще, чем в неё.
+      */}
       <button
         type="button"
-        className="za-row-between za-card__choose"
+        className="za-card__choose"
         role="radio"
         aria-checked={chosen}
         onClick={onChoose}
       >
-        <span className="za-card__title">{title}</span>
-        {chosen ? <Badge tone="success">{copy.current}</Badge> : null}
-        {!chosen && badge ? <Badge tone="warning">{badge}</Badge> : null}
+        <span className="za-row-between">
+          <span className="za-card__title">{title}</span>
+          {chosen ? <Badge tone="success">{copy.current}</Badge> : null}
+          {!chosen && badge ? <Badge tone="warning">{badge}</Badge> : null}
+        </span>
+        {hint ? <span className="za-muted za-card__text">{hint}</span> : null}
       </button>
-      {hint ? <p className="za-muted">{hint}</p> : null}
       {open && children ? (
         <div className="za-stack za-stack--tight" style={{ paddingBlockStart: 12 }}>
           {children}
