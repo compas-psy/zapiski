@@ -808,6 +808,10 @@ export class AppController {
        открыто, и терять его из-за очереди нельзя. */
     await changes.load().catch(() => undefined);
     this.changes = changes;
+    /* Движок — на новое место, и прямо здесь, а не побочным действием
+       `resumeCloud` в конце метода: тот выходит раньше без живой сессии, и
+       облако осталось бы привязанным к прежней папке. */
+    this.rebindEngine();
     vault.onChange(() => {
       void this.refresh();
     });
@@ -3101,6 +3105,43 @@ export class AppController {
     this.attachBackend(backend);
   }
 
+  /**
+   * Пересобрать движок под ТЕКУЩЕЕ хранилище, не трогая выбор облака.
+   *
+   * Движок держит ссылку на `Vault`, полученную в момент подключения. Смена
+   * папки (`openVault`) эту ссылку не обновляла — и держалась вся конструкция
+   * на побочном действии: `openVault` в конце зовёт `resumeCloud`, а тот при
+   * удачном стечении обстоятельств переподключает облако заново.
+   *
+   * Обстоятельства сходятся не всегда. Нет живой сессии, истёк токен
+   * Яндекс.Диска — `resumeCloud` выходит раньше, движок остаётся на ПРЕЖНЕЙ
+   * папке, и дальше он честно синхронизирует её: правки в новой папке не
+   * уезжают никуда, а приезжающее из облака ложится в старую. Со стороны —
+   * «выбрал папку, и синхронизация перестала работать».
+   */
+  private rebindEngine(): void {
+    const backend = this.backend;
+    const vault = this.vault;
+    if (!backend || !vault) {
+      this.engine = null;
+      this.engineFor = null;
+      return;
+    }
+    /* То же место — движок оставляем как есть. Он помнит момент последнего
+       обмена и etag'и, прочитанные с диска; заменять его на каждом открытии
+       того же хранилища значило бы показывать «синхронизации ещё не было»
+       там, где она была час назад. */
+    if (this.engine && this.engineFor === vault.storage) return;
+    this.engine = new SyncEngine(vault, backend, {
+      isOnline: () => this.state.online,
+      ...(this.changes ? { queue: this.changes } : {}),
+    });
+    this.engineFor = vault.storage;
+  }
+
+  /** Хранилище, под которое собран текущий движок. */
+  private engineFor: VaultStorage | null = null;
+
   attachBackend(backend: SyncBackend | null): void {
     const changed = backend?.id !== this.state.backendId;
     this.backend = backend;
@@ -3115,6 +3156,7 @@ export class AppController {
             ...(this.changes ? { queue: this.changes } : {}),
           })
         : null;
+    this.engineFor = this.engine ? (this.vault?.storage ?? null) : null;
     this.patch({
       backendId: backend?.id ?? null,
       backendChoice: backend?.id ?? null,

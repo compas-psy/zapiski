@@ -271,3 +271,53 @@ describe('вход посреди загрузки не сбивает хран�
     expect(app.openedForTest()).toBe('ivan@ya.ru');
   });
 });
+
+/**
+ * Смена папки уводит на новое место и синхронизацию, а не только список.
+ *
+ * Движок синка держит ссылку на `Vault`, полученную при подключении облака.
+ * `openVault` эту ссылку не обновлял — держалось всё на побочном действии:
+ * в конце `openVault` зовётся `resumeCloud`, и тот ПРИ УДАЧЕ переподключает
+ * облако заново, попутно пересобирая движок.
+ *
+ * Удача бывает не всегда: нет живой сессии, истёк токен Яндекс.Диска —
+ * `resumeCloud` выходит раньше. Тогда движок остаётся на прежней папке и
+ * честно синхронизирует её: правки в новой не уезжают никуда, а приезжающее
+ * из облака ложится в старую. Со стороны — «выбрал папку, и синхронизация
+ * перестала работать».
+ */
+describe('движок синка идёт за хранилищем', () => {
+  it('после смены папки в облако уезжают файлы НОВОЙ папки', async () => {
+    const { app, host } = await boot();
+
+    const sent: string[] = [];
+    app.attachBackend({
+      id: 'zapiski',
+      title: 'Облако Записок',
+      async list() {
+        return [];
+      },
+      async get() {
+        return null;
+      },
+      async put(path: string) {
+        sent.push(path);
+        return { etag: '1' };
+      },
+      async remove() {},
+    } as never);
+    await app.syncNow();
+    expect(sent, 'первая синхронизация ничего не отправила').toContain('Первая.md');
+
+    /* Человек выбрал другую папку — в ней своя заметка и нет прежней. */
+    const other = await host.platform.pickVaultDirectory('вторая-папка');
+    await other!.write('Вторая.md', new TextEncoder().encode('# Вторая\n'));
+    await app.openVault(other!);
+
+    sent.length = 0;
+    await app.syncNow();
+
+    expect(sent, 'облако получило файлы прежней папки').not.toContain('Первая.md');
+    expect(sent, 'файлы новой папки не уехали').toContain('Вторая.md');
+  });
+});
