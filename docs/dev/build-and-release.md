@@ -410,6 +410,23 @@ bash scripts/make-android-keystore.sh
 сертификата. Он ничего не отправляет и отказывается класть ключ внутрь
 репозитория.
 
+Нужен `keytool` — он входит в JDK (подойдёт Temurin 17). Чтобы не отвечать на
+семь вопросов о сертификате, задайте их одной строкой:
+
+```bash
+DNAME="CN=ZAPISKI, O=ZAPISKI, C=RU" bash scripts/make-android-keystore.sh
+```
+
+Под Windows скрипт запускается в Git Bash. Без него то же самое делается в
+PowerShell тремя командами:
+
+```powershell
+keytool -genkeypair -v -keystore "$HOME\zapiski-release.jks" -alias zapiski `
+  -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=ZAPISKI, O=ZAPISKI, C=RU"
+keytool -list -v -keystore "$HOME\zapiski-release.jks" -alias zapiski   # отпечаток
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\zapiski-release.jks")) > keystore.txt
+```
+
 Почему руками. Ключ — это личность приложения: Android ставит обновление
 поверх, только если подпись совпала. Сменили ключ — человек с установленной
 сборкой видит «Приложение не установлено» без объяснения причины, а Play
