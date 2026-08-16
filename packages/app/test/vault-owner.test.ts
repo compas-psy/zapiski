@@ -127,3 +127,95 @@ describe('чужие заметки не уезжают в чужое облак
     expect(opening?.backend).toBeNull();
   });
 });
+
+/**
+ * Порядок в `boot()`: сессию восстанавливаем ДО вопроса «где папка».
+ *
+ * Заказчик, Android: «не могу синхронизироваться с облаком». Причина была не в
+ * облаке. Порт `vaultFolders` не знал про владельца, а `boot()` спрашивал у
+ * него `current()` ДО `restoreSession()` — то есть за `local`. На Android этот
+ * вопрос по дороге ЗАНИМАЛ выбранную папку за спрашивающим, и учётка после
+ * восстановления сессии получала пустую подпапку. Синхронизация исправно
+ * работала — с пустотой.
+ *
+ * Сторож держит два утверждения сразу: вопрос задаётся уже под правильным
+ * владельцем И задаётся после того, как сессия восстановлена.
+ */
+describe('boot спрашивает о папке уже под своим владельцем', () => {
+  it('владелец в вопросе совпадает с владельцем открытого хранилища', async () => {
+    const asked: Array<string | undefined> = [];
+    const host = createTestHost({
+      files: FILES,
+      prefs: {
+        onboarded: true,
+        /* Сессия лежит в настройках — ровно так выглядит запуск у человека,
+           который вошёл вчера. Без неё владельцем на старте был бы `local`, и
+           сторож проходил бы при любом порядке вызовов, ничего не проверяя. */
+        'auth.session': {
+          accessToken: 'токен',
+          refreshToken: 'обновление',
+          expiresAt: Date.now() + 3_600_000,
+          userId: 'u1',
+          email: 'ivan@ya.ru',
+          deviceId: 'устройство-1',
+        },
+      },
+      platform: {
+        vaultFolders: {
+          async chooseFolder() {
+            return null;
+          },
+          async useAppFolder() {
+            return null;
+          },
+          async current(owner?: string) {
+            asked.push(owner);
+            return { kind: 'app', writeMode: 'atomic', label: 'Записки' };
+          },
+        },
+      },
+    });
+    const app = new AppController(host);
+    await app.boot();
+
+    expect(asked.length, 'о папке не спросили вовсе').toBeGreaterThan(0);
+    expect(
+      asked[0],
+      'о папке спросили за `local`, хотя открывается место учётки',
+    ).toBe(app.owner());
+  });
+});
+
+/**
+ * Вход, у которого для новой учётки ещё нет места.
+ *
+ * `switchOwner` в этом случае ставит экран выбора места — и раньше
+ * `completeSignIn` затирал его безусловным переходом «туда, ради чего
+ * входили». Человек попадал в список без хранилища: список пуст, «плюс»
+ * отвечает «Папка недоступна», и понять, что от него ждут выбора папки,
+ * неоткуда.
+ */
+describe('вход без места для новой учётки', () => {
+  it('смена владельца честно сообщает, что места нет', async () => {
+    const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
+    const app = new AppController(host);
+    await app.boot();
+
+    /* Хост, у которого для чужой учётки места нет: ровно так ведёт себя
+       браузер без выбранной папки и Android с отозванным доступом. */
+    (host as { restoreVault: (owner?: string) => Promise<unknown> }).restoreVault = async (
+      owner?: string,
+    ) => (owner === 'local' ? host.storage : null);
+
+    app.setAccount({ email: 'second@ya.ru', plan: 'free', marketingOptIn: false });
+    expect(await app.switchOwnerForTest()).toBe(false);
+    expect(app.getState().route.name, 'вместо выбора места показали список').toBe('onboarding');
+  });
+
+  it('место есть — смена владельца это подтверждает', async () => {
+    const { app } = await boot();
+    app.setAccount({ email: 'second@ya.ru', plan: 'free', marketingOptIn: false });
+    expect(await app.switchOwnerForTest()).toBe(true);
+    expect(app.getState().route.name).toBe('list');
+  });
+});

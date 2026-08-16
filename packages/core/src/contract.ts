@@ -188,13 +188,26 @@ export function ownerKeyOf(email: string | null | undefined): VaultOwner {
  * (ТЗ §4.1 п. 1: LocalFolder — в том числе папка, которую синкает сторонний
  * клиент), а не мы за него.
  */
+/**
+ * Владелец обязателен во всех трёх методах — по той же причине, что и в
+ * `pickVaultDirectory`. Порт был owner-blind, и это стоило заказчику дня:
+ * `current()` — вопрос «где папка» — по дороге ЗАНИМАЛ старую папку за
+ * `local`, потому что владельца ему не передавали. Дальше учётка получала
+ * пустую подпапку, синхронизация уносила в облако пустоту, а человек читал это
+ * как «не могу синхронизироваться».
+ */
 export interface VaultFolderPicker {
   /** Системный выбор папки. `null` — пользователь отменил выбор. */
-  chooseFolder(): Promise<VaultLocation | null>;
+  chooseFolder(owner?: VaultOwner): Promise<VaultLocation | null>;
   /** Вернуться к каталогу приложения — надёжный путь с атомарной записью. */
-  useAppFolder(): Promise<VaultLocation | null>;
-  /** Где заметки лежат сейчас. `null` — место ещё не выбрано. */
-  current(): Promise<VaultLocationInfo | null>;
+  useAppFolder(owner?: VaultOwner): Promise<VaultLocation | null>;
+  /**
+   * Где заметки лежат сейчас. `null` — место ещё не выбрано.
+   *
+   * Это ВОПРОС. Он обязан быть чистым: ни одной записи в настройки, ни одной
+   * заявки на папку. Экран настроек зовёт его на каждую перерисовку.
+   */
+  current(owner?: VaultOwner): Promise<VaultLocationInfo | null>;
 }
 
 /**

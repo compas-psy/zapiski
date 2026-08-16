@@ -9,12 +9,12 @@ import { LOCAL_OWNER } from '@zapiski/core';
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
 import {
+  adoptSafTree,
   chosenSafTree,
   createPlatform,
+  forgetTree,
   ownedRoot,
-  PREF_SAF_TREE,
   safAccessRevoked,
-  safTreeKeyOf,
 } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
@@ -74,6 +74,10 @@ async function probePatiently(
 export function createHost(): AppHost {
   /* Настройки нужны и платформе: в них лежит выбранная папка (ТЗ §4.1 п. 1). */
   const prefs = createPreferences();
+  /* Чьё хранилище открыто последним. Нужен `openAttachment`: у него в
+     сигнатуре владельца нет, а брать `local` — значит искать вложение в
+     чужой папке. */
+  let lastOwner: string = LOCAL_OWNER;
 
   return {
     platform: createPlatform(prefs),
@@ -122,10 +126,16 @@ export function createHost(): AppHost {
      *     попробует снова, чем мы молча подменим ему хранилище.
      */
     async restoreVault(owner: string = LOCAL_OWNER) {
-      /* `chosenSafTree`, а не голая настройка: выбор мог не доехать до неё,
+      /* Владелец, чьё хранилище открыто последним: `openAttachment` спросить
+         его больше неоткуда, а спрашивать `local` — значит отдавать вложение
+         из чужой папки. */
+      lastOwner = owner;
+      /* `adoptSafTree`, а не голая настройка: выбор мог не доехать до неё,
          если система убила процесс, пока был открыт системный выбор папки.
-         Тогда след выбора — разрешение, выданное системой. */
-      const tree = await chosenSafTree(prefs, owner);
+         Тогда след выбора — разрешение, выданное системой. И заявка на старую
+         папку делается ЗДЕСЬ — там, где хранилище открывается по-настоящему,
+         а не в вопросе «где папка». */
+      const tree = await adoptSafTree(prefs, owner);
       if (tree !== null) {
         const { alive, answered } = await probePatiently(tree);
         if (alive) return createSafStorage(alive.uri);
@@ -138,8 +148,7 @@ export function createHost(): AppHost {
         if (!(await safAccessRevoked(tree))) return null;
         /* Разрешение отозвано — забываем папку ЭТОГО владельца, чужие не
            трогаем: у каждого своё место, и одно не отвечает за другое. */
-        await prefs.set(safTreeKeyOf(owner), null);
-        await prefs.set(PREF_SAF_TREE, null);
+        await forgetTree(prefs, owner);
       }
       /*
        * Каталог приложения — у каждого владельца свой.
@@ -161,7 +170,10 @@ export function createHost(): AppHost {
      * `false` — приложение попробует прежний путь через `blob:`.
      */
     async openAttachment(path: string): Promise<boolean> {
-      const tree = await chosenSafTree(prefs);
+      /* Владельца берём того, чьё хранилище открыто. Раньше здесь стоял
+         `chosenSafTree(prefs)` без владельца, то есть всегда `local`: под
+         учёткой вложение искалось в чужой папке и не находилось. */
+      const tree = await chosenSafTree(prefs, lastOwner);
       if (tree === null) return false;
       return openSafFile(tree, path).catch(() => false);
     },

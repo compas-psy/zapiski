@@ -659,11 +659,6 @@ export class AppController {
     await this.restoreUnlockGuard(unlockGuard);
     this.patch({ sortByFolder, recentQueries, lastOpened, account });
 
-    /* Где лежат заметки — вопрос платформы, а не настроек: место могло быть
-       выбрано в прошлый запуск, а разрешение на папку — отозвано (ТЗ §4.1). */
-    const vaultLocation = (await this.host.platform.vaultFolders?.current().catch(() => null)) ?? null;
-    if (vaultLocation) this.patch({ vaultLocation });
-
     /* Вход: сессия из настроек и подписка на возврат по ссылке. Делается до
        открытия vault'а — ссылка может прийти в первую же секунду. */
     await this.restoreSession();
@@ -671,6 +666,26 @@ export class AppController {
 
     this.openedFor = this.owner();
     const storage = await this.host.restoreVault(this.openedFor).catch(() => null);
+
+    /*
+     * Где лежат заметки — вопрос платформы, а не настроек: место могло быть
+     * выбрано в прошлый запуск, а разрешение на папку — отозвано (ТЗ §4.1).
+     *
+     * Порядок здесь решает всё, и переставлять его нельзя. Спрашивать надо
+     * ПОСЛЕ двух вещей сразу.
+     *
+     * После `restoreSession` — иначе владельцем в этот момент будет `local`.
+     * Раньше так и было, и на Android вопрос «где папка» по дороге ЗАНИМАЛ
+     * папку за спрашивающим: учётка получала пустую подпапку, синхронизация
+     * уносила в облако пустоту, а человек видел «заметки пропали, облако не
+     * работает».
+     *
+     * После `restoreVault` — потому что именно он занимает папку и
+     * восстанавливает выбор, не доехавший до настроек. Спроси раньше — и
+     * настройки назвали бы каталог приложения, пока заметки читаются из
+     * выбранной папки. Название места обязано совпадать с местом.
+     */
+    await this.refreshVaultLocation();
     if (!storage && onboarded) {
       /*
        * Место человек уже выбирал, а папка сейчас не отвечает.
@@ -702,7 +717,34 @@ export class AppController {
     await this.openVault(storage);
   }
 
-  /** Открыть vault поверх готового хранилища и перейти к списку. */
+  /**
+   * Перечитать, где лежат заметки ЭТОГО владельца.
+   *
+   * Отдельным методом, потому что мест два: старт и смена учётки. Без второго
+   * настройки после входа показывали папку предыдущего владельца — то есть
+   * называли чужое место своим.
+   */
+  private async refreshVaultLocation(): Promise<void> {
+    const picker = this.host.platform.vaultFolders;
+    if (!picker) return;
+    const vaultLocation = (await picker.current(this.owner()).catch(() => null)) ?? null;
+    if (vaultLocation) this.patch({ vaultLocation });
+  }
+
+  /**
+   * Открыть vault поверх готового хранилища и перейти к списку.
+   *
+   * Метод бросает ровно в одном случае: хранилище открыть не удалось. Всё,
+   * что идёт ПОСЛЕ открытия — очередь неотправленного, обход папки, подъём
+   * облака, — исключением наружу не выходит.
+   *
+   * Это не перестраховка. Вызывающий (онбординг) трактует любое исключение
+   * как «папка недоступна»: показывает тост из реестра и уводит человека в
+   * хранилище в памяти. То есть неудача синка или чтения очереди выдавалась за
+   * пропавшую папку, а РАБОЧЕЕ хранилище при этом выбрасывалось — заметки
+   * оставались в памяти до закрытия приложения. Ошибка одного не имеет права
+   * отменять чужую удачу.
+   */
   async openVault(storage: VaultStorage): Promise<void> {
     this.patch({ booting: true });
     /* Отказ открыть хранилище обязан снять флаг «загружаюсь». Без этого
@@ -728,7 +770,9 @@ export class AppController {
        синхронизировать некуда. Загружаем с диска, чтобы накопленное в прошлый
        раз не начиналось с нуля. */
     const changes = new ChangeQueue(storage);
-    await changes.load();
+    /* Не прочиталась — начинаем с пустой: накопленное жаль, но хранилище
+       открыто, и терять его из-за очереди нельзя. */
+    await changes.load().catch(() => undefined);
     this.changes = changes;
     vault.onChange(() => {
       void this.refresh();
@@ -738,7 +782,7 @@ export class AppController {
       void this.flushRenamesNow();
     }, 1000);
     this.startLockWatch();
-    await this.refresh();
+    await this.refresh().catch(() => undefined);
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
     /*
      * Папка не прочиталась — говорим это, а не показываем пустой список.
@@ -753,9 +797,14 @@ export class AppController {
       this.reportError(this.strings.errors.folderUnavailable);
       this.scheduleVaultRetry();
     }
-    await this.host.prefs.set(PREF.onboarded, true);
-    /* Vault открыт — облако можно поднимать: движку синка нужен именно он. */
-    await this.resumeCloud();
+    /* Настройка не записалась — это про настройки, а не про папку. Онбординг
+       повторится, заметки на месте. Бросать отсюда нельзя: вызывающий
+       прочитал бы это как «папки нет» и выбросил открытое хранилище. */
+    await this.host.prefs.set(PREF.onboarded, true).catch(() => undefined);
+    /* Vault открыт — облако можно поднимать: движку синка нужен именно он.
+       Не поднялось — работаем локально и говорим об этом своими словами, а не
+       чужими: «папка недоступна» здесь было бы неправдой. */
+    await this.resumeCloud().catch(() => undefined);
   }
 
   /** Хранилище в памяти — запуск без настоящей ФС (демо, тесты, отказ ФС). */
@@ -833,7 +882,7 @@ export class AppController {
 
     let chosen: VaultLocation | null;
     try {
-      chosen = await picker.chooseFolder();
+      chosen = await picker.chooseFolder(this.owner());
     } catch {
       this.toast({ message: this.strings.errors.folderUnavailable });
       return null;
@@ -858,7 +907,7 @@ export class AppController {
 
     let location: VaultLocation | null;
     try {
-      location = await picker.useAppFolder();
+      location = await picker.useAppFolder(this.owner());
     } catch {
       this.toast({ message: this.strings.errors.folderUnavailable });
       return null;
@@ -1000,11 +1049,19 @@ export class AppController {
        * открыто сейчас. Подключить сначала — значит отдать облаку новой учётки
        * заметки предыдущей, и первая же синхронизация их туда отправит.
        */
-      await this.switchOwner();
+      const placed = await this.switchOwner();
       await this.connectCloud();
       const back = this.afterSignIn;
       this.afterSignIn = null;
-      this.navigate(back ?? { name: 'settings', section: 'sync' }, { replace: true });
+      /*
+       * Места у новой учётки нет — остаёмся там, где его выбирают.
+       *
+       * Раньше переход делался безусловно и затирал экран выбора места,
+       * который только что поставил `switchOwner`. Человек оказывался в
+       * списке без хранилища: список пуст, «плюс» отвечает «Папка
+       * недоступна», и понять, что от него ждут выбора папки, неоткуда.
+       */
+      if (placed) this.navigate(back ?? { name: 'settings', section: 'sync' }, { replace: true });
       return true;
     } catch (error) {
       /* Ошибка входа не блокирует локальную работу: текст на экране входа. */
@@ -1892,13 +1949,13 @@ export class AppController {
    * уметь сделать то же самое без хождения по сети за сессией: проверяется
    * разведение данных, а не механика входа.
    */
-  async switchOwnerForTest(): Promise<void> {
-    await this.switchOwner();
+  async switchOwnerForTest(): Promise<boolean> {
+    return this.switchOwner();
   }
 
-  private async switchOwner(): Promise<void> {
+  private async switchOwner(): Promise<boolean> {
     const next = this.owner();
-    if (next === this.openedFor) return;
+    if (next === this.openedFor) return this.vault !== null;
 
     /* Досылаем и отцепляем ДО открытия чужого хранилища. */
     if (this.engine) await this.syncNow().catch(() => undefined);
@@ -1910,15 +1967,19 @@ export class AppController {
 
     const storage = await this.host.restoreVault(next).catch(() => null);
     this.openedFor = next;
+    /* Настройки обязаны называть место НОВОГО владельца. Без этого после
+       входа там оставалась папка предыдущего — чужое место под своим именем. */
+    await this.refreshVaultLocation();
     if (!storage) {
       /* Места у этого владельца ещё нет. Онбординг здесь уместен: он и есть
          экран выбора места, а данные прежнего владельца остались на диске. */
       this.patch({ ready: true, booting: false, route: { name: 'onboarding', step: 2 } });
-      return;
+      return false;
     }
     await this.openVault(storage);
     await this.refresh();
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
+    return true;
   }
 
   /** Открыть лист снятия шифрования; `null` — закрыть. */

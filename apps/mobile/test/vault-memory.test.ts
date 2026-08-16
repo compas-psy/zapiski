@@ -58,7 +58,9 @@ vi.mock('../src/platform/ipc', () => ({
   EVENTS: new Proxy({}, { get: (_target, key) => String(key) }),
 }));
 
-const { createPlatform, PREF_SAF_TREE } = await import('../src/platform/capabilities');
+const { adoptSafTree, createPlatform, PREF_SAF_TREE, safTreeKeyOf } = await import(
+  '../src/platform/capabilities'
+);
 
 /** Хранилище настроек в памяти — как `PreferencesStore`, только без диска. */
 function memoryPrefs(initial: Record<string, unknown> = {}) {
@@ -233,21 +235,40 @@ describe('открытие хранилища на старте', () => {
  */
 describe('выбор папки переживает смерть процесса', () => {
   it('настройки пусты, а разрешение есть — папка возвращается', async () => {
+    /*
+     * Восстановление живёт в `adoptSafTree`, а не в вопросе «где папка».
+     *
+     * Раньше его делал `vaultFolders.current()`, и это вышло боком: тот же
+     * вызов заодно ЗАНИМАЛ папку за спрашивающим, а спрашивал его `boot()` до
+     * восстановления сессии, то есть за `local`. Вошедший человек терял свою
+     * папку на ровном месте (`vault-owner-folder.test.ts`).
+     *
+     * Разделение ничего не отменяет: восстановление по разрешению осталось —
+     * просто его делает тот, кто хранилище открывает. Соседняя проверка ниже
+     * держит именно запуск, то есть путь, по которому человек и ходит.
+     */
     persisted.mockImplementation(async () => ['content://tree/notes']);
-    probe.mockImplementation(async () => ({
-      uri: 'content://tree/notes',
-      label: 'Заметки',
-      supportsRename: true,
-    }));
+    const prefs = memoryPrefs();
+
+    const recovered = await adoptSafTree(prefs as never, 'local');
+
+    expect(recovered, 'выбранная папка не восстановилась').toBe('content://tree/notes');
+    /* И копия чинится, чтобы следующий запуск не спрашивал систему заново. */
+    expect(prefs.store.get(safTreeKeyOf('local'))).toBe('content://tree/notes');
+  });
+
+  it('вопрос «где папка» сам ничего не восстанавливает и не занимает', async () => {
+    /* Обратная сторона того же правила: `current()` — вопрос. Он не имеет
+       права ни подхватить чужое разрешение, ни записать заявку. */
+    persisted.mockImplementation(async () => ['content://tree/notes']);
     const prefs = memoryPrefs();
 
     const platform = createPlatform(prefs as never);
     const where = await platform.vaultFolders?.current();
 
-    expect(where?.kind, 'выбранная папка не восстановилась').toBe('user');
-    expect(where?.label).toBe('Заметки');
-    /* И копия чинится, чтобы следующий запуск не спрашивал систему заново. */
-    expect(prefs.store.get(PREF_SAF_TREE)).toBe('content://tree/notes');
+    expect(where?.kind).toBe('app');
+    expect(prefs.store.get(PREF_SAF_TREE)).toBeUndefined();
+    expect(prefs.store.get(safTreeKeyOf('local'))).toBeUndefined();
   });
 
   it('то же самое при запуске: хранилище открывается по восстановленной папке', async () => {

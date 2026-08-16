@@ -55,10 +55,33 @@ export const PREF_SAF_TREE = 'storage.androidTree';
  */
 export const PREF_SAF_CLAIM = 'storage.androidTree.legacyOwner';
 
-/** Ключ выбранной папки для владельца. */
+/**
+ * Владельцы, за которыми что-то записано.
+ *
+ * `PreferencesStore` перечислять ключи не умеет, а знать это надо: снимать
+ * SAF-разрешения можно только тогда, когда папки нет ни у кого другого.
+ */
+export const PREF_SAF_OWNERS = 'storage.androidTree.owners';
+
+/**
+ * Ключ выбранной папки для владельца.
+ *
+ * Три состояния, и путать их нельзя:
+ *   · строка с `content://` — папка этого владельца;
+ *   · `APP_FOLDER_CHOICE` (пустая строка) — он ЯВНО выбрал каталог приложения;
+ *   · `null` — выбора не было, и его ещё можно восстановить по разрешению.
+ *
+ * Второе состояние появилось не для красоты. Без него «вернуться в каталог
+ * приложения» приходилось подкреплять снятием всех SAF-разрешений — то есть
+ * отбирать папку и у других владельцев. Теперь отказ записан у того, кто
+ * отказался, и чужие папки при этом целы.
+ */
 export function safTreeKeyOf(owner: string): string {
   return `${PREF_SAF_TREE}.${owner}`;
 }
+
+/** «Этот владелец выбрал каталог приложения» — не то же самое, что «не знаю». */
+export const APP_FOLDER_CHOICE = '';
 
 /**
  * Корень владельца внутри каталога приложения.
@@ -75,11 +98,77 @@ export async function ownedRoot(
 ): Promise<string> {
   const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
   if (claimed === null) {
-    await prefs.set(PREF_SAF_CLAIM, owner);
+    await claim(prefs, owner);
     return base;
   }
   if (claimed === owner) return base;
   return `${base}/.owners/${owner.replace(/[^a-z0-9._-]+/gi, '_')}`;
+}
+
+/**
+ * Записать заявку — и не дать неудачной записи отнять папку.
+ *
+ * `prefs.set` бросает: файл настроек мог не открыться, диск мог быть занят.
+ * Раньше это исключение летело сквозь `ownedRoot` наружу, а вызывающий —
+ * онбординг — трактовал ЛЮБОЕ исключение как «папка недоступна», показывал
+ * тост и уводил человека в память. То есть настройка, которая не записалась,
+ * выдавалась за пропавшую папку.
+ *
+ * Заявка — вещь полезная, но не критическая: не записалась сейчас — запишется
+ * при следующем открытии. Папка от этого никуда не девается.
+ */
+async function claim(prefs: PreferencesStore, owner: string): Promise<void> {
+  await prefs.set(PREF_SAF_CLAIM, owner).catch(() => undefined);
+}
+
+/** Запомнить папку за владельцем. По той же причине — не роняя вызывающего. */
+async function remember(prefs: PreferencesStore, owner: string, tree: string): Promise<void> {
+  await prefs.set(safTreeKeyOf(owner), tree).catch(() => undefined);
+  const known = await prefs.get<string[]>(PREF_SAF_OWNERS, []);
+  if (!known.includes(owner)) {
+    await prefs.set(PREF_SAF_OWNERS, [...known, owner]).catch(() => undefined);
+  }
+}
+
+/**
+ * Забыть папку владельца — доступа к ней действительно нет.
+ *
+ * Общая ячейка `PREF_SAF_TREE` чистится, только если её держит этот же
+ * владелец. Иначе отзыв доступа у одного стирал бы папку у другого — а тот про
+ * отзыв ничего не знает и обнаружил бы пустой список.
+ */
+export async function forgetTree(prefs: PreferencesStore, owner: string): Promise<void> {
+  await prefs.set(safTreeKeyOf(owner), null).catch(() => undefined);
+  const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
+  if (claimed === null || claimed === owner) {
+    await prefs.set(PREF_SAF_TREE, null).catch(() => undefined);
+  }
+}
+
+/**
+ * Держит ли папку кто-то, кроме этого владельца.
+ *
+ * Нужно ровно в одном месте: «вернуться в каталог приложения» снимает
+ * SAF-разрешения, а они общие на приложение. Снять их, когда папка есть у
+ * другой учётки, — значит отобрать её у человека, который ничего не нажимал.
+ *
+ * Список владельцев ведётся отдельной настройкой: `PreferencesStore` умеет
+ * читать и писать по ключу, но не перечислять ключи, а гадать по именам —
+ * это тот самый код, который однажды не найдёт настоящего владельца и молча
+ * решит, что папку можно отнять.
+ */
+async function anyOwnerHoldsTree(prefs: PreferencesStore, except: string): Promise<boolean> {
+  const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
+  const legacy = await prefs.get<string | null>(PREF_SAF_TREE, null);
+  if (legacy !== null && claimed !== null && claimed !== except) return true;
+
+  const known = await prefs.get<string[]>(PREF_SAF_OWNERS, []);
+  for (const owner of known) {
+    if (owner === except) continue;
+    const tree = await prefs.get<string | null>(safTreeKeyOf(owner), null);
+    if (tree !== null && tree !== APP_FOLDER_CHOICE) return true;
+  }
+  return false;
 }
 
 /** Имя каталога приложения в интерфейсе — не путь: путь пользователю не нужен. */
@@ -111,31 +200,58 @@ export async function chosenSafTree(
   owner: string = LOCAL_OWNER,
 ): Promise<string | null> {
   const own = await prefs.get<string | null>(safTreeKeyOf(owner), null);
-  if (own !== null) return own;
+  if (own !== null) return own === APP_FOLDER_CHOICE ? null : own;
 
-  /* Папка, выбранная до появления учёток, достаётся первому спросившему. */
+  /* Папка, выбранная до появления учёток, достаётся первому, кто её ОТКРОЕТ.
+     Здесь только смотрим: заявку делает `adoptSafTree`, и делает её ровно
+     тогда, когда хранилище действительно открывается. */
   const legacy = await prefs.get<string | null>(PREF_SAF_TREE, null);
+  if (legacy === null) return null;
   const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
-  if (legacy !== null) {
-    if (claimed === null) {
-      await prefs.set(PREF_SAF_CLAIM, owner);
-      return legacy;
-    }
-    if (claimed === owner) return legacy;
-    /* Папка занята другим владельцем — своей у этого пока нет. */
-    return null;
-  }
+  return claimed === null || claimed === owner ? legacy : null;
+}
+
+/**
+ * Занять папку за владельцем — и вернуть её.
+ *
+ * ── Почему это отдельно от `chosenSafTree` ──────────────────────────────────
+ *
+ * Заявка необратима по решению заказчика («оставить хозяину, кто вошёл
+ * первым»), а `chosenSafTree` зовётся из `vaultFolders.current()` — то есть с
+ * каждой перерисовки настроек и один раз на старте. Пока заявка стояла внутри
+ * него, порядок в `boot()` решал судьбу папки: `current()` спрашивали ДО
+ * восстановления сессии, владельцем в тот момент был `local`, и старая папка
+ * доставалась ему. Учётка после входа получала пустую подпапку, синхронизация
+ * уносила в облако пустоту, а на экране это выглядело как «заметки пропали,
+ * облако не работает».
+ *
+ * Правило: вопрос не меняет мира. Заявку делает тот, кто открывает хранилище.
+ */
+export async function adoptSafTree(
+  prefs: PreferencesStore,
+  owner: string = LOCAL_OWNER,
+): Promise<string | null> {
+  const own = await prefs.get<string | null>(safTreeKeyOf(owner), null);
+  if (own !== null) return own === APP_FOLDER_CHOICE ? null : own;
+
+  const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
   /* Владелец, за которым старая папка не числится, чужую не подхватывает. */
   if (claimed !== null && claimed !== owner) return null;
+
+  const legacy = await prefs.get<string | null>(PREF_SAF_TREE, null);
+  if (legacy !== null) {
+    await remember(prefs, owner, legacy);
+    await claim(prefs, owner);
+    return legacy;
+  }
 
   /* Мост не ответил — это «сейчас не знаю», а не «выбора нет». Настройку не
      трогаем и ничего не выдумываем. */
   const persisted = await persistedSafTrees().catch(() => [] as string[]);
   const adopted = persisted[0];
   if (adopted === undefined) return null;
-  await prefs.set(safTreeKeyOf(owner), adopted);
-  await prefs.set(PREF_SAF_TREE, adopted);
-  if (claimed === null) await prefs.set(PREF_SAF_CLAIM, owner);
+  await remember(prefs, owner, adopted);
+  await claim(prefs, owner);
   return adopted;
 }
 
@@ -222,20 +338,33 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
      * Теперь решает пользователь, а мы честно говорим, чем он платит.
      */
     vaultFolders: {
-      async chooseFolder() {
+      async chooseFolder(owner: string = LOCAL_OWNER) {
         const tree = await pickSafTree();
         if (!tree) return null;
-        await prefs.set(PREF_SAF_TREE, tree.uri);
+        /* Папка пишется ВЛАДЕЛЬЦУ, а не в общую ячейку. Пока писали в общую,
+           выбор, сделанный под учёткой, при следующем запуске ей не
+           доставался: `chosenSafTree` смотрел ключ владельца, там было пусто,
+           а общую ячейку держал `local`. Человек выбирал папку заново каждый
+           запуск и каждый раз видел пустой список. */
+        await remember(prefs, owner, tree.uri);
+        await claim(prefs, owner);
         return safLocation(tree);
       },
 
-      async useAppFolder() {
-        /* Разрешение отпускается вместе с настройкой. Оставить его значило бы
-           оставить след выбора, по которому приложение при следующем запуске
-           вернёт человека в ту самую папку, из которой он только что ушёл. */
-        await releaseSafTrees().catch(() => undefined);
-        await prefs.set(PREF_SAF_TREE, null);
-        return openAppFolder();
+      async useAppFolder(owner: string = LOCAL_OWNER) {
+        /* Отказ записывается ЯВНО — за тем, кто отказался. Раньше здесь
+           снимались разрешения на ВСЕ деревья: возврат одного владельца в
+           каталог приложения отбирал папку у остальных. Теперь чужие
+           разрешения не трогаются, а восстановление по разрешению не утащит
+           этого владельца назад: у него записано «каталог приложения». */
+        await remember(prefs, owner, APP_FOLDER_CHOICE);
+        /* Разрешения снимаются, только если больше ни за кем папок нет: без
+           этого след выбора вернул бы человека в покинутую папку. */
+        if (!(await anyOwnerHoldsTree(prefs, owner))) {
+          await releaseSafTrees().catch(() => undefined);
+          await prefs.set(PREF_SAF_TREE, null).catch(() => undefined);
+        }
+        return openAppFolder(owner);
       },
 
       /**
@@ -259,8 +388,8 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
        * «доступа нет». Молчание — это «не знаю сейчас», и оно не даёт права
        * распоряжаться чужими данными.
        */
-      async current(): Promise<VaultLocationInfo | null> {
-        const uri = await chosenSafTree(prefs);
+      async current(owner: string = LOCAL_OWNER): Promise<VaultLocationInfo | null> {
+        const uri = await chosenSafTree(prefs, owner);
         if (uri === null) {
           return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
         }
@@ -281,8 +410,10 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
              больше не держит за нами разрешение. */
           if (!(await safAccessRevoked(uri))) return null;
           // Разрешение на папку отозвано или папка удалена: возвращаемся в
-          // каталог приложения, а не делаем вид, что всё на месте.
-          await prefs.set(PREF_SAF_TREE, null);
+          // каталог приложения, а не делаем вид, что всё на месте. Забывается
+          // папка ЭТОГО владельца — общая ячейка чужая, и трогать её значило
+          // бы отобрать папку у того, кто про отзыв не знает.
+          await forgetTree(prefs, owner);
           return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
         }
         return { kind: 'user', writeMode: writeModeOf(tree), label: tree.label };
