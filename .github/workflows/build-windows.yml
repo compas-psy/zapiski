@@ -465,6 +465,14 @@ jobs:
           scp -i ~/.ssh/deploy_key release/* "${SERVER_USER}@${SERVER_HOST}:${target}/"
           echo "Установщик ${VERSION} лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
+          # Постоянный адрес свежего установщика — по той же причине, что и у
+          # APK: каталог называется по ветке, файл по версии, и такую ссылку
+          # нельзя ни дать человеку, ни положить на промостраницу.
+          latest="/var/www/zapiski.cmpas.ru/updates/latest"
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" \
+            "mkdir -p '${latest}' && cp -f \"\$(ls -t '${target}'/*.exe | head -1)\" '${latest}/zapiski-setup.exe'"
+          echo "Постоянная ссылка: https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe"
+
       - name: Установщик должен быть хоть где-то
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}

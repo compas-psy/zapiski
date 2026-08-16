@@ -659,6 +659,17 @@ jobs:
           scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
           echo "APK лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
+          # Постоянный адрес свежей сборки.
+          #
+          # Каталог сборок называется по ветке, а файл внутри — по версии:
+          # дать такую ссылку человеку нельзя, она протухает следующим же
+          # выпуском. Промостраница и письма ссылаются на постоянный адрес, а
+          # он всегда указывает на последнее, что сюда приехало.
+          latest="/var/www/zapiski.cmpas.ru/updates/latest"
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" \
+            "mkdir -p '${latest}' && cp -f \"\$(ls -t '${target}'/*.apk | head -1)\" '${latest}/zapiski.apk'"
+          echo "Постоянная ссылка: https://zapiski.cmpas.ru/updates/latest/zapiski.apk"
+
       - name: APK должен быть хоть где-то
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}
