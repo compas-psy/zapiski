@@ -1026,28 +1026,52 @@ function StorageHousekeeping(): ReactNode {
         <span className="za-info__value">{formatBytes(state.sync.bytes, strings)}</span>
       </div>
 
-      <Button
-        variant="secondary"
-        onClick={() => {
-          /* Та же немота, что была в онбординге: папку выбрали, открыть не
-             вышло — и человек не узнавал об этом ничего. Заметки при этом
-             остаются там, где лежали: сменить папку не удалось, но старая
-             никуда не делась. */
-          void (async () => {
-            const storage = await app.host.platform.pickVaultDirectory(app.owner()).catch(() => null);
-            if (!storage) {
-              app.toast({ message: strings.errors.folderUnavailable });
-              return;
-            }
-            if ((await app.openVault(storage)) === 'unreadable') {
-              app.toast({ message: strings.errors.folderUnavailable });
-            }
-          })();
-        }}
-      >
-        {copy.changeFolder}
-      </Button>
-      <p className="za-muted">{copy.changeFolderHint}</p>
+      {/*
+        Вторая кнопка про папку показывается ТОЛЬКО там, где нет настоящего
+        выбора места.
+
+        ── Что она натворила ─────────────────────────────────────────────────
+        *
+        На Android «Сменить папку» не открывала никакого окна: `pickVaultDirectory`
+        там молча отдаёт каталог приложения. То есть человек, работавший в своей
+        папке `Zapiski`, нажимал кнопку с обещающим именем — и оказывался
+        обратно в «Записках», без вопроса и без объяснения. Рядом стояла вторая
+        кнопка, «Выбрать другую папку», которая делает настоящий системный
+        выбор. Две почти одинаковые надписи, и одна отменяет другую.
+        *
+        Заказчик сформулировал точнее меня: «чем она отличается от выбрать
+        другую папку — никто не знает».
+        *
+        Правило: у вопроса «где лежат заметки» ровно один орган управления.
+        Там, где порт `vaultFolders` есть (Android), это «Выбрать другую папку»
+        и парная ей «Вернуться в каталог приложения». Там, где порта нет
+        (Windows, веб), выбор делает `pickVaultDirectory` — и кнопка нужна.
+      */}
+      {app.canChooseVaultFolder ? null : (
+        <>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void (async () => {
+                const storage = await app.host.platform
+                  .pickVaultDirectory(app.owner())
+                  .catch(() => null);
+                /* Отмена диалога — право человека и сообщений не требует
+                   (BEHAVIOR §0). Отличить её от отказа платформы здесь нечем,
+                   поэтому молчим: тост «папка недоступна» после осознанной
+                   отмены — это ложь о причине. */
+                if (!storage) return;
+                if ((await app.openVault(storage)) === 'unreadable') {
+                  app.toast({ message: strings.errors.folderUnavailable });
+                }
+              })();
+            }}
+          >
+            {copy.changeFolder}
+          </Button>
+          <p className="za-muted">{copy.changeFolderHint}</p>
+        </>
+      )}
 
       <Button
         variant="secondary"
