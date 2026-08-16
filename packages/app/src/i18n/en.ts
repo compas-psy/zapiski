@@ -64,6 +64,11 @@ export const en: AppCatalog = {
         },
       },
       footnote: 'You can change this at any time in settings',
+      whereAndroid:
+        'Notes go into the app folder as ordinary .md files. To use a different folder, open Settings → Storage and sync',
+      whereWeb: 'In a browser the notes live in the browser itself — no folder to choose',
+      whereDesktop:
+        'A folder dialog opens next: the notes will sit there as ordinary .md files, visible to any other program. The cloud syncs that folder rather than replacing it',
       pickFolder: 'Choose a folder',
       next: 'Next',
     },

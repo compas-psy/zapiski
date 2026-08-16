@@ -96,7 +96,9 @@ describe('онбординг в браузере', () => {
     await app.boot();
     mount(app);
 
-    fireEvent.click(screen.getByRole('button', { name: ru.onboarding.step2.next }));
+    /* Кнопка называет то, что случится: на Windows следом откроется окно
+       выбора папки, и «Дальше» было бы обещанием мимо дела. */
+    fireEvent.click(screen.getByRole('button', { name: ru.onboarding.step2.pickFolder }));
     await waitFor(() => expect(picker).toHaveBeenCalled());
     app.dispose();
   });

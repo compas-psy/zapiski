@@ -23,6 +23,35 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
 
   const bulletIcons = [<IconPen size={18} key="pen" />, <IconLock size={18} key="lock" />, <IconRefresh size={18} key="sync" />];
 
+  /*
+   * Спрашиваем ли папку системным окном — и только там, где это осмысленно.
+   *
+   * Заказчик: «выбор папки — лишнее для Android и требует пояснений на Windows
+   * и Web». Он прав по всем трём. На Android папка приложения — рабочее
+   * умолчание, а системный выбор ничего не добавляет к первому запуску: там
+   * человек только что нажал «Облако Записок» и получил файловый диалог, из
+   * которого не следует ровно ничего. В браузере папки нет вовсе. Остаётся
+   * Windows, где заметки и правда ложатся в папку на диске, — и там окно
+   * объясняется до того, как открыться.
+   *
+   * Выбор папки на Android никуда не делся: он живёт в настройках хранилища,
+   * по явной просьбе, вместе с ценой (поверх системного провайдера атомарной
+   * записи нет). Это разные вещи — «можно выбрать» и «спросить при первом
+   * запуске».
+   */
+  const platform = app.host.platform.kind;
+  /* На Windows папку спрашиваем при любом выборе: умолчания там нет, и даже
+     облаку нужно место на диске — оно синхронизирует папку, а не заменяет её.
+     Раньше кнопка при выборе облака говорила «Дальше», а окно всё равно
+     открывалось: обещание расходилось с делом. */
+  const asksForFolder = platform === 'windows';
+  const whereHint =
+    platform === 'android'
+      ? strings.onboarding.step2.whereAndroid
+      : platform === 'web'
+        ? strings.onboarding.step2.whereWeb
+        : strings.onboarding.step2.whereDesktop;
+
   if (step === 1) {
     return (
       <div className="za-screen">
@@ -89,13 +118,13 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
             );
           })}
 
+          {/* Где заметки окажутся и что сейчас произойдёт — до нажатия, а не
+              после. На Windows следом откроется системное окно, и человек
+              вправе знать зачем; на Android и в вебе окна не будет вовсе. */}
+          <p className="za-muted">{whereHint}</p>
           <p className="za-muted">{strings.onboarding.step2.footnote}</p>
-          {/* В браузере кнопка всегда «Дальше»: папку сайт не спрашивает, и
-              обещать выбор папки, которого не будет, нельзя. */}
           <Button fullWidth loading={busy} onClick={() => void proceed()}>
-            {choice === 'local' || app.host.platform.kind === 'web'
-              ? strings.onboarding.step2.next
-              : strings.onboarding.step2.pickFolder}
+            {asksForFolder ? strings.onboarding.step2.pickFolder : strings.onboarding.step2.next}
           </Button>
         </div>
       </div>
@@ -157,7 +186,7 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
 
            На Windows порта нет, а `pickVaultDirectory` и так открывает
            нативный диалог — там ветка ниже отрабатывает как прежде. */
-        const picker = inBrowser ? null : app.host.platform.vaultFolders;
+        const picker = asksForFolder ? app.host.platform.vaultFolders : null;
         if (picker) {
           const chosen = await picker.chooseFolder();
           storage = chosen?.storage ?? null;

@@ -595,15 +595,31 @@ export class AppController {
     this.listenAuthCallbacks();
 
     const storage = await this.host.restoreVault().catch(() => null);
+    if (!storage && onboarded) {
+      /*
+       * Место человек уже выбирал, а папка сейчас не отвечает.
+       *
+       * Онбординг здесь — неправильный ответ, и заказчик показал почему:
+       * поставил свежую сборку, выбрал облако и получил системный выбор
+       * папки. С его стороны это выглядит как сброс приложения, а сам выбор
+       * никуда не девался — не отвечает папка, и, скорее всего, временно.
+       *
+       * Поэтому остаёмся на списке, называем причину словами реестра
+       * (BEHAVIOR §11) и предлагаем то, что помогает: подождать (пробуем сами)
+       * или указать папку заново.
+       */
+      this.patch({ ready: true, booting: false, route: { name: 'list' } });
+      this.reportError(this.strings.errors.folderUnavailable);
+      this.toast({
+        message: this.strings.errors.folderUnavailable,
+        actionLabel: this.strings.onboarding.step2.pickFolder,
+        onAction: () => this.navigate({ name: 'settings', section: 'sync' }),
+      });
+      this.scheduleVaultRetry();
+      return;
+    }
     if (!storage || !onboarded) {
-      /* Нет хранилища — онбординг с выбором места (SCREENS §1, шаг 2).
-
-         Тому, кто онбординг уже проходил, этот экран сам по себе ничего не
-         объясняет: он выглядит как первый запуск, то есть как «заметки
-         пропали». Причина другая — папка сейчас недоступна, — и её надо
-         назвать словами реестра (BEHAVIOR §11). Обещание сказать вслух дано
-         ещё в `restoreVault` оболочки; здесь оно выполняется. */
-      if (onboarded) this.toast({ message: this.strings.errors.folderUnavailable });
+      /* Первый запуск: онбординг с выбором места (SCREENS §1, шаг 2). */
       this.patch({ booting: false, route: { name: 'onboarding', step: 1 } });
       return;
     }
@@ -1109,7 +1125,16 @@ export class AppController {
    */
   async retryVault(): Promise<boolean> {
     const vault = this.vault;
-    if (!vault) return false;
+    /* Хранилища нет вовсе — папка не ответила ещё на запуске. Спрашиваем
+       платформу заново: это тот же случай, только раньше по времени. */
+    if (!vault) {
+      const storage = await this.host.restoreVault().catch(() => null);
+      if (!storage) return false;
+      await this.openVault(storage);
+      if (this.vault?.unreadable === true) return false;
+      if (this.state.syncError === this.strings.errors.folderUnavailable) this.clearError();
+      return true;
+    }
     await vault.open().catch(() => undefined);
     if (vault.unreadable) return false;
     await this.refresh();

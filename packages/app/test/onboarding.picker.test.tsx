@@ -1,23 +1,28 @@
 /**
- * Онбординг обязан ПРЕДЛОЖИТЬ выбор папки там, где он есть.
+ * Шаг 2 онбординга: папку спрашивают только там, где вопрос осмыслен.
  *
- * Отзыв заказчика про Android: «Самый главный косяк — не выбирается папка,
- * где хранить заметки». Кнопка на шаге 2 была, нажатие срабатывало, а
- * системного диалога человек не видел никогда: на Android
- * `pickVaultDirectory` по устройству отдаёт каталог приложения, а настоящий
- * выбор живёт в отдельном порте `vaultFolders` — за него там платят
- * атомарностью записи, и приложение говорит об этой цене вслух.
+ * ── Как менялось требование ─────────────────────────────────────────────────
  *
- * Порт был, экран настроек его звал — но до настроек на телефоне нельзя было
- * добраться (затемнение библиотеки перехватывало нажатия), и единственная
- * дорога к выбору папки оказалась перекрыта с обеих сторон.
+ * Сначала заказчик писал про Android: «самый главный косяк — не выбирается
+ * папка, где хранить заметки». Тогда онбординг научился звать системный выбор
+ * (`vaultFolders.chooseFolder`), и этот файл сторожил именно вызов диалога.
  *
- * Правило: если платформа объявила системный выбор, онбординг обязан его
- * показать, а не назначать место за человека.
+ * Проверив живую сборку, заказчик уточнил: «выбор папки — лишнее для Android и
+ * требует пояснений на Windows и Web». Он прав, и первое требование это не
+ * отменяет, а уточняет: **выбрать** папку по-прежнему можно — но по своей
+ * воле, в настройках, а не на первом запуске. На телефоне человек нажимает
+ * «Облако Записок» и получает файловый диалог, из которого не следует ничего:
+ * ни где окажутся заметки, ни зачем это спрашивают.
  *
- * Правило действует В ОБОЛОЧКАХ. В браузере всё наоборот: папки у сайта нет,
- * а системный диалог на Android после выбора не отвечал — экран замирал на
- * «Дальше» насовсем. Это отдельная проверка, `web-onboarding.test.tsx`.
+ * Правило теперь такое:
+ *  • Android — папка приложения молча, без системного окна;
+ *  • веб — папки нет вовсе;
+ *  • Windows — окно нужно по делу (умолчания там нет), и тогда до нажатия
+ *    сказано, зачем оно.
+ *
+ * Вторая половина правила — «выбор остался в настройках» — сторожится в
+ * `vault-location.test.tsx`: там проверяется и сам выбор, и предупреждение о
+ * цене (поверх системного провайдера атомарной записи нет).
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import { fireEvent } from '@testing-library/dom';
@@ -28,53 +33,56 @@ import { ToastProvider } from '@zapiski/ui';
 import { AppProvider } from '../src/state/context.js';
 import { AppController } from '../src/state/store.js';
 import { OnboardingScreen } from '../src/screens/OnboardingScreen.js';
+import { strings } from '../src/i18n/index.js';
 import { createTestHost } from './host.js';
 
+const ru = strings('ru');
+
+/** Экран шага 2 на заданной платформе. */
+function mount(host: ReturnType<typeof createTestHost>): AppController {
+  const app = new AppController(host);
+  render(
+    <ToastProvider>
+      <AppProvider host={host} controller={app}>
+        <OnboardingScreen step={2} />
+      </AppProvider>
+    </ToastProvider>,
+  );
+  return app;
+}
+
 describe('шаг 2: выбор места для заметок', () => {
-  it('платформа умеет выбирать папку — диалог показывается', async () => {
+  it('Android не спрашивает папку — заметки ложатся в папку приложения', async () => {
     const chooseFolder = vi.fn(async () => null);
+    const pick = vi.fn(async () => null);
     const base = createTestHost();
-    /* Так выглядит Android: системный выбор — в `vaultFolders`, а
-       `pickVaultDirectory` молча отдаёт каталог приложения. Порт объявлен
-       только для чтения, поэтому платформа собирается заново, а не правится
-       на месте. */
     const host = {
       ...base,
       platform: {
         ...base.platform,
-        /* Именно Android, а не веб: в браузере папку не спрашивают вовсе —
-           у сайта её нет, и системный диалог там кончался зависанием
-           (`web-onboarding.test.tsx`). Прежде тестовый хост объявлял себя
-           вебом, и правило проверялось не на той платформе. */
         kind: 'android' as const,
+        pickVaultDirectory: pick,
         vaultFolders: { chooseFolder, useAppFolder: async () => null, current: async () => null },
       },
     };
 
-    const app = new AppController(host);
-    render(
-      <ToastProvider>
-        <AppProvider host={host} controller={app}>
-          <OnboardingScreen step={2} />
-        </AppProvider>
-      </ToastProvider>,
-    );
+    const app = mount(host);
+    /* Кнопка обещает то, что произойдёт: никакого «Выбрать папку». */
+    fireEvent.click(screen.getByRole('button', { name: ru.onboarding.step2.next }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Дальше|Выбрать папку/ }));
-
-    await waitFor(() => {
-      expect(
-        chooseFolder,
-        'онбординг не предложил системный выбор папки — место назначено за человека',
-      ).toHaveBeenCalled();
-    });
+    await waitFor(() => expect(pick).toHaveBeenCalled());
+    expect(
+      chooseFolder,
+      'на первом запуске Android открыл системный выбор папки — человек его не просил',
+    ).not.toHaveBeenCalled();
+    /* И сказано, где заметки окажутся и как выбрать другую папку потом. */
+    expect(screen.getByText(ru.onboarding.step2.whereAndroid)).toBeTruthy();
+    app.dispose();
   });
 
-  it('платформы без своего выбора работают как прежде', async () => {
-    /* Обратная сторона: на Windows порта `vaultFolders` нет, а
-       `pickVaultDirectory` и так открывает нативный диалог. Ветка обязана
-       остаться прежней — иначе сторож выше можно было бы удовлетворить,
-       сломав десктоп. */
+  it('Windows спрашивает папку и объясняет зачем', async () => {
+    /* Умолчания на Windows нет: заметки обязаны лечь в папку, которую человек
+       назовёт. Значит окно нужно — а раз нужно, о нём говорят заранее. */
     const base = createTestHost();
     const pick = vi.fn(async () => null);
     const host = {
@@ -87,17 +95,47 @@ describe('шаг 2: выбор места для заметок', () => {
       },
     };
 
-    const app = new AppController(host);
-    render(
-      <ToastProvider>
-        <AppProvider host={host} controller={app}>
-          <OnboardingScreen step={2} />
-        </AppProvider>
-      </ToastProvider>,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: /Дальше|Выбрать папку/ }));
+    const app = mount(host);
+    expect(screen.getByText(ru.onboarding.step2.whereDesktop)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: ru.onboarding.step2.pickFolder }));
 
     await waitFor(() => expect(pick).toHaveBeenCalled());
+    app.dispose();
+  });
+
+  it('Windows: выбор облака тоже ведёт к папке, и кнопка об этом говорит', async () => {
+    /*
+      Прежде при выборе облака кнопка говорила «Дальше», а окно выбора папки
+      всё равно открывалось: обещание расходилось с делом. Облако синхронизирует
+      папку, а не заменяет её, — значит место на диске нужно и здесь.
+    */
+    const base = createTestHost();
+    const pick = vi.fn(async () => null);
+    const host = {
+      ...base,
+      platform: { ...base.platform, kind: 'windows' as const, pickVaultDirectory: pick },
+    };
+
+    const app = mount(host);
+    fireEvent.click(screen.getByText(ru.onboarding.step2.options.cloud.title));
+    expect(
+      screen.getByRole('button', { name: ru.onboarding.step2.pickFolder }),
+      'кнопка обещает «Дальше», а следом откроется файловый диалог',
+    ).toBeTruthy();
+    app.dispose();
+  });
+
+  it('в браузере папки нет вовсе', async () => {
+    const base = createTestHost();
+    const pick = vi.fn(async () => null);
+    const host = { ...base, platform: { ...base.platform, kind: 'web' as const, pickVaultDirectory: pick } };
+
+    const app = mount(host);
+    expect(screen.getByText(ru.onboarding.step2.whereWeb)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: ru.onboarding.step2.next }));
+
+    await waitFor(() => expect(app.getState().route.name).not.toBe('onboarding'));
+    expect(pick, 'сайт полез спрашивать папку, которой у него нет').not.toHaveBeenCalled();
+    app.dispose();
   });
 });
