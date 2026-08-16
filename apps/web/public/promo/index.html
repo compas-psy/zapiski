@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ЗАПИСКИ — тихая комната для мыслей</title>
+<meta name="description" content="Заметки лежат обычными файлами .md на вашем устройстве. Шифрование бесплатно, синхронизация через своё хранилище. Android, Windows и браузер." />
+<meta name="color-scheme" content="light" />
+<link rel="icon" href="/promo/assets/zapiski-mark.svg" type="image/svg+xml" />
+<meta property="og:title" content="ЗАПИСКИ — тихая комната для мыслей" />
+<meta property="og:description" content="Обычные файлы .md, шифрование на устройстве, синхронизация через своё хранилище." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://zapiski.cmpas.ru/promo" />
+<style>
+/*
+ * Промостраница ЗАПИСКИ — по пакету `promo_handoff`.
+ *
+ * Один файл намеренно: лендинг обязан открываться быстро и не тянуть бандл
+ * приложения. Все значения — из README пакета §2; ни одного hex вне
+ * токен-слоя ниже.
+ *
+ * Два набора токенов и смешивать их нельзя: `--*` — хром страницы (кремовая
+ * тема СИМПАС, форест), `--app-*` — макеты приложения внутри страницы (тема
+ * «Бумага · Гранат»). Тень макетов тёплая: она падает от бумажного
+ * интерфейса, а не от зелёной страницы.
+ */
+:root {
+  --bg:#F7F8F4; --surface:#FFFFFF; --surface-alt:#F6FAF6;
+  --line:#E4E9E3; --line-hair:#DCE3DD;
+  --text:#142018; --text-secondary:#5F6C64;
+  --accent:#1D4735; --accent-hover:#143D2F; --accent-soft:#E7F0EA;
+  --brand-terracotta:#C8604A; --eyebrow:#A0442F; --gold:#CC9E50;
+  --success-text:#2C6B44; --warning-text:#886522;
+
+  --app-bg:#FBFAF7; --app-surface:#FFFFFF; --app-surface-alt:#F7F5EF;
+  --app-sunken:#F3F1EA; --app-line:#EAE6DB; --app-line-soft:#F0EDE4;
+  --app-text:#38342E; --app-secondary:#726C60; --app-tertiary:#8A8375;
+  --app-disabled:#C8C1B4; --app-accent:#B5503C; --app-accent-soft:#F6E7E2;
+  --app-on-soft:#93412F; --app-meta-on-soft:#96513C; --app-sync-ok:#5FA97A;
+
+  --shadow-card:0 8px 30px rgba(20,32,24,.06);
+  --shadow-mock:0 26px 52px rgba(56,52,46,.11), 0 6px 18px rgba(56,52,46,.05);
+  --sans:'Geist','Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --mono:'Geist Mono','JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pad:clamp(72px,9vw,128px);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+::selection{background:var(--accent-soft)}
+img,svg{max-width:100%}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-hover)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+
+.wrap{max-width:1200px;margin-inline:auto;padding-inline:32px}
+@media (max-width:600px){.wrap{padding-inline:20px}}
+section{padding-block:var(--pad)}
+h1,h2,h3{margin:0;letter-spacing:-.03em}
+p{margin:0}
+
+/* ── Шапка ──────────────────────────────────────────────────────────────── */
+.top{position:sticky;top:0;z-index:20;height:68px;display:flex;align-items:center;
+  background:rgba(247,248,244,.82);backdrop-filter:blur(18px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:28px;width:100%}
+.mark{display:flex;align-items:center;gap:10px;color:var(--text)}
+.mark img{inline-size:28px;block-size:28px}
+.wordmark{font-size:13px;font-weight:700;letter-spacing:.12em}
+.nav{display:flex;gap:22px;margin-inline-start:auto;font-size:14px;color:var(--text-secondary)}
+.nav a{color:inherit}
+.nav a:hover{color:var(--text)}
+@media (max-width:860px){.nav{display:none}}
+
+/* ── Кнопки ─────────────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  height:38px;padding-inline:18px;border-radius:14px;font:inherit;font-size:14px;font-weight:600;
+  border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.btn--primary{background:var(--accent);color:#fff}
+.btn--primary:hover{background:var(--accent-hover);color:#fff}
+.btn--secondary{background:var(--surface);color:var(--text);border-color:var(--line)}
+.btn--lg{height:52px;padding-inline:24px;font-size:15px;border-radius:14px}
+.top .btn{margin-inline-start:0}
+
+/* ── Эйрбоу ─────────────────────────────────────────────────────────────── */
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--eyebrow)}
+.eyebrow::before{content:'';inline-size:36px;block-size:1px;background:var(--line-hair)}
+.eyebrow .dot{inline-size:6px;block-size:6px;border-radius:50%;background:var(--brand-terracotta)}
+.eyebrow::after{content:'';flex:1;block-size:1px;background:var(--line-hair)}
+.eyebrow--hero{color:var(--text-secondary);letter-spacing:.16em}
+
+/* ── Герой ──────────────────────────────────────────────────────────────── */
+.hero{padding-block:clamp(34px,4.2vw,64px) clamp(48px,6vw,88px)}
+.hero h1{font-size:clamp(42px,7.4vw,94px);font-weight:700;letter-spacing:-.042em;line-height:.97;margin-block:22px 20px}
+.hero .lead{max-inline-size:610px;font-size:clamp(15px,1.3vw,18px);line-height:1.62;color:var(--text-secondary)}
+.hero .actions{display:flex;flex-wrap:wrap;gap:12px;margin-block-start:32px}
+.note-mono{font-family:var(--mono);font-size:11px;color:var(--text-secondary);margin-block-start:16px}
+
+/* ── Слайдер ────────────────────────────────────────────────────────────── */
+.slider{position:relative}
+.slider__clip{overflow:hidden;padding:40px 0 30px;margin:-40px -80px -30px}
+.slider__track{display:flex;transition:transform 450ms cubic-bezier(.77,0,.175,1)}
+.slider__slide{flex:0 0 100%;box-sizing:border-box;padding:0 80px 4px}
+.slider__dots{display:flex;justify-content:center;gap:8px;margin-block-start:22px}
+.slider__dot{inline-size:8px;block-size:8px;border-radius:50%;background:#D5DDD6;border:0;padding:0;cursor:pointer}
+.slider__dot[aria-current='true']{background:var(--accent)}
+.slide__cap{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-secondary);margin-block-end:14px;text-align:center}
+@media (max-width:900px){.slider__clip{margin-inline:-20px}.slider__slide{padding-inline:20px}}
+
+/* ── Макеты приложения ──────────────────────────────────────────────────── */
+.mock{border-radius:20px;background:var(--app-bg);border:1px solid var(--app-line);
+  box-shadow:var(--shadow-mock);overflow:hidden;color:var(--app-text)}
+.mock__bar{display:flex;align-items:center;gap:8px;height:38px;padding-inline:14px;
+  background:var(--app-surface-alt);border-block-end:1px solid var(--app-line)}
+.mock__dot{inline-size:9px;block-size:9px;border-radius:50%;background:var(--app-line)}
+.mock__body{display:grid;grid-template-columns:200px 1fr;min-block-size:280px}
+.mock__side{background:var(--app-surface-alt);border-inline-end:1px solid var(--app-line);padding:14px}
+.mock__pane{background:var(--app-surface);padding:20px 24px}
+.mock__label{font-size:10.5px;font-family:var(--mono);color:var(--app-tertiary);letter-spacing:.06em;margin-block-end:8px}
+.mock__row{display:flex;justify-content:space-between;gap:10px;padding-block:7px;
+  border-block-end:1px solid var(--app-line-soft);font-size:13px}
+.mock__row span:last-child{color:var(--app-tertiary);font-family:var(--mono);font-size:11px}
+.mock__row--on{background:var(--app-accent-soft);border-radius:10px;padding-inline:8px;border-color:transparent}
+.mock__row--on span:first-child{color:var(--app-text);font-weight:600}
+.mock__row--on span:last-child{color:var(--app-meta-on-soft)}
+.mock__title{font-size:20px;font-weight:700;letter-spacing:-.015em;margin-block-end:10px}
+.mock__text{font-size:13.5px;line-height:1.7;color:var(--app-secondary)}
+.mock__text b{color:var(--app-text)}
+@media (max-width:760px){.mock__body{grid-template-columns:1fr}.mock__side{display:none}}
+
+/* Телефонный кадр */
+.phone{max-inline-size:300px;margin-inline:auto;border-radius:28px;padding:10px;
+  background:var(--app-surface-alt);border:1px solid var(--app-line);box-shadow:var(--shadow-mock)}
+.phone__screen{border-radius:20px;background:var(--app-surface);padding:16px;min-block-size:420px}
+
+/* ── Секции с двумя колонками ───────────────────────────────────────────── */
+.duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:clamp(28px,4vw,64px);align-items:center}
+h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-height:1.06;margin-block:18px 16px}
+.lead{font-size:clamp(15px,1.3vw,18px);line-height:1.62;color:var(--text-secondary)}
+.ticks{list-style:none;margin:24px 0 0;padding:0;display:grid;gap:12px}
+.ticks li{display:flex;gap:10px;font-size:15px}
+.ticks svg{flex:0 0 auto;margin-block-start:3px}
+
+/* ── Три обещания и темы ────────────────────────────────────────────────── */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:26px;box-shadow:var(--shadow-card)}
+.card h3{font-size:20px;font-weight:700;letter-spacing:-.015em;margin-block-end:8px}
+.card p{color:var(--text-secondary);font-size:14.5px}
+.themes{display:grid;grid-template-columns:repeat(auto-fit,minmax(198px,1fr));gap:14px}
+.theme{border:1px solid var(--line);border-radius:20px;overflow:hidden;background:var(--surface)}
+.theme__prev{padding:18px;min-block-size:118px;font-size:12.5px;line-height:1.6}
+.theme__foot{display:flex;align-items:center;gap:9px;padding:12px 16px;border-block-start:1px solid var(--line);font-size:13px}
+.theme__circle{inline-size:16px;block-size:16px;border-radius:50%;border:1px solid var(--line)}
+.theme__accent{inline-size:9px;block-size:9px;border-radius:50%;margin-inline-start:auto}
+
+/* ── Файлы: тёмная панель ───────────────────────────────────────────────── */
+.tree{background:#142018;border-radius:20px;padding:26px;font-family:var(--mono);font-size:13px;line-height:2.1;color:#E9EFE9}
+.tree .dir{color:#7E9A88}
+.tree .enc{color:#D3A08F}
+.tree__note{margin-block-start:16px;padding-block-start:16px;border-block-start:1px solid #26332B;
+  font-family:var(--sans);font-size:13px;line-height:1.6;color:#B9C6BC}
+
+/* ── Приватность ────────────────────────────────────────────────────────── */
+.band{border-radius:28px;padding:clamp(28px,4vw,54px);color:#fff;
+  background:radial-gradient(circle at 80% 20%,rgba(204,158,80,.16),transparent 34%),
+             linear-gradient(135deg,#143D2F,#1D4735 55%,#285B46)}
+.band h2{color:#fff}
+.band p{color:rgba(255,255,255,.72)}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin-block-start:26px}
+.chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.16);border-radius:99px;
+  padding:8px 16px;font-size:13px;color:rgba(255,255,255,.85)}
+.glass{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:22px;padding:26px}
+.glass .k{font-size:13px;color:rgba(255,255,255,.78)}
+.glass .v{font-size:15px;color:rgba(255,255,255,.85);margin-block-start:6px}
+
+/* ── Вход ───────────────────────────────────────────────────────────────── */
+.plate{background:#F2F4EF;border-radius:16px;padding:18px 22px;display:flex;gap:14px;margin-block-start:24px}
+.badge{display:inline-flex;align-items:center;height:24px;padding-inline:10px;border-radius:99px;
+  font-size:11.5px;font-weight:600}
+.badge--ok{background:#EAF7EE;color:var(--success-text)}
+.badge--web{background:#F2F4EF;color:var(--text-secondary);font-family:var(--mono)}
+.dots li{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+.dots li::before{content:'';inline-size:5px;block-size:5px;border-radius:50%;background:#A3ADA7;margin-block-start:9px;flex:0 0 auto}
+.stack{display:grid;gap:16px}
+
+/* ── Тарифы ─────────────────────────────────────────────────────────────── */
+.price{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.price__card{border-radius:20px;padding:28px;background:var(--bg);border:1px solid var(--line)}
+.price__card--plus{background:var(--surface);border:1.5px solid var(--accent);box-shadow:var(--shadow-card)}
+.price__num{font-size:38px;font-weight:700;letter-spacing:-.03em;margin-block:14px 4px}
+.price__per{font-size:13px;color:var(--text-secondary)}
+
+/* ── Футер ──────────────────────────────────────────────────────────────── */
+footer{border-block-start:1px solid var(--line);padding-block:48px;color:var(--text-secondary);font-size:14px}
+.foot{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:28px}
+.foot h4{margin:0 0 12px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text)}
+.foot ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+
+/* ── Появление секций ───────────────────────────────────────────────────── */
+.reveal{opacity:0;transform:translateY(14px);transition:opacity 520ms ease,transform 520ms ease}
+.reveal.on{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none;transition:none}
+  .slider__track{transition:none}
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="mark" href="#top">
+      <img src="/promo/assets/zapiski-mark.svg" alt="" />
+      <span class="wordmark">ЗАПИСКИ</span>
+    </a>
+    <nav class="nav">
+      <a href="#write">Письмо</a>
+      <a href="#order">Порядок</a>
+      <a href="#files">Файлы</a>
+      <a href="#privacy">Приватность</a>
+      <a href="#price">Цена</a>
+    </nav>
+    <a class="btn btn--primary" href="#get">Скачать</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero" id="top">
+    <div class="wrap">
+      <div class="eyebrow eyebrow--hero"><span class="dot"></span>Заметки, которые остаются вашими</div>
+      <h1>Тихая комната<br />для мыслей</h1>
+      <p class="lead">Заметки лежат обычными файлами <b>.md</b> на вашем устройстве. Приложение можно удалить — записи останутся. Шифрование бесплатно, ключ знаете только вы.</p>
+      <div class="actions">
+        <a class="btn btn--primary btn--lg" href="/updates/latest/zapiski.apk">Скачать для Android</a>
+        <a class="btn btn--primary btn--lg" href="/updates/latest/zapiski-setup.exe">Скачать для Windows</a>
+        <a class="btn btn--secondary btn--lg" href="/">Открыть в браузере</a>
+      </div>
+      <p class="note-mono">APK и установщик — всегда последняя сборка. Обновления приходят в приложении.</p>
+    </div>
+  </section>
+
+  <section class="reveal" style="padding-block-start:0">
+    <div class="wrap">
+      <div class="slider" id="slider">
+        <div class="slider__clip">
+          <div class="slider__track" id="track">
+
+            <div class="slider__slide">
+              <p class="slide__cap">Для вашей рутины</p>
+              <div class="mock">
+                <div class="mock__bar"><span class="mock__dot"></span><span class="mock__dot"></span><span class="mock__dot"></span></div>
+                <div class="mock__body">
+                  <div class="mock__side">
+                    <p class="mock__label">ПАПКИ</p>
+                    <div class="mock__row"><span>Все заметки</span><span>128</span></div>
+                    <div class="mock__row"><span>Дом</span><span>14</span></div>
+                    <div class="mock__row"><span>Поездки</span><span>7</span></div>
+                    <p class="mock__label" style="margin-block-start:16px">ТЕГИ</p>
+                    <div class="mock__row"><span>#списки</span><span>21</span></div>
+                  </div>
+                  <div class="mock__pane">
+                    <div class="mock__row mock__row--on"><span>Что взять на дачу</span><span>вчера</span></div>
+                    <div class="mock__row"><span>Рецепт: хлеб на закваске</span><span>12 авг</span></div>
+                    <div class="mock__row"><span>Идеи подарков</span><span>9 авг</span></div>
+                    <p class="mock__title" style="margin-block-start:22px">Что взять на дачу</p>
+                    <p class="mock__text">Список собирается сам: <b>первая строка становится заголовком</b>, а файл получает её имя. Ничего не нужно сохранять.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slider__slide">
+              <p class="slide__cap">Для специалистов в своём деле</p>
+              <div class="mock">
+                <div class="mock__bar"><span class="mock__dot"></span><span class="mock__dot"></span><span class="mock__dot"></span></div>
+                <div class="mock__body">
+                  <div class="mock__side">
+                    <p class="mock__label">ПАПКИ</p>
+                    <div class="mock__row"><span>Супервизия</span><span>36</span></div>
+                    <div class="mock__row"><span>Методики</span><span>18</span></div>
+                    <p class="mock__label" style="margin-block-start:16px">ТЕГИ</p>
+                    <div class="mock__row"><span>#протокол</span><span>12</span></div>
+                  </div>
+                  <div class="mock__pane">
+                    <div class="mock__row mock__row--on"><span>Разбор случая · 14.08</span><span>Зашифровано</span></div>
+                    <div class="mock__row"><span>Протокол первой встречи</span><span>11 авг</span></div>
+                    <p class="mock__title" style="margin-block-start:22px">Разбор случая · 14.08</p>
+                    <p class="mock__text">Заметка заперта. Она расшифровывается только на вашем устройстве и только вашим паролем — <b>ключ не уходит никуда</b>.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slider__slide">
+              <p class="slide__cap">И то же самое в кармане</p>
+              <div class="phone">
+                <div class="phone__screen">
+                  <p class="mock__label">ВСЕ ЗАМЕТКИ</p>
+                  <div class="mock__row mock__row--on"><span>Что взять на дачу</span><span>вчера</span></div>
+                  <div class="mock__row"><span>Рецепт: хлеб</span><span>12 авг</span></div>
+                  <div class="mock__row"><span>Идеи подарков</span><span>9 авг</span></div>
+                  <div class="mock__row"><span>Разбор случая</span><span>7 авг</span></div>
+                  <p class="mock__text" style="margin-block-start:20px">Те же файлы, что на компьютере: синхронизация идёт через ваше хранилище или Облако Записок.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+        <div class="slider__dots" id="dots"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <div class="wrap">
+      <div class="cards">
+        <div class="card"><h3>Обычные файлы</h3><p>Каждая заметка — файл <b>.md</b> в вашей папке. Откроется любым редактором, переживёт удаление приложения.</p></div>
+        <div class="card"><h3>Ключ только у вас</h3><p>AES-256 на устройстве, бесплатно и без подписки. Мы технически не можем прочитать зашифрованную заметку.</p></div>
+        <div class="card"><h3>Порядок без усилий</h3><p>Папки, теги, ссылки между заметками и поиск, который находит по первым буквам.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="write">
+    <div class="wrap duo">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>Два режима письма</div>
+        <h2>Разметку видно только тем, кому она нужна</h2>
+        <p class="lead">В простом режиме на экране остаётся текст: заголовок крупнее, список — списком. В профессиональном разметка видна целиком. Переключение — одной кнопкой в шапке заметки.</p>
+        <ul class="ticks">
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Панель форматирования: стиль абзаца, списки, таблицы, ссылки</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Таблицы правятся с телефона — вставка строк и столбцов в четыре стороны</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Вложения ложатся рядом с заметкой, в вашу папку <span style="font-family:var(--mono);font-size:12.5px">attachments/</span></span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="mock" style="padding:24px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="display:flex;align-items:center;gap:4px;height:44px;padding-inline:8px;border-radius:99px;background:var(--app-surface);border:1px solid var(--app-line);box-shadow:0 6px 22px rgba(56,52,46,.07)">
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-secondary)">↺</span>
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-disabled)">↻</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;height:44px;padding-inline:8px;border-radius:99px;background:var(--app-surface);border:1px solid var(--app-line);box-shadow:0 6px 22px rgba(56,52,46,.07)">
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;background:var(--app-accent-soft);color:var(--app-on-soft);font-weight:700">Aa</span>
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-secondary);font-weight:700">B</span>
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-secondary)">☰</span>
+              <span style="inline-size:1px;block-size:20px;background:var(--app-line)"></span>
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-secondary)">▦</span>
+              <span style="inline-size:36px;block-size:36px;border-radius:10px;display:grid;place-items:center;color:var(--app-secondary)">🔗</span>
+            </div>
+          </div>
+          <div style="margin-block-start:16px;margin-inline-start:clamp(0px,4vw,54px);inline-size:262px;max-inline-size:100%;border-radius:16px;background:var(--app-surface);border:1px solid var(--app-line);box-shadow:0 18px 40px rgba(56,52,46,.13);padding:6px">
+            <div style="display:flex;align-items:center;height:40px;padding-inline:12px;border-radius:10px;font-size:13.5px">Заголовок<span style="margin-inline-start:auto;font-family:var(--mono);font-size:11px;color:var(--app-tertiary)">Ctrl+1</span></div>
+            <div style="display:flex;align-items:center;height:40px;padding-inline:12px;border-radius:10px;background:#FAF7F5;font-size:13.5px">Текст<span style="margin-inline-start:auto;color:var(--app-accent)">✓</span></div>
+            <div style="display:flex;align-items:center;height:40px;padding-inline:12px;border-radius:10px;font-size:13.5px">Цитата<span style="margin-inline-start:auto;font-family:var(--mono);font-size:11px;color:var(--app-tertiary)">Ctrl+Q</span></div>
+            <div style="display:flex;align-items:center;height:40px;padding-inline:12px;border-radius:10px;font-size:13.5px">Код<span style="margin-inline-start:auto;font-family:var(--mono);font-size:11px;color:var(--app-tertiary)">Ctrl+E</span></div>
+            <div style="border-block-start:1px solid var(--app-line-soft);margin-block:4px"></div>
+            <div style="display:flex;align-items:center;height:40px;padding-inline:12px;border-radius:10px;font-size:13.5px">Разделитель</div>
+          </div>
+        </div>
+        <p class="note-mono">Текущий стиль отмечен галочкой. Панель не уводит курсор из текста.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="order">
+    <div class="wrap duo">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>Порядок без усилий</div>
+        <h2>Найдётся раньше, чем вы допишете запрос</h2>
+        <p class="lead">Поиск идёт по всему хранилищу и подсвечивает совпадения. Папки, теги и ссылки между заметками — на месте, но заводить их необязательно: пишите, порядок появится сам.</p>
+        <ul class="ticks">
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Поиск по словам и тегам, с подсветкой найденного</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Ссылки между заметками и обратные ссылки</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Архив и корзина: удалённое возвращается 30 дней</span></li>
+        </ul>
+      </div>
+      <div class="mock" style="padding:22px">
+        <div style="display:flex;align-items:center;height:40px;padding-inline:14px;border-radius:12px;background:var(--app-sunken);color:var(--app-secondary);font-size:14px">закваска</div>
+        <div class="mock__row" style="margin-block-start:14px"><span>Рецепт: <mark style="background:var(--app-accent-soft);color:var(--app-on-soft);border-radius:4px">хлеб на закваске</mark></span><span>12 авг</span></div>
+        <div class="mock__row"><span>Список покупок · <mark style="background:var(--app-accent-soft);color:var(--app-on-soft);border-radius:4px">закваска</mark></span><span>3 авг</span></div>
+        <p class="note-mono" style="color:var(--app-tertiary)">найдено за 12 мс</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="files">
+    <div class="wrap duo">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>Файлы, а не база данных</div>
+        <h2>Ваши заметки переживут наше приложение</h2>
+        <p class="lead">Хранилище — обычная папка. Её видно файловым менеджером, её можно скопировать на флешку, синхронизировать своим клиентом Яндекс.Диска или положить в WebDAV.</p>
+        <ul class="ticks">
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Импорт из Obsidian, Bear, Notion и Evernote</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Экспорт в Markdown, HTML, DOCX и PDF</span></li>
+          <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Никакого экспорта «на всякий случай» — файлы и так ваши</span></li>
+        </ul>
+      </div>
+      <div class="tree">
+        <div class="dir">Записки/</div>
+        <div>&nbsp;&nbsp;Что взять на дачу.md</div>
+        <div>&nbsp;&nbsp;Рецепт: хлеб на закваске.md</div>
+        <div class="enc">&nbsp;&nbsp;Разбор случая.md.enc</div>
+        <div class="dir">&nbsp;&nbsp;Поездки/</div>
+        <div>&nbsp;&nbsp;&nbsp;&nbsp;Карелия, август.md</div>
+        <div class="dir">&nbsp;&nbsp;attachments/</div>
+        <p class="tree__note">Зашифрованная заметка лежит той же папкой — но её содержимое недоступно никому, кроме вас: ключ выводится из вашего пароля на устройстве.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <div class="wrap">
+      <div class="eyebrow"><span class="dot"></span>Темы</div>
+      <h2>Пять тем — и ни одной кричащей</h2>
+      <div class="themes" style="margin-block-start:32px">
+        <div class="theme"><div class="theme__prev" style="background:#FBFAF7;color:#38342E">Бумага и гранат: тёплый лист, спокойный текст.</div><div class="theme__foot"><span class="theme__circle" style="background:#FBFAF7"></span>Бумага · Гранат<span class="theme__accent" style="background:#B5503C"></span></div></div>
+        <div class="theme"><div class="theme__prev" style="background:#F7F8F4;color:#142018">Крем и хвоя: то же спокойствие, но холоднее.</div><div class="theme__foot"><span class="theme__circle" style="background:#F7F8F4"></span>Крем · Хвоя<span class="theme__accent" style="background:#256247"></span></div></div>
+        <div class="theme"><div class="theme__prev" style="background:#FAFAFB;color:#33363A">Мел и черника: строгая, почти офисная.</div><div class="theme__foot"><span class="theme__circle" style="background:#FAFAFB"></span>Мел · Черника<span class="theme__accent" style="background:#4C6B94"></span></div></div>
+        <div class="theme"><div class="theme__prev" style="background:#232120;color:#E9E5DC">Графит: тёмная, но не чёрная — глазам легче.</div><div class="theme__foot"><span class="theme__circle" style="background:#232120"></span>Графит<span class="theme__accent" style="background:#D0765B"></span></div></div>
+        <div class="theme"><div class="theme__prev" style="background:#000;color:#E9E5DC">Чернила: настоящий чёрный для OLED.</div><div class="theme__foot"><span class="theme__circle" style="background:#000"></span>Чернила<span class="theme__accent" style="background:#D0765B"></span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="privacy">
+    <div class="wrap">
+      <div class="band">
+        <div class="duo">
+          <div>
+            <h2>Мы не читаем ваши заметки.<br />Технически не можем</h2>
+            <p style="margin-block-start:16px">Шифрование происходит на устройстве, ключ выводится из вашего пароля и никуда не уходит. В облако попадает контейнер, который без вас не открыть.</p>
+            <div class="chips">
+              <span class="chip">AES-256 на устройстве</span>
+              <span class="chip">Argon2id</span>
+              <span class="chip">Отпечаток или пароль</span>
+              <span class="chip">Ключ не покидает телефон</span>
+            </div>
+          </div>
+          <div class="glass">
+            <p class="k">Что видит сервер</p>
+            <p class="v">Имя файла, размер, время изменения</p>
+            <p class="k" style="margin-block-start:20px">Что не видит никогда</p>
+            <p class="v">Текст заметки, вложения, ваш пароль</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="account">
+    <div class="wrap duo">
+      <div>
+        <div class="eyebrow"><span class="dot"></span>Вход</div>
+        <h2>Регистрации нет.<br />Аккаунт — только для облака</h2>
+        <p class="lead" style="margin-block-start:16px">Приложение открывается и сразу пишет: ни имени, ни почты, ни номера. Аккаунт понадобится в одном случае — когда вы захотите, чтобы заметки были одни на всех устройствах через Облако Записок, или откроете ЗАПИСКИ в браузере на чужом компьютере.</p>
+        <p class="lead" style="margin-block-start:14px">Вход — Яндекс ID или письмо со ссылкой. Паролей в продукте нет вовсе: ни «придумайте пароль», ни «забыли пароль», ни СМС.</p>
+        <div class="plate">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#1D4735" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;margin-block-start:2px"><rect x="4" y="9" width="12" height="8" rx="2"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/></svg>
+          <p style="font-size:14.5px">Единственный пароль в ЗАПИСКАХ — тот, которым вы сами шифруете заметку. Он не уходит с устройства и не восстанавливается: восстановить его значило бы уметь читать ваши записи.</p>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card" style="background:var(--bg);box-shadow:none">
+          <span class="badge badge--ok">Android, Windows и браузер</span>
+          <h3 style="margin-block-start:14px">Работает без аккаунта</h3>
+          <ul class="ticks" style="margin-block-start:14px">
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Редактор, оба режима письма, вложения</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Шифрование и вход по отпечатку</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Синхронизация через Яндекс.Диск, WebDAV или общую папку</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Импорт и экспорт</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="badge badge--web">аккаунт</span>
+          <h3 style="margin-block-start:14px">Нужен для этого</h3>
+          <ul class="ticks dots" style="margin-block-start:14px">
+            <li><span>Облако Записок: одни и те же заметки на всех устройствах</span></li>
+            <li><span>Работа в браузере на чужом компьютере</span></li>
+            <li><span>Публикация заметки по ссылке</span></li>
+          </ul>
+          <p class="note-mono">Письмо со ссылкой действует 15 минут. СМС не отправляем.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="reveal" id="price">
+    <div class="wrap">
+      <div class="eyebrow"><span class="dot"></span>Цена</div>
+      <h2>Всё главное — бесплатно</h2>
+      <div class="price" style="margin-block-start:32px">
+        <div class="price__card">
+          <h3>Бесплатно</h3>
+          <p class="price__num">0 ₽</p>
+          <p class="price__per">навсегда, без аккаунта и без почты</p>
+          <ul class="ticks" style="margin-block-start:18px">
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Неограниченные заметки и вложения</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Шифрование AES-256</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Синхронизация через своё хранилище</span></li>
+          </ul>
+        </div>
+        <div class="price__card price__card--plus">
+          <span class="badge badge--ok">14 дней бесплатно</span>
+          <h3 style="margin-block-start:12px">ЗАПИСКИ+</h3>
+          <p class="price__num">299 ₽<span style="font-size:16px;font-weight:400;color:var(--text-secondary)"> / мес</span></p>
+          <p class="price__per">при годовой оплате — 249 ₽/мес (2 988 ₽ за год, экономия 600 ₽)</p>
+          <ul class="ticks" style="margin-block-start:18px">
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Облако Записок: мгновенная синхронизация</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>История версий и разрешение конфликтов</span></li>
+            <li><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#3B8F5A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5 L7.5 13 L14 5.5"/></svg><span>Публикация заметки по ссылке</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="lead" style="margin-block-start:22px;font-size:14px">Отмена в один тап. Без таймеров и «скидок только сегодня». Если подписка закончится, заметки останутся у вас — они и так лежат на вашем диске.</p>
+    </div>
+  </section>
+
+  <section class="reveal" id="get">
+    <div class="wrap" style="text-align:center">
+      <h2 style="font-size:clamp(32px,5vw,62px);letter-spacing:-.035em;line-height:1.04">Первая мысль появится<br />за две секунды</h2>
+      <div class="actions" style="justify-content:center;margin-block-start:28px;display:flex;flex-wrap:wrap;gap:12px">
+        <a class="btn btn--primary btn--lg" href="/updates/latest/zapiski.apk">Скачать для Android</a>
+        <a class="btn btn--primary btn--lg" href="/updates/latest/zapiski-setup.exe">Скачать для Windows</a>
+        <a class="btn btn--secondary btn--lg" href="/">Открыть в браузере</a>
+      </div>
+      <p class="note-mono">Не спрашиваем ни имени, ни почты, ни номера телефона.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <a class="mark" href="#top"><img src="/promo/assets/zapiski-mark.svg" alt="" /><span class="wordmark">ЗАПИСКИ</span></a>
+      <p style="margin-block-start:12px">Тихая комната для мыслей.<br />Издатель — СИМПАС.</p>
+    </div>
+    <div><h4>Продукт</h4><ul>
+      <li><a href="#write">Письмо</a></li>
+      <li><a href="#order">Порядок</a></li>
+      <li><a href="#files">Файлы</a></li>
+      <li><a href="#privacy">Приватность</a></li>
+    </ul></div>
+    <div><h4>Установка</h4><ul>
+      <li><a href="/updates/latest/zapiski.apk">Android (APK)</a></li>
+      <li><a href="/updates/latest/zapiski-setup.exe">Windows</a></li>
+      <li><a href="/">Браузер</a></li>
+    </ul></div>
+    <div><h4>Правовое</h4><ul>
+      <li><a href="/terms">Пользовательское соглашение</a></li>
+      <li><a href="/privacy">Политика обработки данных</a></li>
+      <li><a href="#account">Вход и аккаунт</a></li>
+    </ul></div>
+  </div>
+</footer>
+
+<script>
+/* Появление секций. Без наблюдателя — просто показываем всё. */
+(() => {
+  const items = document.querySelectorAll('.reveal');
+  if (!('IntersectionObserver' in window)) {
+    items.forEach((node) => node.classList.add('on'));
+    return;
+  }
+  const watch = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      entry.target.classList.add('on');
+      watch.unobserve(entry.target);
+    }
+  }, { rootMargin: '0px 0px -12% 0px' });
+  items.forEach((node) => watch.observe(node));
+})();
+
+/* Слайдер: автопрокрутка 6 с, пауза под курсором, точки перезапускают таймер. */
+(() => {
+  const track = document.getElementById('track');
+  const dots = document.getElementById('dots');
+  const root = document.getElementById('slider');
+  if (!track || !dots || !root) return;
+  const count = track.children.length;
+  let current = 0;
+  let timer = null;
+
+  for (let index = 0; index < count; index += 1) {
+    const dot = document.createElement('button');
+    dot.type = 'button';
+    dot.className = 'slider__dot';
+    dot.setAttribute('aria-label', `Кадр ${index + 1}`);
+    dot.addEventListener('click', () => { show(index); start(); });
+    dots.appendChild(dot);
+  }
+
+  function show(index) {
+    current = (index + count) % count;
+    track.style.transform = `translateX(-${current * 100}%)`;
+    [...dots.children].forEach((dot, at) => dot.setAttribute('aria-current', String(at === current)));
+  }
+  function start() { stop(); timer = setInterval(() => show(current + 1), 6000); }
+  function stop() { if (timer) clearInterval(timer); timer = null; }
+
+  root.addEventListener('pointerenter', stop);
+  root.addEventListener('pointerleave', start);
+  show(0);
+  start();
+})();
+</script>
+</body>
+</html>

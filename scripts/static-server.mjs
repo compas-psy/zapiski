@@ -12,7 +12,7 @@
  * пока не убедится, что отдаёт `index.html`. Не смогла — падение с внятным
  * текстом, а не тихая пустая страница.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join } from 'node:path';
 
@@ -45,12 +45,18 @@ export async function serveDist(root, port) {
   const server = createServer((request, response) => {
     const path = (request.url ?? '/').split('?')[0];
     let file = join(root, path === '/' ? 'index.html' : path.slice(1));
+    /* Каталог — не файл: отдаём его `index.html`, как это делает nginx
+       (`try_files $uri $uri/`). Без этой ветки `/promo` уходил в `readFileSync`
+       каталога, тот бросал EISDIR уже ПОСЛЕ отправки заголовков, и вместо
+       страницы прогон получал «Cannot write headers after they are sent». */
+    if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html');
     if (!existsSync(file) || file.endsWith('/')) file = index;
     try {
+      const body = readFileSync(file);
       response.writeHead(200, {
         'content-type': MIME[extname(file)] ?? 'application/octet-stream',
       });
-      response.end(readFileSync(file));
+      response.end(body);
     } catch {
       response.writeHead(404).end();
     }
