@@ -66,6 +66,7 @@ const {
   forgetTree,
   ownedRoot,
   PREF_SAF_CLAIM,
+  PREF_SAF_OWNERS,
   PREF_SAF_TREE,
   safTreeKeyOf,
 } = await import('../src/platform/capabilities');
@@ -173,7 +174,7 @@ describe('возврат в каталог приложения не трога�
 
     await platform.vaultFolders?.chooseFolder('local');
     prefs.store.set(safTreeKeyOf(USER), OTHER);
-    prefs.store.set('storage.androidTree.owners', ['local', USER]);
+    prefs.store.set(PREF_SAF_OWNERS, ['local', USER]);
 
     await platform.vaultFolders?.useAppFolder('local');
 

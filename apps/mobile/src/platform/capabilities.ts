@@ -60,8 +60,12 @@ export const PREF_SAF_CLAIM = 'storage.androidTree.legacyOwner';
  *
  * `PreferencesStore` перечислять ключи не умеет, а знать это надо: снимать
  * SAF-разрешения можно только тогда, когда папки нет ни у кого другого.
+ *
+ * Имя намеренно вне пространства `storage.androidTree.<владелец>`: владельца с
+ * ключом `owners` сейчас быть не может (это либо `local`, либо почта с `@`),
+ * но список, живущий среди самих записей, — заготовка для столкновения имён.
  */
-export const PREF_SAF_OWNERS = 'storage.androidTree.owners';
+export const PREF_SAF_OWNERS = 'storage.androidTreeOwners';
 
 /**
  * Ключ выбранной папки для владельца.
