@@ -74,9 +74,68 @@ permissions:
 
 jobs:
   # ───────────────────────────────────────────────────────────────────────────
+  # ЧТО ИЗМЕНИЛОСЬ
+  # ───────────────────────────────────────────────────────────────────────────
+  #
+  # Пуш в ветку запускал сборку всегда, потому что фильтра `paths` у `push`
+  # нет — и не может быть: GitHub применяет его и к тегам, а тег `v*`,
+  # поставленный на коммит без изменений в оболочке, тихо не запустил бы релиз.
+  #
+  # Заказчик спросил прямо: «зачем сборка Windows и Android, когда выкладывается
+  # промостраница?». Незачем — и полтора часа раннеров уходили впустую на каждую
+  # правку лендинга. Фильтр переехал из `on:` в отдельный job: теги и ручной
+  # запуск собираются всегда, а пуш в ветку — только если тронуто то, из чего
+  # собирается приложение.
+  changes:
+    name: Что изменилось
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] || [ "${GITHUB_EVENT_NAME}" != "push" ]; then
+            echo 'Тег или ручной запуск — собираем без разговоров.'
+            echo 'build=true' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          base="${BEFORE:-}"
+          # Новая ветка приходит с нулями вместо предыдущего коммита: сравнить
+          # не с чем, поэтому берём родителя. Если и его нет — собираем.
+          if [ -z "${base}" ] || [ "${base}" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse "${GITHUB_SHA}^" 2>/dev/null || true)"
+          fi
+          if [ -z "${base}" ]; then
+            echo '::warning::не с чем сравнить — собираем на всякий случай'
+            echo 'build=true' >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          files="$(git diff --name-only "${base}" "${GITHUB_SHA}")"
+          echo "Изменено файлов: $(printf '%s' "${files}" | grep -c . || true)"
+          if printf '%s\n' "${files}" | grep -Eq '^(apps/desktop/|packages/|pnpm-lock\.yaml|pnpm-workspace\.yaml|package\.json|\.github/workflows/build-windows\.yml)'; then
+            echo 'Тронуто то, из чего собирается приложение.'
+            echo 'build=true' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'Приложение не тронуто — сборка не нужна.'
+            echo 'build=false' >> "${GITHUB_OUTPUT}"
+          fi
+
+  # ───────────────────────────────────────────────────────────────────────────
   # BUILD
   # ───────────────────────────────────────────────────────────────────────────
   build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
     name: Установщик Windows
     runs-on: windows-latest
     # Холодная сборка Tauri на windows-раннере — это компиляция ~540 крейтов
