@@ -42,7 +42,7 @@
   --shadow-mock:0 26px 52px rgba(56,52,46,.11), 0 6px 18px rgba(56,52,46,.05);
   --sans:'Geist','Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --mono:'Geist Mono','JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
-  --pad:clamp(72px,9vw,128px);
+  --pad:clamp(48px,5.4vw,84px);
 }
 *,*::before,*::after{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -98,15 +98,15 @@ p{margin:0}
 
 /* ── Слайдер ────────────────────────────────────────────────────────────── */
 .slider{position:relative}
-.slider__clip{overflow:hidden;padding:40px 0 30px;margin:-40px -80px -30px}
+.slider__clip{overflow:hidden;padding:32px 0 24px;margin:-32px -44px -24px}
 .slider__track{display:flex;transition:transform 450ms cubic-bezier(.77,0,.175,1)}
-.slider__slide{flex:0 0 100%;box-sizing:border-box;padding:0 80px 4px}
-.slider__dots{display:flex;justify-content:center;gap:8px;margin-block-start:22px}
+.slider__slide{flex:0 0 100%;box-sizing:border-box;padding:0 44px 4px;display:grid;align-content:start}
+.slider__dots{display:flex;justify-content:center;gap:8px;margin-block-start:16px}
 .slider__dot{inline-size:8px;block-size:8px;border-radius:50%;background:#D5DDD6;border:0;padding:0;cursor:pointer}
 .slider__dot[aria-current='true']{background:var(--accent)}
 .slide__cap{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
   color:var(--text-secondary);margin-block-end:14px;text-align:center}
-@media (max-width:900px){.slider__clip{margin-inline:-20px}.slider__slide{padding-inline:20px}}
+@media (max-width:900px){.slider__clip{margin-inline:-16px}.slider__slide{padding-inline:16px}}
 
 /* ── Макеты приложения ──────────────────────────────────────────────────── */
 .mock{border-radius:20px;background:var(--app-bg);border:1px solid var(--app-line);
@@ -114,7 +114,7 @@ p{margin:0}
 .mock__bar{display:flex;align-items:center;gap:8px;height:38px;padding-inline:14px;
   background:var(--app-surface-alt);border-block-end:1px solid var(--app-line)}
 .mock__dot{inline-size:9px;block-size:9px;border-radius:50%;background:var(--app-line)}
-.mock__body{display:grid;grid-template-columns:200px 1fr;min-block-size:280px}
+.mock__body{display:grid;grid-template-columns:220px 1fr;min-block-size:396px}
 .mock__side{background:var(--app-surface-alt);border-inline-end:1px solid var(--app-line);padding:14px}
 .mock__pane{background:var(--app-surface);padding:20px 24px}
 .mock__label{font-size:10.5px;font-family:var(--mono);color:var(--app-tertiary);letter-spacing:.06em;margin-block-end:8px}
@@ -132,7 +132,7 @@ p{margin:0}
 /* Телефонный кадр */
 .phone{max-inline-size:300px;margin-inline:auto;border-radius:28px;padding:10px;
   background:var(--app-surface-alt);border:1px solid var(--app-line);box-shadow:var(--shadow-mock)}
-.phone__screen{border-radius:20px;background:var(--app-surface);padding:16px;min-block-size:420px}
+.phone__screen{border-radius:20px;background:var(--app-surface);padding:16px;min-block-size:372px}
 
 /* ── Секции с двумя колонками ───────────────────────────────────────────── */
 .duo{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:clamp(28px,4vw,64px);align-items:center}
@@ -263,8 +263,11 @@ footer{border-block-start:1px solid var(--line);padding-block:48px;color:var(--t
                     <div class="mock__row mock__row--on"><span>Что взять на дачу</span><span>вчера</span></div>
                     <div class="mock__row"><span>Рецепт: хлеб на закваске</span><span>12 авг</span></div>
                     <div class="mock__row"><span>Идеи подарков</span><span>9 авг</span></div>
+                    <div class="mock__row"><span>Список покупок</span><span>3 авг</span></div>
                     <p class="mock__title" style="margin-block-start:22px">Что взять на дачу</p>
                     <p class="mock__text">Список собирается сам: <b>первая строка становится заголовком</b>, а файл получает её имя. Ничего не нужно сохранять.</p>
+                    <p class="mock__text" style="margin-block-start:12px">☐ Плед и два пледа поменьше<br />☐ Кофе, фильтры<br />☑ Аптечка<br />☐ Настолки</p>
+                    <p class="note-mono" style="margin-block-start:14px;color:var(--app-tertiary)">сохранено · 128 заметок</p>
                   </div>
                 </div>
               </div>
@@ -285,8 +288,11 @@ footer{border-block-start:1px solid var(--line);padding-block:48px;color:var(--t
                   <div class="mock__pane">
                     <div class="mock__row mock__row--on"><span>Разбор случая · 14.08</span><span>Зашифровано</span></div>
                     <div class="mock__row"><span>Протокол первой встречи</span><span>11 авг</span></div>
+                    <div class="mock__row"><span>Список литературы</span><span>2 авг</span></div>
                     <p class="mock__title" style="margin-block-start:22px">Разбор случая · 14.08</p>
                     <p class="mock__text">Заметка заперта. Она расшифровывается только на вашем устройстве и только вашим паролем — <b>ключ не уходит никуда</b>.</p>
+                    <p class="mock__text" style="margin-block-start:12px">Гипотеза, ход встречи и наблюдения — в одной заметке. Ссылка на методику ставится как <b>[[Протокол первой встречи]]</b> и открывается одним нажатием.</p>
+                    <p class="note-mono" style="margin-block-start:14px;color:var(--app-tertiary)">зашифровано · AES-256</p>
                   </div>
                 </div>
               </div>
@@ -301,6 +307,7 @@ footer{border-block-start:1px solid var(--line);padding-block:48px;color:var(--t
                   <div class="mock__row"><span>Рецепт: хлеб</span><span>12 авг</span></div>
                   <div class="mock__row"><span>Идеи подарков</span><span>9 авг</span></div>
                   <div class="mock__row"><span>Разбор случая</span><span>7 авг</span></div>
+                  <div class="mock__row"><span>Список покупок</span><span>3 авг</span></div>
                   <p class="mock__text" style="margin-block-start:20px">Те же файлы, что на компьютере: синхронизация идёт через ваше хранилище или Облако Записок.</p>
                 </div>
               </div>
