@@ -568,7 +568,14 @@ function SyncSection(): ReactNode {
 
   const connect = (id: SyncBackend['id']): void => {
     const vault = app.vaultRef;
-    if (!vault) return;
+    /* Молчаливый выход был вторым слоем той же беды: папка не открылась,
+       хранилища нет — и кнопка «Облако Записок» нажималась, не делая ничего и
+       не говоря ни слова. Заказчик описал это дословно: «кнопка облака
+       нажимается, но не происходит ничего». */
+    if (!vault) {
+      app.toast({ message: strings.errors.folderUnavailable });
+      return;
+    }
     if (id === 'local') {
       /* Вторая папка на устройстве (флешка, папка облачного клиента). */
       void app.host.platform.pickVaultDirectory(app.owner()).then((storage) => {

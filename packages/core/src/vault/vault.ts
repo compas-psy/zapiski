@@ -214,7 +214,6 @@ export class Vault {
 
   /** Открытие: доигрывание журналов, загрузка снапшота либо полная перестройка. */
   async open(): Promise<void> {
-    await recoverRename(this.storage);
     this.accessFailed = false;
 
     /*
@@ -241,6 +240,23 @@ export class Vault {
       if (kept && kept.version === SNAPSHOT_VERSION) this.adoptSnapshot(kept);
       return;
     }
+
+    /*
+     * Доигрывание прерванного переименования — ПОСЛЕ проверки читаемости и в
+     * защите от исключения.
+     *
+     * Оно стояло первой строкой и бросало наружу. На Android это стоило
+     * заказчику вечера: он выбирал системным окном свою папку `Zapiski`,
+     * приложение шло её открывать, доигрывание спотыкалось о свежий пустой
+     * каталог — и `openVault` падал. Вызывающий трактует любое исключение как
+     * «папка недоступна»: показывался тост, выбор не применялся, а в настройках
+     * оставалось прежнее «Записки» — то есть имя каталога приложения там, где
+     * человек только что указал свой. Расхождение имён он и заметил.
+     *
+     * Восстановление журнала — операция ремонтная, а не пропускная: не удалось
+     * доиграть — хранилище от этого не перестаёт быть хранилищем.
+     */
+    await recoverRename(this.storage).catch(() => null);
 
     this.trashEntries = (await readJson<TrashEntry[]>(this.storage, TRASH_JOURNAL)) ?? [];
     const snapshot = await readJson<VaultSnapshot>(this.storage, INDEX_FILE);
