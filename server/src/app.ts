@@ -9,6 +9,7 @@ import { redactPaths, serializers } from './lib/logging.ts';
 import { registerAuth } from './plugins/auth.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBillingRoutes } from './routes/billing.ts';
+import { registerFeedbackRoutes } from './routes/feedback.ts';
 import { registerHealthRoutes } from './routes/health.ts';
 import { registerLegalRoutes } from './routes/legal.ts';
 import { registerLiveRoute } from './routes/live.ts';
@@ -226,6 +227,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await registerBillingRoutes(app);
   await registerPublishRoutes(app);
   await registerUpdateRoutes(app);
+  await registerFeedbackRoutes(app);
 
   return app;
 }

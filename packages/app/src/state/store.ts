@@ -61,6 +61,13 @@ import {
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
+  buildFeedbackReport,
+  isErrorCode,
+  notesBucket,
+  type DiagnosticsConsent,
+  type FeedbackDiagnostics,
+  type FeedbackDraft,
+  type FeedbackReport,
 } from '@zapiski/core';
 import type {
   AttachmentPlacement,
@@ -76,6 +83,24 @@ import { attachmentMime } from '../lib/attachment-urls.js';
 import { cropImage, type CropRect } from '../lib/crop.js';
 import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
+import { FeedbackQueue, newFeedbackId } from './feedback.js';
+
+/**
+ * Как контроллер ходит в сеть за обратной связью.
+ *
+ * Отдельный тип, а не `typeof fetch`: тесту нужно подменить отправку, не
+ * подменяя глобальный `fetch` всему процессу, — иначе один тест влияет на
+ * соседние. Форма ходит своим запросом и без облачного клиента: она обязана
+ * работать без аккаунта, а облачному клиенту нужна сессия.
+ */
+export type FeedbackFetch = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
+) => Promise<{ ok: boolean; status: number }>;
+
+export interface AppControllerOptions {
+  feedbackFetch?: FeedbackFetch;
+}
 import { AuthError, SessionStore, type AuthErrorCode, type Consents } from './session.js';
 
 /** Сортировка списка. Запоминается НА ПАПКУ, не глобально (BEHAVIOR §1.2). */
@@ -353,6 +378,11 @@ const PREF = {
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
   backend: 'sync.backend',
+  /** Когда приложение впервые запустилось — для «дней с установки» в форме. */
+  installedAt: 'app.installedAt',
+  /** Когда последний раз показывали контекстное приглашение и когда отклонили. */
+  feedbackPromptedAt: 'feedback.promptedAt',
+  feedbackDismissedAt: 'feedback.dismissedAt',
   autoLock: 'security.autoLockMinutes',
   /**
    * Счётчик неудачных попыток пароля и конец задержки (BEHAVIOR §5.2,
@@ -552,10 +582,28 @@ export class AppController {
     /** Куда уходят ОО-тосты (BEHAVIOR §0). Провайдер подставляет `useToast`. */
     private toastSink: (toast: ToastRequest) => void = () => {},
     locale: Locale = DEFAULT_LOCALE,
+    options: AppControllerOptions = {},
   ) {
     this.state = initialState(locale);
     this.session = new SessionStore(host);
+    this.feedback = new FeedbackQueue(host.prefs);
+    /* Отправка обращений — свой запрос, а не облачный клиент: форма работает
+       без аккаунта, а облачному клиенту нужна сессия. */
+    this.feedbackFetch = options.feedbackFetch ?? ((url, init) => fetch(url, init));
   }
+
+  private readonly feedback: FeedbackQueue;
+  private readonly feedbackFetch: FeedbackFetch;
+  /**
+   * Коды последних отказов — для диагностики в форме.
+   *
+   * Именно КОДЫ: «SYNC_CONFLICT», а не «Не удалось синхронизировать». Текст
+   * ошибки принадлежит человеку и его языку, а разбирающему обращение нужен
+   * машинный признак. Хранится в памяти и не переживает перезапуск: обращение
+   * пишут по горячим следам, а вчерашние коды к сегодняшней жалобе отношения
+   * не имеют.
+   */
+  private errorCodes: string[] = [];
 
   // ── Подписка ───────────────────────────────────────────────────────────────
 
@@ -2085,6 +2133,106 @@ export class AppController {
     await this.refresh();
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
     return opened === 'ok';
+  }
+
+  // ── Обратная связь беты ────────────────────────────────────────────────────
+
+  /**
+   * Запомнить код отказа — его покажет форма в блоке «Что будет отправлено».
+   *
+   * Принимает только КОД: заглавные латинские, цифры, подчёркивание. Всё
+   * остальное отбрасывается молча и намеренно. Текст ошибки сюда попадать не
+   * должен, а «очистить» его нельзя — из «read /vault/Личное/Дневник.md»
+   * очистка сделала бы обрывок пути, то есть ровно ту утечку, которой
+   * страница обратной связи и не имеет права допустить.
+   */
+  rememberErrorCode(code: string): void {
+    if (!isErrorCode(code)) return;
+    this.errorCodes = [...this.errorCodes.filter((item) => item !== code), code].slice(-5);
+  }
+
+  /**
+   * Что уедет вместе с обращением.
+   *
+   * Собирается из состояния приложения — и ни одно поле не берёт из хранилища
+   * ничего, кроме ЧИСЛА заметок, да и то сразу превращённого в корзину. Точное
+   * число в бете на полсотни человек почти опознаёт конкретного.
+   */
+  async feedbackDiagnostics(): Promise<FeedbackDiagnostics> {
+    const installedAt = await this.installedAt();
+    const days = Math.max(0, Math.floor((Date.now() - installedAt) / 86_400_000));
+    return {
+      version: this.host.platform.version,
+      platform: this.host.platform.kind,
+      locale: this.state.locale,
+      notes: notesBucket(this.state.notes.length),
+      encryption: this.state.notes.some((note) => note.encrypted),
+      errorCodes: [...this.errorCodes],
+      daysSinceInstall: days,
+    };
+  }
+
+  /** Момент первого запуска. Пишется один раз и больше не меняется. */
+  private async installedAt(): Promise<number> {
+    const stored = await this.host.prefs.get<number | null>(PREF.installedAt, null);
+    if (typeof stored === 'number' && Number.isFinite(stored)) return stored;
+    const now = Date.now();
+    await this.host.prefs.set(PREF.installedAt, now).catch(() => undefined);
+    return now;
+  }
+
+  /**
+   * Отправить обращение.
+   *
+   * `sent` — уехало; `queued` — принято и ждёт сети. Третьего исхода нет: форма
+   * не имеет права ответить «не получилось». Человек написал в тот момент,
+   * когда его задело; отказ означал бы, что он не напишет больше никогда.
+   */
+  async submitFeedback(
+    draft: FeedbackDraft,
+    /* Что человек оставил включённым в блоке «Что будет отправлено». */
+    consent?: DiagnosticsConsent,
+  ): Promise<'sent' | 'queued'> {
+    const report = buildFeedbackReport({
+      id: newFeedbackId(),
+      createdAt: Date.now(),
+      draft,
+      diagnostics: await this.feedbackDiagnostics(),
+      ...(consent ? { consent } : {}),
+    });
+
+    try {
+      await this.sendFeedback(report);
+      return 'sent';
+    } catch {
+      await this.feedback.add(report);
+      return 'queued';
+    }
+  }
+
+  /** Сколько обращений ждёт сети. */
+  pendingFeedback(): Promise<number> {
+    return this.feedback.pending();
+  }
+
+  /** Досылка накопленного. Зовётся при возврате к приложению и при появлении сети. */
+  async flushFeedback(): Promise<number> {
+    const { sent } = await this.feedback.flush((report) => this.sendFeedback(report));
+    return sent;
+  }
+
+  private async sendFeedback(report: FeedbackReport): Promise<void> {
+    const response = await this.feedbackFetch(`${this.host.cloudBaseUrl}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+    });
+    /* 4xx — это отказ по существу (тело не то, обращение слишком большое), и
+       повторять его бессмысленно: очередь копила бы заведомо мёртвый запрос.
+       5xx и обрыв сети — другое дело, их и досылаем. */
+    if (!response.ok && response.status >= 500) {
+      throw new Error(`сервер ответил ${response.status}`);
+    }
   }
 
   /** Открыть лист снятия шифрования; `null` — закрыть. */

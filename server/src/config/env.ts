@@ -72,6 +72,14 @@ const schema = z.object({
    */
   AUTH_SUCCESS_REDIRECT_DESKTOP: z.string().optional(),
 
+  /**
+   * Токен ночного цикла для `GET /api/v1/feedback`.
+   *
+   * Не задан — ручка не пускает НИКОГО. Забытая настройка не имеет права
+   * превращаться в открытую дверь: за ней лежат тексты живых людей.
+   */
+  FEEDBACK_SERVICE_TOKEN: z.string().min(24).optional(),
+
   /** ADR-0003 §7: существующий postfix на хосте, новых почтовых сервисов нет. */
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: int(25),

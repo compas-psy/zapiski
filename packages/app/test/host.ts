@@ -31,6 +31,14 @@ export interface TestHostOptions {
   files?: Record<string, string>;
   platform?: Partial<PlatformCapabilities>;
   prefs?: Record<string, unknown>;
+  /**
+   * Готовое хранилище настроек — на два хоста одно.
+   *
+   * Нужно там, где проверяется ПЕРЕЗАПУСК приложения: процесс новый, диск
+   * прежний. Без общего хранилища «после перезапуска» проверялось бы на чистых
+   * настройках, то есть не проверялось бы вовсе.
+   */
+  prefsStore?: PreferencesStore;
 }
 
 /** Что делает поддельный модуль при `unlock`: отдать ключ, отказать, отменить. */
@@ -128,7 +136,7 @@ export function createTestHost(options: TestHostOptions = {}): AppHost & {
 
   return {
     platform,
-    prefs: memoryPreferences(options.prefs),
+    prefs: options.prefsStore ?? memoryPreferences(options.prefs),
     restoreVault: async (owner = 'local') => vaultFor(owner),
     openExternal: async () => {},
     cloudBaseUrl: 'https://zapiski.cmpas.ru/api/v1',
