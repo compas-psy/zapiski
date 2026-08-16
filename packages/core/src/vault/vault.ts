@@ -233,7 +233,7 @@ export class Vault {
      */
     if (!(await this.rootReadable())) {
       this.accessFailed = true;
-      const kept = await readJson<VaultSnapshot>(this.storage, INDEX_FILE);
+      const kept = await readJson<VaultSnapshot>(this.storage, INDEX_FILE).catch(() => null);
       /* Снапшот берём КАК ЕСТЬ, без проверки на свежесть: сверять его не с чем,
          пока папка молчит. Показать вчерашний список правильнее, чем пустой:
          первое устарело на день, второе неверно целиком. */
@@ -258,8 +258,18 @@ export class Vault {
      */
     await recoverRename(this.storage).catch(() => null);
 
-    this.trashEntries = (await readJson<TrashEntry[]>(this.storage, TRASH_JOURNAL)) ?? [];
-    const snapshot = await readJson<VaultSnapshot>(this.storage, INDEX_FILE);
+    /*
+     * Служебные файлы читаются В ЗАЩИТЕ — и это не перестраховка.
+     *
+     * Журнал корзины и снимок индекса лежат в `.zapiski/`. Отказ на них
+     * означает «служебного файла нет или он не прочёлся», а не «папки нет»:
+     * индекс перестроится обходом, корзина начнётся пустой. Пока отказ летел
+     * наружу, вызывающий читал его как «Папка недоступна» — и человек получал
+     * это сообщение о папке, которая лежала на месте и была полна заметок.
+     */
+    this.trashEntries =
+      (await readJson<TrashEntry[]>(this.storage, TRASH_JOURNAL).catch(() => null)) ?? [];
+    const snapshot = await readJson<VaultSnapshot>(this.storage, INDEX_FILE).catch(() => null);
     if (snapshot && snapshot.version === SNAPSHOT_VERSION && (await this.snapshotIsFresh(snapshot))) {
       this.adoptSnapshot(snapshot);
       if (this.index.loadSnapshot(snapshot.index)) return;

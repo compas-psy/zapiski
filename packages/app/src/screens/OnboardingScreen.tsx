@@ -207,9 +207,11 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
       }
 
       if (storage) {
-        try {
-          await app.openVault(storage);
-        } catch {
+        /* Результат, а не исключение: раньше ЛЮБАЯ поломка внутри открытия —
+           чтение очереди, обход папки, подъём облака — читалась здесь как
+           «папка недоступна», и человек уходил в хранилище в памяти с рабочей
+           папкой под ногами. */
+        if ((await app.openVault(storage)) === 'unreadable') {
           refused = true;
           storage = null;
         }

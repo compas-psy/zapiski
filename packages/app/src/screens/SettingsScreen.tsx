@@ -1035,10 +1035,11 @@ function StorageHousekeeping(): ReactNode {
              никуда не делась. */
           void (async () => {
             const storage = await app.host.platform.pickVaultDirectory(app.owner()).catch(() => null);
-            if (!storage) return;
-            try {
-              await app.openVault(storage);
-            } catch {
+            if (!storage) {
+              app.toast({ message: strings.errors.folderUnavailable });
+              return;
+            }
+            if ((await app.openVault(storage)) === 'unreadable') {
               app.toast({ message: strings.errors.folderUnavailable });
             }
           })();

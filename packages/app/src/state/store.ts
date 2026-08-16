@@ -441,6 +441,25 @@ export type BiometricUnlock =
  */
 const VAULT_RETRY_MS = [500, 1500, 4000, 10_000, 30_000];
 
+/**
+ * Чем кончилось открытие хранилища.
+ *
+ * ── Почему результат, а не исключение ───────────────────────────────────────
+ *
+ * «Папка недоступна» обязана иметь РОВНО ОДИН источник. Пока `openVault`
+ * бросал, источников было столько, сколько операций внутри: чтение очереди
+ * неотправленного, обход папки, подъём облака, доигрывание прерванного
+ * переименования, запись настройки. Любая падала — и вызывающий, который умеет
+ * ловить только исключение, объявлял человеку, что пропала папка. Заказчик
+ * прошёл через это четыре раза: выбирал свою папку и получал «Папка
+ * недоступна» о папке, которая была на месте.
+ *
+ * Результатом вместо исключения класс закрывается целиком: что бы ни сломалось
+ * внутри, наружу выходит либо `ok`, либо честное `unreadable` — и второе
+ * означает ровно одно: хранилище прочитать не удалось.
+ */
+export type VaultOpenOutcome = 'ok' | 'unreadable';
+
 export class AppController {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -779,7 +798,7 @@ export class AppController {
    * оставались в памяти до закрытия приложения. Ошибка одного не имеет права
    * отменять чужую удачу.
    */
-  async openVault(storage: VaultStorage): Promise<void> {
+  async openVault(storage: VaultStorage): Promise<VaultOpenOutcome> {
     this.patch({ booting: true });
     /* Отказ открыть хранилище обязан снять флаг «загружаюсь». Без этого
        состояние врёт о себе: vault не открыт, а приложение считает, что оно
@@ -790,7 +809,12 @@ export class AppController {
       vault = await Vault.open(storage, { locale: this.state.locale });
     } catch (error) {
       this.patch({ booting: false });
-      throw error;
+      /* Причина остаётся в консоли: она нужна разработчику, а человеку из неё
+         нечего взять — ему нужно место, а не текст исключения. Латиницей:
+         инвариант 5 запрещает кириллические литералы в коде, и правильно —
+         иначе однажды такой литерал доедет до экрана мимо реестра. */
+      console.error('[zapiski] vault open failed', error);
+      return 'unreadable';
     }
     /* Таймеры прежнего vault'а останавливаются ЗДЕСЬ, а не до открытия.
        Остановить их раньше значило бы обезоружить работающее хранилище из-за
@@ -843,6 +867,7 @@ export class AppController {
        Не поднялось — работаем локально и говорим об этом своими словами, а не
        чужими: «папка недоступна» здесь было бы неправдой. */
     await this.resumeCloud().catch(() => undefined);
+    return vault.unreadable ? 'unreadable' : 'ok';
   }
 
   /** Хранилище в памяти — запуск без настоящей ФС (демо, тесты, отказ ФС). */
@@ -974,9 +999,7 @@ export class AppController {
    */
   private async switchVaultLocation(location: VaultLocation): Promise<boolean> {
     this.lockAll();
-    try {
-      await this.openVault(location.storage);
-    } catch {
+    if ((await this.openVault(location.storage)) === 'unreadable') {
       this.toast({ message: this.strings.errors.folderUnavailable });
       return false;
     }
@@ -1321,8 +1344,7 @@ export class AppController {
     if (!vault) {
       const storage = await this.host.restoreVault(this.owner()).catch(() => null);
       if (!storage) return false;
-      await this.openVault(storage);
-      if (this.vault?.unreadable === true) return false;
+      if ((await this.openVault(storage)) === 'unreadable') return false;
       if (this.state.syncError === this.strings.errors.folderUnavailable) this.clearError();
       return true;
     }
@@ -2037,10 +2059,12 @@ export class AppController {
       this.patch({ ready: true, booting: false, route: { name: 'onboarding', step: 2 } });
       return false;
     }
-    await this.openVault(storage);
+    /* Место есть, но прочитать его не вышло — это не «места нет», и путать
+       нельзя: человеку надо предложить повторить, а не выбирать заново. */
+    const opened = await this.openVault(storage);
     await this.refresh();
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
-    return true;
+    return opened === 'ok';
   }
 
   /** Открыть лист снятия шифрования; `null` — закрыть. */
