@@ -201,7 +201,18 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       await ctx.db
         .query('DELETE FROM magic_tokens WHERE token_hash = $1', [hashOf(issued.token)])
         .catch(() => undefined);
-      throw error;
+      /*
+       * Свой код, а не проброс отказа релея.
+       *
+       * Наружу уходил безымянный отказ, клиент показывал текст про
+       * СИНХРОНИЗАЦИЮ, и человек искал причину где угодно, кроме почты.
+       * Владельцу продукта доставалось ровно «вход по почте не работает» —
+       * без единой зацепки, чинить это или ждать.
+       *
+       * Исходная ошибка остаётся в логе (`magic_link_send_failed`), наружу
+       * идёт причина и рабочий путь: Яндекс ID почтового релея не касается.
+       */
+      throw errors.mailFailed();
     }
 
     return reply.code(202).send({

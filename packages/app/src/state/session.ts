@@ -47,6 +47,12 @@ export type AuthErrorCode =
   | 'too_soon'
   /** Сети нет или сервер не ответил. */
   | 'unreachable'
+  /**
+   * Письмо со ссылкой не ушло: наша часть отработала, не ответил почтовый
+   * релей. Отдельный код, потому что и причина, и следующий шаг другие: вход
+   * через Яндекс ID от почты не зависит и работает.
+   */
+  | 'mail_failed'
   /** Сервер ответил, но не тем. */
   | 'server';
 
@@ -171,7 +177,9 @@ export class SessionStore {
       }),
     });
     if (response.status === 429) throw new AuthError('too_soon');
-    if (!response.ok) throw new AuthError('server');
+    /* Причина отказа читается из тела: «письмо не ушло» и «сервер не ответил»
+       требуют разных слов и разных следующих шагов. */
+    if (!response.ok) throw new AuthError(codeOf(await errorCode(response)));
   }
 
   /** Адрес, который оболочка открывает во внешнем браузере для Яндекс ID. */
@@ -403,6 +411,7 @@ function codeOf(serverCode: string): AuthErrorCode {
   if (serverCode === 'session_expired') return 'link_dead';
   if (serverCode.startsWith('oauth') || serverCode.startsWith('yandex')) return 'declined';
   if (serverCode === 'too_many_attempts') return 'too_soon';
+  if (serverCode === 'mail_failed') return 'mail_failed';
   return 'server';
 }
 

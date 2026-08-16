@@ -22,6 +22,8 @@ export const en: Catalog = {
     webdavUnreachable: 'The server is not responding · Retry',
     yandexTokenExpired: 'Please sign in to Yandex.Disk again',
     magicLinkExpired: 'This link is no longer valid. Send a new one?',
+    /** The sign-in email could not be sent; Yandex ID still works. */
+    mailFailed: 'The sign-in email could not be sent. Use Yandex ID or try again later',
     mailNotDelivered: (email: string): string =>
       `The email was sent to ${email}. If it has not arrived, check Spam or send it again`,
     wrongPassword: 'That password did not work',

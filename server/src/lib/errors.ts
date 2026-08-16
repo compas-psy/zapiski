@@ -69,6 +69,22 @@ export const errors = {
   subscriptionRequired: (): ApiError =>
     new ApiError(402, 'subscription_required', PENDING_REGISTRY.subscriptionRequired),
 
+  /**
+   * Письмо не удалось отправить.
+   *
+   * Отдельный код, а не общий отказ, и вот почему. Ручка `/auth/magic-link`
+   * делает две разные вещи: заводит токен в базе и отдаёт письмо релею. Когда
+   * падало второе, наружу уходил безымянный отказ, клиент показывал текст про
+   * СИНХРОНИЗАЦИЮ, и человек искал проблему где угодно, кроме почты. Заодно
+   * этого не видел и владелец продукта: «вход по почте не работает» — всё, что
+   * можно было сказать.
+   *
+   * Код 502: наша часть отработала, не ответил чужой релей. Вход при этом не
+   * сломан — Яндекс ID рядом и работает.
+   */
+  mailFailed: (): ApiError =>
+    new ApiError(502, 'mail_failed', PENDING_REGISTRY.mailFailed),
+
   /** Оплата в этой сборке не подключена: платить не за что, всё открыто. */
   billingDisabled: (): ApiError =>
     new ApiError(404, 'billing_disabled', PENDING_REGISTRY.billingDisabled),

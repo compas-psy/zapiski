@@ -266,3 +266,32 @@ describe('открытый текст никогда не попадает в з
     expect(await app.unlock(path, PASSWORD)).toContain('текст первой');
   });
 });
+
+describe('старая заметка не выключает биометрию', () => {
+  /**
+   * Регрессия, сообщённая как «биометрия не поднимается».
+   *
+   * Контейнер версии 1 пальцем не открывается по устройству формата: ключ там
+   * выводится Argon2id прямо из пароля, иерархии нет, и `decryptNoteFile` без
+   * пароля честно отвечает `null`. Код принимал это за протухшую привязку —
+   * и снимал её. Одной попытки открыть пальцем старую заметку хватало, чтобы
+   * палец перестал предлагаться вообще.
+   */
+  it('версия 1 отвечает «legacy», привязка и настройка остаются', async () => {
+    const { app, bio, host } = await boot();
+    await app.setVaultPassword(PASSWORD, true);
+    const path = (await app.encryptNote('Первая.md')) as string;
+
+    /* Подменяем версию в заголовке контейнера: байт 4 — версия (см. ядро). */
+    const data = await host.storage.read(path);
+    const legacy = Uint8Array.from(data as Uint8Array);
+    legacy[4] = 1;
+    await host.storage.write(path, legacy);
+    app.lockAll();
+
+    const outcome = await app.unlockWithBiometrics(path);
+    expect(outcome.kind).toBe('legacy');
+    expect(bio.stored()).not.toBeNull();
+    expect(await app.biometricsEnabled()).toBe(true);
+  });
+});

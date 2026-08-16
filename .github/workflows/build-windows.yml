@@ -326,6 +326,64 @@ jobs:
           echo "tauri ${args[*]}"
           pnpm exec tauri "${args[@]}"
 
+      # ── Authenticode: подпись установщика сертификатом ────────────────────
+      #
+      # Это ДРУГАЯ подпись, чем `TAURI_SIGNING_PRIVATE_KEY` выше. Та заверяет
+      # манифест обновлений — её проверяет наш же клиент. Эта заверяет сам
+      # `.exe` перед Windows, и без неё SmartScreen показывает «Windows
+      # защитила ваш компьютер» с кнопкой «Подробнее», спрятанной за неочевидным
+      # нажатием. Заказчик спросил именно про это предупреждение.
+      #
+      # Сертификат покупается на организацию и в репозиторий не кладётся:
+      # секреты `WINDOWS_CERT_BASE64` (PFX в base64) и `WINDOWS_CERT_PASSWORD`.
+      # Нет секретов — шаг пропускается ГРОМКО: молчаливый пропуск читался бы
+      # как «подписали», а установщик при этом остаётся неподписанным.
+      #
+      # EV-сертификат репутацию SmartScreen даёт сразу; обычный OV набирает её
+      # установками, и первые дни предупреждение остаётся. Это свойство
+      # Windows, а не сборки, и обещать иначе нельзя.
+      - name: Подписать установщик сертификатом
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64)) {
+            Write-Warning 'Секретов WINDOWS_CERT_BASE64 / WINDOWS_CERT_PASSWORD нет — установщик БЕЗ подписи Authenticode.'
+            Write-Warning 'При запуске Windows покажет предупреждение SmartScreen. Это ожидаемо для неподписанного файла.'
+            exit 0
+          }
+
+          $dir = Join-Path $env:RUNNER_TEMP 'authenticode'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $pfx = Join-Path $dir 'zapiski.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64))
+
+          # signtool лежит в Windows SDK; на образе GitHub он есть, но путь к
+          # нему версионный — ищем самый свежий, а не прибиваем гвоздями.
+          $signtool = Get-ChildItem -Path 'C:\Program Files (x86)\Windows Kits\10\bin' `
+            -Recurse -Filter 'signtool.exe' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like '*x64*' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe не найден в Windows SDK' }
+
+          $targets = Get-ChildItem -Path 'apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle' `
+            -Recurse -Include '*.exe','*.msi' -ErrorAction SilentlyContinue
+          if (-not $targets) { throw 'Нечего подписывать: установщик не найден' }
+
+          foreach ($target in $targets) {
+            Write-Host "Подписываем $($target.FullName)"
+            & $signtool.FullName sign /fd SHA256 /f $pfx /p $env:WINDOWS_CERT_PASSWORD `
+              /tr http://timestamp.digicert.com /td SHA256 $target.FullName
+            if ($LASTEXITCODE -ne 0) { throw "signtool вернул $LASTEXITCODE" }
+            # Проверяем СВОЮ работу, а не верим коду возврата: подпись обязана
+            # читаться обратно, иначе шаг «прошёл», а файл не подписан.
+            & $signtool.FullName verify /pa /v $target.FullName
+            if ($LASTEXITCODE -ne 0) { throw "подпись не читается: verify вернул $LASTEXITCODE" }
+          }
+          Remove-Item $pfx -Force
+
       # Скрипт кладётся файлом, а не подаётся в `node -` heredoc'ом: под
       # git-bash на Windows heredoc в stdin ноды — лишний способ получить
       # «SyntaxError» на ровном месте. И кладётся он рядом с репозиторием, а не

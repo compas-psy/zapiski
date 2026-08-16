@@ -84,8 +84,10 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
       onUnlocked(outcome.body);
       return;
     }
-    /* Отмена биометрии — не ошибка: просто остаётся поле пароля. */
-    if (outcome.kind === 'cancelled') return;
+    /* Отмена биометрии — не ошибка: просто остаётся поле пароля.
+       Заметка версии 1 — тоже: её открывает только пароль, и привязка
+       отпечатка здесь ни при чём, снимать её не за что. */
+    if (outcome.kind === 'cancelled' || outcome.kind === 'legacy') return;
     /* Привязка не подходит хранилищу — она уже снята, и об этом надо сказать:
        иначе палец «не срабатывает» молча, и человек считает это поломкой. */
     setBiometricsReady(false);

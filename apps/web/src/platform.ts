@@ -6,7 +6,6 @@
  * нет ни одной заглушки, которая делает вид, что умеет.
  */
 import type { PlatformCapabilities, VaultStorage } from '@zapiski/core';
-import { createWebAuthnBiometrics } from './biometrics.js';
 import type { VaultOwner } from '@zapiski/core';
 import { pickVaultDirectory } from './vault-storage.js';
 
@@ -16,7 +15,26 @@ export function createWebPlatform(): PlatformCapabilities {
     version: __ZAPISKI_VERSION__,
 
     /** WebAuthn-PRF, если браузер и устройство умеют; иначе тумблера нет. */
-    biometrics: createWebAuthnBiometrics(),
+    /*
+     * Биометрия в браузере НЕ предлагается. Порт написан и рабочий
+     * (`biometrics.ts`, WebAuthn + PRF) — включается одной строкой, — но
+     * предлагать его нельзя, и причина не в удобстве.
+     *
+     * Веб-версия по нашему же обещанию — про ЧУЖОЙ компьютер: «Заметки в
+     * браузере на чужом компьютере». А платформенный аутентификатор WebAuthn
+     * привязан к учётной записи ЭТОЙ машины: разблокировку проходит тот, кто
+     * проходит Windows Hello или Touch ID на ней, то есть её хозяин. Включив
+     * тумблер на чужом ноутбуке, человек оставил бы там ключ от своих
+     * зашифрованных заметок — и отдал бы его владельцу машины.
+     *
+     * На своём устройстве это лишено смысла иначе: там стоит приложение, где
+     * биометрия работает через Android Keystore или Windows Hello и защищает
+     * ключ по-настоящему.
+     *
+     * Поэтому в браузере остаётся пароль. Порт `null` — и UI СКРОЕТ тумблер
+     * целиком (BEHAVIOR §5.1), а не покажет выключенным.
+     */
+    biometrics: null,
 
     /** Вибрации по контракту продукта — только Android (BEHAVIOR §0). */
     haptics: null,

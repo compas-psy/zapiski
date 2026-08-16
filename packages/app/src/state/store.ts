@@ -427,6 +427,8 @@ export type PasswordCheck = 'ok' | 'wrong' | 'unknown';
 export type BiometricUnlock =
   | { kind: 'unlocked'; body: string }
   | { kind: 'cancelled' }
+  /** Заметка версии 1: её открывает только пароль. Привязка ни при чём. */
+  | { kind: 'legacy' }
   | { kind: 'stale' };
 
 /**
@@ -1128,6 +1130,9 @@ export class AppController {
     if (code === 'link_dead') return errors.magicLinkExpired;
     if (code === 'declined') return errors.yandexTokenExpired;
     if (code === 'too_soon') return errors.tryLater;
+    /* Письмо не ушло — это не «синхронизация не удалась». Прежде сюда падало
+       всё подряд, и человек с неработающей почтой читал сообщение про синк. */
+    if (code === 'mail_failed') return errors.mailFailed;
     return errors.syncFailed;
   }
 
@@ -2759,6 +2764,23 @@ export class AppController {
     if (!salt) return { kind: 'cancelled' };
     const master = await this.crypto.importMaster(material, salt);
     material.fill(0);
+
+    /*
+     * Контейнер версии 1 пальцем не открывается ПО УСТРОЙСТВУ ФОРМАТА.
+     *
+     * У него нет иерархии ключей: ключ выводится Argon2id прямо из пароля, и
+     * master его не заменяет — `decryptNoteFile` без пароля честно отвечает
+     * `null`. Это не «привязка не подходит», а «эта заметка требует пароль».
+     *
+     * Разница стоит дорого: ниже неподходящая привязка СНИМАЕТСЯ, и без этой
+     * ветки одна попытка открыть пальцем старую заметку выключала биометрию
+     * целиком — палец переставал предлагаться вообще. Так и было сообщено:
+     * «биометрия не поднимается».
+     */
+    const data = await vault.storage.read(path).catch(() => null);
+    const header = data ? this.crypto.parseHeader(data) : null;
+    if (header?.version === LEGACY_CONTAINER_VERSION) return { kind: 'legacy' };
+
     const body = await decryptNoteFile(vault.storage, this.crypto, path, master);
     /*
      * Палец подтверждён, а ключ не подошёл — это НЕ отмена, и молчать нельзя.
