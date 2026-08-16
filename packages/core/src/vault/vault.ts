@@ -172,6 +172,14 @@ export class Vault {
   private readonly renameDelayMs: number;
   /** Отложенные переименования: путь → момент, когда пора переименовать. */
   private pendingRenames = new Map<VaultPath, number>();
+  /**
+   * Хранилище прочиталось не полностью: обход папки или чтение файла отказали.
+   *
+   * Отказ может прийти с двух сторон, и обе одинаково опасны. Не ответил
+   * обход — список пуст не по делу. Не прочитались файлы — список пуст при
+   * удавшемся обходе. В обоих случаях «заметок нет» перестаёт быть фактом.
+   */
+  private accessFailed = false;
   private listeners = new Set<(paths: VaultPath[]) => void>();
 
   constructor(
@@ -187,6 +195,17 @@ export class Vault {
     return catalog(this.locale);
   }
 
+  /**
+   * Папку не удалось прочитать целиком — значит списку заметок верить нельзя.
+   *
+   * Признак существует ради одного запрета: не выдавать «заметок нет» за
+   * факт, когда факта нет. Приложение обязано на него смотреть и говорить
+   * человеку правду («Папка недоступна…»), а не показывать пустой экран.
+   */
+  get unreadable(): boolean {
+    return this.accessFailed;
+  }
+
   static async open(storage: VaultStorage, options: VaultOptions = {}): Promise<Vault> {
     const vault = new Vault(storage, options);
     await vault.open();
@@ -196,16 +215,64 @@ export class Vault {
   /** Открытие: доигрывание журналов, загрузка снапшота либо полная перестройка. */
   async open(): Promise<void> {
     await recoverRename(this.storage);
+    this.accessFailed = false;
+
+    /*
+     * Сначала — можно ли вообще читать папку.
+     *
+     * Заказчик, третье утро подряд: «снова утро, снова пустота». Заметки на
+     * месте; читать их в этот момент нельзя. На Android папка живёт за
+     * системным провайдером (свой у карты памяти, свой у клиента Яндекс.Диска),
+     * и на холодном старте — а утро это и есть холодный старт — провайдер
+     * может быть ещё не поднят. Тогда обход возвращал НОЛЬ файлов, и дальше всё
+     * шло само: индекс перестраивался пустым, пустой индекс сохранялся поверх
+     * прежнего, а человек получал экран «пока нет заметок» — утверждение,
+     * которого никто не проверял.
+     *
+     * Разница между «в папке пусто» и «папку не прочитать» стоит всего одного
+     * вызова, а цена смешения — архив, объявленный несуществующим.
+     */
+    if (!(await this.rootReadable())) {
+      this.accessFailed = true;
+      const kept = await readJson<VaultSnapshot>(this.storage, INDEX_FILE);
+      /* Снапшот берём КАК ЕСТЬ, без проверки на свежесть: сверять его не с чем,
+         пока папка молчит. Показать вчерашний список правильнее, чем пустой:
+         первое устарело на день, второе неверно целиком. */
+      if (kept && kept.version === SNAPSHOT_VERSION) this.adoptSnapshot(kept);
+      return;
+    }
+
     this.trashEntries = (await readJson<TrashEntry[]>(this.storage, TRASH_JOURNAL)) ?? [];
     const snapshot = await readJson<VaultSnapshot>(this.storage, INDEX_FILE);
     if (snapshot && snapshot.version === SNAPSHOT_VERSION && (await this.snapshotIsFresh(snapshot))) {
-      this.meta.clear();
-      for (const [path, value] of Object.entries(snapshot.meta)) this.meta.set(path, value);
-      this.mtimes.clear();
-      for (const [path, value] of Object.entries(snapshot.mtimes)) this.mtimes.set(path, value);
+      this.adoptSnapshot(snapshot);
       if (this.index.loadSnapshot(snapshot.index)) return;
     }
     await this.rebuild();
+  }
+
+  /**
+   * Читается ли корень хранилища прямо сейчас.
+   *
+   * Именно `list`, а не `stat`: провайдер отвечает на существование папки
+   * охотнее, чем на её содержимое, и «папка есть» ничего не говорит о том,
+   * увидим ли мы файлы.
+   */
+  private async rootReadable(): Promise<boolean> {
+    try {
+      await this.storage.list('');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private adoptSnapshot(snapshot: VaultSnapshot): void {
+    this.meta.clear();
+    for (const [path, value] of Object.entries(snapshot.meta)) this.meta.set(path, value);
+    this.mtimes.clear();
+    for (const [path, value] of Object.entries(snapshot.mtimes)) this.mtimes.set(path, value);
+    this.index.loadSnapshot(snapshot.index);
   }
 
   private async snapshotIsFresh(snapshot: VaultSnapshot): Promise<boolean> {
@@ -221,13 +288,33 @@ export class Vault {
 
   /** Полная перестройка индекса из файлов (ТЗ §2.1.1, «Перестроить индекс»). */
   async rebuild(): Promise<void> {
+    this.accessFailed = false;
+    const paths = await this.notePaths();
+    /* Корень не прочитался — перестраивать не из чего. Прежний индекс остаётся
+       в памяти, снапшот на диске остаётся нетронутым: пустой список нельзя ни
+       показать как истину, ни тем более записать поверх настоящего. */
+    if (this.accessFailed && paths.length === 0) return;
+
     const notes: Note[] = [];
     this.mtimes.clear();
-    for (const path of await this.notePaths()) {
+    for (const path of paths) {
       const note = await this.read(path);
+      /* Файл виден в папке, а прочитать его не удалось — второй способ
+         получить пустой список при целом хранилище: обход ответил, чтение нет.
+         Это тоже отказ доступа, а не отсутствие заметки. */
       if (note) notes.push(note);
+      else this.accessFailed = true;
     }
+    /* Прочитать не удалось НИЧЕГО из того, что видно в папке. Индекс в этом
+       случае не трогаем вовсе: пустой список здесь — свойство момента, а не
+       хранилища, и заменять им прежний нельзя даже в памяти. */
+    if (this.accessFailed && notes.length === 0 && paths.length > 0) return;
+
     this.index.rebuild(notes);
+    /* Что-то прочиталось, что-то нет: показать прочитанное полезно, а вот
+       сохранять неполный список поверх полного нельзя — при следующем запуске
+       он станет «правдой». */
+    if (this.accessFailed) return;
     await this.persist();
   }
 
@@ -249,7 +336,15 @@ export class Vault {
   async notePaths(dir: VaultPath = ''): Promise<VaultPath[]> {
     const out: VaultPath[] = [];
     const walk = async (current: VaultPath): Promise<void> => {
-      const entries = await this.storage.list(current).catch(() => []);
+      const entries = await this.storage.list(current).catch(() => {
+        /* Неудача обхода — не пустая папка. Раньше эти два случая сходились
+           здесь в один, и «не смогли прочитать» превращалось в «заметок нет».
+           Теперь неудача помнится и меняет поведение всего, что зависит от
+           списка: перестройки индекса, сохранения снапшота и того, что видит
+           человек. */
+        this.accessFailed = true;
+        return [];
+      });
       for (const entry of entries) {
         if (isMetaPath(entry.path)) continue;
         if (entry.isDirectory) await walk(entry.path);

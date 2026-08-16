@@ -7,7 +7,7 @@ import type { AppHost } from '@zapiski/app';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
-import { chosenSafTree, createPlatform, PREF_SAF_TREE } from './platform/capabilities';
+import { chosenSafTree, createPlatform, PREF_SAF_TREE, safAccessRevoked } from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
@@ -24,6 +24,44 @@ import { currentVaultRoot, defaultVaultRoot, openVault } from './platform/vault'
 const CLOUD_BASE_URL =
   (import.meta.env['VITE_CLOUD_BASE_URL'] as string | undefined) ??
   'https://zapiski.cmpas.ru/api/v1';
+
+/**
+ * Паузы перед повторной проверкой папки (мс). Ноль — первая попытка сразу.
+ *
+ * Заказчик третье утро подряд: «снова утро, снова пустота». Утро — холодный
+ * старт: телефон ночью перезагрузился или Android убил процесс. Провайдер
+ * папки в этот момент может быть ещё не поднят, и первая же проверка отвечает
+ * «не подтверждаю». Ему нужна не тревога, а секунда времени.
+ *
+ * Дольше ждать нельзя: пауза перед списком заметок — это то, что человек видит
+ * при каждом запуске, и платить ею за редкий случай было бы неправильно.
+ */
+const PROBE_DELAYS_MS = [0, 250, 750];
+
+/**
+ * Проверить дерево, дав провайдеру время проснуться.
+ *
+ * Три исхода, и путать их нельзя: `alive` — папка на месте; `answered: false` —
+ * мост вообще не ответил (это «сейчас не знаю», выбор человека неприкосновенен);
+ * `answered: true` при пустом `alive` — мост ответил «не подтверждаю», и вот
+ * тогда есть смысл спрашивать систему, не отозвано ли разрешение.
+ */
+async function probePatiently(
+  tree: string,
+): Promise<{ alive: { uri: string } | null; answered: boolean }> {
+  let answered = false;
+  for (const delay of PROBE_DELAYS_MS) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      const alive = await probeSafTree(tree);
+      answered = true;
+      if (alive) return { alive, answered };
+    } catch {
+      /* Мост промолчал — пробуем ещё раз; повод забыть папку это не даёт. */
+    }
+  }
+  return { alive: null, answered };
+}
 
 export function createHost(): AppHost {
   /* Настройки нужны и платформе: в них лежит выбранная папка (ТЗ §4.1 п. 1). */
@@ -81,13 +119,15 @@ export function createHost(): AppHost {
          Тогда след выбора — разрешение, выданное системой. */
       const tree = await chosenSafTree(prefs);
       if (tree !== null) {
-        let alive;
-        try {
-          alive = await probeSafTree(tree);
-        } catch {
-          return null;
-        }
+        const { alive, answered } = await probePatiently(tree);
         if (alive) return createSafStorage(alive.uri);
+        /* Мост не ответил вовсе — «сейчас не знаю», и точка. */
+        if (!answered) return null;
+        /* «Не подтвердилось» и «отозвано» — разные вещи, и второе доказывается
+           только тем, что система больше не держит за нами разрешение. Утро
+           после перезагрузки телефона выглядит как первое: провайдер папки не
+           поднят, а выбор человека при этом в полном порядке. */
+        if (!(await safAccessRevoked(tree))) return null;
         await prefs.set(PREF_SAF_TREE, null);
       }
       const known = await currentVaultRoot().catch(() => null);

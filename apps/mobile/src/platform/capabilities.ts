@@ -83,6 +83,25 @@ export async function chosenSafTree(prefs: PreferencesStore): Promise<string | n
   return adopted;
 }
 
+/**
+ * Разрешение на папку действительно отозвано — или папка просто молчит?
+ *
+ * `probeSafTree` отвечает `null` в обоих случаях: и когда человек отозвал
+ * доступ в настройках Android, и когда провайдер папки сейчас не отвечает —
+ * карта памяти не примонтирована, клиент облачного диска не запущен, система
+ * ещё не подняла его после ночи. Различить их можно только по одному признаку:
+ * держит ли система за нами разрешение на это дерево. Разрешение на месте —
+ * значит доступ не отзывали, и стирать выбор человека не за что.
+ *
+ * Система не ответила и на этот вопрос — считаем, что не отозвано: сомнение
+ * толкуется в пользу сохранности чужих данных.
+ */
+export async function safAccessRevoked(tree: string): Promise<boolean> {
+  const held = await persistedSafTrees().catch(() => null);
+  if (held === null) return false;
+  return !held.includes(tree);
+}
+
 function safLocation(tree: SafTree): VaultLocation {
   return {
     kind: 'user',
@@ -192,6 +211,11 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
         }
 
         if (!tree) {
+          /* Проверка сказала «нет» — но и это ещё не приговор выбору. Так же
+             выглядит непроснувшийся провайдер папки: карта не примонтирована,
+             клиент диска не запущен. Забываем адрес, только если система
+             больше не держит за нами разрешение. */
+          if (!(await safAccessRevoked(uri))) return null;
           // Разрешение на папку отозвано или папка удалена: возвращаемся в
           // каталог приложения, а не делаем вид, что всё на месте.
           await prefs.set(PREF_SAF_TREE, null);

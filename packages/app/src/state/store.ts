@@ -359,6 +359,16 @@ const PREF = {
 const VAULT_KEY_PATH = `${META_DIR}/crypto.json`;
 const VAULT_KEY_ID = 'vault';
 
+/**
+ * Паузы между попытками прочитать папку, которая молчит (мс).
+ *
+ * Первая — через полсекунды: системный провайдер, не поднятый к моменту
+ * запуска приложения, обычно просыпается именно так быстро. Последняя — через
+ * полминуты, и на этом попытки заканчиваются: опрашивать папку, которой нет,
+ * до конца заряда батареи — не ответ, а его имитация.
+ */
+const VAULT_RETRY_MS = [500, 1500, 4000, 10_000, 30_000];
+
 export class AppController {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -389,6 +399,8 @@ export class AppController {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private renameTimer: ReturnType<typeof setInterval> | null = null;
+  /** Отложенная попытка прочитать папку, которая молчала (см. `retryVault`). */
+  private vaultRetryTimer: ReturnType<typeof setTimeout> | null = null;
   /** Минут до автозамка; `null` — до выхода из приложения. */
   private autoLockMinutes: number | null = 10;
   /**
@@ -636,6 +648,19 @@ export class AppController {
     this.startLockWatch();
     await this.refresh();
     this.patch({ ready: true, booting: false, route: { name: 'list' } });
+    /*
+     * Папка не прочиталась — говорим это, а не показываем пустой список.
+     *
+     * Заказчик третье утро подряд: «снова утро, снова пустота». Утро — это
+     * холодный старт, а на холодном старте системный провайдер папки может
+     * быть ещё не поднят. Пустой экран в этот момент — не отчёт о хранилище,
+     * а ложное утверждение о нём; вместо него говорится «Папка недоступна…»,
+     * и приложение само пробует прочитать её ещё раз.
+     */
+    if (vault.unreadable) {
+      this.reportError(this.strings.errors.folderUnavailable);
+      this.scheduleVaultRetry();
+    }
     await this.host.prefs.set(PREF.onboarded, true);
     /* Vault открыт — облако можно поднимать: движку синка нужен именно он. */
     await this.resumeCloud();
@@ -651,6 +676,7 @@ export class AppController {
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.vaultRetryTimer) clearTimeout(this.vaultRetryTimer);
     this.authOff?.();
     this.authOff = null;
   }
@@ -1056,6 +1082,8 @@ export class AppController {
   async rescanVault(): Promise<boolean> {
     const vault = this.vault;
     if (!vault) return false;
+    /* Папка молчала — пересматривать нечего, надо сперва её прочитать. */
+    if (vault.unreadable) return this.retryVault();
     const onDisk = await vault.notePaths().catch(() => null);
     if (onDisk === null) return false;
     const known = new Set(vault.notes().map((note) => note.path));
@@ -1069,6 +1097,44 @@ export class AppController {
 
   get vaultRef(): Vault | null {
     return this.vault;
+  }
+
+  /**
+   * Ещё раз прочитать папку. `true` — получилось.
+   *
+   * Провайдер, который не ответил на холодном старте, обычно поднимается сам
+   * через секунду-другую: ему нужно, чтобы система его запустила. Поэтому
+   * правильный ответ на молчание — не «заметок нет», а «сейчас попробуем ещё
+   * раз», и сказать об этом вслух.
+   */
+  async retryVault(): Promise<boolean> {
+    const vault = this.vault;
+    if (!vault) return false;
+    await vault.open().catch(() => undefined);
+    if (vault.unreadable) return false;
+    await this.refresh();
+    if (this.state.syncError === this.strings.errors.folderUnavailable) this.clearError();
+    return true;
+  }
+
+  /**
+   * Повторные попытки прочитать папку, пока она молчит.
+   *
+   * Паузы растут: первая через полсекунды (провайдер обычно поднимается
+   * именно так быстро), последняя — через полминуты. Попытки конечны:
+   * бесконечный опрос папки, которой нет, — это разряженная батарея вместо
+   * ответа. Дальше остаются возвращение к приложению и кнопка «Повторить».
+   */
+  private scheduleVaultRetry(attempt = 0): void {
+    if (this.vaultRetryTimer) clearTimeout(this.vaultRetryTimer);
+    const delay = VAULT_RETRY_MS[attempt];
+    if (delay === undefined) return;
+    this.vaultRetryTimer = setTimeout(() => {
+      this.vaultRetryTimer = null;
+      void this.retryVault().then((ok) => {
+        if (!ok) this.scheduleVaultRetry(attempt + 1);
+      });
+    }, delay);
   }
 
   async readNote(path: VaultPath): Promise<Note | null> {

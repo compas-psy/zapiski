@@ -110,8 +110,12 @@ describe('папка пользователя переживает молчан�
   it('доступа действительно нет — адрес забывается', async () => {
     /* Обратная сторона правила: явный ответ «нет доступа» обязан приводить к
        возврату в каталог приложения. Без этой проверки сторож можно было бы
-       удовлетворить, вообще перестав забывать адрес. */
+       удовлетворить, вообще перестав забывать адрес.
+
+       «Действительно нет» — это ДВА совпавших ответа: проверка не подтвердила
+       дерево И система больше не держит за нами разрешение на него. */
     probe.mockImplementation(async () => null);
+    persisted.mockImplementation(async () => []);
     const prefs = memoryPrefs({ [PREF_SAF_TREE]: 'content://tree/notes' });
 
     const platform = createPlatform(prefs as never);
@@ -119,6 +123,34 @@ describe('папка пользователя переживает молчан�
 
     expect(prefs.store.get(PREF_SAF_TREE)).toBeNull();
     expect(where?.kind).toBe('app');
+  });
+
+  it('папка молчит, но разрешение на месте — выбор остаётся', async () => {
+    /*
+     * Утро после перезагрузки телефона. Провайдер папки — свой у карты памяти,
+     * свой у клиента облачного диска — ещё не поднят, и проверка дерева
+     * отвечает «не подтверждаю». Разрешение при этом никуда не делось: человек
+     * ничего не отзывал.
+     *
+     * Заказчик описал последствие прежнего поведения тремя словами: «снова
+     * утро, снова пустота» — приложение забывало папку и открывало пустой
+     * каталог приложения, где заметок нет и не было.
+     */
+    probe.mockImplementation(async () => null);
+    persisted.mockImplementation(async () => ['content://tree/notes']);
+    const prefs = memoryPrefs({ [PREF_SAF_TREE]: 'content://tree/notes' });
+
+    const platform = createPlatform(prefs as never);
+    const where = await platform.vaultFolders?.current();
+
+    expect(
+      prefs.store.get(PREF_SAF_TREE),
+      'непроснувшийся провайдер стёр выбор пользователя',
+    ).toBe('content://tree/notes');
+    /* И каталог приложения не выдаётся за папку пользователя: `null` — это
+       честное «сейчас не знаю», на которое приложение отвечает «Папка
+       недоступна…», а не пустым списком. */
+    expect(where).toBeNull();
   });
 
   it('доступ есть — папка пользователя и остаётся папкой пользователя', async () => {
@@ -145,6 +177,22 @@ describe('папка пользователя переживает молчан�
  * держит оба места, чтобы «починено» означало «везде».
  */
 describe('открытие хранилища на старте', () => {
+  it('папка молчит, а разрешение есть — запуск не забывает выбор', async () => {
+    /* То же правило на старте: третье утро подряд заказчик получал пустой
+       список именно здесь — приложение решало, что доступа нет, стирало адрес
+       и открывало каталог приложения. */
+    probe.mockImplementation(async () => null);
+    persisted.mockImplementation(async () => ['content://tree/notes']);
+    const prefs = memoryPrefs({ [PREF_SAF_TREE]: 'content://tree/notes' });
+    prefsHolder.current = prefs;
+
+    const { createHost } = await import('../src/host');
+    const storage = await createHost().restoreVault();
+
+    expect(storage, 'молчащая папка подменена каталогом приложения').toBeNull();
+    expect(prefs.store.get(PREF_SAF_TREE)).toBe('content://tree/notes');
+  });
+
   it('молчание моста не стирает выбранную папку', async () => {
     probe.mockImplementation(async () => {
       throw new Error('мост не ответил');
