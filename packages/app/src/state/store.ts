@@ -592,8 +592,42 @@ export class AppController {
    */
   private bootRun: Promise<void> | null = null;
 
+  /**
+   * Очередь операций, которые открывают и закрывают хранилище.
+   *
+   * ── Зачем ───────────────────────────────────────────────────────────────
+   *
+   * Защита от повторного `boot()` была, а от НАЛОЖЕНИЯ загрузки на вход — нет.
+   * И наложение это не редкое, а штатное: возврат из Яндекс ID приходит по
+   * `zapiski://`, Android поднимает приложение заново, `boot()` начинается, и
+   * прямо посреди него `listenAuthCallbacks` дёргает `completeSignIn` — без
+   * `await`, потому что боту незачем ждать вход.
+   *
+   * Дальше два прогона делят одно поле `this.vault`. `switchOwner` обнуляет
+   * его и открывает место учётки; `boot`, ничего об этом не зная, открывает
+   * место того владельца, который был у него на руках в начале, и записывает
+   * результат последним. Выходит: облако подключено к учётке, а открыта папка
+   * `local`. Синхронизация работает — с чужой пустой папкой, и на экране это
+   * «вошёл, а заметок нет и синхронизация не идёт».
+   *
+   * Очередь чинит класс целиком: пока одна операция владеет хранилищем,
+   * вторая ждёт. Порядок сохраняется, отказ одной не роняет следующую.
+   */
+  private vaultQueue: Promise<unknown> = Promise.resolve();
+
+  private serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.vaultQueue.then(operation, operation);
+    /* Хвост очереди не должен нести отказ: иначе одна неудача сорвала бы все
+       последующие операции, которые к ней отношения не имеют. */
+    this.vaultQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
+  }
+
   async boot(): Promise<void> {
-    this.bootRun ??= this.bootOnce().finally(() => {
+    this.bootRun ??= this.serialize(() => this.bootOnce()).finally(() => {
       this.bootRun = null;
     });
     return this.bootRun;
@@ -1270,7 +1304,13 @@ export class AppController {
    * правильный ответ на молчание — не «заметок нет», а «сейчас попробуем ещё
    * раз», и сказать об этом вслух.
    */
-  async retryVault(): Promise<boolean> {
+  retryVault(): Promise<boolean> {
+    /* Тоже через очередь: повтор заводится таймером и может прийтись ровно на
+       смену владельца — тогда два прогона снова делят одно поле `vault`. */
+    return this.serialize(() => this.retryVaultNow());
+  }
+
+  private async retryVaultNow(): Promise<boolean> {
     const vault = this.vault;
     /* Хранилища нет вовсе — папка не ответила ещё на запуске. Спрашиваем
        платформу заново: это тот же случай, только раньше по времени. */
@@ -1953,7 +1993,24 @@ export class AppController {
     return this.switchOwner();
   }
 
-  private async switchOwner(): Promise<boolean> {
+  /**
+   * Чьё хранилище открыто — для тестов.
+   *
+   * Наружу это поле не нужно: экраны знают владельца через `owner()`. Но
+   * сторож на гонку «вход посреди загрузки» обязан проверять именно ОТКРЫТОЕ
+   * место, а не намерение: вся суть дефекта была в их расхождении.
+   */
+  openedForTest(): VaultOwner | null {
+    return this.openedFor;
+  }
+
+  private switchOwner(): Promise<boolean> {
+    /* Через ту же очередь, что и загрузка: вход приходит по `zapiski://`
+       посреди `boot()`, и без очереди два прогона делят одно поле `vault`. */
+    return this.serialize(() => this.switchOwnerNow());
+  }
+
+  private async switchOwnerNow(): Promise<boolean> {
     const next = this.owner();
     if (next === this.openedFor) return this.vault !== null;
 

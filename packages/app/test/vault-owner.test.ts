@@ -219,3 +219,55 @@ describe('вход без места для новой учётки', () => {
     expect(app.getState().route.name).toBe('list');
   });
 });
+
+/**
+ * Возврат из Яндекс ID приходит ПОСРЕДИ загрузки — и не имеет права её сбить.
+ *
+ * Заказчик, Android, свежая установка: «ЯндексID возвращает в приложение,
+ * дальше возникает ошибка Папка недоступна», в настройках — 0 файлов и
+ * «синхронизация ещё не было».
+ *
+ * Механика. Возврат приходит по схеме `zapiski://`, Android поднимает
+ * приложение заново, начинается `boot()`. Внутри него `listenAuthCallbacks`
+ * дёргает `completeSignIn` — намеренно без `await`, боту незачем ждать вход.
+ * Дальше два прогона делят одно поле `vault`: `switchOwner` обнуляет его и
+ * открывает место учётки, а `boot` открывает место того владельца, который был
+ * у него на руках, и записывает результат последним. Облако подключено к
+ * учётке, а открыта папка `local` — синхронизация работает с чужой пустой
+ * папкой.
+ *
+ * Сторож держит два утверждения: операции с хранилищем не накладываются, и по
+ * итогам открыто место того, кто вошёл.
+ */
+describe('вход посреди загрузки не сбивает хранилище', () => {
+  it('операции с хранилищем не накладываются, открыто место вошедшего', async () => {
+    const host = createTestHost({ files: FILES, prefs: { onboarded: true } });
+    let inside = 0;
+    let overlapped = false;
+    const original = host.restoreVault.bind(host);
+    (host as { restoreVault: (owner?: string) => Promise<unknown> }).restoreVault = async (
+      owner?: string,
+    ) => {
+      inside += 1;
+      if (inside > 1) overlapped = true;
+      /* Пауза обязательна: без неё вызовы не пересеклись бы даже в сломанном
+         коде, и сторож проходил бы, ничего не проверив. */
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inside -= 1;
+      return original(owner);
+    };
+
+    const app = new AppController(host);
+    /* Ровно то, что делает оболочка: загрузка пошла, а возврат из браузера
+       пришёл, не дожидаясь её конца. */
+    const booting = app.boot();
+    app.setAccount({ email: 'ivan@ya.ru', plan: 'free', marketingOptIn: false });
+    const switching = app.switchOwnerForTest();
+    await Promise.all([booting, switching]);
+
+    expect(overlapped, 'загрузка и вход открывали хранилище одновременно').toBe(false);
+    expect(app.getState().route.name).not.toBe('onboarding');
+    /* И место открыто того, кто вошёл, а не того, с кем начиналась загрузка. */
+    expect(app.openedForTest()).toBe('ivan@ya.ru');
+  });
+});
