@@ -39,6 +39,7 @@ export type {
   UpdaterProvider,
   VaultEntry,
   VaultFolderPicker,
+  VaultOwner,
   WindowControls,
   VaultLocation,
   VaultLocationInfo,
@@ -54,6 +55,7 @@ export { MemoryVaultStorage, type MemoryVaultStorageOptions } from './memory-sto
 /* Редакция документов, на которые даётся согласие при регистрации. */
 export { LEGAL_URLS, LEGAL_VERSION } from './legal.js';
 export { BILLING_ENABLED } from './billing.js';
+export { LOCAL_OWNER, ownerKeyOf } from './contract.js';
 
 // ── Утилиты путей и текста ─────────────────────────────────────────────────
 export {

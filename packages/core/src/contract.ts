@@ -162,6 +162,24 @@ export interface VaultLocation extends VaultLocationInfo {
 }
 
 /**
+ * Чьё хранилище открыто: `'local'` — без аккаунта, иначе почта учётки.
+ *
+ * Модель та же, что у Obsidian: хранилище — это папка, которую выбрал человек,
+ * а смена личности означает смену хранилища, а не подмешивание чужих файлов в
+ * открытую папку.
+ */
+export type VaultOwner = string;
+
+/** Хозяин без аккаунта — локальная работа. */
+export const LOCAL_OWNER: VaultOwner = 'local';
+
+/** Ключ владельца из почты: регистр и пробелы не должны заводить два места. */
+export function ownerKeyOf(email: string | null | undefined): VaultOwner {
+  const trimmed = (email ?? '').trim().toLowerCase();
+  return trimmed === '' ? LOCAL_OWNER : trimmed;
+}
+
+/**
  * Выбор папки там, где он существует, но идёт с оговорками.
  *
  * Порт необязательный: на Windows и в вебе выбранная пользователем папка ничем
@@ -234,8 +252,16 @@ export interface PlatformCapabilities {
   readonly updater: UpdaterProvider | null;
   /** FLAG_SECURE: скрыть содержимое в превью задач ОС (BEHAVIOR §5.3). */
   secureFlag(on: boolean): void;
-  /** Открыть системный диалог выбора папки vault'а. */
-  pickVaultDirectory(): Promise<VaultStorage | null>;
+  /**
+   * Открыть системный диалог выбора папки vault'а.
+   *
+   * `owner` — чьё это хранилище: `'local'` без аккаунта, иначе почта учётки.
+   * Оболочка запоминает выбор ОТДЕЛЬНО для каждого владельца, иначе вход
+   * второй учёткой цепляет облако к чужой папке: заметки первой уезжают в
+   * чужое облако при первой же синхронизации, а на экране два человека
+   * оказываются перемешаны.
+   */
+  pickVaultDirectory(owner?: VaultOwner): Promise<VaultStorage | null>;
   /**
    * Выбор папки с оговорками (Android/SAF). Поле необязательное: платформа,
    * которой нечего оговаривать, его не реализует, и UI тогда не показывает

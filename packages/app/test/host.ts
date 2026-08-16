@@ -88,8 +88,29 @@ export function fakeBiometrics(): FakeBiometrics {
 export function createTestHost(options: TestHostOptions = {}): AppHost & {
   storage: VaultStorage;
   saved: Array<{ name: string; mime: string; size: number }>;
+  /** Хранилища по владельцам — как их держит оболочка. */
+  vaults: Map<string, VaultStorage>;
 } {
   const storage = new MemoryVaultStorage(options.files ? { files: options.files } : {});
+  /*
+   * Хранилище на владельца — та же модель, что в оболочках.
+   *
+   * Первый спросивший получает уже существующее место с файлами (решение
+   * заказчика «оставить хозяину, кто вошёл первым»), остальные — своё пустое.
+   * Без этого тест не отличил бы «данные разошлись» от «данные пропали».
+   */
+  const vaults = new Map<string, VaultStorage>();
+  let claimed: string | null = null;
+  const vaultFor = (owner: string): VaultStorage => {
+    if (claimed === null) claimed = owner;
+    if (owner === claimed) return storage;
+    let own = vaults.get(owner);
+    if (!own) {
+      own = new MemoryVaultStorage({});
+      vaults.set(owner, own);
+    }
+    return own;
+  };
   const saved: Array<{ name: string; mime: string; size: number }> = [];
 
   const platform: PlatformCapabilities = {
@@ -101,14 +122,14 @@ export function createTestHost(options: TestHostOptions = {}): AppHost & {
     shareTarget: null,
     updater: null,
     secureFlag: () => {},
-    pickVaultDirectory: async () => storage,
+    pickVaultDirectory: async (owner = 'local') => vaultFor(owner),
     ...options.platform,
   };
 
   return {
     platform,
     prefs: memoryPreferences(options.prefs),
-    restoreVault: async () => storage,
+    restoreVault: async (owner = 'local') => vaultFor(owner),
     openExternal: async () => {},
     cloudBaseUrl: 'https://zapiski.cmpas.ru/api/v1',
     pdf: null,
@@ -117,5 +138,6 @@ export function createTestHost(options: TestHostOptions = {}): AppHost & {
     },
     storage,
     saved,
+    vaults,
   };
 }

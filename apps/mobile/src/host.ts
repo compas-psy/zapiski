@@ -4,15 +4,23 @@
  */
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
+import { LOCAL_OWNER } from '@zapiski/core';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
-import { chosenSafTree, createPlatform, PREF_SAF_TREE, safAccessRevoked } from './platform/capabilities';
+import {
+  chosenSafTree,
+  createPlatform,
+  ownedRoot,
+  PREF_SAF_TREE,
+  safAccessRevoked,
+  safTreeKeyOf,
+} from './platform/capabilities';
 import { saveFile } from './platform/files';
 import { createPdfRenderer } from './platform/pdf';
 import { createPreferences } from './platform/prefs';
 import { createSafStorage, openSafFile, probeSafTree } from './platform/saf';
-import { currentVaultRoot, defaultVaultRoot, openVault } from './platform/vault';
+import { defaultVaultRoot, openVault } from './platform/vault';
 
 /**
  * Дев-сборка ходит в облако по другому адресу — например, на ноутбук
@@ -113,11 +121,11 @@ export function createHost(): AppHost {
      *     трогая сохранённый выбор: пусть человек увидит «папка недоступна» и
      *     попробует снова, чем мы молча подменим ему хранилище.
      */
-    async restoreVault() {
+    async restoreVault(owner: string = LOCAL_OWNER) {
       /* `chosenSafTree`, а не голая настройка: выбор мог не доехать до неё,
          если система убила процесс, пока был открыт системный выбор папки.
          Тогда след выбора — разрешение, выданное системой. */
-      const tree = await chosenSafTree(prefs);
+      const tree = await chosenSafTree(prefs, owner);
       if (tree !== null) {
         const { alive, answered } = await probePatiently(tree);
         if (alive) return createSafStorage(alive.uri);
@@ -128,12 +136,21 @@ export function createHost(): AppHost {
            после перезагрузки телефона выглядит как первое: провайдер папки не
            поднят, а выбор человека при этом в полном порядке. */
         if (!(await safAccessRevoked(tree))) return null;
+        /* Разрешение отозвано — забываем папку ЭТОГО владельца, чужие не
+           трогаем: у каждого своё место, и одно не отвечает за другое. */
+        await prefs.set(safTreeKeyOf(owner), null);
         await prefs.set(PREF_SAF_TREE, null);
       }
-      const known = await currentVaultRoot().catch(() => null);
-      const root = known ?? (await defaultVaultRoot().catch(() => null));
-      if (root === null) return null;
-      return openVault(root);
+      /*
+       * Каталог приложения — у каждого владельца свой.
+       *
+       * `currentVaultRoot()` спрашивать здесь больше нельзя: он отвечает «что
+       * открыто сейчас», то есть папку ПРЕДЫДУЩЕГО владельца, и вход второй
+       * учёткой открыл бы чужие заметки — ровно то, что чинится.
+       */
+      const base = await defaultVaultRoot().catch(() => null);
+      if (base === null) return null;
+      return openVault(await ownedRoot(prefs, base, owner));
     },
 
     /**

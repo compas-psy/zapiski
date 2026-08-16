@@ -11,12 +11,58 @@
  * Ручка выбранной папки переживает перезапуск: она лежит в IndexedDB, и при
  * старте `restoreVault()` спрашивает разрешение заново — без диалога выбора.
  */
+import { LOCAL_OWNER } from '@zapiski/core';
 import type { VaultEntry, VaultStat, VaultStorage } from '@zapiski/core';
 
 /** Имя базы и хранилища для ручки папки. */
 const DB_NAME = 'zapiski';
 const HANDLE_STORE = 'handles';
-const HANDLE_KEY = 'vault';
+/**
+ * Ключ ручки папки и имя каталога OPFS — СВОИ у каждого владельца.
+ *
+ * Прежде и то и другое было единственным: `vault`. Вход второй учёткой цеплял
+ * облако к той же папке, и первая же синхронизация отправляла заметки первого
+ * человека в чужое облако. Теперь место принадлежит владельцу — как хранилище
+ * в Obsidian, которое человек выбирает сам.
+ *
+ * Старое имя остаётся за тем, кто пришёл первым: файлы, уже лежащие в `vault`,
+ * никуда не переезжают. Это решение заказчика — «оставить хозяину, кто вошёл
+ * первым», — и оно же самое безопасное: ни одного движения чужих файлов.
+ */
+const LEGACY_KEY = 'vault';
+const LEGACY_CLAIM = 'zapiski.vault.legacyOwner';
+
+/**
+ * Имя места для владельца.
+ *
+ * Первый спросивший занимает старое имя `vault` — там уже лежат файлы, и
+ * трогать их нельзя. Остальные получают своё имя. Заявка делается один раз и
+ * не переигрывается: иначе после выхода из аккаунта «старое место» досталось
+ * бы локальному владельцу, и человек увидел бы чужие заметки.
+ */
+function handleKeyOf(owner: string): string {
+  claimLegacy(owner);
+  return claimedBy() === owner ? LEGACY_KEY : `vault:${owner}`;
+}
+
+/** Кто занял старое место. `null` — ещё никто, займёт первый спросивший. */
+function claimedBy(): string | null {
+  try {
+    return localStorage.getItem(LEGACY_CLAIM);
+  } catch {
+    /* Приватный режим без localStorage: старое место просто никому не
+       достаётся, и каждый владелец получает своё. Данные при этом целы. */
+    return null;
+  }
+}
+
+function claimLegacy(owner: string): void {
+  try {
+    if (localStorage.getItem(LEGACY_CLAIM) === null) localStorage.setItem(LEGACY_CLAIM, owner);
+  } catch {
+    /* см. `claimedBy` */
+  }
+}
 
 /* ── Типы FSA, которых ещё нет в стандартных lib.dom ──────────────────────── */
 
@@ -252,9 +298,9 @@ export function canPickDirectory(): boolean {
  * успешно, а первая же попытка создать файл упасть. Узнать об этом на месте
  * дешевле, чем посреди первой заметки.
  */
-export async function pickVaultDirectory(): Promise<VaultStorage | null> {
+export async function pickVaultDirectory(owner = LOCAL_OWNER): Promise<VaultStorage | null> {
   const picker = (window as PickerWindow).showDirectoryPicker;
-  if (typeof picker !== 'function') return openOpfsVault();
+  if (typeof picker !== 'function') return openOpfsVault(owner);
 
   let handle: FileSystemDirectoryHandle;
   try {
@@ -268,7 +314,7 @@ export async function pickVaultDirectory(): Promise<VaultStorage | null> {
   await assertWritable(handle);
   // Запоминаем только то, что доказало работоспособность: битую ручку незачем
   // тащить в следующий запуск, она снова упадёт при восстановлении.
-  await rememberHandle(handle).catch(() => undefined);
+  await rememberHandle(handle, owner).catch(() => undefined);
   return new DirectoryVaultStorage(handle, handle.name);
 }
 
@@ -351,10 +397,10 @@ async function probeWrite(handle: FileSystemDirectoryHandle): Promise<void> {
 }
 
 /** OPFS — приватное хранилище источника. Есть везде, где есть service worker. */
-export async function openOpfsVault(): Promise<VaultStorage | null> {
+export async function openOpfsVault(owner = LOCAL_OWNER): Promise<VaultStorage | null> {
   if (!navigator.storage || typeof navigator.storage.getDirectory !== 'function') return null;
   const root = await navigator.storage.getDirectory();
-  const handle = await root.getDirectoryHandle('vault', { create: true });
+  const handle = await root.getDirectoryHandle(handleKeyOf(owner), { create: true });
   return new DirectoryVaultStorage(handle, 'OPFS');
 }
 
@@ -363,8 +409,8 @@ export async function openOpfsVault(): Promise<VaultStorage | null> {
  * (если разрешение ещё действует), иначе OPFS, иначе `null` — тогда экраны
  * покажут онбординг с выбором места (SCREENS §1, шаг 2).
  */
-export async function restoreVault(): Promise<VaultStorage | null> {
-  const handle = await recallHandle();
+export async function restoreVault(owner = LOCAL_OWNER): Promise<VaultStorage | null> {
+  const handle = await recallHandle(owner);
   if (handle) {
     const permission = handle as FileSystemDirectoryHandle & PermissionCapableHandle;
     const state =
@@ -372,7 +418,7 @@ export async function restoreVault(): Promise<VaultStorage | null> {
     if (state === 'granted') return new DirectoryVaultStorage(handle, handle.name);
     /* `prompt` требует жеста пользователя — не дёргаем его на старте. */
   }
-  return openOpfsVault();
+  return openOpfsVault(owner);
 }
 
 /* ── IndexedDB: одна ручка, один ключ ─────────────────────────────────────── */
@@ -389,24 +435,27 @@ function openDb(): Promise<IDBDatabase | null> {
   });
 }
 
-export async function rememberHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+export async function rememberHandle(
+  handle: FileSystemDirectoryHandle,
+  owner = LOCAL_OWNER,
+): Promise<void> {
   const db = await openDb();
   if (!db) return;
   await new Promise<void>((resolve) => {
     const tx = db.transaction(HANDLE_STORE, 'readwrite');
-    tx.objectStore(HANDLE_STORE).put(handle, HANDLE_KEY);
+    tx.objectStore(HANDLE_STORE).put(handle, handleKeyOf(owner));
     tx.oncomplete = () => resolve();
     tx.onerror = () => resolve();
   });
   db.close();
 }
 
-async function recallHandle(): Promise<FileSystemDirectoryHandle | null> {
+async function recallHandle(owner = LOCAL_OWNER): Promise<FileSystemDirectoryHandle | null> {
   const db = await openDb();
   if (!db) return null;
   const handle = await new Promise<FileSystemDirectoryHandle | null>((resolve) => {
     const tx = db.transaction(HANDLE_STORE, 'readonly');
-    const request = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY);
+    const request = tx.objectStore(HANDLE_STORE).get(handleKeyOf(owner));
     request.onsuccess = () => resolve((request.result as FileSystemDirectoryHandle) ?? null);
     request.onerror = () => resolve(null);
   });

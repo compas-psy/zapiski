@@ -37,6 +37,7 @@ import {
   stemOf,
   storedLocale,
   toBase64,
+  ownerKeyOf,
   UnlockGuard,
   writeAtomic,
   writeJsonAtomic,
@@ -56,6 +57,7 @@ import {
   type UnlockGuardRecord,
   type VaultLocation,
   type VaultLocationInfo,
+  type VaultOwner,
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
@@ -595,6 +597,9 @@ export class AppController {
     return this.bootRun;
   }
 
+  /** Для какого владельца открыто текущее хранилище. `null` — ещё не открывали. */
+  private openedFor: VaultOwner | null = null;
+
   private async bootOnce(): Promise<void> {
     const [
       sortByFolder,
@@ -662,7 +667,8 @@ export class AppController {
     await this.restoreSession();
     this.listenAuthCallbacks();
 
-    const storage = await this.host.restoreVault().catch(() => null);
+    this.openedFor = this.owner();
+    const storage = await this.host.restoreVault(this.openedFor).catch(() => null);
     if (!storage && onboarded) {
       /*
        * Место человек уже выбирал, а папка сейчас не отвечает.
@@ -985,6 +991,14 @@ export class AppController {
         marketingOptIn: session.marketingOptIn === true,
       });
       this.patch({ authBusy: false });
+      /*
+       * Хранилище владельца открывается ДО подключения облака.
+       *
+       * Порядок не переставляется: `connectCloud` цепляет движок к тому, что
+       * открыто сейчас. Подключить сначала — значит отдать облаку новой учётки
+       * заметки предыдущей, и первая же синхронизация их туда отправит.
+       */
+      await this.switchOwner();
       await this.connectCloud();
       const back = this.afterSignIn;
       this.afterSignIn = null;
@@ -1098,6 +1112,9 @@ export class AppController {
     if (this.state.backendId === 'zapiski') this.attachBackend(null);
     this.setAccount(null);
     this.patch({ authError: null });
+    /* Заметки учётки остаются на диске и снова покажутся, когда человек в неё
+       вернётся. Здесь открывается локальное хранилище — своё, не её. */
+    await this.switchOwner();
   }
 
   clearAuthError(): void {
@@ -1196,7 +1213,7 @@ export class AppController {
     /* Хранилища нет вовсе — папка не ответила ещё на запуске. Спрашиваем
        платформу заново: это тот же случай, только раньше по времени. */
     if (!vault) {
-      const storage = await this.host.restoreVault().catch(() => null);
+      const storage = await this.host.restoreVault(this.owner()).catch(() => null);
       if (!storage) return false;
       await this.openVault(storage);
       if (this.vault?.unreadable === true) return false;
@@ -1827,6 +1844,76 @@ export class AppController {
 
   toggleShare(open?: boolean): void {
     this.patch({ shareOpen: open ?? !this.state.shareOpen });
+  }
+
+  /**
+   * Чьё хранилище открыто прямо сейчас.
+   *
+   * `local` без аккаунта, иначе почта. Ключ нормализуется в ядре: регистр и
+   * пробелы не должны заводить два разных места одному человеку.
+   */
+  owner(): VaultOwner {
+    return ownerKeyOf(this.state.account?.email ?? null);
+  }
+
+  /**
+   * Сменить владельца хранилища — вход, выход, смена учётки.
+   *
+   * ── Что было ────────────────────────────────────────────────────────────
+   *
+   * Хранилище было одно и об аккаунте не знало. `signOutCloud` отцеплял синк,
+   * но папку оставлял; вход второй учёткой цеплял облако к ТОЙ ЖЕ папке. Дальше
+   * движок делал ровно то, для чего он есть: отправлял всё, что видит, — то
+   * есть заметки первого человека уезжали в облако второго, а на экране два
+   * человека оказывались перемешаны. Заказчик описал это как «данные
+   * перемешиваются», но половина беды была не видна: чужие заметки покидали
+   * устройство.
+   *
+   * ── Что теперь ──────────────────────────────────────────────────────────
+   *
+   * Хранилище принадлежит владельцу, как в Obsidian: папка, которую человек
+   * выбрал, и смена личности означает смену папки. Порядок здесь обязателен и
+   * не переставляется: сначала досылаем накопленное СТАРЫМ бэкендом, потом
+   * отцепляем его, и только потом открываем чужое хранилище. Наоборот — это
+   * отправка чужих файлов.
+   *
+   * Незнакомый владелец не получает ни пустого списка, ни онбординга поверх
+   * чужих данных: `restoreVault` вернёт `null`, и человек выберет место сам.
+   */
+  /**
+   * Переключение владельца для тестов.
+   *
+   * Продуктовые пути зовут `switchOwner` сами (вход и выход), но тест обязан
+   * уметь сделать то же самое без хождения по сети за сессией: проверяется
+   * разведение данных, а не механика входа.
+   */
+  async switchOwnerForTest(): Promise<void> {
+    await this.switchOwner();
+  }
+
+  private async switchOwner(): Promise<void> {
+    const next = this.owner();
+    if (next === this.openedFor) return;
+
+    /* Досылаем и отцепляем ДО открытия чужого хранилища. */
+    if (this.engine) await this.syncNow().catch(() => undefined);
+    this.attachBackend(null);
+    this.lockAll();
+    this.master = null;
+    this.vault = null;
+    this.patch({ notes: [], folders: [], unlocked: {} });
+
+    const storage = await this.host.restoreVault(next).catch(() => null);
+    this.openedFor = next;
+    if (!storage) {
+      /* Места у этого владельца ещё нет. Онбординг здесь уместен: он и есть
+         экран выбора места, а данные прежнего владельца остались на диске. */
+      this.patch({ ready: true, booting: false, route: { name: 'onboarding', step: 2 } });
+      return;
+    }
+    await this.openVault(storage);
+    await this.refresh();
+    this.patch({ ready: true, booting: false, route: { name: 'list' } });
   }
 
   /** Открыть лист снятия шифрования; `null` — закрыть. */

@@ -7,6 +7,7 @@
  * Поэтому ниже нет ни одной заглушки, которая делает вид, что работает.
  */
 import { open } from '@tauri-apps/plugin-dialog';
+import { LOCAL_OWNER } from '@zapiski/core';
 import type {
   BiometricProvider,
   GlobalHotkeyProvider,
@@ -16,6 +17,7 @@ import type {
 } from '@zapiski/core';
 
 import { SHELL_PREF, type NativePreferences } from './prefs';
+import { rememberVaultPath } from './vault-owner';
 import type { PlatformStrings } from './strings';
 import { openVaultAt } from './vault';
 import { createWindowControls } from './window';
@@ -84,7 +86,7 @@ export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities
       /* см. комментарий выше — на Windows делать нечего */
     },
 
-    async pickVaultDirectory(): Promise<VaultStorage | null> {
+    async pickVaultDirectory(owner: string = LOCAL_OWNER): Promise<VaultStorage | null> {
       const picked = await open({
         directory: true,
         multiple: false,
@@ -93,9 +95,10 @@ export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities
       if (typeof picked !== 'string') return null;
 
       const storage = await openVaultAt(picked);
-      /* Запоминаем выбор, чтобы следующий запуск открыл vault сам
-         (`restoreVault`), а не показал онбординг заново. */
-      await deps.prefs.set(SHELL_PREF.vaultPath, picked);
+      /* Запоминаем выбор ВЛАДЕЛЬЦА, чтобы следующий запуск открыл именно его
+         vault (`restoreVault`), а не показал онбординг заново — и чтобы вход
+         другой учёткой не цеплял облако к чужой папке. */
+      await rememberVaultPath(deps.prefs, owner, picked);
       return storage;
     },
 

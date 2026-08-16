@@ -13,6 +13,7 @@
 import type {
   PdfRenderer,
   PlatformCapabilities,
+  VaultOwner,
   VaultPath,
   VaultStorage,
   SyncBackend,
@@ -26,8 +27,12 @@ export interface AppHost {
    * Хранилище последнего открытого vault'а, если оно уже известно
    * (например, восстановлено из permission handle в вебе). `null` — покажем
    * онбординг с выбором места хранения (SCREENS §1, шаг 2).
+   *
+   * `owner` — чьё хранилище открыть. Оболочка помнит выбор для каждого
+   * владельца отдельно; `null` для незнакомого владельца означает «места ещё
+   * нет», а не «папка пропала».
    */
-  restoreVault(): Promise<VaultStorage | null>;
+  restoreVault(owner?: VaultOwner): Promise<VaultStorage | null>;
 
   /** Настройки приложения вне vault'а: тема, акцент, язык, выбранный backend. */
   readonly prefs: PreferencesStore;

@@ -172,7 +172,12 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
        */
       const inBrowser = app.host.platform.kind === 'web';
       if (inBrowser) {
-        storage = await app.host.restoreVault().catch(() => null);
+        /* Владельца передаём и здесь: в браузере это единственное место,
+           откуда берётся хранилище на онбординге, и без ключа оно открывало
+           бы `local` поверх места учётки. Созданная заметка тогда ложилась в
+           одно место, а следующий запуск открывал другое — «заметки
+           пропали», хотя файл на диске цел. */
+        storage = await app.host.restoreVault(app.owner()).catch(() => null);
         if (!storage) app.toast({ message: strings.errors.browserStorageUnavailable });
       }
       try {
@@ -193,7 +198,10 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
         }
         /* Отмена — не отказ: человек вправе не выбирать, и тогда заметки
            ложатся в каталог приложения, надёжный путь с атомарной записью. */
-        if (!inBrowser) storage ??= await app.host.platform.pickVaultDirectory();
+        /* Владелец обязателен: без него онбординг открывал бы место
+           `local`, а загрузка спрашивала место учётки — и созданная заметка
+           пропадала бы при следующем запуске. */
+        if (!inBrowser) storage ??= await app.host.platform.pickVaultDirectory(app.owner());
       } catch {
         refused = true;
       }

@@ -7,6 +7,7 @@
  */
 import type { PlatformCapabilities, VaultStorage } from '@zapiski/core';
 import { createWebAuthnBiometrics } from './biometrics.js';
+import type { VaultOwner } from '@zapiski/core';
 import { pickVaultDirectory } from './vault-storage.js';
 
 export function createWebPlatform(): PlatformCapabilities {
@@ -39,8 +40,8 @@ export function createWebPlatform(): PlatformCapabilities {
       /* нечего делать */
     },
 
-    pickVaultDirectory(): Promise<VaultStorage | null> {
-      return pickVaultDirectory();
+    pickVaultDirectory(owner?: VaultOwner): Promise<VaultStorage | null> {
+      return pickVaultDirectory(owner);
     },
   };
 }

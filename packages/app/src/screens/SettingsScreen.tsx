@@ -571,7 +571,7 @@ function SyncSection(): ReactNode {
     if (!vault) return;
     if (id === 'local') {
       /* Вторая папка на устройстве (флешка, папка облачного клиента). */
-      void app.host.platform.pickVaultDirectory().then((storage) => {
+      void app.host.platform.pickVaultDirectory(app.owner()).then((storage) => {
         if (storage) {
           void app.switchBackend(new LocalFolderBackend(storage, { title: copy.localFolder }));
         }
@@ -1027,7 +1027,7 @@ function StorageHousekeeping(): ReactNode {
              остаются там, где лежали: сменить папку не удалось, но старая
              никуда не делась. */
           void (async () => {
-            const storage = await app.host.platform.pickVaultDirectory().catch(() => null);
+            const storage = await app.host.platform.pickVaultDirectory(app.owner()).catch(() => null);
             if (!storage) return;
             try {
               await app.openVault(storage);

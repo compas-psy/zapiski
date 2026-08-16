@@ -20,6 +20,7 @@
  * (BEHAVIOR §5.1). Поэтому подделывать возможности нельзя ни при каких
  * обстоятельствах: скрытый тумблер честен, выключенный — обманывает.
  */
+import { LOCAL_OWNER } from '@zapiski/core';
 import type { PlatformCapabilities, VaultLocation, VaultLocationInfo } from '@zapiski/core';
 import type { PreferencesStore } from '@zapiski/app';
 
@@ -45,6 +46,41 @@ import { defaultVaultRoot, openVault } from './vault';
  * заметки «пропадут» вместе с выбором.
  */
 export const PREF_SAF_TREE = 'storage.androidTree';
+/**
+ * Кто занял папку, выбранную до появления учёток.
+ *
+ * Заявка делается один раз и не переигрывается — решение заказчика «оставить
+ * хозяину, кто вошёл первым». Ни один файл при этом не двигается: чужая
+ * учётка получает своё место, а прежние заметки остаются там, где лежали.
+ */
+export const PREF_SAF_CLAIM = 'storage.androidTree.legacyOwner';
+
+/** Ключ выбранной папки для владельца. */
+export function safTreeKeyOf(owner: string): string {
+  return `${PREF_SAF_TREE}.${owner}`;
+}
+
+/**
+ * Корень владельца внутри каталога приложения.
+ *
+ * Первому спросившему достаётся сам каталог — его заметки уже там, и двигать
+ * их нельзя. Остальным заводится подпапка по ключу владельца; имя
+ * обеззараживается, потому что почта содержит `@` и точки, а имя каталога —
+ * это имя каталога.
+ */
+export async function ownedRoot(
+  prefs: PreferencesStore,
+  base: string,
+  owner: string,
+): Promise<string> {
+  const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
+  if (claimed === null) {
+    await prefs.set(PREF_SAF_CLAIM, owner);
+    return base;
+  }
+  if (claimed === owner) return base;
+  return `${base}/.owners/${owner.replace(/[^a-z0-9._-]+/gi, '_')}`;
+}
 
 /** Имя каталога приложения в интерфейсе — не путь: путь пользователю не нужен. */
 const APP_FOLDER_LABEL = 'Записки';
@@ -70,16 +106,36 @@ const APP_FOLDER_LABEL = 'Записки';
  * разрешения (`useAppFolder`), иначе восстановление молча утащило бы человека
  * назад в папку, из которой он ушёл.
  */
-export async function chosenSafTree(prefs: PreferencesStore): Promise<string | null> {
-  const saved = await prefs.get<string | null>(PREF_SAF_TREE, null);
-  if (saved !== null) return saved;
+export async function chosenSafTree(
+  prefs: PreferencesStore,
+  owner: string = LOCAL_OWNER,
+): Promise<string | null> {
+  const own = await prefs.get<string | null>(safTreeKeyOf(owner), null);
+  if (own !== null) return own;
+
+  /* Папка, выбранная до появления учёток, достаётся первому спросившему. */
+  const legacy = await prefs.get<string | null>(PREF_SAF_TREE, null);
+  const claimed = await prefs.get<string | null>(PREF_SAF_CLAIM, null);
+  if (legacy !== null) {
+    if (claimed === null) {
+      await prefs.set(PREF_SAF_CLAIM, owner);
+      return legacy;
+    }
+    if (claimed === owner) return legacy;
+    /* Папка занята другим владельцем — своей у этого пока нет. */
+    return null;
+  }
+  /* Владелец, за которым старая папка не числится, чужую не подхватывает. */
+  if (claimed !== null && claimed !== owner) return null;
 
   /* Мост не ответил — это «сейчас не знаю», а не «выбора нет». Настройку не
      трогаем и ничего не выдумываем. */
   const persisted = await persistedSafTrees().catch(() => [] as string[]);
   const adopted = persisted[0];
   if (adopted === undefined) return null;
+  await prefs.set(safTreeKeyOf(owner), adopted);
   await prefs.set(PREF_SAF_TREE, adopted);
+  if (claimed === null) await prefs.set(PREF_SAF_CLAIM, owner);
   return adopted;
 }
 
@@ -112,9 +168,17 @@ function safLocation(tree: SafTree): VaultLocation {
 }
 
 export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
-  /** Каталог приложения: настоящие `.md`, запись атомарна (ТЗ §4.3). */
-  const openAppFolder = async (): Promise<VaultLocation | null> => {
-    const root = await defaultVaultRoot();
+  /**
+   * Каталог приложения: настоящие `.md`, запись атомарна (ТЗ §4.3).
+   *
+   * У каждого владельца — своя подпапка внутри каталога приложения; у первого
+   * спросившего остаётся корень, где его заметки уже лежат. Иначе вход второй
+   * учёткой цеплял бы облако к чужим файлам, и первая же синхронизация
+   * отправила бы их в чужое облако.
+   */
+  const openAppFolder = async (owner: string = LOCAL_OWNER): Promise<VaultLocation | null> => {
+    const base = await defaultVaultRoot();
+    const root = await ownedRoot(prefs, base, owner);
     const storage = await openVault(root);
     if (!storage) return null;
     return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL, storage };
@@ -139,12 +203,12 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
       void call<void>(COMMANDS.secureFlag, { on }).catch(() => undefined);
     },
 
-    async pickVaultDirectory() {
+    async pickVaultDirectory(owner: string = LOCAL_OWNER) {
       // Умолчание и надёжный путь: каталог приложения во внешней памяти —
       // настоящие файлы `.md` на настоящей ФС с атомарной записью. Выбор
       // произвольной папки живёт в `vaultFolders` и идёт с предупреждением:
       // смешивать их в одну кнопку значило бы обещать §4.3 там, где его нет.
-      const location = await openAppFolder();
+      const location = await openAppFolder(owner);
       return location?.storage ?? null;
     },
 

@@ -8,11 +8,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import type { AppHost } from '@zapiski/app';
+import { LOCAL_OWNER } from '@zapiski/core';
 import type { Locale, VaultStorage } from '@zapiski/core';
 
 import { onAuthCallback, takeInitialAuthCallback } from './auth';
 import { createBiometrics } from './biometrics';
 import { createCapabilities } from './capabilities';
+import { vaultPathOf } from './vault-owner';
 import { DEFAULT_HOTKEY, NativeGlobalHotkey } from './hotkey';
 import { WebviewPdfRenderer } from './pdf';
 import { NativePreferences, SHELL_PREF } from './prefs';
@@ -62,8 +64,8 @@ export async function createDesktopShell(): Promise<DesktopShell> {
   const host: AppHost = {
     platform: createCapabilities({ prefs, strings, biometrics, globalHotkey: hotkey, updater }),
 
-    async restoreVault(): Promise<VaultStorage | null> {
-      const stored = await prefs.get<string | null>(SHELL_PREF.vaultPath, null);
+    async restoreVault(owner: string = LOCAL_OWNER): Promise<VaultStorage | null> {
+      const stored = await vaultPathOf(prefs, owner);
       if (stored === null) return null;
       try {
         return await openVaultAt(stored);
