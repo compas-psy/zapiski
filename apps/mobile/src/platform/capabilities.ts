@@ -300,6 +300,7 @@ function safLocation(tree: SafTree): VaultLocation {
     kind: 'user',
     writeMode: writeModeOf(tree),
     label: tree.label,
+    detail: tree.uri,
     storage: createSafStorage(tree.uri),
   };
 }
@@ -318,7 +319,7 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
     const root = await ownedRoot(prefs, base, owner);
     const storage = await openVault(root);
     if (!storage) return null;
-    return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL, storage };
+    return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL, detail: root, storage };
   };
 
   return {
@@ -412,7 +413,15 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
       async current(owner: string = LOCAL_OWNER): Promise<VaultLocationInfo | null> {
         const uri = await chosenSafTree(prefs, owner);
         if (uri === null) {
-          return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
+          /* Адрес каталога приложения — чтобы «Записки» в настройках можно было
+             отличить от папки пользователя с тем же именем. */
+          const base = await defaultVaultRoot().catch(() => null);
+          return {
+            kind: 'app',
+            writeMode: 'atomic',
+            label: APP_FOLDER_LABEL,
+            ...(base === null ? {} : { detail: base }),
+          };
         }
 
         let tree;
@@ -437,7 +446,7 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
           await forgetTree(prefs, owner);
           return { kind: 'app', writeMode: 'atomic', label: APP_FOLDER_LABEL };
         }
-        return { kind: 'user', writeMode: writeModeOf(tree), label: tree.label };
+        return { kind: 'user', writeMode: writeModeOf(tree), label: tree.label, detail: uri };
       },
     },
   };

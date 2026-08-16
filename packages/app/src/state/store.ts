@@ -1004,7 +1004,12 @@ export class AppController {
       return false;
     }
     this.patch({
-      vaultLocation: { kind: location.kind, writeMode: location.writeMode, label: location.label },
+      vaultLocation: {
+        kind: location.kind,
+        writeMode: location.writeMode,
+        label: location.label,
+        ...(location.detail === undefined ? {} : { detail: location.detail }),
+      },
     });
     return true;
   }
