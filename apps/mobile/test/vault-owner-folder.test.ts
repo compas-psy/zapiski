@@ -65,7 +65,6 @@ const {
   createPlatform,
   forgetTree,
   ownedRoot,
-  PREF_SAF_CLAIM,
   PREF_SAF_OWNERS,
   PREF_SAF_TREE,
   safTreeKeyOf,
@@ -108,47 +107,40 @@ beforeEach(() => {
 });
 
 describe('вопрос «где папка» ничего не занимает', () => {
-  it('current() не делает заявку на старую папку', async () => {
+  it('current() ничего не пишет в настройки', async () => {
     const prefs = memoryPrefs({ [PREF_SAF_TREE]: TREE });
+    const before = new Map(prefs.store);
     const platform = createPlatform(prefs as never);
 
     await platform.vaultFolders?.current();
 
-    expect(
-      prefs.store.get(PREF_SAF_CLAIM),
-      'вопрос о папке занял её за спрашивающим',
-    ).toBeUndefined();
+    expect([...prefs.store.entries()], 'вопрос о папке изменил настройки').toEqual([
+      ...before.entries(),
+    ]);
   });
 
-  it('current() отвечает про папку СВОЕГО владельца', async () => {
-    /* Папка занята `local`; учётка спрашивает про себя и обязана услышать
-       «каталог приложения», а не чужое место под своим именем. */
-    const prefs = memoryPrefs({
-      [PREF_SAF_TREE]: TREE,
-      [PREF_SAF_CLAIM]: 'local',
-    });
-    const platform = createPlatform(prefs as never);
-
-    expect((await platform.vaultFolders?.current('local'))?.kind).toBe('user');
-    expect((await platform.vaultFolders?.current(USER))?.kind).toBe('app');
-  });
-
-  it('заявку делает тот, кто открывает хранилище', async () => {
+  it('старая папка достаётся любому владельцу, у кого своей ещё нет', async () => {
+    /*
+     * Здесь стоял глобальный флаг «кто занял папку», и он же был костылём:
+     * один на всё приложение, ни от чего не зависящий. Пока он стоял на одном
+     * владельце, `chosenSafTree` отвечал другому «твоего тут нет» — а это
+     * значит каталог приложения. Человек, сменивший учётку, упорно попадал не
+     * в свою папку, сколько бы раз её ни выбирал.
+     *
+     * Папка на устройстве одна. Прятать её от того, кто в неё же складывал
+     * заметки, не за что.
+     */
     const prefs = memoryPrefs({ [PREF_SAF_TREE]: TREE });
 
-    expect(await adoptSafTree(prefs as never, USER)).toBe(TREE);
-    expect(prefs.store.get(PREF_SAF_CLAIM)).toBe(USER);
-    expect(prefs.store.get(safTreeKeyOf(USER))).toBe(TREE);
-  });
-
-  it('порядок «сессия → папка» держится: занявший второй не отбирает', async () => {
-    const prefs = memoryPrefs({ [PREF_SAF_TREE]: TREE });
-    await adoptSafTree(prefs as never, USER);
-
-    /* Тот же случай, что раньше ломал всё: спросили за `local`. Ответ —
-       «твоего тут нет», и папка учётки остаётся у неё. */
-    expect(await chosenSafTree(prefs as never, 'local')).toBeNull();
+    expect(await chosenSafTree(prefs as never, 'local')).toBe(TREE);
     expect(await chosenSafTree(prefs as never, USER)).toBe(TREE);
+  });
+
+  it('свой выбор владельца сильнее старой общей ячейки', async () => {
+    const prefs = memoryPrefs({ [PREF_SAF_TREE]: TREE, [safTreeKeyOf(USER)]: OTHER });
+
+    expect(await chosenSafTree(prefs as never, USER)).toBe(OTHER);
+    expect(await chosenSafTree(prefs as never, 'local')).toBe(TREE);
   });
 });
 
@@ -212,11 +204,10 @@ describe('отзыв доступа у одного не стирает папк
   it('общая ячейка чистится, только если её держит тот же владелец', async () => {
     const prefs = memoryPrefs({
       [PREF_SAF_TREE]: TREE,
-      [PREF_SAF_CLAIM]: 'local',
       [safTreeKeyOf(USER)]: OTHER,
     });
 
-    await forgetTree(prefs as never, USER);
+    await forgetTree(prefs as never, USER, OTHER);
 
     expect(prefs.store.get(safTreeKeyOf(USER))).toBeNull();
     expect(prefs.store.get(PREF_SAF_TREE), 'забыли чужую папку').toBe(TREE);
@@ -233,7 +224,7 @@ describe('незаписанная настройка — это не пропа
      */
     const prefs = brokenPrefs();
 
-    await expect(ownedRoot(prefs as never, '/base', 'local')).resolves.toBe('/base');
+    await expect(ownedRoot('/base')).resolves.toBe('/base');
   });
 
   it('adoptSafTree отдаёт папку, даже если заявку записать не вышло', async () => {

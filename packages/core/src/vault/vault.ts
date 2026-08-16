@@ -287,11 +287,27 @@ export class Vault {
   private async rootReadable(): Promise<boolean> {
     try {
       await this.storage.list('');
+      this.accessError = null;
       return true;
-    } catch {
+    } catch (error) {
+      /*
+       * Причина отказа сохраняется дословно — и это не отладочная роскошь.
+       *
+       * «Папку не прочитать» приложение говорит человеку одной фразой, а
+       * причин у неё столько, сколько ответов у системного провайдера
+       * документов: отозванное разрешение, неподнятый провайдер, удалённый
+       * каталог, отказ SecurityException. Заказчик четыре круга подряд видел
+       * одну фразу и не мог сказать, какая из причин у него, — а я не мог
+       * спросить. Ответ системы, показанный рядом, заканчивает этот разговор
+       * за один снимок экрана.
+       */
+      this.accessError = error instanceof Error ? error.message : String(error);
       return false;
     }
   }
+
+  /** Что ответила система, когда папку не удалось прочитать. `null` — читается. */
+  accessError: string | null = null;
 
   private adoptSnapshot(snapshot: VaultSnapshot): void {
     this.meta.clear();

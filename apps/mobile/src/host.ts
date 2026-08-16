@@ -148,7 +148,7 @@ export function createHost(): AppHost {
         if (!(await safAccessRevoked(tree))) return null;
         /* Разрешение отозвано — забываем папку ЭТОГО владельца, чужие не
            трогаем: у каждого своё место, и одно не отвечает за другое. */
-        await forgetTree(prefs, owner);
+        await forgetTree(prefs, owner, tree);
       }
       /*
        * Каталог приложения — у каждого владельца свой.
@@ -159,7 +159,7 @@ export function createHost(): AppHost {
        */
       const base = await defaultVaultRoot().catch(() => null);
       if (base === null) return null;
-      return openVault(await ownedRoot(prefs, base, owner));
+      return openVault(await ownedRoot(base));
     },
 
     /**

@@ -252,6 +252,17 @@ export interface AppState {
    * не блокирует ввод (BEHAVIOR §0, приёмочный критерий №5).
    */
   syncError: string | null;
+  /**
+   * Дословный ответ системы, когда папку не удалось прочитать.
+   *
+   * Не для красоты и не для отладки. «Папку не прочитать» — одна фраза, а
+   * причин у неё столько, сколько ответов у провайдера документов Android:
+   * отозванное разрешение, неподнятый провайдер, удалённый каталог,
+   * SecurityException. Заказчик четыре круга видел одну фразу и не мог
+   * сказать, какая из причин у него; я не мог спросить. Ответ системы рядом с
+   * адресом папки заканчивает этот разговор за один снимок экрана.
+   */
+  vaultError: string | null;
 
   /**
    * Отказ входа — текст из реестра BEHAVIOR §11. Живёт на экране входа и
@@ -286,6 +297,8 @@ function initialState(locale: Locale): AppState {
     recentQueries: [],
     lastOpened: [],
     sync: { state: 'offline', lastSyncAt: null, noteCount: 0, bytes: 0 },
+    /* Дословный ответ системы, когда папку не удалось прочитать. */
+    vaultError: null,
     backendId: null,
     backendChoice: null,
     cloudNeedsSignIn: false,
@@ -814,6 +827,7 @@ export class AppController {
          инвариант 5 запрещает кириллические литералы в коде, и правильно —
          иначе однажды такой литерал доедет до экрана мимо реестра. */
       console.error('[zapiski] vault open failed', error);
+      this.patch({ vaultError: error instanceof Error ? error.message : String(error) });
       return 'unreadable';
     }
     /* Таймеры прежнего vault'а останавливаются ЗДЕСЬ, а не до открытия.
@@ -867,6 +881,7 @@ export class AppController {
        Не поднялось — работаем локально и говорим об этом своими словами, а не
        чужими: «папка недоступна» здесь было бы неправдой. */
     await this.resumeCloud().catch(() => undefined);
+    this.patch({ vaultError: vault.unreadable ? (vault.accessError ?? 'unknown') : null });
     return vault.unreadable ? 'unreadable' : 'ok';
   }
 

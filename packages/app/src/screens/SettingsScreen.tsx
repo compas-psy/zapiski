@@ -1201,6 +1201,8 @@ function VaultLocationChoice(): ReactNode {
         видно оба, и разговор о папке перестаёт быть разговором вслепую.
       */}
       {location?.detail ? <p className="za-muted za-hint">{location.detail}</p> : null}
+      {/* Ответ системы дословно — рядом с адресом, к которому он относится. */}
+      {state.vaultError ? <p className="za-muted za-hint">{state.vaultError}</p> : null}
 
       {/* Оговорка про выбранную папку — постоянно на виду, а не одним тостом. */}
       {warning !== null ? (
