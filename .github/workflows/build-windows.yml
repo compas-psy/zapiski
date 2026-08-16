@@ -492,6 +492,17 @@ jobs:
           console.log(`Установщик: ${installer} (собран как ${built})`);
           console.log(`Размер: ${(bytes / 1024 / 1024).toFixed(2)} МБ`);
           console.log(`SHA-256: ${sha}`);
+          /*
+           * Контрольная сумма кладётся ФАЙЛОМ рядом с установщиком.
+           *
+           * Пока установщик не подписан сертификатом, это единственный способ
+           * для человека убедиться, что он скачал наш файл, а не подменённый.
+           * В логе сборки она бесполезна: туда не заглядывает никто, кроме нас.
+           */
+          fs.writeFileSync(
+            path.join('release', `${installer}.sha256`),
+            `${sha}  ${installer}\n`,
+          );
           console.log(`Подпись обновлений: ${signed ? 'есть' : 'НЕТ'}`);
           NODE
           node collect-release.mjs
@@ -586,9 +597,24 @@ jobs:
           # APK: каталог называется по ветке, файл по версии, и такую ссылку
           # нельзя ни дать человеку, ни положить на промостраницу.
           latest="/var/www/zapiski.cmpas.ru/updates/latest"
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" \
-            "mkdir -p '${latest}' && cp -f \"\$(ls -t '${target}'/*.exe | head -1)\" '${latest}/zapiski-setup.exe'"
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" sh -s -- "${target}" "${latest}" <<'REMOTE'
+          set -eu
+          target="$1"
+          latest="$2"
+          mkdir -p "${latest}"
+          exe="$(ls -t "${target}"/*.exe | head -1)"
+          cp -f "${exe}" "${latest}/zapiski-setup.exe"
+          # Сумма пересобирается под ИМЯ, под которым файл лежит на постоянной
+          # ссылке. Скопировать её как есть было бы хуже, чем не класть вовсе:
+          # внутри стоит имя с версией, и `sha256sum -c` у человека, скачавшего
+          # zapiski-setup.exe, спотыкается о «нет такого файла». Проверка,
+          # которая падает не по той причине, ничего не проверяет.
+          awk '{ print $1 "  zapiski-setup.exe" }' "${exe}.sha256" > "${latest}/zapiski-setup.exe.sha256"
+          # И сразу сверяем: это заодно ловит порчу файла при передаче.
+          cd "${latest}" && sha256sum -c zapiski-setup.exe.sha256
+          REMOTE
           echo "Постоянная ссылка: https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe"
+          echo "Контрольная сумма: https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe.sha256"
 
       - name: Установщик должен быть хоть где-то
         env:
