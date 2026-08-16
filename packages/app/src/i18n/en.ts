@@ -402,6 +402,15 @@ export const en: AppCatalog = {
     strengthLabel: 'Password strength',
     lockedTitle: 'This note is encrypted. The key is yours alone · AES-256',
     unlock: 'Unlock',
+    hintShown: (hint: string): string => `Hint: ${hint}`,
+    forgotTitle: 'I forgot the password',
+    forgotBody:
+      'The password cannot be recovered — the key is derived from it and we never hold it. ' +
+      'The note itself is intact: the file stays in your folder and failed attempts erase nothing. ' +
+      'Only the password opens it. If it never comes back, the note can be deleted — ' +
+      'other notes are unaffected.',
+    biometricsStale:
+      'The fingerprint no longer matches this vault — the enrolment was removed. Enter the password and turn biometrics on again in settings',
     useBiometrics: 'Use a fingerprint',
     pinLabel: 'Password',
     biometricsTitle: 'Unlock with a fingerprint',
@@ -414,6 +423,7 @@ export const en: AppCatalog = {
     removeTitle: 'Remove encryption',
     removeQuestion: 'The note becomes a regular file on disk. Continue?',
     removeConfirm: 'Remove encryption',
+    removeDone: 'Encryption removed · the note is a plain file again',
     autoLockLabel: 'Auto-lock',
     autoLockValues: {
       1: 'after 1 minute',
@@ -562,12 +572,18 @@ export const en: AppCatalog = {
       encryptDefaultNoPassword: 'Encrypt any note first — that is when the vault password appears',
       biometrics: 'Unlock with biometrics',
       biometricsPassword: 'Vault password',
+      biometricsPasswordHint: 'Needed to place the key in the secure module. Enter it and the switch turns on',
+      biometricsUnverifiable:
+        'Nothing to verify the password against yet: encrypt any note or unlock an existing one, then turn biometrics on again',
+      biometricsFailed: 'The system refused access to the secure module. Biometrics is not on',
       secureScreen: 'Hide content in the task switcher',
       changePassword: 'Change password',
       changeTitle: 'Change the vault password',
       currentPassword: 'Current password',
       newPassword: 'New password',
       changeNote: 'Notes will be re-encrypted with the new password. This is the only place it changes',
+      changeUnverifiable:
+        'Nothing to verify the current password against: the vault holds no encrypted note and no check record. Unlock any note and try again',
       changeDone: (count: number): string => `Password changed · ${count} note(s) re-encrypted`,
       changePartial: (paths: string[]): string =>
         `Could not re-encrypt: ${paths.join(' · ')} — they still open with the old password`,

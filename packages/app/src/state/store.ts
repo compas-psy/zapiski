@@ -208,6 +208,15 @@ export interface AppState {
   debugOpen: boolean;
   shareOpen: boolean;
   /**
+   * Какую заметку расшифровываем. `null` — лист закрыт.
+   *
+   * Состояние живёт в контроллере, а не в экране, потому что вход в операцию
+   * два: меню строки списка и меню открытой заметки. Инвариант BEHAVIOR §0
+   * говорит о МЕСТАХ подтверждения, и место здесь одно — лист смонтирован
+   * единожды в `App.tsx`, а меню только называют путь.
+   */
+  decrypting: VaultPath | null;
+  /**
    * Онбординг только что закончился и открыта ПЕРВАЯ заметка: над текстом
    * висит чип «Локальный режим включён — можно писать» (SCREENS §1, шаг 3).
    * Отдельного экрана «успех» нет — есть этот чип и курсор в заголовке.
@@ -287,6 +296,7 @@ function initialState(locale: Locale): AppState {
     rawMode: false,
     debugOpen: false,
     shareOpen: false,
+    decrypting: null,
     firstRun: false,
     account: null,
     vaultLocation: null,
@@ -358,6 +368,64 @@ const PREF = {
  */
 const VAULT_KEY_PATH = `${META_DIR}/crypto.json`;
 const VAULT_KEY_ID = 'vault';
+
+/**
+ * Контрольный образец: как узнать, что пароль верный, НЕ открывая заметку.
+ *
+ * ── Зачем ───────────────────────────────────────────────────────────────────
+ *
+ * Пароль хранилища проверялся ровно одним способом — попыткой расшифровать
+ * первую попавшуюся зашифрованную заметку. Там, где заметки нет, проверки не
+ * было вовсе, и это выходило наружу двумя разными дефектами:
+ *
+ *  · биометрия включалась по НЕПРОВЕРЕННОМУ паролю. Тумблер «Разблокировать
+ *    биометрией» брал то, что набрано в поле рядом (в том числе пустую
+ *    строку), выводил из него ключ и клал в Keystore. Тумблер вставал в
+ *    «включено», а палец потом не открывал ничего: в защищённом модуле лежал
+ *    ключ от другого пароля. Худший вид отказа — тот, что выглядит успехом;
+ *  · смена пароля при нуле зашифрованных заметок принимала ЛЮБОЙ старый
+ *    пароль: проверять было не на чем, и `changeVaultPassword` молча менял
+ *    ключ хранилища. Заметка, приехавшая позже синхронизацией, после этого не
+ *    открывалась ни новым паролем, ни старым.
+ *
+ * ── Что это ─────────────────────────────────────────────────────────────────
+ *
+ * В `.zapiski/crypto.json` рядом с солью лежит контейнер с известной строкой,
+ * зашифрованный ключом заметки с фиксированным `keyId`. Расшифровалась —
+ * пароль верный. Секрета в нём нет: строка известна, а без пароля контейнер
+ * не открыть, как и любую заметку.
+ *
+ * Файл не синхронизируется (`.zapiski/` синк не переносит), поэтому на втором
+ * устройстве его может не быть — там проверка падает обратно на заметку, как
+ * и раньше. Оба пути равноправны, и ни один не притворяется другим:
+ * `verifyVaultPassword` честно отвечает `unknown`, когда проверить нечем.
+ */
+const VAULT_CHECK_TEXT = 'zapiski/vault-check/v1';
+const VAULT_CHECK_KEY_ID = new Uint8Array([
+  0x7a, 0x70, 0x73, 0x6b, 0x76, 0x61, 0x75, 0x6c, 0x74, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x76, 0x31,
+]);
+
+interface VaultKeyFile {
+  version: number;
+  salt: string;
+  /** База64 контейнера с `VAULT_CHECK_TEXT`. Появился позже соли — необязателен. */
+  check?: string;
+}
+
+/** Исход проверки пароля. `unknown` — проверить не на чем, и это не «неверный». */
+export type PasswordCheck = 'ok' | 'wrong' | 'unknown';
+
+/**
+ * Исход разблокировки отпечатком.
+ *
+ * `cancelled` и `stale` разделены нарочно: первое — человек передумал и
+ * молчания заслуживает, второе — привязка не подходит к хранилищу, и молчать
+ * про это значит оставить палец «не срабатывающим» без объяснения.
+ */
+export type BiometricUnlock =
+  | { kind: 'unlocked'; body: string }
+  | { kind: 'cancelled' }
+  | { kind: 'stale' };
 
 /**
  * Паузы между попытками прочитать папку, которая молчит (мс).
@@ -1761,6 +1829,11 @@ export class AppController {
     this.patch({ shareOpen: open ?? !this.state.shareOpen });
   }
 
+  /** Открыть лист снятия шифрования; `null` — закрыть. */
+  askRemoveEncryption(path: VaultPath | null): void {
+    this.patch({ decrypting: path });
+  }
+
   // ── Заметки ────────────────────────────────────────────────────────────────
 
   /**
@@ -1961,6 +2034,42 @@ export class AppController {
       this.touchLock(path);
       return;
     }
+
+    /*
+     * Зашифрованный путь без ключа в памяти — САМОЕ опасное место файла.
+     *
+     * Ниже стоит обычная запись, и до этой ветки она добиралась: если в
+     * `unlocked` записи нет, открытый текст уходил прямо в `.md.enc`. Так
+     * зашифрованная заметка теряла шифрование молча — контейнер затирался
+     * markdown'ом, файл переставал открываться паролем, а на диске (и в
+     * облаке, куда он синкается) оставался читаемый текст.
+     *
+     * Воспроизводится обычным жестом, без единого края: открыть запертую
+     * заметку, уйти в настройки и вернуться. Выход из заметки запирает её
+     * (BEHAVIOR §5.3) и чистит `unlocked`, а редактор при возврате продолжает
+     * держать текст и через полсекунды его сохраняет — уже без ключа.
+     * Поймано браузерным прогоном: файл `Секрет.md.enc` весил 41 байт и читался
+     * глазами.
+     *
+     * Порядок здесь такой: ключ заметки → вывести из master → отказаться.
+     * Отказ означает «не записали ничего»: текст остаётся в редакторе, файл на
+     * диске цел, человек видит сообщение. Записать открытым — не вариант
+     * никогда.
+     */
+    if (isEncryptedPath(path)) {
+      const key = await this.noteKeyFor(path);
+      if (!key) {
+        this.reportError(this.strings.errors.encryptFailed);
+        return;
+      }
+      try {
+        await encryptNoteFileSafely(vault, this.crypto, path, body, key);
+      } catch (error) {
+        this.reportError(diskErrorMessage(error, this.strings));
+      }
+      return;
+    }
+
     try {
       await vault.write(path, body);
     } catch (error) {
@@ -1969,6 +2078,25 @@ export class AppController {
       return;
     }
     this.scheduleSync(path);
+  }
+
+  /**
+   * Ключ конкретной зашифрованной заметки, если он выводим прямо сейчас.
+   *
+   * `null` — хранилище заперто или контейнер не читается. Это не ошибка сама
+   * по себе, но и не повод писать открытым текстом: вызывающий обязан
+   * отказаться от записи.
+   */
+  private async noteKeyFor(path: VaultPath): Promise<CryptoKey | null> {
+    const unlocked = this.state.unlocked[path];
+    if (unlocked) return unlocked.key;
+    const vault = this.vault;
+    const master = this.master;
+    if (!vault || !master) return null;
+    const data = await vault.storage.read(path).catch(() => null);
+    const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
+    if (!keyId) return null;
+    return this.crypto.deriveNoteKey(master, keyId).catch(() => null);
   }
 
   async setPinned(path: VaultPath, pinned: boolean): Promise<void> {
@@ -2187,7 +2315,7 @@ export class AppController {
     const vault = this.vault;
     if (!vault) return null;
 
-    const stored = await readJson<{ salt: string }>(vault.storage, VAULT_KEY_PATH);
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
     if (stored?.salt) {
       try {
         return fromBase64(stored.salt);
@@ -2205,14 +2333,82 @@ export class AppController {
     return null;
   }
 
-  private async rememberVaultSalt(salt: Uint8Array): Promise<void> {
+  /**
+   * Записать соль и контрольный образец.
+   *
+   * Зовётся отовсюду, где в руках оказался рабочий master: установка пароля,
+   * удачная разблокировка, смена пароля. Так образец появляется у всех, а не
+   * только у тех, кто заводил шифрование на этом устройстве, — и `unknown` из
+   * `verifyVaultPassword` становится редкостью, а не обычным делом.
+   */
+  private async rememberVault(master: MasterKey): Promise<void> {
     const vault = this.vault;
     if (!vault) return;
+    const file: VaultKeyFile = { version: 1, salt: toBase64(master.salt) };
+    const check = await this.crypto
+      .deriveNoteKey(master, VAULT_CHECK_KEY_ID)
+      .then((key) => this.crypto.encrypt(VAULT_CHECK_TEXT, key))
+      .catch(() => null);
+    if (check) file.check = toBase64(check);
     /* Ошибка записи не фатальна: соль есть в каждом контейнере, файл — лишь
        ускорение для случая «зашифрованных заметок ещё нет». */
-    await writeJsonAtomic(vault.storage, VAULT_KEY_PATH, { version: 1, salt: toBase64(salt) }).catch(
-      () => undefined,
-    );
+    await writeJsonAtomic(vault.storage, VAULT_KEY_PATH, file).catch(() => undefined);
+  }
+
+  /**
+   * Подходит ли пароль хранилищу — без открытия заметки, если есть образец.
+   *
+   * Три исхода, и третий обязателен: `unknown` означает «проверить нечем», и
+   * выдавать его за `wrong` нельзя. Разница видна человеку: «пароль не
+   * подошёл» и «мы не можем проверить пароль» — разные новости, и вторая не
+   * должна выглядеть первой.
+   */
+  async verifyVaultPassword(password: string): Promise<PasswordCheck> {
+    const vault = this.vault;
+    if (!vault) return 'unknown';
+    /* Argon2id отказывается считать пустой пароль исключением, а не значением:
+       без этой ветки проверка не «отвечала бы `wrong`», а падала. Пустая
+       строка паролем хранилища быть не может — это `wrong`, и точка. */
+    if (password === '') return 'wrong';
+    const salt = await this.vaultSalt();
+    if (!salt) return 'unknown';
+
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
+    if (stored?.check) {
+      const master = await this.crypto.deriveMaster(password, salt);
+      const opened = await this.openCheck(stored.check, master);
+      if (opened !== null) return opened ? 'ok' : 'wrong';
+    }
+
+    /* Образца нет (второе устройство, старое хранилище) — проверяем заметкой. */
+    const encrypted = this.state.notes.find((note) => note.encrypted);
+    if (!encrypted) return 'unknown';
+    const master = await this.crypto.deriveMaster(password, salt);
+    const body = await decryptNoteFile(
+      vault.storage,
+      this.crypto,
+      encrypted.path,
+      master,
+      password,
+    ).catch(() => null);
+    return body === null ? 'wrong' : 'ok';
+  }
+
+  /** `null` — образец нечитаем (побит файл), а не «пароль неверный». */
+  private async openCheck(check: string, master: MasterKey): Promise<boolean | null> {
+    let bytes: Uint8Array;
+    try {
+      bytes = fromBase64(check);
+    } catch {
+      return null;
+    }
+    const header = this.crypto.parseHeader(bytes);
+    if (!header?.keyId) return null;
+    const text = await this.crypto
+      .deriveNoteKey(master, header.keyId)
+      .then((key) => this.crypto.decrypt(bytes, key))
+      .catch(() => null);
+    return text === VAULT_CHECK_TEXT;
   }
 
   /**
@@ -2226,9 +2422,22 @@ export class AppController {
     if (!vault) return false;
     const salt = (await this.vaultSalt()) ?? this.crypto.randomSalt();
     const material = await this.crypto.deriveMasterMaterial(password, salt);
-    this.master = await this.crypto.importMaster(material, salt);
-    await this.rememberVaultSalt(salt);
-    if (enrollBiometrics) await this.enrollBiometrics(material);
+    const master = await this.crypto.importMaster(material, salt);
+    this.master = master;
+    await this.rememberVault(master);
+    /*
+     * Запись настройки — не украшение, а половина работы.
+     *
+     * Тумблер «Разблокировать отпечатком» в этом листе включён по умолчанию,
+     * ключ уезжал в Keystore — и на этом всё заканчивалось: настройка
+     * `security.biometrics` не выставлялась никогда. Замок спрашивает именно
+     * её (`biometricsEnabled()`), поэтому палец не предлагался ни разу, а в
+     * «Безопасности» тумблер стоял выключенным, хотя ключ уже лежал в
+     * защищённом модуле. Со стороны это ровно «биометрия не срабатывает».
+     */
+    if (enrollBiometrics && (await this.enrollBiometrics(material))) {
+      await this.host.prefs.set(PREF.biometrics, true);
+    }
     material.fill(0);
     return true;
   }
@@ -2315,7 +2524,7 @@ export class AppController {
     this.patch({ failedAttempts: 0, lockedUntil: 0 });
     await this.saveUnlockGuard(reset);
     this.master = master;
-    await this.rememberVaultSalt(master.salt);
+    await this.rememberVault(master);
     await this.adoptUnlocked(path, body, master);
     this.host.platform.haptics?.impact('light');
     return body;
@@ -2374,25 +2583,33 @@ export class AppController {
   async changeVaultPassword(
     oldPassword: string,
     newPassword: string,
-  ): Promise<{ ok: boolean; changed: number; failed: VaultPath[] }> {
+  ): Promise<{ ok: boolean; changed: number; failed: VaultPath[]; reason?: 'wrong' | 'unknown' }> {
     const vault = this.vault;
     const salt = await this.vaultSalt();
-    if (!vault || !salt) return { ok: false, changed: 0, failed: [] };
+    if (!vault || !salt) return { ok: false, changed: 0, failed: [], reason: 'unknown' };
 
     const oldMaster = await this.crypto.deriveMaster(oldPassword, salt);
     const paths = this.state.notes.filter((note) => note.encrypted).map((note) => note.path);
 
-    /* Проверка пароля до единой записи: иначе неверный старый пароль
-       превратил бы «не подошёл» в наполовину перешифрованное хранилище. */
-    const first = paths[0];
-    if (first !== undefined) {
-      const probe = await decryptNoteFile(vault.storage, this.crypto, first, oldMaster, oldPassword);
-      if (probe === null) {
+    /*
+     * Проверка пароля до единой записи: иначе неверный старый пароль
+     * превратил бы «не подошёл» в наполовину перешифрованное хранилище.
+     *
+     * Проверять обязательно ДО, и обязательно чем-то: раньше проверкой была
+     * первая зашифрованная заметка, а при нуле заметок её не было вовсе — и
+     * смена пароля принимала любой старый. Ключ хранилища при этом менялся
+     * молча, и заметка, приехавшая позже синхронизацией, не открывалась уже
+     * ничем. Теперь проверка идёт по контрольному образцу, а заметка —
+     * запасной путь.
+     */
+    const verdict = await this.verifyVaultPassword(oldPassword);
+    if (verdict !== 'ok') {
+      if (verdict === 'wrong') {
         const record = this.guard.registerFailure();
         this.patch({ failedAttempts: record.failedAttempts, lockedUntil: record.lockedUntil });
         await this.saveUnlockGuard(record);
-        return { ok: false, changed: 0, failed: [] };
       }
+      return { ok: false, changed: 0, failed: [], reason: verdict };
     }
 
     const newSalt = this.crypto.randomSalt();
@@ -2418,10 +2635,20 @@ export class AppController {
     }
 
     this.master = newMaster;
-    await this.rememberVaultSalt(newSalt);
+    await this.rememberVault(newMaster);
     /* Открытые заметки закрываются: их ключи выведены из прежнего master. */
     this.patch({ unlocked: {} });
-    if (this.host.platform.biometrics) await this.enrollBiometrics(material);
+    /*
+     * Биометрия перевыпускается ТОЛЬКО если человек её включал.
+     *
+     * Прежде смена пароля клала ключ в Keystore всегда, лишь бы платформа
+     * умела биометрию, — то есть заводила разблокировку отпечатком тому, кто
+     * её не просил и в настройках не включал. Заодно это молча включало бы
+     * палец там, где человек его сознательно выключил.
+     */
+    if (await this.biometricsEnabled()) {
+      if (!(await this.enrollBiometrics(material))) await this.host.prefs.set(PREF.biometrics, false);
+    }
     material.fill(0);
     return { ok: true, changed, failed };
   }
@@ -2433,40 +2660,77 @@ export class AppController {
    * Argon2id не запускается вовсе, поэтому заметка открывается мгновенно —
    * ровно то, ради чего ТЗ §3.3 и требует «биометрия открывает master key».
    */
-  async unlockWithBiometrics(path: VaultPath): Promise<string | null> {
+  async unlockWithBiometrics(path: VaultPath): Promise<BiometricUnlock> {
     const biometrics = this.host.platform.biometrics;
     const vault = this.vault;
-    if (!biometrics || !vault) return null;
+    if (!biometrics || !vault) return { kind: 'cancelled' };
     const material = await biometrics.unlock(VAULT_KEY_ID).catch(() => null);
-    if (!material) return null;
+    /* Отмена пальцем и отказ системы неразличимы и оба означают «просто
+       введите пароль» — молчать здесь правильно (BEHAVIOR §5.2). */
+    if (!material) return { kind: 'cancelled' };
     const salt = await this.vaultSalt();
-    if (!salt) return null;
+    if (!salt) return { kind: 'cancelled' };
     const master = await this.crypto.importMaster(material, salt);
     material.fill(0);
     const body = await decryptNoteFile(vault.storage, this.crypto, path, master);
-    if (body === null) return null;
+    /*
+     * Палец подтверждён, а ключ не подошёл — это НЕ отмена, и молчать нельзя.
+     *
+     * Так выглядит устаревшая привязка: пароль сменили на другом устройстве,
+     * или ключ клали по непроверенному паролю (дефект, починенный в
+     * `setBiometricsEnabled`). Раньше оба случая возвращали `null` и на экране
+     * не менялось ничего — палец «не срабатывал» без единого слова. Теперь
+     * привязка снимается, и человек получает объяснение и путь: ввести пароль
+     * и включить биометрию заново.
+     */
+    if (body === null) {
+      await biometrics.remove(VAULT_KEY_ID).catch(() => undefined);
+      await this.host.prefs.set(PREF.biometrics, false);
+      return { kind: 'stale' };
+    }
     this.master = master;
+    await this.rememberVault(master);
     await this.adoptUnlocked(path, body, master);
     this.host.platform.haptics?.impact('light');
-    return body;
+    return { kind: 'unlocked', body };
   }
 
-  /** Включить или выключить биометрию для хранилища (раздел «Безопасность»). */
-  async setBiometricsEnabled(on: boolean, password?: string): Promise<boolean> {
+  /**
+   * Включить или выключить биометрию для хранилища (раздел «Безопасность»).
+   *
+   * Включение обязано СНАЧАЛА проверить пароль. Раньше проверки не было
+   * вовсе: что набрано в поле рядом — из того и выводился ключ, а пустое поле
+   * давало ключ от пустой строки. `enroll` при этом отрабатывал успешно,
+   * тумблер вставал в «включено», и человек уходил уверенным, что палец
+   * работает. Не работал: в Keystore лежал ключ от другого пароля, и
+   * `unlockWithBiometrics` молча возвращал `null`.
+   *
+   * Отсюда три исхода вместо двух — экран обязан их различать и сказать,
+   * какой именно случился.
+   */
+  async setBiometricsEnabled(
+    on: boolean,
+    password?: string,
+  ): Promise<'on' | 'off' | 'wrong' | 'unknown' | 'failed'> {
     const biometrics = this.host.platform.biometrics;
-    if (!biometrics) return false;
+    if (!biometrics) return 'failed';
     if (!on) {
       await biometrics.remove(VAULT_KEY_ID).catch(() => undefined);
       await this.host.prefs.set(PREF.biometrics, false);
-      return true;
+      return 'off';
     }
     const salt = await this.vaultSalt();
-    if (!salt || password === undefined) return false;
+    if (!salt || password === undefined || password === '') return 'wrong';
+
+    const verdict = await this.verifyVaultPassword(password);
+    if (verdict !== 'ok') return verdict;
+
     const material = await this.crypto.deriveMasterMaterial(password, salt);
     const ok = await this.enrollBiometrics(material);
     material.fill(0);
-    if (ok) await this.host.prefs.set(PREF.biometrics, true);
-    return ok;
+    if (!ok) return 'failed';
+    await this.host.prefs.set(PREF.biometrics, true);
+    return 'on';
   }
 
   async biometricsEnabled(): Promise<boolean> {

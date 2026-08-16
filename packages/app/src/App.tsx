@@ -33,6 +33,7 @@ import { IconBug } from "./components/icons.js";
 import { EmptyBlock } from "./components/ScreenStates.js";
 import { ScreenBoundary } from "./components/ScreenBoundary.js";
 import { CommandPalette } from "./screens/CommandPalette.js";
+import { RemoveEncryptionSheet } from "./screens/NoteMenu.js";
 import { DebugMenu } from "./screens/DebugMenu.js";
 import { LibraryPanel } from "./screens/LibraryPanel.js";
 import { NoteListScreen } from "./screens/NoteListScreen.js";
@@ -246,6 +247,19 @@ function AppShell(): ReactNode {
   const overlays = (
     <>
       <CommandPalette />
+      {/*
+        Снятие шифрования — единственный лист на всё приложение.
+
+        Вход в операцию два (меню строки списка и меню открытой заметки), а
+        место подтверждения одно: инвариант BEHAVIOR §0 считает места, и
+        держать по листу в каждом экране значило бы завести второе.
+      */}
+      <RemoveEncryptionSheet
+        reason="remove-encryption"
+        open={state.decrypting !== null}
+        path={state.decrypting ?? ""}
+        onClose={() => app.askRemoveEncryption(null)}
+      />
       <DebugMenu />
       <ShareSheet
         open={state.shareOpen}

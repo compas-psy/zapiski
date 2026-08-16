@@ -52,6 +52,9 @@ import { clockTime, formatBytes } from '../lib/format.js';
  * Именно СПРЯТАН, а не удалён: `PlusSection`, экран тарифов и все тексты на
  * месте и вернутся одной строкой — `BILLING_ENABLED` в `@zapiski/core`.
  */
+/** Минимум пароля хранилища — тот же, что в листе шифрования (BEHAVIOR §5.1). */
+const MIN_PASSWORD = 8;
+
 const SECTIONS: SettingsSection[] = [
   'appearance',
   'editor',
@@ -813,6 +816,7 @@ function SecuritySection(): ReactNode {
   /* Включение биометрии требует пароля: в keystore уезжает ключевой материал,
      а вывести его без пароля неоткуда. */
   const [biometricsPassword, setBiometricsPassword] = useState('');
+  const [biometricsError, setBiometricsError] = useState<string | null>(null);
   const [changeOpen, setChangeOpen] = useState(false);
 
   useEffect(() => {
@@ -841,35 +845,66 @@ function SecuritySection(): ReactNode {
         {hasPassword ? copy.encryptDefaultHint : copy.encryptDefaultNoPassword}
       </p>
 
-      {/* Биометрии нет на платформе — тумблера тоже нет (BEHAVIOR §5.1). */}
-      {biometrics && hasPassword ? (
-        <div className="za-field-row">
-          <Switch
-            label={copy.biometrics}
-            checked={biometricsOn}
-            onChange={(event) => {
-              const on = event.target.checked;
-              if (!on) {
-                setBiometricsOn(false);
-                void app.setBiometricsEnabled(false);
-                return;
-              }
-              void app.setBiometricsEnabled(true, biometricsPassword).then((ok) => {
-                setBiometricsOn(ok);
-                if (ok) setBiometricsPassword('');
-              });
-            }}
-          />
-        </div>
-      ) : null}
+      {/*
+        Биометрии нет на платформе — тумблера тоже нет (BEHAVIOR §5.1).
+
+        Порядок здесь важнее вида: поле пароля стоит ВЫШЕ тумблера. Прежде оно
+        было ниже, и естественный жест — сначала переключить — приводил к
+        `setBiometricsEnabled(true, '')`: ключ выводился из пустой строки и
+        уезжал в Keystore. Тумблер вставал в «включено», а палец не открывал
+        ничего. Теперь пароль спрашивается первым, тумблер до его ввода
+        выключен и объясняет, чего ждёт, а неверный пароль получает ответ
+        словами, а не молчаливым откатом.
+      */}
       {biometrics && hasPassword && !biometricsOn ? (
         <TextField
           type="password"
           label={copy.biometricsPassword}
           value={biometricsPassword}
           autoComplete="current-password"
-          onChange={(event) => setBiometricsPassword(event.target.value)}
+          error={biometricsError ?? undefined}
+          showError={biometricsError !== null}
+          hint={copy.biometricsPasswordHint}
+          onChange={(event) => {
+            setBiometricsPassword(event.target.value);
+            setBiometricsError(null);
+          }}
         />
+      ) : null}
+      {biometrics && hasPassword ? (
+        <div className="za-field-row">
+          <Switch
+            label={copy.biometrics}
+            checked={biometricsOn}
+            disabled={!biometricsOn && biometricsPassword.length === 0}
+            onChange={(event) => {
+              const on = event.target.checked;
+              setBiometricsError(null);
+              if (!on) {
+                setBiometricsOn(false);
+                void app.setBiometricsEnabled(false);
+                return;
+              }
+              void app.setBiometricsEnabled(true, biometricsPassword).then((outcome) => {
+                setBiometricsOn(outcome === 'on');
+                if (outcome === 'on') {
+                  setBiometricsPassword('');
+                  return;
+                }
+                /* Каждый отказ называется своим именем: «не подошёл»,
+                   «проверить нечем» и «система отказала» — три разные новости
+                   и три разных следующих шага. */
+                setBiometricsError(
+                  outcome === 'wrong'
+                    ? strings.errors.wrongPassword
+                    : outcome === 'unknown'
+                      ? copy.biometricsUnverifiable
+                      : copy.biometricsFailed,
+                );
+              });
+            }}
+          />
+        </div>
       ) : null}
 
       <div className="za-field-row">
@@ -1243,7 +1278,18 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ready = current.length > 0 && next.length >= 8 && next === repeat;
+  /*
+   * Условия те же, что были, но теперь каждое умеет сказать о себе.
+   *
+   * Заказчик: «кнопка сменить пароль после ввода старого и 2 раза нового не
+   * активируется». Так и было: правило «не меньше 8 символов» и «повтор
+   * совпал» держали кнопку выключенной и не показывали ни слова — ни
+   * подписи под полем, ни подсказки. Выключенная кнопка без объяснения
+   * неотличима от сломанной, и это ровно то, что человек увидел.
+   */
+  const tooShort = next.length > 0 && next.length < MIN_PASSWORD;
+  const mismatch = repeat.length > 0 && repeat !== next;
+  const ready = current.length > 0 && next.length >= MIN_PASSWORD && next === repeat;
 
   const submit = async (): Promise<void> => {
     setBusy(true);
@@ -1253,8 +1299,9 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
     if (!result.ok) {
       /* Текст — из реестра BEHAVIOR §11, а не свой: «Пароль не подошёл»
          человек уже видел на замке, и вторая формулировка того же означала бы
-         две разные ошибки в его голове вместо одной. */
-      setError(strings.errors.wrongPassword);
+         две разные ошибки в его голове вместо одной. Отдельно — случай
+         «проверить нечем»: это не «не подошёл», и путать их нельзя. */
+      setError(result.reason === 'unknown' ? copy.changeUnverifiable : strings.errors.wrongPassword);
       return;
     }
     app.toast({ message: copy.changeDone(result.changed) });
@@ -1296,6 +1343,9 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
           label={copy.newPassword}
           value={next}
           autoComplete="new-password"
+          hint={strings.crypto.tooShort}
+          error={tooShort ? strings.crypto.tooShort : undefined}
+          showError={tooShort}
           onChange={(event) => setNext(event.target.value)}
         />
         <TextField
@@ -1303,6 +1353,8 @@ function ChangePasswordDialog({ open, onClose }: { open: boolean; onClose: () =>
           label={strings.crypto.passwordRepeat}
           value={repeat}
           autoComplete="new-password"
+          error={mismatch ? strings.crypto.mismatch : undefined}
+          showError={mismatch}
           onChange={(event) => setRepeat(event.target.value)}
         />
         <InfoNote icon={<IconInfo size={15} />}>{copy.changeNote}</InfoNote>

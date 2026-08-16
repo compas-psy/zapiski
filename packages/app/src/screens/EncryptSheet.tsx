@@ -113,12 +113,23 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
 
         {needsPassword ? (
           <>
+        {/*
+          Правило длины — подсказкой, а не только ошибкой.
+
+          Ошибка в `TextField` живёт после blur: во время набора текст не
+          «кричит», и это верно. Но кнопка выключена ИМЕННО этим правилом, и
+          пока человек не ушёл из поля, он видит мёртвую кнопку без причины —
+          ровно то, что заказчик описал на смене пароля. Подсказка спокойно
+          говорит правило заранее, ошибка после blur остаётся.
+        */}
         <TextField
           type="password"
           label={strings.crypto.password}
           value={password}
           autoComplete="new-password"
+          hint={strings.crypto.tooShort}
           error={tooShort ? strings.crypto.tooShort : undefined}
+          showError={tooShort}
           onChange={(event) => setPassword(event.target.value)}
         />
         <div
@@ -144,8 +155,18 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
           label={strings.crypto.passwordRepeat}
           value={repeat}
           autoComplete="new-password"
-          /* Ошибка показывается ПОСЛЕ blur — так устроен TextField в ui. */
+          /*
+            Несовпадение показывается сразу, не дожидаясь blur.
+
+            Правило «ошибка живёт после blur» написано для проверок вроде
+            формата почты, где недопечатанное значение законно. У повтора
+            пароля любое расхождение — это и есть положение дел, и именно оно
+            держит кнопку выключенной. Ждать blur значит показывать мёртвую
+            кнопку без причины; сообщение исчезает в тот же миг, когда пароли
+            сошлись.
+          */
           error={mismatch ? strings.crypto.mismatch : undefined}
+          showError={mismatch}
           onChange={(event) => setRepeat(event.target.value)}
         />
         <TextField

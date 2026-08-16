@@ -26,6 +26,8 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
   const [hint, setHint] = useState<string | null>(null);
   const [delayLeft, setDelayLeft] = useState(0);
   const [biometricsSheet, setBiometricsSheet] = useState(false);
+  /* Привязка отпечатка не подошла к хранилищу и была снята — надо сказать. */
+  const [stale, setStale] = useState(false);
   /**
    * Готова ли биометрия именно для этого хранилища.
    *
@@ -77,9 +79,17 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
 
   const tryBiometrics = async (): Promise<void> => {
     setBiometricsSheet(false);
-    const body = await app.unlockWithBiometrics(path);
+    const outcome = await app.unlockWithBiometrics(path);
+    if (outcome.kind === 'unlocked') {
+      onUnlocked(outcome.body);
+      return;
+    }
     /* Отмена биометрии — не ошибка: просто остаётся поле пароля. */
-    if (body !== null) onUnlocked(body);
+    if (outcome.kind === 'cancelled') return;
+    /* Привязка не подходит хранилищу — она уже снята, и об этом надо сказать:
+       иначе палец «не срабатывает» молча, и человек считает это поломкой. */
+    setBiometricsReady(false);
+    setStale(true);
   };
 
   return (
@@ -107,10 +117,22 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
             if (event.key === 'Enter') void submit();
           }}
         />
+        {/*
+          Подсказка видна СРАЗУ, а не после ошибки.
+          Она и заводится ради того, чтобы вспомнить пароль до попытки; прежде
+          её показывали только вместе с «Пароль не подошёл», то есть ровно
+          тому, кто уже промахнулся. Человеку, который просто не помнит, она не
+          доставалась вовсе — а он-то и есть её адресат.
+        */}
+        {hint ? <p className="za-muted za-hint">{strings.crypto.hintShown(hint)}</p> : null}
         {failed ? (
           <p className="za-muted" role="status">
             {strings.errors.wrongPassword}
-            {hint ? ` · ${hint}` : ''}
+          </p>
+        ) : null}
+        {stale ? (
+          <p className="za-muted" role="status">
+            {strings.crypto.biometricsStale}
           </p>
         ) : null}
         {delayLeft > 0 ? (
@@ -131,6 +153,20 @@ export function LockScreen({ path, title, onUnlocked }: LockScreenProps): ReactN
           {strings.crypto.useBiometrics}
         </Button>
       ) : null}
+
+      {/*
+        Забытый пароль — тупик по устройству продукта, но не повод молчать.
+
+        Заказчик: «я не помню пароль и нельзя его восстановить». Восстановить
+        действительно нельзя — в этом и защита, — но человек имеет право
+        узнать это ЗДЕСЬ, а не догадываться, перебирая пароли. Поэтому раздел
+        говорит прямо: обхода нет, файл на месте, заметка цела, попытки не
+        удаляют ничего. Ни одной кнопки «восстановить», которая ведёт в никуда.
+      */}
+      <details className="za-locked__forgot">
+        <summary>{strings.crypto.forgotTitle}</summary>
+        <p className="za-muted">{strings.crypto.forgotBody}</p>
+      </details>
 
       {biometrics ? (
         <BottomSheet

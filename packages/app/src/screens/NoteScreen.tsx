@@ -652,12 +652,22 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
           <InfoPanel note={{ ...note, body }} backlinks={backlinks} />
         </div>
       ) : null}
-      {isMobile && note ? (
+      {/*
+        Меню «⋯» монтируется на ВСЕХ платформах, а не только на мобильной.
+
+        Прежде оно стояло под `isMobile`, а кнопка «⋯» в шапке рисовалась
+        всегда: на десктопе и в Windows нажатие переключало состояние, которое
+        никто не читал, и не происходило ровно ничего. Через это меню лежит
+        единственный путь к «Зашифровать» и «Снять шифрование» из открытой
+        заметки — то есть шифрование с десктопа было недостижимо.
+      */}
+      {note ? (
         <NoteMenu
           note={{ ...note, body }}
           backlinks={backlinks}
           open={menuOpen}
           onClose={() => setMenuOpen(false)}
+          showInfo={isMobile}
         />
       ) : null}
 

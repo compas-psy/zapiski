@@ -33,6 +33,58 @@ export interface TestHostOptions {
   prefs?: Record<string, unknown>;
 }
 
+/** Что делает поддельный модуль при `unlock`: отдать ключ, отказать, отменить. */
+export interface FakeBiometrics {
+  provider: NonNullable<PlatformCapabilities['biometrics']>;
+  /** Что лежит в «защищённом модуле». `null` — не заводили или сняли. */
+  stored(): Uint8Array | null;
+  /** Человек нажал «Отмена» — по контракту это `null`, а не ошибка. */
+  cancel(on: boolean): void;
+  /** Сколько раз спрашивали палец. */
+  unlocks(): number;
+}
+
+/**
+ * Поддельный модуль биометрии, повторяющий контракт платформы.
+ *
+ * До него в тестовом хосте стоял `biometrics: null`, и весь путь «включить
+ * отпечаток → открыть им заметку» не проверялся НИ РАЗУ. Через эту дыру
+ * прошли сразу три дефекта: включение по непроверенному паролю, ненаписанная
+ * настройка `security.biometrics` и молчаливый отказ при устаревшей привязке.
+ *
+ * Подделка честная: она хранит ровно то, что дали в `enroll`, и отдаёт ровно
+ * это в `unlock`. Никакой «проверки пароля» внутри — её и не должно быть на
+ * этом уровне, иначе тест проверял бы подделку, а не продукт.
+ */
+export function fakeBiometrics(): FakeBiometrics {
+  let secret: Uint8Array | null = null;
+  let cancelled = false;
+  let unlocks = 0;
+  return {
+    provider: {
+      async isAvailable() {
+        return true;
+      },
+      async enroll(_keyId, value) {
+        secret = Uint8Array.from(value);
+      },
+      async unlock() {
+        unlocks += 1;
+        if (cancelled || !secret) return null;
+        return Uint8Array.from(secret);
+      },
+      async remove() {
+        secret = null;
+      },
+    },
+    stored: () => secret,
+    cancel: (on) => {
+      cancelled = on;
+    },
+    unlocks: () => unlocks,
+  };
+}
+
 export function createTestHost(options: TestHostOptions = {}): AppHost & {
   storage: VaultStorage;
   saved: Array<{ name: string; mime: string; size: number }>;

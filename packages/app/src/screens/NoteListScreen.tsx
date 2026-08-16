@@ -403,6 +403,17 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
         hidden: note.encrypted,
         onSelect: () => setEncrypting(note),
       },
+      /*
+        Обратное действие было недостижимо ниоткуда: в этом меню его не было
+        вовсе, а в меню открытой заметки подтверждение ничего не вызывало.
+        Зашифровать заметку можно было, снять шифрование — нет.
+      */
+      {
+        id: 'decrypt',
+        label: strings.crypto.removeTitle,
+        hidden: !note.encrypted,
+        onSelect: () => app.askRemoveEncryption(note.path),
+      },
       {
         id: 'export',
         label: strings.list.exportNote,
