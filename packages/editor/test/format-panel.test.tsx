@@ -592,13 +592,29 @@ describe('таблица правится редактором', () => {
     expect(cells()).toHaveLength(4);
   });
 
-  it('добавление строки и столбца', () => {
+  it('вставка строки и столбца — в четыре стороны от текущей ячейки', () => {
+    /* Эталон заказчика (Telegram, «Add Cells») предлагает четыре направления.
+       Две кнопки «в конец» заставляли добавлять строку последней и тащить её
+       ручкой на место. */
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
     press(button(container, copy.table));
-    tap(addButton(copy.tableMenu.addRow));
+    tap(addButton(copy.tableMenu.insertBelow));
     expect(view?.state.doc.toString().split('\n')).toHaveLength(4);
-    tap(addButton(copy.tableMenu.addColumn));
+    tap(addButton(copy.tableMenu.insertRight));
     expect(cells()).toHaveLength(9);
+  });
+
+  it('строка вставляется ВЫШЕ текущей, а не в конец', () => {
+    const container = mount(TABLE.replace('созвон', 'соз¦вон'));
+    press(button(container, copy.table));
+    tap(addButton(copy.tableMenu.insertAbove));
+
+    const body = view?.state.doc.toString().split('\n') ?? [];
+    /* Пустая строка встала перед той, где стоял курсор, а не после неё. */
+    const empty = body.findIndex((line) => /^\|(\s*\|)+$/.test(line.trim()));
+    const anchor = body.findIndex((line) => line.includes('созвон'));
+    expect(empty, 'пустой строки не появилось').toBeGreaterThan(-1);
+    expect(empty, 'строка вставлена не выше текущей').toBeLessThan(anchor);
   });
 
   it('удаление столбца', () => {
@@ -676,7 +692,7 @@ describe('таблица правится редактором', () => {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
       press(button(container, copy.table));
-      tap(addButton(copy.tableMenu.addRow));
+      tap(addButton(copy.tableMenu.insertBelow));
       expect(box.calls).toEqual([]);
     });
   });

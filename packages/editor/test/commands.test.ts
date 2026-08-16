@@ -151,7 +151,10 @@ describe('вставки ссылок и таблиц', () => {
     const v = open('', 0);
     insertTable(v);
     const lines = v.state.doc.toString().split('\n');
-    expect(lines.length).toBe(3);
+    /* Заготовка — три столбца и две строки тела, как в приложениях, откуда
+       человек приходит: шапка, разделитель и две пустые строки. */
+    expect(lines.length).toBe(4);
+    expect(lines[0]?.split('|').filter((cell) => cell.trim() !== '')).toHaveLength(3);
     expect(lines[1]).toContain('---');
   });
 });

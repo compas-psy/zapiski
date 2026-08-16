@@ -329,7 +329,16 @@ export const insertTable: StateCommand = ({ state, dispatch }) => {
   const range = state.selection.main;
   const line = state.doc.lineAt(range.head);
   const prefix = line.text.trim().length ? '\n\n' : '';
-  const table = '| Колонка | Колонка |\n| --- | --- |\n|  |  |';
+  /*
+   * Три столбца и две строки тела — как в приложениях, откуда человек
+   * приходит (заказчик прислал снимки Telegram именно с такой заготовкой).
+   *
+   * Прежние два столбца и одна строка выглядели не таблицей, а парой ячеек:
+   * первое, что приходилось делать после вставки, — добавлять недостающее.
+   * Лишний столбец удалить одним нажатием проще, чем добавить два.
+   */
+  const table =
+    '| Колонка | Колонка | Колонка |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |';
   const at = line.to;
   dispatch(
     state.update({

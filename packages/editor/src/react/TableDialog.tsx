@@ -71,6 +71,18 @@ export function TableDialog({ copy, view, onUndoable, onClose }: TableDialogProp
   const anchor = useRef(initial.current?.firstLine ?? 1);
   const [draft, setDraft] = useState<TableModel | null>(initial.current);
   const [column, setColumn] = useState(initial.current?.column ?? 0);
+  /**
+   * Строка, относительно которой вставляют.
+   *
+   * Заказчик прислал эталон: в Telegram «Add Cells» предлагает четыре
+   * направления — строку выше и ниже, столбец слева и справа. У нас было две
+   * кнопки, и обе добавляли в конец: чтобы вставить строку в середину, её
+   * приходилось добавлять последней и тащить ручкой наверх.
+   *
+   * Точка отсчёта — та ячейка, в которой человек только что стоял. Строка
+   * заголовка ею быть не может: над заголовком строки в markdown не бывает.
+   */
+  const [row, setRow] = useState(initial.current?.row ?? 0);
   const [drag, setDrag] = useState<Drag | null>(null);
   const rowNodes = useRef<(HTMLElement | null)[]>([]);
   const columnNodes = useRef<(HTMLElement | null)[]>([]);
@@ -159,6 +171,10 @@ export function TableDialog({ copy, view, onUndoable, onClose }: TableDialogProp
 
   // ── Разметка ──────────────────────────────────────────────────────────────
 
+  /* Отсчёт для вставки: строка, где стоял человек, но не строка заголовка —
+     над ней в markdown ничего не бывает. */
+  const anchorRow = Math.min(Math.max(row, draft.header ? 1 : 0), draft.rows.length - 1);
+
   const dragging = (kind: 'row' | 'column', index: number): string =>
     drag?.kind === kind && drag.index === index ? ' zp-table__handle--on' : '';
 
@@ -222,7 +238,10 @@ export function TableDialog({ copy, view, onUndoable, onClose }: TableDialogProp
                   style={{ textAlign: cssAlign(draft.aligns[index] ?? 'none') }}
                   value={cell}
                   aria-label={`${strings.columnNumber(index + 1)}, ${row + 1}`}
-                  onFocus={() => setColumn(index)}
+                  onFocus={() => {
+                    setColumn(index);
+                    setRow(row);
+                  }}
                   onChange={(event) => write(setCell(draft, row, index, event.target.value), 'input.type')}
                 />
               ))}
@@ -240,20 +259,46 @@ export function TableDialog({ copy, view, onUndoable, onClose }: TableDialogProp
         })}
       </div>
 
+      {/*
+        Четыре направления, а не две кнопки «в конец».
+
+        Точка отсчёта — ячейка, где человек стоял: строка выше/ниже неё,
+        столбец слева/справа от неё. Строка заголовка отсчётом быть не может
+        (над ней в markdown ничего не бывает), поэтому «сверху» от неё
+        вставляет первую строку тела.
+      */}
       <div className="zp-table__adds">
         <button
           type="button"
           className="zp-table__add"
-          onClick={() => write(insertRow({ ...draft, row: draft.rows.length - 1 }, 'below'))}
+          title={strings.insertAbove}
+          onClick={() => write(insertRow({ ...draft, row: anchorRow }, 'above'))}
         >
-          <Plus /> {strings.addRow}
+          <Plus /> {strings.insertAbove}
         </button>
         <button
           type="button"
           className="zp-table__add"
+          title={strings.insertBelow}
+          onClick={() => write(insertRow({ ...draft, row: anchorRow }, 'below'))}
+        >
+          <Plus /> {strings.insertBelow}
+        </button>
+        <button
+          type="button"
+          className="zp-table__add"
+          title={strings.insertLeft}
+          onClick={() => write(insertColumn({ ...draft, column }, 'left'))}
+        >
+          <Plus /> {strings.insertLeft}
+        </button>
+        <button
+          type="button"
+          className="zp-table__add"
+          title={strings.insertRight}
           onClick={() => write(insertColumn({ ...draft, column }, 'right'))}
         >
-          <Plus /> {strings.addColumn}
+          <Plus /> {strings.insertRight}
         </button>
       </div>
 
@@ -433,7 +478,14 @@ export const tableDialogStyles = {
     cursor: 'pointer',
   },
   '.zp-table__drop:hover': { color: 'var(--danger, var(--text))' },
-  '.zp-table__adds': { display: 'flex', gap: '6px' },
+  /* Четыре направления вставки. Сетка 2×2, а не лента: на телефоне лента из
+     четырёх подписей не помещается по ширине, а горизонтальной прокрутки в
+     диалоге быть не должно. */
+  '.zp-table__adds': {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '6px',
+  },
   '.zp-table__add': {
     display: 'inline-flex',
     alignItems: 'center',
