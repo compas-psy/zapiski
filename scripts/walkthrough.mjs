@@ -30,7 +30,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
-import { findChrome } from './find-chrome.mjs';
+import { browserEnv, findChrome } from './find-chrome.mjs';
 import { seedWebSession } from './web-session.mjs';
 
 const PORT = process.env.ZAPISKI_PORT ?? '4173';
@@ -87,7 +87,7 @@ const served = await serveDist(DIST, PORT).catch((error) => {
 const server = served;
 const URL_BASE = served.url;
 
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU' });
 /* В вебе без аккаунта дальше экрана входа не пройти — прогон проверяет
    продукт за воротами, а не сами ворота (их проверяет check-signin-screen). */
@@ -474,6 +474,72 @@ for (const [name, viewport] of [
     check(mine, `${name}: центр пункта меню перекрыт чем-то другим`);
   } else {
     check(false, `${name}: в открытом меню нет ни одного пункта`);
+  }
+
+  /* ── Сворачиваемый блок: заголовок со стрелкой, а не голый html ──────────
+     Заказчик: «доделать раскрываемый список, так как сейчас не работает», и
+     рядом — снимки из Telegram: строка с шевроном, тап по нему прячет и
+     показывает содержимое.
+
+     Модульные тесты держат разметку и декорации; здесь проверяется то, чего
+     они не видят: попадает ли палец в стрелку и меняется ли картинка на
+     экране. Стрелка рисуется 18 px — в неё не попасть, — поэтому у неё есть
+     невидимое поле до 44 px, и проверяется именно попадание мимо рисунка. */
+  await screen.keyboard.press('Escape');
+  await screen.waitForTimeout(200);
+  await screen.locator('.cm-content').click();
+  await screen.keyboard.type('Это сворачиваемый блок');
+  await screen.waitForTimeout(200);
+
+  const lists = screen.getByRole('button', { name: /Списки|Lists/ }).first();
+  if ((await lists.count()) === 0) {
+    check(false, `${name}: кнопки списков нет — сворачиваемый блок недостижим`);
+  } else {
+    await lists.tap();
+    await screen.waitForTimeout(350);
+    const details = screen
+      .locator('.zp-panel__layer [role="menuitem"]')
+      .filter({ hasText: /Сворачиваемый блок|Collapsible/ })
+      .first();
+    if ((await details.count()) === 0) {
+      check(false, `${name}: в меню списков нет пункта «Сворачиваемый блок»`);
+    } else {
+      await details.tap();
+      await screen.waitForTimeout(400);
+      await screen.keyboard.type('Тело блока');
+      await screen.waitForTimeout(300);
+
+      const arrow = screen.locator('.cm-z-summary-arrow').first();
+      check((await arrow.count()) > 0, `${name}: сворачиваемый блок вставлен без стрелки`);
+      /* Голой разметки на экране быть не должно — ровно на неё и жаловались:
+         «просто выдаёт xml». */
+      const shown = await screen.$eval('.cm-content', (node) => node.innerText);
+      check(!shown.includes('<details>'), `${name}: на экране виден тег <details>`);
+      check(!shown.includes('<summary>'), `${name}: на экране виден тег <summary>`);
+
+      if ((await arrow.count()) > 0) {
+        const box = await arrow.boundingBox();
+        /* Палец промахивается вниз чаще всего: проверяем точку в 16 px под
+           центром рисунка — она обязана принадлежать стрелке. */
+        const belowIsArrow = await screen.evaluate(
+          ([x, y]) => Boolean(document.elementFromPoint(x, y)?.closest('.cm-z-summary-arrow')),
+          [box.x + box.width / 2, box.y + box.height / 2 + 16],
+        );
+        check(belowIsArrow, `${name}: у стрелки цель нажатия меньше пальца`, JSON.stringify(box));
+
+        await arrow.tap();
+        await screen.waitForTimeout(300);
+        const hiddenAfter = await screen.locator('.cm-line.cm-z-collapsed').count();
+        check(hiddenAfter >= 2, `${name}: тап по стрелке не свернул блок`, `скрыто строк: ${hiddenAfter}`);
+
+        await arrow.tap();
+        await screen.waitForTimeout(300);
+        const hiddenBack = await screen.locator('.cm-line.cm-z-collapsed').count();
+        /* Одна строка остаётся скрытой законно: пустая строка под заголовком
+           нужна разбору markdown, а человеку — нет. */
+        check(hiddenBack <= 1, `${name}: повторный тап не развернул блок`, `скрыто строк: ${hiddenBack}`);
+      }
+    }
   }
 
   /* ── Касание со сносом пальца ────────────────────────────────────────────

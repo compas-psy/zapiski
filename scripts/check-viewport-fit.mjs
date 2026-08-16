@@ -29,7 +29,7 @@
 import { fileURLToPath } from 'node:url';
 
 import { serveDist } from './static-server.mjs';
-import { findChrome } from './find-chrome.mjs';
+import { browserEnv, findChrome } from './find-chrome.mjs';
 import { seedWebSession } from './web-session.mjs';
 
 const PORT = process.env.ZAPISKI_PORT_FIT ?? '4177';
@@ -126,7 +126,7 @@ const overflowProbe = () => {
 };
 
 const problems = [];
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 
 for (const viewport of VIEWPORTS) {
   const context = await browser.newContext({

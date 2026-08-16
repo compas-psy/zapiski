@@ -29,6 +29,7 @@ interface MovableFileHandle {
   move?(parent: FileSystemDirectoryHandle, name: string): Promise<void>;
 }
 
+
 type PickerWindow = Window & {
   showDirectoryPicker?(options?: { mode?: 'read' | 'readwrite' }): Promise<FileSystemDirectoryHandle>;
 };
@@ -36,11 +37,46 @@ type PickerWindow = Window & {
 /* ── Хранилище ────────────────────────────────────────────────────────────── */
 
 export class DirectoryVaultStorage implements VaultStorage {
+  /**
+   * Кто сейчас пишет в этот путь. Ключ — путь назначения.
+   *
+   * ── Зачем очередь ───────────────────────────────────────────────────────
+   *
+   * Атомарная запись здесь — «временный файл + `move` на место». Пока `move`
+   * идёт, файл назначения ЗАБЛОКИРОВАН: второй `move` в тот же путь падает с
+   * «A FileSystemHandle cannot be moved to a destination which is locked».
+   * В файловой системе такого нет — там `rename` поверх существующего просто
+   * побеждает, — и потому ядро спокойно пишет один и тот же файл дважды
+   * подряд: заметку создаёт `vault.create`, а через мгновение её же
+   * сохраняет автосохранение редактора.
+   *
+   * Живой прогон в браузере поймал именно это: первая заметка не создавалась
+   * вовсе — исключение улетало из `createNote`, и человек оставался на пустом
+   * списке после онбординга.
+   *
+   * Очередь по пути упорядочивает такие записи: вторая ждёт первую, обе
+   * доходят, последняя побеждает — как и на диске.
+   */
+  private readonly writes = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly root: FileSystemDirectoryHandle,
     /** Что показать в настройках как «папка с заметками». */
     readonly label: string,
   ) {}
+
+  /** Выполнить работу над путём, дождавшись предыдущей работы над ним же. */
+  private queued<T>(path: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.writes.get(path) ?? Promise.resolve();
+    /* Чужая неудача не должна ронять следующего в очереди: ждём завершения,
+       а не успеха. Свою ошибку вызывающий получит как обычно. */
+    const next = previous.then(work, work);
+    this.writes.set(
+      path,
+      next.catch(() => undefined),
+    );
+    return next;
+  }
 
   async read(path: string): Promise<Uint8Array | null> {
     const handle = await this.fileHandle(path, false);
@@ -50,31 +86,37 @@ export class DirectoryVaultStorage implements VaultStorage {
   }
 
   /**
-   * Запись атомарная: сначала во временный файл, затем переименование.
-   * `move()` есть не везде — там, где его нет, честно копируем и удаляем tmp:
-   * читатель в этот момент видит либо старую версию, либо новую целиком.
+   * Запись прямо в файл — и это атомарно по спецификации.
+   *
+   * ── Почему не «временный файл + переименование» ─────────────────────────
+   *
+   * Здесь стоял тот же приём, что и на диске: записать рядом и переименовать
+   * поверх. В вебе он лишний и вредный.
+   *
+   * Лишний — потому что `createWritable()` по спецификации File System Access
+   * пишет в теневую копию и подменяет файл целиком на `close()`: прерывание на
+   * любом байте оставляет прежнюю версию, а не половину новой. Это ровно то,
+   * чего требует ТЗ §4.3, и оно уже есть.
+   *
+   * Вредный — потому что переименование поверх делается через `move()`, а он в
+   * Chromium **отказывает, если в имени назначения есть не-ASCII**: живой опыт
+   * в браузере — `move(dir, 'note.md')` проходит, `move(dir, 'Заметка.md')`
+   * падает с «A FileSystemHandle cannot be moved to a destination which is
+   * locked», хотя ничего не заблокировано. Имя по умолчанию у нас «Без
+   * названия.md», поэтому в вебе не создавалась ПЕРВАЯ ЖЕ заметка: человек
+   * проходил онбординг и оставался на пустом списке.
    */
   async write(path: string, data: Uint8Array): Promise<void> {
-    const directory = await this.directoryOf(path, true);
-    const name = baseName(path);
-    const temporary = `${name}.${Date.now().toString(36)}.tmp`;
+    return this.queued(path, () => this.writeNow(path, data));
+  }
 
-    const tmpHandle = await directory.getFileHandle(temporary, { create: true });
-    const writable = await tmpHandle.createWritable();
+  private async writeNow(path: string, data: Uint8Array): Promise<void> {
+    const directory = await this.directoryOf(path, true);
+    const handle = await directory.getFileHandle(baseName(path), { create: true });
+    const writable = await handle.createWritable();
     /* Копия буфера: у Uint8Array из ядра может быть чужой ArrayBuffer. */
     await writable.write(data.slice().buffer as ArrayBuffer);
     await writable.close();
-
-    const movable = tmpHandle as FileSystemFileHandle & MovableFileHandle;
-    if (typeof movable.move === 'function') {
-      await movable.move(directory, name);
-      return;
-    }
-    const target = await directory.getFileHandle(name, { create: true });
-    const copy = await target.createWritable();
-    await copy.write(data.slice().buffer as ArrayBuffer);
-    await copy.close();
-    await directory.removeEntry(temporary).catch(() => undefined);
   }
 
   async remove(path: string): Promise<void> {
@@ -84,16 +126,29 @@ export class DirectoryVaultStorage implements VaultStorage {
   }
 
   async rename(from: string, to: string): Promise<void> {
+    /* Ключ — путь НАЗНАЧЕНИЯ: блокируется именно он. Внутри зовётся
+       `writeNow`, а не `write`, иначе очередь ждала бы сама себя. */
+    return this.queued(to, () => this.renameNow(from, to));
+  }
+
+  private async renameNow(from: string, to: string): Promise<void> {
     const source = await this.fileHandle(from, false);
     if (!source) return;
     const targetDirectory = await this.directoryOf(to, true);
     const movable = source as FileSystemFileHandle & MovableFileHandle;
     if (typeof movable.move === 'function') {
-      await movable.move(targetDirectory, baseName(to));
-      return;
+      try {
+        await movable.move(targetDirectory, baseName(to));
+        return;
+      } catch {
+        /* `move()` есть, но сработать не обязан: у браузеров с ним хватает
+           краевых случаев. Отказ — не повод потерять переименование: ниже
+           копируем содержимое и убираем исходник. Медленнее, зато заметка
+           оказывается там, где человек её ждёт. */
+      }
     }
     const file = await source.getFile();
-    await this.write(to, new Uint8Array(await file.arrayBuffer()));
+    await this.writeNow(to, new Uint8Array(await file.arrayBuffer()));
     await this.remove(from);
   }
 

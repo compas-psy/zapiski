@@ -367,7 +367,31 @@ class LivePreviewBuilder {
     this.hidden.push(arrow);
     this.fade(head + openTagLength + inner.length, head + summary[0].length, active);
 
-    if (collapsed) this.collapseBody(to);
+    if (collapsed) {
+      this.collapseBody(to);
+      return;
+    }
+
+    /*
+     * Пустая строка сразу под заголовком — строительные леса, а не отступ.
+     *
+     * Она стоит там по правилу CommonMark: без неё html-блок тянется дальше, и
+     * markdown внутри (списки, выделения) перестаёт разбираться. Человеку эта
+     * строка не нужна и не принадлежит: он её не писал и удалить не может —
+     * удалит, и разметка внутри блока сломается. Показывать её — значит
+     * оставлять в блоке пустоту, которой в других приложениях нет.
+     *
+     * Прячем, пока в ней не стоит курсор: с курсором строка обязана быть
+     * видимой, иначе каретка «пропадает» в невидимой строке.
+     */
+    const doc = this.state.doc;
+    const headLine = doc.lineAt(head);
+    if (headLine.number < doc.lines) {
+      const next = doc.line(headLine.number + 1);
+      if (next.text.trim() === '' && !this.isActive(next.from, next.to)) {
+        this.lines(next.from, next.from, 'cm-z-collapsed');
+      }
+    }
   }
 
   /**

@@ -24,6 +24,7 @@
 import { serveDist } from './static-server.mjs';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { browserEnv } from './find-chrome.mjs';
 
 const CHROME =
   process.env.ZAPISKI_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -51,7 +52,7 @@ const server = await serveDist('apps/web/dist', PORT).catch((error) => {
   process.exit(1);
 });
 
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 820 }, locale: 'ru-RU' });
 await page.goto(URL_BASE, { waitUntil: 'networkidle' });
 

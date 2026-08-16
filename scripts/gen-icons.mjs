@@ -34,6 +34,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { browserEnv } from './find-chrome.mjs';
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SOURCE = resolve(REPO_ROOT, 'packages/ui/src/assets/services/zapiski.svg');
@@ -88,7 +89,7 @@ function variant(kind) {
   return markup.replace(PLATE_RECT, '').replace('scale(0.74)', 'scale(0.49)');
 }
 
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 const page = await browser.newPage({ viewport: { width: 600, height: 600 } });
 
 /** PNG нужного размера. Прозрачность сохраняется (`omitBackground`). */

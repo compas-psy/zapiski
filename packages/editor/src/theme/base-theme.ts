@@ -270,17 +270,42 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
 
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {
+    position: 'relative',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     inlineSize: '18px',
     blockSize: '18px',
-    marginRight: '4px',
+    marginRight: '6px',
     verticalAlign: '-3px',
     cursor: 'pointer',
     color: 'var(--text-secondary)',
   },
-  '.cm-z-summary-arrow svg': { inlineSize: '16px', blockSize: '16px', fill: 'currentColor' },
+  /*
+   * Палец крупнее стрелки.
+   *
+   * Сама стрелка — 18 px, как в §4, и увеличивать её нельзя: она стоит в
+   * строке текста и не должна её распирать. Но цель нажатия — не то же, что
+   * рисунок: на телефоне попасть в 18 px невозможно, и блок читается как
+   * «не работает», хотя он работает. Невидимое поле вокруг доводит цель до
+   * 44 px — минимума, ниже которого мы не опускаемся нигде.
+   */
+  '.cm-z-summary-arrow::before': {
+    content: '""',
+    position: 'absolute',
+    insetInline: '-13px',
+    insetBlock: '-13px',
+  },
+  '.cm-z-summary-arrow svg': {
+    inlineSize: '16px',
+    blockSize: '16px',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: '2',
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    transition: 'transform 120ms ease',
+  },
   '.cm-z-summary-arrow-open svg': { transform: 'rotate(90deg)' },
   '.cm-z-collapsed': { display: 'none' },
 

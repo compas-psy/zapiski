@@ -15,6 +15,7 @@ import { serveDist } from './static-server.mjs';
 import { seedWebSession } from './web-session.mjs';
 import { chromium } from 'playwright-core';
 import { existsSync } from 'node:fs';
+import { browserEnv } from './find-chrome.mjs';
 
 const CHROME =
   process.env.ZAPISKI_CHROME ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
@@ -30,7 +31,7 @@ const server = await serveDist('apps/web/dist', PORT).catch((error) => {
   console.error(`фокус: ПРОВЕРИТЬ НЕ УДАЛОСЬ — ${error.message}`);
   process.exit(1);
 });
-const browser = await chromium.launch({ executablePath: CHROME, args:['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 const page = await browser.newPage({ viewport:{width:1280,height:820}, locale:'ru-RU' });
 /* В вебе вход обязателен: без аккаунта заметки остались бы в одном браузере.
    Прогон проверяет не ворота, а поле за ними, поэтому сессия подставляется

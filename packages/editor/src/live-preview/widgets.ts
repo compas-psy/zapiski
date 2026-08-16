@@ -642,9 +642,13 @@ export class SummaryWidget extends WidgetType {
     svg.setAttribute('viewBox', '0 0 16 16');
     svg.setAttribute('role', 'presentation');
     const path = document.createElementNS(SVG_NS, 'path');
-    /* Треугольник вправо; развёрнутый блок поворачивает его вниз средствами
-       CSS — так поворот анимируется и не требует второго виджета. */
-    path.setAttribute('d', 'M6 4 L11 8 L6 12 Z');
+    /* Шеврон вправо; развёрнутый блок поворачивает его вниз средствами CSS —
+       так поворот анимируется и не требует второго виджета.
+
+       Именно шеврон, а не залитый треугольник: он совпадает с остальными
+       иконками продукта (обводка 1.75–2, скруглённые концы) и с тем, как
+       сворачиваемый блок выглядит в приложениях, откуда человек приходит. */
+    path.setAttribute('d', 'M6 3.5 L10.5 8 L6 12.5');
     svg.appendChild(path);
     host.appendChild(svg);
 

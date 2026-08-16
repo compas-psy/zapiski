@@ -23,7 +23,7 @@ import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { findChrome } from './find-chrome.mjs';
+import { browserEnv, findChrome } from './find-chrome.mjs';
 import { serveDist } from './static-server.mjs';
 import { seedWebSession } from './web-session.mjs';
 
@@ -50,7 +50,7 @@ await access(path.join(DIST, 'index.html')).catch(() =>
 );
 
 const server = await serveDist(DIST, PORT).catch((error) => skip(error.message));
-const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 
 const problems = [];
 const check = (ok, message) => {

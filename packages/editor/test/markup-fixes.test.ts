@@ -250,10 +250,24 @@ describe('замечание 12: сворачиваемый блок работ�
     const once = state.update({ effects: toggleCollapsed.of(0) }).state;
     const twice = once.update({ effects: toggleCollapsed.of(0) }).state;
 
-    const classes = decorationsOf(twice)
-      .map((deco) => deco.class ?? '')
-      .join(' ');
-    expect(classes).not.toContain('cm-z-collapsed');
+    /*
+     * Проверяется тело, а не отсутствие класса вообще.
+     *
+     * Одна скрытая строка в развёрнутом блоке остаётся законно: пустая строка
+     * сразу под заголовком стоит там ради CommonMark (без неё markdown внутри
+     * не разбирается), человек её не писал и видеть не должен. Раньше тест
+     * требовал «ни одной скрытой строки» и на этой строительной подпорке
+     * падал, хотя тело как раз показывалось.
+     */
+    const hidden = new Set(
+      decorationsOf(twice)
+        .filter((deco) => (deco.class ?? '').includes('cm-z-collapsed'))
+        .map((deco) => deco.from),
+    );
+    const body = twice.doc.line(4);
+
+    expect(body.text, 'взята не та строка — проверка смотрит не на тело').toBe('Тело');
+    expect(hidden.has(body.from), 'тело осталось скрытым после разворачивания').toBe(false);
   });
 });
 
