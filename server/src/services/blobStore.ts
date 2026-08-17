@@ -23,7 +23,7 @@ import path from 'node:path';
  *    совпал файл.
  */
 
-export type BlobNamespace = 'blobs' | 'published';
+export type BlobNamespace = 'blobs' | 'published' | 'feedback';
 
 export interface StoredBlob {
   storageKey: string;
@@ -54,6 +54,22 @@ export class BlobStore {
   /** Ключ содержимого внутри аккаунта. */
   keyForContent(userId: string, sha256Hex: string): string {
     return path.posix.join('blobs', userId, sha256Hex.slice(0, 2), sha256Hex.slice(2, 4), sha256Hex);
+  }
+
+  /**
+   * Ключ снимка экрана, приложенного к обращению.
+   *
+   * В томе, а не в базе. Причина не в объёме: инвариант zero-knowledge (ТЗ
+   * §2.1.5) запрещает держать в БД что-либо, кроме шифротекста CRDT, и
+   * `bytea` со снимком его нарушал — сторож схемы это и поймал. Заодно снимок
+   * удаляется вместе с файлом, а не переписыванием строки.
+   *
+   * Аккаунта у обращения нет (форма работает без него), поэтому ключ считается
+   * от идентификатора обращения, а не от пользователя.
+   */
+  keyForFeedback(reportId: string): string {
+    const digest = createHash('sha256').update(`feedback:${reportId}`).digest('hex');
+    return path.posix.join('feedback', digest.slice(0, 2), digest.slice(2, 4), digest);
   }
 
   /** Ключ опубликованной страницы: у неё ровно одна текущая версия. */

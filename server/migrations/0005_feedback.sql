@@ -32,9 +32,14 @@ CREATE TABLE IF NOT EXISTS feedback (
   received_at   timestamptz NOT NULL DEFAULT now(),
   kind          text        NOT NULL
                             CHECK (kind IN ('broken', 'awkward', 'want-feature', 'other')),
-  -- Свободный текст. Единственное место продукта, где мы его принимаем, и он
-  -- идёт в поддержку, а не в аналитику.
-  body          text        NOT NULL,
+  -- Сообщение человека в поддержку. Единственное место продукта, где мы
+  -- принимаем свободный текст, и он идёт в поддержку, а не в аналитику.
+  --
+  -- Колонка называется `message`, а не `body`, намеренно: `body` — словарь
+  -- содержимого ЗАМЕТКИ, и сторож схемы (`schema.zero-knowledge.test.ts`)
+  -- запрещает его во всей базе. Запрет правильный, а имя было неточным:
+  -- здесь лежит не заметка, а письмо, которое человек написал нам сам.
+  message       text        NOT NULL,
   -- Контакт, оставленный ДОБРОВОЛЬНО. NULL — человек ответа не просил.
   contact       text,
   entry         text        NOT NULL
@@ -42,8 +47,11 @@ CREATE TABLE IF NOT EXISTS feedback (
   -- Обстоятельства и диагностика — как прислал клиент, уже в корзинах и кодах.
   context       jsonb,
   diagnostics   jsonb,
-  -- Скриншот прикладывается только явным действием и после предупреждения.
-  screenshot    bytea,
+  -- Снимок экрана прикладывается только явным действием и после
+  -- предупреждения. В базе лежит АДРЕС в томе, а не байты: инвариант
+  -- zero-knowledge оставляет в БД единственную бинарную колонку — шифротекст
+  -- CRDT (ТЗ §2.1.5). NULL — снимка нет.
+  screenshot_key text,
   -- Судьба обращения: new → triaged → answered → resolved.
   status        text        NOT NULL DEFAULT 'new'
                             CHECK (status IN ('new', 'triaged', 'answered', 'resolved')),
@@ -60,7 +68,7 @@ CREATE INDEX IF NOT EXISTS feedback_status_idx ON feedback (status, received_at)
 
 COMMENT ON COLUMN feedback.id IS
   'UUID с устройства: идемпотентность досылки из офлайн-очереди.';
-COMMENT ON COLUMN feedback.body IS
-  'Свободный текст обращения. В аналитику не попадает ни в каком виде (только корзина s/m/l).';
+COMMENT ON COLUMN feedback.message IS
+  'Сообщение человека в поддержку. В аналитику не попадает ни в каком виде (только корзина s/m/l).';
 COMMENT ON COLUMN feedback.contact IS
   'Контакт для ответа, оставленный добровольно. NULL — ответа не просили.';

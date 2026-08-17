@@ -98,8 +98,18 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
     if (!parsed.success) throw errors.badRequest('feedback_malformed');
     const report = parsed.data;
 
-    const screenshot =
-      report.screenshot === undefined ? null : Buffer.from(report.screenshot, 'base64');
+    /*
+     * Снимок ложится в том, а в базу едет его адрес: инвариант zero-knowledge
+     * (ТЗ §2.1.5) оставляет в БД единственную бинарную колонку — шифротекст
+     * CRDT. Пишем ДО вставки: строка со ссылкой на несуществующий файл хуже,
+     * чем файл без строки — второй просто займёт место, а первая соврёт тому,
+     * кто будет разбирать обращения.
+     */
+    let screenshotKey: string | null = null;
+    if (report.screenshot !== undefined) {
+      screenshotKey = ctx.blobs.keyForFeedback(report.id);
+      await ctx.blobs.writeAt(screenshotKey, Buffer.from(report.screenshot, 'base64'));
+    }
 
     /*
      * `ON CONFLICT DO NOTHING` — идемпотентность досылки. Ответ одинаковый и
@@ -107,7 +117,7 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
      * ему важно, что дошло.
      */
     await ctx.db.query(
-      `INSERT INTO feedback (id, created_at, kind, body, contact, entry, context, diagnostics, screenshot)
+      `INSERT INTO feedback (id, created_at, kind, message, contact, entry, context, diagnostics, screenshot_key)
          VALUES ($1, to_timestamp($2 / 1000.0), $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO NOTHING`,
       [
@@ -119,7 +129,7 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
         report.entry,
         report.context === undefined ? null : JSON.stringify(report.context),
         report.diagnostics === undefined ? null : JSON.stringify(report.diagnostics),
-        screenshot,
+        screenshotKey,
       ],
     );
 
@@ -145,7 +155,7 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
       created_at: Date;
       received_at: Date;
       kind: string;
-      body: string;
+      message: string;
       contact: string | null;
       entry: string;
       context: unknown;
@@ -153,8 +163,8 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
       has_screenshot: boolean;
       status: string;
     }>(
-      `SELECT id, created_at, received_at, kind, body, contact, entry, context, diagnostics,
-              screenshot IS NOT NULL AS has_screenshot, status
+      `SELECT id, created_at, received_at, kind, message, contact, entry, context, diagnostics,
+              screenshot_key IS NOT NULL AS has_screenshot, status
          FROM feedback
         WHERE ($1::timestamptz IS NULL OR received_at > $1::timestamptz)
         ORDER BY received_at ASC
@@ -168,7 +178,7 @@ export async function registerFeedbackRoutes(app: FastifyInstance): Promise<void
         createdAt: row.created_at.toISOString(),
         receivedAt: row.received_at.toISOString(),
         kind: row.kind,
-        text: row.body,
+        text: row.message,
         contact: row.contact,
         entry: row.entry,
         context: row.context,

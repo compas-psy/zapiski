@@ -94,8 +94,19 @@ describe.skipIf(noDatabase())('приём и выдача обращений', (
     await harness.close();
   });
 
+  /*
+   * Ответ достаётся из `await`, а не возвращается напрямую: `inject` объявлен
+   * как объединение «промис ответа» и цепочки-строителя, и из него TypeScript
+   * `statusCode` не выводит. Тело приводится к объекту, потому что часть
+   * проверок нарочно шлёт заведомо неверное — на то они и проверки.
+   */
   async function post(body: unknown) {
-    return harness.app.inject({ method: 'POST', url: '/api/v1/feedback', payload: body });
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/feedback',
+      payload: body as object,
+    });
+    return response;
   }
 
   it('обращение принимается без аккаунта и получает статус new', async () => {

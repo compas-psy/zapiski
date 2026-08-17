@@ -264,3 +264,9 @@ export {
   type FeedbackSubmittedEvent,
   type FeedbackSubmittedInput,
 } from './feedback/events.js';
+export {
+  DISMISS_QUIET_MS,
+  PROMPT_QUIET_MS,
+  shouldOfferFeedback,
+  type FeedbackPromptTimes,
+} from './feedback/prompt.js';

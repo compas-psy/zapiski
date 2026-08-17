@@ -62,11 +62,14 @@ import {
   type VaultStorage,
   type VersionSnapshot,
   buildFeedbackReport,
+  shouldOfferFeedback,
   isErrorCode,
   notesBucket,
   type DiagnosticsConsent,
+  type FeedbackContext,
   type FeedbackDiagnostics,
   type FeedbackDraft,
+  type FeedbackEntry,
   type FeedbackReport,
 } from '@zapiski/core';
 import type {
@@ -297,6 +300,23 @@ export interface AppState {
   authError: string | null;
   /** Идёт обмен токена после возврата по ссылке. */
   authBusy: boolean;
+
+  /**
+   * Полоса «Рассказать, что пошло не так?» — или `null`, если сейчас нечего
+   * предлагать.
+   *
+   * Это ПРЕДЛОЖЕНИЕ, а не ошибка: место в интерфейсе оно занимает одной
+   * строкой, закрывается крестиком и после отказа не возвращается неделю
+   * (`shouldOfferFeedback` в ядре). Приложение для психолога не имеет права
+   * дёргать человека между сессиями по каждому поводу.
+   */
+  feedbackPrompt: FeedbackPromptState | null;
+}
+
+/** Что показывает контекстная полоса и с чем откроется форма. */
+export interface FeedbackPromptState {
+  entry: FeedbackEntry;
+  context?: FeedbackContext;
 }
 
 export type Listener = () => void;
@@ -347,6 +367,7 @@ function initialState(locale: Locale): AppState {
     syncError: null,
     authError: null,
     authBusy: false,
+    feedbackPrompt: null,
   };
 }
 
@@ -355,6 +376,15 @@ export interface ToastRequest {
   actionLabel?: string | undefined;
   onAction?: (() => void | Promise<void>) | undefined;
 }
+
+/**
+ * С какой длительности операция считается «долгой» и стоит вопроса.
+ *
+ * Десять секунд — не круглое число ради круглого: столько человек ещё ждёт,
+ * глядя на экран, а дальше уходит в другое приложение и возвращается уже
+ * раздражённым. Спрашивать раньше значит спрашивать про норму.
+ */
+const SLOW_OPERATION_MS = 10_000;
 
 /** MIME-типы экспорта — платформа отдаёт файл пользователю (BEHAVIOR §9). */
 const MIME: Record<'md' | 'html' | 'docx', string> = {
@@ -920,6 +950,12 @@ export class AppController {
     if (vault.unreadable) {
       this.reportError(this.strings.errors.folderUnavailable);
       this.scheduleVaultRetry();
+      /* Недоступная папка — самый дорогой отказ продукта: человек видит пустоту
+         на месте своих заметок. Именно про него и стоит спросить, если правило
+         позволяет. Код, а не текст: наружу уезжает `FOLDER_UNAVAILABLE`, а
+         дословный ответ системы остаётся здесь. */
+      this.rememberErrorCode('FOLDER_UNAVAILABLE');
+      void this.offerFeedback('error', { errorCode: 'FOLDER_UNAVAILABLE', lastAction: 'open' });
     }
     /* Настройка не записалась — это про настройки, а не про папку. Онбординг
        повторится, заметки на месте. Бросать отсюда нельзя: вызывающий
@@ -2210,6 +2246,55 @@ export class AppController {
     }
   }
 
+  /**
+   * Открыть форму обращения.
+   *
+   * Контекст передаётся маршрутом, а не собирается экраном: к моменту, когда
+   * человек до формы дошёл, сбой уже позади, и спрашивать о нём состояние
+   * поздно. Полоса при этом гаснет — своё дело она сделала.
+   */
+  openFeedback(entry: FeedbackEntry, context?: FeedbackContext): void {
+    this.patch({ feedbackPrompt: null });
+    this.navigate({ name: 'feedback', entry, ...(context ? { context } : {}) });
+  }
+
+  /**
+   * Предложить рассказать о проблеме — если правило позволяет.
+   *
+   * Зовётся из мест, где что-то действительно не получилось: сбой синка,
+   * конфликт, недоступная папка, слишком долгая операция. Само правило
+   * («сутки после показа, неделя после отказа») живёт в ядре и проверено там;
+   * здесь только чтение и запись меток.
+   *
+   * Возвращает, показали ли. Молча ничего не делать — нормальный исход и не
+   * повод для сообщения: человек не просил приглашения.
+   */
+  async offerFeedback(entry: FeedbackEntry, context?: FeedbackContext): Promise<boolean> {
+    /* Форма уже открыта или полоса уже висит — второй раз не предлагаем. */
+    if (this.state.route.name === 'feedback' || this.state.feedbackPrompt !== null) return false;
+
+    const [promptedAt, dismissedAt] = await Promise.all([
+      this.host.prefs.get<number | null>(PREF.feedbackPromptedAt, null),
+      this.host.prefs.get<number | null>(PREF.feedbackDismissedAt, null),
+    ]);
+    if (!shouldOfferFeedback({ now: Date.now(), promptedAt, dismissedAt })) return false;
+
+    await this.host.prefs.set(PREF.feedbackPromptedAt, Date.now()).catch(() => undefined);
+    this.patch({ feedbackPrompt: { entry, ...(context ? { context } : {}) } });
+    return true;
+  }
+
+  /**
+   * Закрыть полосу крестиком — неделя тишины.
+   *
+   * Отказ это ответ, а не пауза. Переспросить назавтра значило бы его не
+   * услышать.
+   */
+  async dismissFeedbackPrompt(): Promise<void> {
+    this.patch({ feedbackPrompt: null });
+    await this.host.prefs.set(PREF.feedbackDismissedAt, Date.now()).catch(() => undefined);
+  }
+
   /** Сколько обращений ждёт сети. */
   pendingFeedback(): Promise<number> {
     return this.feedback.pending();
@@ -3420,6 +3505,9 @@ export class AppController {
       return;
     }
     this.patch({ sync: { ...this.state.sync, state: 'syncing' } });
+    /* Отсчёт для «долгой операции»: время меряем здесь, а не в подписи —
+       подпись меняется, а обещание «синк не должен занимать минуты» нет. */
+    const startedAt = Date.now();
     try {
       const outcome = await engine.sync();
       this.patch({ sync: outcome, syncError: outcome.error ?? null });
@@ -3434,9 +3522,29 @@ export class AppController {
         });
       }
       await this.refresh();
+
+      /* Точки входа в обратную связь. Порядок не случаен: конфликт — самое
+         дорогое, что может случиться с чужими заметками, и спрашивать надо
+         прежде всего о нём. */
+      if (outcome.conflicts > 0) {
+        void this.offerFeedback('sync_conflict', {
+          conflict: 'both-kept',
+          lastAction: 'sync',
+        });
+      } else if (outcome.error !== undefined) {
+        this.rememberErrorCode('SYNC_FAILED');
+        void this.offerFeedback('error', { errorCode: 'SYNC_FAILED', lastAction: 'sync' });
+      } else {
+        const durationMs = Date.now() - startedAt;
+        if (durationMs >= SLOW_OPERATION_MS) {
+          void this.offerFeedback('slow_op', { durationMs, lastAction: 'sync' });
+        }
+      }
     } catch {
       /* Сетевые ошибки — только в статусе синка, не модалками (BEHAVIOR §0). */
       this.reportError(this.strings.errors.syncFailed);
+      this.rememberErrorCode('SYNC_FAILED');
+      void this.offerFeedback('error', { errorCode: 'SYNC_FAILED', lastAction: 'sync' });
     }
   }
 
