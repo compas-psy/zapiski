@@ -95,7 +95,7 @@ beforeEach(() => {
 describe('свежая установка', () => {
   it('без облака хранилище открывается в каталоге приложения', async () => {
     prefsHolder.current = memoryPrefs();
-    const host = createHost();
+    const host = await createHost();
 
     const storage = await host.restoreVault('local');
 
@@ -117,7 +117,7 @@ describe('свежая установка', () => {
      */
     const prefs = memoryPrefs();
     prefsHolder.current = prefs;
-    const host = createHost();
+    const host = await createHost();
 
     await host.restoreVault('local');
     const storage = await host.restoreVault('ivan@ya.ru');
@@ -131,7 +131,7 @@ describe('свежая установка', () => {
        каталог не занимал — значит корень достаётся ему, и заметки лягут туда,
        где их видно из компьютера по USB. */
     prefsHolder.current = memoryPrefs();
-    const host = createHost();
+    const host = await createHost();
 
     const storage = await host.restoreVault('ivan@ya.ru');
 
@@ -144,7 +144,7 @@ describe('каталог приложения не открылся', () => {
   it('это и есть «папка недоступна» — единственный честный случай', async () => {
     prefsHolder.current = memoryPrefs();
     broken.add('/data/Записки');
-    const host = createHost();
+    const host = await createHost();
 
     expect(await host.restoreVault('local')).toBeNull();
   });

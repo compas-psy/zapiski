@@ -8,6 +8,7 @@ import { LOCAL_OWNER } from '@zapiski/core';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
+import { createBiometrics } from './platform/biometrics';
 import { onIntent, takeInitialIntent } from './platform/intents';
 import {
   adoptSafTree,
@@ -72,16 +73,30 @@ async function probePatiently(
   return { alive: null, answered };
 }
 
-export function createHost(): AppHost {
+/**
+ * Собрать `AppHost`.
+ *
+ * Асинхронна из-за одного поля — биометрии. `PlatformCapabilities.biometrics` по
+ * контракту поле, а не функция: интерфейс решает по нему, показывать ли тумблер
+ * «Использовать отпечаток», ещё до первого рендера. Значит доступность обязана
+ * быть выяснена ДО сборки возможностей — иначе тумблер либо появляется через
+ * секунду после открытия листа, либо (как было) показывается всегда и обещает
+ * то, чего на устройстве нет. Windows устроен так же
+ * (`apps/desktop/src/platform/host.ts`).
+ */
+export async function createHost(): Promise<AppHost> {
   /* Настройки нужны и платформе: в них лежит выбранная папка (ТЗ §4.1 п. 1). */
   const prefs = createPreferences();
+  /* Один вопрос устройству: есть ли стойкая биометрия. `null` — тумблера не
+     будет вовсе (BEHAVIOR §5.1). */
+  const biometrics = await createBiometrics();
   /* Чьё хранилище открыто последним. Нужен `openAttachment`: у него в
      сигнатуре владельца нет, а брать `local` — значит искать вложение в
      чужой папке. */
   let lastOwner: string = LOCAL_OWNER;
 
   return {
-    platform: createPlatform(prefs),
+    platform: createPlatform(prefs, biometrics),
     prefs,
     cloudBaseUrl: CLOUD_BASE_URL,
 

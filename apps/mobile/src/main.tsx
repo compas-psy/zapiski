@@ -18,7 +18,6 @@ import './shell.css';
 import '@zapiski/app/styles.css';
 
 import { createHost } from './host';
-import { EVENTS, on } from './platform/ipc';
 
 /**
  * Тема применяется до первого рендера: иначе тёмная тема мигает светлым на
@@ -36,11 +35,19 @@ if (container === null) throw new Error('в index.html нет #root');
 
 applyThemeEarly();
 
-const host = createHost();
-
-createRoot(container).render(
-  <StrictMode>
-    <App host={host} />
-  </StrictMode>,
-);
+/*
+ * Сборка хоста асинхронна из-за одного поля — биометрии: доступность нужно
+ * выяснить ДО первого рендера, иначе тумблер «Использовать отпечаток» либо
+ * мигает через секунду, либо обещает то, чего на устройстве нет (см. host.ts).
+ *
+ * Заметного ожидания это не добавляет: один вызов IPC, а тема уже применена
+ * выше, поэтому пустой кадр остаётся тем же самым, что и раньше.
+ */
+void createHost().then((host) => {
+  createRoot(container).render(
+    <StrictMode>
+      <App host={host} />
+    </StrictMode>,
+  );
+});
 

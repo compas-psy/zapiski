@@ -86,7 +86,18 @@ object Biometrics {
             // Ключ заведён с `userAuthenticationRequired`, поэтому даже
             // шифрование требует биометрии. Это не лишний шаг: человек, включая
             // тумблер, ровно один раз подтверждает, что телефон в его руках.
-            prompt(activity, context, cipher) { authenticated ->
+            prompt(
+                activity,
+                context,
+                cipher,
+                failed = { error ->
+                    // Ключ без сохранённого шифротекста бесполезен и мешает
+                    // следующей попытке: `createKey` перезапишет псевдоним, а
+                    // старый файл остался бы читаться чужим ключом.
+                    remove(context, keyId)
+                    NativeBridge.result(requestId, false, describe(error), null)
+                },
+            ) { authenticated ->
                 if (authenticated == null) {
                     // Отмена при включении тумблера: ключ не нужен.
                     remove(context, keyId)
@@ -138,7 +149,12 @@ object Biometrics {
                 init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
             }
 
-            prompt(activity, context, cipher) { authenticated ->
+            prompt(
+                activity,
+                context,
+                cipher,
+                failed = { error -> NativeBridge.result(requestId, false, describe(error), null) },
+            ) { authenticated ->
                 if (authenticated == null) {
                     // Отмена биометрии пользователем — не ошибка (BEHAVIOR §5.2):
                     // `ok = true` и пустые данные означают «показать пароль».
@@ -212,11 +228,33 @@ object Biometrics {
      * Системный диалог биометрии. `null` в колбэке — отмена или неуспех;
      * различать их незачем: BEHAVIOR §5.2 в обоих случаях показывает поле
      * пароля без единого сообщения.
+     *
+     * ── Почему здесь два уровня try/catch ───────────────────────────────────
+     *
+     * Всё, что ниже, выполняется на ГЛАВНОМ потоке: сам показ — через
+     * `runOnUiThread`, колбэки — через `mainExecutor`. А вызывающая сторона
+     * (`enroll`/`unlock`) к этому моменту уже вернулась из своего `try`, и её
+     * `catch` до сюда не достаёт. Значит любое исключение отсюда — необработанное
+     * исключение главного потока, то есть смерть процесса.
+     *
+     * Именно так выглядел отказ, с которым пришёл заказчик: «при включении
+     * биометрии приложение просто крашится». Ни тоста, ни строки в обратной
+     * связи — потому что показать их было уже некому. Первый кандидат на само
+     * исключение — `SecurityException` от `authenticate()` без разрешения
+     * `USE_BIOMETRIC` (его в манифесте не было; см. `apply-android-overlay.mjs`),
+     * но починка нужна независимо от того, какое исключение окажется там
+     * завтра: диалог биометрии не имеет права уносить с собой приложение.
+     *
+     * `failed` отделён от `done(null)` намеренно. `done(null)` означает
+     * «человек отказался, покажите пароль» — нормальный исход. Отказ системы —
+     * другое дело: он обязан назвать причину словами, иначе на устройстве, где
+     * консоли нет, разбираться будет нечем.
      */
     private fun prompt(
         activity: Activity,
         context: Context,
         cipher: Cipher,
+        failed: (Throwable) -> Unit,
         done: (Cipher?) -> Unit,
     ) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
@@ -224,37 +262,65 @@ object Biometrics {
             return
         }
         activity.runOnUiThread {
-            val builder = BiometricPrompt.Builder(context)
-                .setTitle(context.getString(R.string.biometric_title))
-                .setSubtitle(context.getString(R.string.biometric_subtitle))
-                .setNegativeButton(
-                    context.getString(R.string.biometric_cancel),
-                    context.mainExecutor,
-                ) { _, _ -> done(null) }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                builder.setConfirmationRequired(false)
+            /* Колбэки системы приходят на главный поток так же, как этот блок,
+               и точно так же не имеют права из него выпасть. */
+            val deliver = { authenticated: Cipher? ->
+                try {
+                    done(authenticated)
+                } catch (error: Throwable) {
+                    failed(error)
+                }
             }
+            try {
+                val builder = BiometricPrompt.Builder(context)
+                    .setTitle(context.getString(R.string.biometric_title))
+                    .setSubtitle(context.getString(R.string.biometric_subtitle))
+                    .setNegativeButton(
+                        context.getString(R.string.biometric_cancel),
+                        context.mainExecutor,
+                    ) { _, _ -> deliver(null) }
 
-            builder.build().authenticate(
-                BiometricPrompt.CryptoObject(cipher),
-                CancellationSignal(),
-                context.mainExecutor,
-                object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        done(result.cryptoObject?.cipher)
-                    }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    builder.setConfirmationRequired(false)
+                }
 
-                    override fun onAuthenticationError(code: Int, message: CharSequence) {
-                        done(null)
-                    }
+                builder.build().authenticate(
+                    BiometricPrompt.CryptoObject(cipher),
+                    CancellationSignal(),
+                    context.mainExecutor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            deliver(result.cryptoObject?.cipher)
+                        }
 
-                    override fun onAuthenticationFailed() {
-                        // Палец не подошёл — диалог остаётся открытым и человек
-                        // пробует ещё раз. Ответ Rust'у здесь не отправляем.
-                    }
-                },
-            )
+                        override fun onAuthenticationError(code: Int, message: CharSequence) {
+                            deliver(null)
+                        }
+
+                        override fun onAuthenticationFailed() {
+                            // Палец не подошёл — диалог остаётся открытым и человек
+                            // пробует ещё раз. Ответ Rust'у здесь не отправляем.
+                        }
+                    },
+                )
+            } catch (error: Throwable) {
+                failed(error)
+            }
         }
+    }
+
+    /**
+     * Причина отказа словами — с классом исключения.
+     *
+     * `SecurityException` и `IllegalStateException` в этом месте означают разные
+     * поломки сборки, а `message` у обеих бывает пустым. Без класса человек
+     * получил бы «биометрия недоступна» на любой из них, и починить по такому
+     * сообщению нечего. Содержимого заметок здесь нет и быть не может: сюда
+     * попадают только исключения системного диалога.
+     */
+    private fun describe(error: Throwable): String {
+        val kind = error.javaClass.simpleName
+        val message = error.message?.takeIf { it.isNotBlank() }
+        return if (message == null) "биометрия недоступна: $kind" else "биометрия недоступна: $kind: $message"
     }
 }

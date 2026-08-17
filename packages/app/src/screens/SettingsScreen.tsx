@@ -1285,6 +1285,21 @@ function AccountSection(): ReactNode {
       </div>
       <p className="za-muted za-hint">{strings.signIn.consentMarketingHint}</p>
 
+      {/*
+        Согласие на продуктовую аналитику (ТЗ §6, O-260817-05) — рядом с
+        рекламным, но отдельным тумблером и другими словами: это два разных
+        решения, и молчаливо связывать их с чек-ином самочувствия или друг с
+        другом нельзя (та же граница, что закрыла B-260817-03 в МОМЕНТАХ).
+      */}
+      <div className="za-field-row">
+        <Switch
+          label={strings.signIn.consentAnalytics}
+          checked={state.account.analyticsOptIn === true}
+          onChange={(event) => void app.setAnalyticsConsent(event.target.checked)}
+        />
+      </div>
+      <p className="za-muted za-hint">{strings.signIn.consentAnalyticsHint}</p>
+
       <Button variant="secondary" onClick={() => setConfirm(true)}>
         {copy.signOut}
       </Button>

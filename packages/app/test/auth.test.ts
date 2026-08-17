@@ -275,6 +275,62 @@ describe('сессия облака', () => {
     expect(await host.prefs.get('auth.session', null)).toMatchObject({ accessToken: 'access-1' });
     expect(await host.prefs.get('account', null)).toBeNull();
   });
+
+  it('согласие на аналитику из ответа сервера при входе доезжает до сессии (O-260817-05)', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, {
+      fetch: async () => jsonOk({ ...SESSION_BODY, user: { ...SESSION_BODY.user, analyticsOptIn: true } }),
+    });
+
+    await session.adopt({ magicToken: 'ottt' });
+
+    expect(session.current()?.analyticsOptIn).toBe(true);
+  });
+
+  it('дать согласие на аналитику — POST на analytics-consent с токеном, возвращает ответ сервера', async () => {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const host = createTestHost();
+    const session = new SessionStore(host, {
+      fetch: async (url, init) => {
+        calls.push({ url, init });
+        if (url.includes('analytics-consent')) return jsonOk({ analyticsOptIn: true });
+        return jsonOk(SESSION_BODY);
+      },
+    });
+    await session.adopt({ magicToken: 'ottt' });
+
+    const applied = await session.setAnalyticsConsent(true);
+
+    expect(applied).toBe(true);
+    const consentCall = calls.find((call) => call.url.includes('analytics-consent'));
+    expect(consentCall).toBeDefined();
+    expect(new URL(consentCall!.url).pathname).toBe('/api/v1/auth/analytics-consent');
+    expect(JSON.parse(consentCall!.init?.body as string)).toEqual({ optIn: true });
+    const headers = new Headers(consentCall!.init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer access-1');
+  });
+
+  it('отправка событий аналитики — на батч-ручку с токеном, без него не пытается', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+
+    /* Аккаунта ещё нет — отправлять точно нечем, и ходить в сеть незачем. */
+    expect(await session.sendAnalyticsEvents([{ event: 'note_saved' }])).toBe(false);
+
+    await session.adopt({ magicToken: 'ottt' });
+    const calls: string[] = [];
+    const authed = new SessionStore(host, {
+      fetch: async (url) => {
+        calls.push(url);
+        return jsonOk({ accepted: 1 });
+      },
+    });
+    await authed.load();
+    const ok = await authed.sendAnalyticsEvents([{ event: 'note_saved', props: {} }]);
+
+    expect(ok).toBe(true);
+    expect(calls.some((url) => new URL(url).pathname === '/api/v1/analytics/events')).toBe(true);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

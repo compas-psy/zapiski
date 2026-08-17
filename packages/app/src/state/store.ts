@@ -6,6 +6,9 @@
  * работает в вебе, на Windows и на Android (ARCHITECTURE §1).
  */
 import {
+  AnalyticsQueue,
+  buildAnalyticsEvent,
+  lengthBucket,
   ChangeQueue,
   LEGACY_CONTAINER_VERSION,
   MemoryVaultStorage,
@@ -61,6 +64,7 @@ import {
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
+  type AnalyticsEventName,
   buildFeedbackReport,
   joinTitle,
   shouldOfferFeedback,
@@ -150,6 +154,11 @@ export interface AccountState {
    * потому что и отзывается там же — в настройках, а не в переписке с нами.
    */
   marketingOptIn?: boolean;
+  /**
+   * Согласие на продуктовую аналитику (ТЗ §6, O-260817-05). По умолчанию
+   * выключено: до него `track()` не ставит в очередь и не отправляет ничего.
+   */
+  analyticsOptIn?: boolean;
 }
 
 /** Расшифрованная заметка живёт ТОЛЬКО в памяти (ТЗ §3.3, BEHAVIOR §5.3). */
@@ -566,6 +575,9 @@ export class AppController {
    * (она на диске, BEHAVIOR §6) и передаётся движку, когда место появляется.
    */
   private changes: ChangeQueue | null = null;
+  /** Очередь аналитики (O-260817-05) — живёт с хранилищем, как и `changes`. */
+  private analytics: AnalyticsQueue | null = null;
+  private analyticsFlushTimer: ReturnType<typeof setTimeout> | null = null;
   /** История версий доступна и без бэкенда: снапшоты лежат в `.zapiski/`. */
   private versions: VersionHistory | null = null;
   private backend: SyncBackend | null = null;
@@ -936,6 +948,11 @@ export class AppController {
        открыто, и терять его из-за очереди нельзя. */
     await changes.load().catch(() => undefined);
     this.changes = changes;
+    /* Та же дисциплина, что у `changes`: своя очередь на новое хранилище,
+       читаем накопленное с диска вместо того, чтобы начать с пустоты. */
+    const analytics = new AnalyticsQueue(storage);
+    await analytics.load().catch(() => undefined);
+    this.analytics = analytics;
     /* Движок — на новое место, и прямо здесь, а не побочным действием
        `resumeCloud` в конце метода: тот выходит раньше без живой сессии, и
        облако осталось бы привязанным к прежней папке. */
@@ -991,6 +1008,7 @@ export class AppController {
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.analyticsFlushTimer) clearTimeout(this.analyticsFlushTimer);
     if (this.vaultRetryTimer) clearTimeout(this.vaultRetryTimer);
     this.authOff?.();
     this.authOff = null;
@@ -1140,6 +1158,7 @@ export class AppController {
         email: session.email,
         plan: this.state.account?.plan ?? 'free',
         marketingOptIn: session.marketingOptIn === true,
+        analyticsOptIn: session.analyticsOptIn === true,
       },
     });
   }
@@ -1217,6 +1236,7 @@ export class AppController {
         /* Согласие приезжает из `/auth/me`: настройки обязаны показывать то,
            что записано на сервере, а не то, что человек нажимал год назад. */
         marketingOptIn: session.marketingOptIn === true,
+        analyticsOptIn: session.analyticsOptIn === true,
       });
       this.patch({ authBusy: false });
       /*
@@ -1339,6 +1359,25 @@ export class AppController {
     }
     const account = this.state.account;
     if (account) this.patch({ account: { ...account, marketingOptIn: applied } });
+    return applied;
+  }
+
+  /**
+   * Отозвать или снова дать согласие на продуктовую аналитику (ТЗ §6,
+   * O-260817-05). Тот же принцип: тумблер показывает то, что записал сервер.
+   * Отзыв ещё и стирает накопленную офлайн-очередь: то, что не успело уйти
+   * до отзыва, не должно уйти после него.
+   */
+  async setAnalyticsConsent(optIn: boolean): Promise<boolean> {
+    const applied = await this.session.setAnalyticsConsent(optIn).catch(() => null);
+    if (applied === null) {
+      this.toast({ message: this.strings.errors.syncFailed });
+      return this.state.account?.analyticsOptIn ?? false;
+    }
+    const account = this.state.account;
+    if (account) this.patch({ account: { ...account, analyticsOptIn: applied } });
+    if (applied) void this.flushAnalytics();
+    else await this.analytics?.clear();
     return applied;
   }
 
@@ -2601,6 +2640,7 @@ export class AppController {
         return;
       }
       this.touchLock(path);
+      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -2635,7 +2675,9 @@ export class AppController {
         await encryptNoteFileSafely(vault, this.crypto, path, body, key);
       } catch (error) {
         this.reportError(diskErrorMessage(error, this.strings));
+        return;
       }
+      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -2647,6 +2689,7 @@ export class AppController {
       return;
     }
     this.scheduleSync(path);
+    this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: false });
   }
 
   /**
@@ -2775,7 +2818,12 @@ export class AppController {
       this.patch({ results: [] });
       return;
     }
-    this.patch({ results: vault.index.search(parsed, 200) });
+    const results = vault.index.search(parsed, 200);
+    this.patch({ results });
+    this.track('note_searched', {
+      query_length_bucket: lengthBucket(parsed.text.length),
+      results_count: results.length,
+    });
   }
 
   /** Запомнить запрос в «НЕДАВНИЕ» (до 8, BEHAVIOR §4). */
@@ -2864,6 +2912,84 @@ export class AppController {
   /** Открыто ли хранилище прямо сейчас (ключ в памяти, автозамок не сработал). */
   get vaultUnlocked(): boolean {
     return this.master !== null;
+  }
+
+  /**
+   * В каком состоянии шифрование хранилища — три исхода, и путать их нельзя.
+   *
+   * ── Зачем этот метод появился ───────────────────────────────────────────────
+   *
+   * `hasVaultPassword()` отвечает «соль есть на диске», а зашифровать заметку
+   * можно только ключом В ПАМЯТИ. Между этими двумя фактами не стояло никого:
+   * лист шифрования спрашивал первое, `encryptNote` требовал второе и при
+   * несовпадении возвращал `null` — то есть «не удалось зашифровать».
+   *
+   * Заказчик попал ровно в эту щель: пароль однажды задан, приложение с тех пор
+   * перезапускалось, и шифрование перестало работать НАВСЕГДА — «Повторить»
+   * повторяло отказ, а ввести пароль было негде (его спрашивает только замок
+   * уже зашифрованной заметки). Геттер `vaultUnlocked` для этого состояния
+   * существовал и не спрашивался ни одним продуктовым файлом.
+   *
+   * ── Почему «нечего проверять» — это `none`, а не `locked` ────────────────────
+   *
+   * `locked` обязан вести к полю пароля, а поле пароля обязано уметь ответить
+   * «не подошёл». Если проверить пароль нечем (соль есть, а ни контрольного
+   * образца, ни одной зашифрованной заметки нет — например, запись
+   * `.zapiski/crypto.json` прошла, а до первой заметки дело не дошло), то
+   * единственный честный исход — завести пароль заново: терять нечего, потому
+   * что зашифрованного ничего нет. Молча принять любой введённый пароль было бы
+   * хуже всего: заметки уехали бы под ключ, который потом не проверяется.
+   */
+  async vaultLockState(): Promise<'none' | 'locked' | 'open'> {
+    if (this.master !== null) return 'open';
+    const vault = this.vault;
+    if (!vault) return 'none';
+    const salt = await this.vaultSalt();
+    if (!salt) return 'none';
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
+    if (stored?.check) return 'locked';
+    return this.state.notes.some((note) => note.encrypted) ? 'locked' : 'none';
+  }
+
+  /**
+   * Открыть хранилище паролем — без открытия конкретной заметки.
+   *
+   * Argon2id прогоняется РОВНО ОДИН раз: на телефоне это секунда с лишним, и
+   * «проверить, а потом вывести» стоило бы две. Поэтому ключ выводится сразу, а
+   * проверяется уже выведенным — контрольным образцом или любой зашифрованной
+   * заметкой.
+   *
+   * Три исхода те же, что у `verifyVaultPassword`, и `unknown` обязателен:
+   * «пароль не подошёл» и «нам нечем проверить пароль» — разные новости.
+   */
+  async unlockVault(password: string): Promise<PasswordCheck> {
+    const vault = this.vault;
+    if (!vault) return 'unknown';
+    /* Argon2id считает пустую строку значением, а не исключением; паролем
+       хранилища она быть не может (то же и в `verifyVaultPassword`). */
+    if (password === '') return 'wrong';
+    const salt = await this.vaultSalt();
+    if (!salt) return 'unknown';
+
+    const master = await this.crypto.deriveMaster(password, salt);
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
+    let ok = stored?.check ? await this.openCheck(stored.check, master) : null;
+    if (ok === null) {
+      /* Образца нет (второе устройство, старое хранилище) — проверяем заметкой. */
+      const encrypted = this.state.notes.find((note) => note.encrypted);
+      if (encrypted) {
+        const body = await decryptNoteFile(vault.storage, this.crypto, encrypted.path, master);
+        ok = body !== null;
+      }
+    }
+    if (ok === null) return 'unknown';
+    if (!ok) return 'wrong';
+
+    this.master = master;
+    /* Образец есть у всех, кто хоть раз открыл хранилище: иначе `unknown` из
+       проверки пароля становится обычным делом на втором устройстве. */
+    await this.rememberVault(master);
+    return 'ok';
   }
 
   /**
@@ -3040,7 +3166,21 @@ export class AppController {
   async encryptNote(path: VaultPath, hint?: string): Promise<VaultPath | null> {
     const vault = this.vault;
     const master = this.master;
-    if (!vault || !master) return null;
+    if (!vault) return null;
+    /*
+     * Закрытое хранилище — не отказ шифрования, и молчать здесь нельзя.
+     *
+     * Раньше эта строка возвращала `null` вместе со случаем «нет папки», и
+     * вызывающий показывал «Не удалось зашифровать заметку · Повторить» — на
+     * положение дел, которое повтором не лечится. Лист шифрования теперь
+     * спрашивает пароль сам (`vaultLockState`), но сообщение остаётся: до
+     * `encryptNote` можно дойти и из другого места, и оно обязано называть
+     * причину, а не выдавать её за поломку.
+     */
+    if (!master) {
+      this.reportError(this.strings.errors.vaultLocked);
+      return null;
+    }
     const source = await this.resolveSavePath(path);
     if ((await vault.storage.stat(source)) === null) return null;
     const target = await encryptNoteFile(vault.storage, this.crypto, source, master, hint);
@@ -3551,6 +3691,11 @@ export class AppController {
     return this.changes?.size ?? 0;
   }
 
+  /** Сколько аналитических событий ждут отправки (O-260817-05). */
+  analyticsPendingCount(): number {
+    return this.analytics?.size ?? 0;
+  }
+
   /** Показать в состоянии текущее число неотправленных. */
   private patchPending(): void {
     const pending = this.pendingCount();
@@ -3589,6 +3734,13 @@ export class AppController {
     try {
       const outcome = await engine.sync();
       this.patch({ sync: outcome, syncError: outcome.error ?? null });
+      if (outcome.error === undefined) {
+        this.track('sync_completed', {
+          pushed: outcome.pushed,
+          pulled: outcome.pulled,
+          conflicts: outcome.conflicts,
+        });
+      }
       for (const message of outcome.messages) this.toast({ message });
       if (options.announce === true && outcome.error === undefined) {
         this.toast({
@@ -3635,7 +3787,53 @@ export class AppController {
       },
       syncError: online ? this.state.syncError : null,
     });
-    if (online) void this.syncNow();
+    if (online) {
+      void this.syncNow();
+      void this.flushAnalytics();
+    }
+  }
+
+  // ── Аналитика (ТЗ §6, O-260817-05) ──────────────────────────────────────────
+  //
+  // Правило 2 (charter/12_ANALYTICS.md §1): содержание не измеряется никогда.
+  // `track` не принимает ничего, что не прошло через `buildAnalyticsEvent` —
+  // неизвестное имя события или поле, не объявленное в реестре, туда просто
+  // не попадёт (см. packages/core/src/analytics/schema.ts).
+
+  /**
+   * Поставить событие в очередь. Без согласия — молчаливый no-op: ничего не
+   * считается, не пишется на диск и не отправляется (до `analyticsOptIn` нет
+   * даже очереди на диске).
+   */
+  private track(name: AnalyticsEventName, props: Record<string, unknown>): void {
+    if (this.state.account?.analyticsOptIn !== true) return;
+    const queue = this.analytics;
+    if (!queue) return;
+    const event = buildAnalyticsEvent(name, props);
+    if (!event) return;
+    void queue.enqueue(event).then(() => {
+      if (this.state.online) void this.flushAnalytics();
+    });
+  }
+
+  /** Отправка накопленного — debounce, чтобы не дёргать сеть на каждое событие. */
+  private async flushAnalytics(): Promise<void> {
+    if (this.analyticsFlushTimer) return;
+    this.analyticsFlushTimer = setTimeout(() => {
+      this.analyticsFlushTimer = null;
+      void this.doFlushAnalytics();
+    }, 3000);
+  }
+
+  private async doFlushAnalytics(): Promise<void> {
+    const queue = this.analytics;
+    if (!queue || queue.size === 0 || !this.state.online) return;
+    if (this.state.account?.analyticsOptIn !== true) return;
+    const queued = queue.list();
+    const ok = await this.session
+      .sendAnalyticsEvents(queued.map((item) => item.event))
+      .catch(() => false);
+    if (ok) await queue.ack(queued.map((item) => item.id));
   }
 
   /** Ошибка живёт в статусе. Ввод текста она не трогает (приёмочный критерий №5). */
@@ -3672,10 +3870,12 @@ export class AppController {
       if (data.byteLength > 0) {
         await this.host.saveFile(`${note.title || stemOf(path)}.pdf`, data, 'application/pdf');
       }
+      this.track('export_requested', { format, notes_count: 1 });
       return;
     }
     const file = exportNote(note, format);
     await this.host.saveFile(file.name, file.data, MIME[format]);
+    this.track('export_requested', { format, notes_count: 1 });
   }
 
   /** Все заметки — zip со структурой папок и `attachments`. */
@@ -3685,6 +3885,7 @@ export class AppController {
     const paths = this.state.notes.filter((note) => !note.encrypted).map((note) => note.path);
     const data = await exportArchive(vault, paths);
     await this.host.saveFile('zapiski.zip', data, 'application/zip');
+    this.track('export_requested', { format: 'zip', notes_count: paths.length });
   }
 
   // ── Аккаунт ────────────────────────────────────────────────────────────────

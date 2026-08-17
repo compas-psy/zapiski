@@ -1,15 +1,27 @@
 /**
  * Установка шифрования — SCREENS §7 (`2e`), BEHAVIOR §5.1.
  *
- * Два состояния, и это следствие иерархии ключей (ТЗ §3.3):
+ * Три состояния, и это следствие иерархии ключей (ТЗ §3.3):
  *
- *  · пароля хранилища ещё нет — лист просит его завести: пароль, повтор,
- *    подсказка, тумблер биометрии, честное предупреждение. Это происходит
- *    ОДИН раз за всё время жизни хранилища;
- *  · пароль есть — полей нет вовсе, только кнопка. Спрашивать пароль на
- *    каждую заметку значило бы заводить по паролю на заметку, а это утопия:
- *    их невозможно запомнить, и человек либо ставит везде один, либо
- *    перестаёт шифровать.
+ *  · `none` — пароля хранилища ещё нет: лист просит его завести (пароль,
+ *    повтор, подсказка, тумблер биометрии, честное предупреждение). Это
+ *    происходит ОДИН раз за всё время жизни хранилища;
+ *  · `locked` — пароль задан, но ключа в памяти нет: лист просит пароль ОДНИМ
+ *    полем и открывает хранилище на месте;
+ *  · `open` — ключ в памяти: полей нет вовсе, только кнопка. Спрашивать пароль
+ *    на каждую заметку значило бы заводить по паролю на заметку, а это утопия:
+ *    их невозможно запомнить, и человек либо ставит везде один, либо перестаёт
+ *    шифровать.
+ *
+ * ── Откуда взялось состояние `locked` ───────────────────────────────────────
+ *
+ * Его не было, и это стоило заказчику работающего шифрования. Лист спрашивал
+ * `hasVaultPassword()` — «соль есть на диске», — а `encryptNote` требует ключ в
+ * памяти. Пароль задаётся один раз, приложение с тех пор перезапускается, ключ
+ * в памяти не живёт — и лист показывал одну кнопку, которая отвечала «Не удалось
+ * зашифровать заметку · Повторить». «Повторить» повторяло отказ, а ввести пароль
+ * было негде: его спрашивает только замок УЖЕ зашифрованной заметки. То есть
+ * зашифровать первую заметку после перезапуска стало невозможно.
  *
  * Несовпадение повтора показывается только после blur второго поля.
  */
@@ -36,24 +48,44 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
   const [useBiometrics, setUseBiometrics] = useState(true);
   const [busy, setBusy] = useState(false);
   /* `null` — ещё не знаем: сходить на диск надо, а гадать нельзя. */
-  const [needsPassword, setNeedsPassword] = useState<boolean | null>(null);
+  const [lock, setLock] = useState<'none' | 'locked' | 'open' | null>(null);
+  /* Отказ пароля в состоянии `locked`: «не подошёл» и «проверить нечем» — разные
+     новости, и вторую нельзя показывать первой. */
+  const [verdict, setVerdict] = useState<'wrong' | 'unknown' | null>(null);
+  /*
+   * Умеет ли устройство биометрию. Спрашивается вместе с состоянием замка, до
+   * первого показа полей, — поэтому тумблер не «появляется через секунду».
+   *
+   * Проверка здесь ВТОРАЯ: с этой правки `platform.biometrics` уже равен `null`
+   * там, где биометрии нет (так было на Windows и не было на Android). Но
+   * «умеет» может измениться и после включения — человек снял все отпечатки в
+   * системе, — и предлагать палец в этот момент значит обещать несуществующее.
+   */
+  const [biometricsReady, setBiometricsReady] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     let alive = true;
-    void app.hasVaultPassword().then((has) => {
-      if (alive) setNeedsPassword(!has);
+    const provider = app.host.platform.biometrics;
+    void Promise.all([
+      app.vaultLockState(),
+      provider ? provider.isAvailable().catch(() => false) : Promise.resolve(false),
+    ]).then(([state, available]) => {
+      if (!alive) return;
+      setLock(state);
+      setBiometricsReady(available);
     });
     return () => {
       alive = false;
     };
   }, [app, open]);
 
-  const biometrics = app.host.platform.biometrics;
   const tooShort = password.length > 0 && password.length < MIN_LENGTH;
   const mismatch = repeat.length > 0 && repeat !== password;
   const ready =
-    needsPassword === false || (password.length >= MIN_LENGTH && repeat === password);
+    lock === 'open' ||
+    (lock === 'locked' && password.length > 0) ||
+    (lock === 'none' && password.length >= MIN_LENGTH && repeat === password);
   /* Три деления, приглушённые цвета, без «слабый/плохой» (BEHAVIOR §5.1). */
   const strength = strengthOf(password);
 
@@ -74,7 +106,24 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
     setBusy(true);
     try {
       /* Пароль задаётся только в первый раз; дальше шифрование молчит. */
-      if (needsPassword) await app.setVaultPassword(password, Boolean(biometrics) && useBiometrics);
+      if (lock === 'none') await app.setVaultPassword(password, biometricsReady && useBiometrics);
+      if (lock === 'locked') {
+        /*
+         * Открыть хранилище на месте. Ровно этого шага и не хватало: без него
+         * шифрование отвечало отказом, который не лечится повтором.
+         *
+         * `setVaultPassword` здесь звать НЕЛЬЗЯ, хотя соблазн есть: он вывел бы
+         * ключ из любого введённого пароля и перезаписал контрольный образец —
+         * то есть при опечатке объявил бы новым паролем хранилища опечатку, а
+         * уже зашифрованные заметки перестали бы открываться чем-либо.
+         */
+        const opened = await app.unlockVault(password);
+        if (opened !== 'ok') {
+          setVerdict(opened);
+          return;
+        }
+        setVerdict(null);
+      }
       const target = await app.encryptNote(path, hint || undefined);
       if (target === null) {
         app.toast({ message: strings.errors.encryptFailed });
@@ -95,10 +144,10 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
     <BottomSheet
       open={open}
       onClose={onClose}
-      title={needsPassword === false ? strings.crypto.encryptTitle : strings.crypto.setupTitle}
+      title={lock === 'none' ? strings.crypto.setupTitle : strings.crypto.encryptTitle}
       footer={
         <Button fullWidth disabled={!ready} loading={busy} onClick={() => void submit()}>
-          {strings.crypto.encrypt}
+          {lock === 'locked' ? strings.crypto.unlockAndEncrypt : strings.crypto.encrypt}
         </Button>
       }
     >
@@ -107,11 +156,47 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
           <IconLock size={18} />
         </span>
 
-        {needsPassword === false ? (
+        {lock === 'open' ? (
           <InfoNote icon={<IconInfo size={15} />}>{strings.crypto.reuseVaultPassword}</InfoNote>
         ) : null}
 
-        {needsPassword ? (
+        {/*
+          Хранилище закрыто: одно поле и ничего больше.
+
+          Повтора здесь нет и быть не должно — пароль уже существует, и «введите
+          дважды» на входе означало бы, что мы не знаем, чего просим. Подсказки
+          про 8 символов тоже нет: правило длины относится к установке пароля, а
+          не к вводу существующего.
+        */}
+        {lock === 'locked' ? (
+          <>
+            <InfoNote icon={<IconInfo size={15} />}>{strings.crypto.lockedVaultNote}</InfoNote>
+            <TextField
+              type="password"
+              label={strings.crypto.password}
+              value={password}
+              autoComplete="current-password"
+              error={
+                verdict === 'wrong'
+                  ? strings.errors.wrongPassword
+                  : verdict === 'unknown'
+                    ? strings.crypto.cannotCheckPassword
+                    : undefined
+              }
+              showError={verdict !== null}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                /* Сообщение об отказе живёт до следующей попытки, а не до
+                   следующего символа: иначе оно исчезает раньше, чем человек
+                   успел его прочитать. Но как только он начал править пароль,
+                   оно уже про прошлое. */
+                if (verdict !== null) setVerdict(null);
+              }}
+            />
+          </>
+        ) : null}
+
+        {lock === 'none' ? (
           <>
         {/*
           Правило длины — подсказкой, а не только ошибкой.
@@ -175,8 +260,17 @@ export function EncryptSheet({ open, path, onClose }: EncryptSheetProps): ReactN
           onChange={(event) => setHint(event.target.value)}
         />
 
-        {/* Платформа без биометрии — тумблер скрыт, не «выключен и недоступен». */}
-        {biometrics ? (
+        {/*
+          Устройство без биометрии — тумблер скрыт, не «выключен и недоступен»
+          (BEHAVIOR §5.1).
+
+          Раньше здесь стояло `platform.biometrics ?`, то есть «есть ли порт», —
+          а порт на Android заявлялся всегда. Тумблер показывался на любом
+          телефоне, включённым по умолчанию, и человек, нажав «Зашифровать»,
+          получал крах приложения на системном диалоге, которого на этом
+          устройстве быть не могло. Теперь спрашивается сама возможность.
+        */}
+        {biometricsReady ? (
           <Switch
             label={strings.crypto.biometricsToggle}
             checked={useBiometrics}

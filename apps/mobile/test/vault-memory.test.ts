@@ -189,7 +189,7 @@ describe('открытие хранилища на старте', () => {
     prefsHolder.current = prefs;
 
     const { createHost } = await import('../src/host');
-    const storage = await createHost().restoreVault();
+    const storage = await (await createHost()).restoreVault();
 
     expect(storage, 'молчащая папка подменена каталогом приложения').toBeNull();
     expect(prefs.store.get(PREF_SAF_TREE)).toBe('content://tree/notes');
@@ -204,7 +204,7 @@ describe('открытие хранилища на старте', () => {
     prefsHolder.current = prefs;
 
     const { createHost } = await import('../src/host');
-    const storage = await createHost().restoreVault();
+    const storage = await (await createHost()).restoreVault();
 
     /* Хранилище не открылось — и это правильный ответ: «сейчас не знаю, где
        заметки». Неправильным было бы молча открыть каталог приложения. */
@@ -282,7 +282,7 @@ describe('выбор папки переживает смерть процесс
     prefsHolder.current = prefs;
 
     const { createHost } = await import('../src/host');
-    const storage = await createHost().restoreVault();
+    const storage = await (await createHost()).restoreVault();
 
     expect(storage, 'запуск не нашёл выбранную папку').toEqual({
       kind: 'saf',

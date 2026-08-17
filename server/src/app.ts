@@ -7,6 +7,7 @@ import type { AppContext } from './context.ts';
 import { ApiError, errors } from './lib/errors.ts';
 import { redactPaths, serializers } from './lib/logging.ts';
 import { registerAuth } from './plugins/auth.ts';
+import { registerAnalyticsRoutes } from './routes/analytics.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBillingRoutes } from './routes/billing.ts';
 import { registerFeedbackRoutes } from './routes/feedback.ts';
@@ -228,6 +229,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   await registerPublishRoutes(app);
   await registerUpdateRoutes(app);
   await registerFeedbackRoutes(app);
+  await registerAnalyticsRoutes(app);
 
   return app;
 }

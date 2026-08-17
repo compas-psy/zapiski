@@ -33,6 +33,8 @@ export const en: Catalog = {
     conflictEncrypted: 'The note changed on two devices. Both versions are kept',
     imageInsertFailed: 'Could not insert the image · Retry',
     encryptFailed: 'Could not encrypt the note · Retry',
+    /** The vault is locked — not the same thing as “could not encrypt”. */
+    vaultLocked: 'The vault is locked · Enter the password',
     subscriptionExpired: 'The subscription has ended. Your notes are here, syncing via Zapiski Cloud is paused',
     subscriptionRequired:
       'Syncing via Zapiski Cloud is part of the subscription. Your notes are here and open as usual',
