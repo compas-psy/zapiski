@@ -21,10 +21,14 @@
  * обстоятельствах: скрытый тумблер честен, выключенный — обманывает.
  */
 import { LOCAL_OWNER } from '@zapiski/core';
-import type { PlatformCapabilities, VaultLocation, VaultLocationInfo } from '@zapiski/core';
+import type {
+  BiometricProvider,
+  PlatformCapabilities,
+  VaultLocation,
+  VaultLocationInfo,
+} from '@zapiski/core';
 import type { PreferencesStore } from '@zapiski/app';
 
-import { createBiometrics } from './biometrics';
 import { createHaptics } from './haptics';
 import { COMMANDS, call } from './ipc';
 import {
@@ -278,7 +282,18 @@ function safLocation(tree: SafTree): VaultLocation {
   };
 }
 
-export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
+export function createPlatform(
+  prefs: PreferencesStore,
+  /**
+   * Биометрия — уже выясненная, а не выясняемая.
+   *
+   * `PlatformCapabilities.biometrics` по контракту поле: интерфейс решает по
+   * нему, показывать ли тумблер, ещё до первого рендера. Поэтому доступность
+   * спрашивается один раз в `createHost` и приезжает сюда готовым ответом —
+   * `null` означает «на этом устройстве биометрии нет», и тумблера не будет.
+   */
+  biometrics: BiometricProvider | null,
+): PlatformCapabilities {
   /**
    * Каталог приложения: настоящие `.md`, запись атомарна (ТЗ §4.3).
    *
@@ -298,7 +313,7 @@ export function createPlatform(prefs: PreferencesStore): PlatformCapabilities {
   return {
     kind: 'android',
     version: __ZAPISKI_VERSION__,
-    biometrics: createBiometrics(),
+    biometrics,
     haptics: createHaptics(),
     globalHotkey: null,
     shareTarget: createShareTarget(),

@@ -2634,6 +2634,84 @@ export class AppController {
   }
 
   /**
+   * В каком состоянии шифрование хранилища — три исхода, и путать их нельзя.
+   *
+   * ── Зачем этот метод появился ───────────────────────────────────────────────
+   *
+   * `hasVaultPassword()` отвечает «соль есть на диске», а зашифровать заметку
+   * можно только ключом В ПАМЯТИ. Между этими двумя фактами не стояло никого:
+   * лист шифрования спрашивал первое, `encryptNote` требовал второе и при
+   * несовпадении возвращал `null` — то есть «не удалось зашифровать».
+   *
+   * Заказчик попал ровно в эту щель: пароль однажды задан, приложение с тех пор
+   * перезапускалось, и шифрование перестало работать НАВСЕГДА — «Повторить»
+   * повторяло отказ, а ввести пароль было негде (его спрашивает только замок
+   * уже зашифрованной заметки). Геттер `vaultUnlocked` для этого состояния
+   * существовал и не спрашивался ни одним продуктовым файлом.
+   *
+   * ── Почему «нечего проверять» — это `none`, а не `locked` ────────────────────
+   *
+   * `locked` обязан вести к полю пароля, а поле пароля обязано уметь ответить
+   * «не подошёл». Если проверить пароль нечем (соль есть, а ни контрольного
+   * образца, ни одной зашифрованной заметки нет — например, запись
+   * `.zapiski/crypto.json` прошла, а до первой заметки дело не дошло), то
+   * единственный честный исход — завести пароль заново: терять нечего, потому
+   * что зашифрованного ничего нет. Молча принять любой введённый пароль было бы
+   * хуже всего: заметки уехали бы под ключ, который потом не проверяется.
+   */
+  async vaultLockState(): Promise<'none' | 'locked' | 'open'> {
+    if (this.master !== null) return 'open';
+    const vault = this.vault;
+    if (!vault) return 'none';
+    const salt = await this.vaultSalt();
+    if (!salt) return 'none';
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
+    if (stored?.check) return 'locked';
+    return this.state.notes.some((note) => note.encrypted) ? 'locked' : 'none';
+  }
+
+  /**
+   * Открыть хранилище паролем — без открытия конкретной заметки.
+   *
+   * Argon2id прогоняется РОВНО ОДИН раз: на телефоне это секунда с лишним, и
+   * «проверить, а потом вывести» стоило бы две. Поэтому ключ выводится сразу, а
+   * проверяется уже выведенным — контрольным образцом или любой зашифрованной
+   * заметкой.
+   *
+   * Три исхода те же, что у `verifyVaultPassword`, и `unknown` обязателен:
+   * «пароль не подошёл» и «нам нечем проверить пароль» — разные новости.
+   */
+  async unlockVault(password: string): Promise<PasswordCheck> {
+    const vault = this.vault;
+    if (!vault) return 'unknown';
+    /* Argon2id считает пустую строку значением, а не исключением; паролем
+       хранилища она быть не может (то же и в `verifyVaultPassword`). */
+    if (password === '') return 'wrong';
+    const salt = await this.vaultSalt();
+    if (!salt) return 'unknown';
+
+    const master = await this.crypto.deriveMaster(password, salt);
+    const stored = await readJson<VaultKeyFile>(vault.storage, VAULT_KEY_PATH);
+    let ok = stored?.check ? await this.openCheck(stored.check, master) : null;
+    if (ok === null) {
+      /* Образца нет (второе устройство, старое хранилище) — проверяем заметкой. */
+      const encrypted = this.state.notes.find((note) => note.encrypted);
+      if (encrypted) {
+        const body = await decryptNoteFile(vault.storage, this.crypto, encrypted.path, master);
+        ok = body !== null;
+      }
+    }
+    if (ok === null) return 'unknown';
+    if (!ok) return 'wrong';
+
+    this.master = master;
+    /* Образец есть у всех, кто хоть раз открыл хранилище: иначе `unknown` из
+       проверки пароля становится обычным делом на втором устройстве. */
+    await this.rememberVault(master);
+    return 'ok';
+  }
+
+  /**
    * Соль хранилища — та, из которой выводится ключ.
    *
    * Ищется по трём местам подряд, и порядок здесь важнее самих мест:
@@ -2807,7 +2885,21 @@ export class AppController {
   async encryptNote(path: VaultPath, hint?: string): Promise<VaultPath | null> {
     const vault = this.vault;
     const master = this.master;
-    if (!vault || !master) return null;
+    if (!vault) return null;
+    /*
+     * Закрытое хранилище — не отказ шифрования, и молчать здесь нельзя.
+     *
+     * Раньше эта строка возвращала `null` вместе со случаем «нет папки», и
+     * вызывающий показывал «Не удалось зашифровать заметку · Повторить» — на
+     * положение дел, которое повтором не лечится. Лист шифрования теперь
+     * спрашивает пароль сам (`vaultLockState`), но сообщение остаётся: до
+     * `encryptNote` можно дойти и из другого места, и оно обязано называть
+     * причину, а не выдавать её за поломку.
+     */
+    if (!master) {
+      this.reportError(this.strings.errors.vaultLocked);
+      return null;
+    }
     const source = await this.resolveSavePath(path);
     if ((await vault.storage.stat(source)) === null) return null;
     const target = await encryptNoteFile(vault.storage, this.crypto, source, master, hint);

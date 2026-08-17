@@ -192,6 +192,108 @@ check((await page.locator('.cm-content').count()) > 0, 'верный парол�
 const bodyText = await page.locator('.cm-content').innerText().catch(() => '');
 check(bodyText.includes('тайная строка'), 'текст после разблокировки не тот', bodyText.slice(0, 80));
 
+// ── 5б. Шифрование ПОСЛЕ перезапуска — состояние, которого здесь не было ──
+//
+// Это и есть отказ, с которым пришёл заказчик: «при попытке шифровать выдаётся
+// ошибка». Пароль хранилища задаётся один раз (ТЗ §3.3), ключ живёт только в
+// памяти сеанса — значит после каждого перезапуска существует состояние
+// «пароль есть, ключа нет». Лист шифрования его не знал: он спрашивал «есть ли
+// соль на диске», а `encryptNote` требует ключ, и человек получал «Не удалось
+// зашифровать заметку · Повторить». Повтор повторял отказ, а ввести пароль было
+// негде — его спрашивает только замок УЖЕ зашифрованной заметки.
+//
+// Прогон этого не видел по той же причине, по какой не видели тесты: он шифровал
+// одну заметку в том же сеансе, где задал пароль, а перезагружал страницу ПОСЛЕ.
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForTimeout(2500);
+
+const newNote = page.getByRole('button', { name: /Новая заметка|New note/ }).first();
+check((await newNote.count()) > 0, 'после перезагрузки нечем создать заметку');
+await newNote.click();
+await page.waitForTimeout(1200);
+await page.locator('.za-editor__title').click();
+await page.keyboard.type('Вторая тайна', { delay: 15 });
+await page.locator('.cm-content').click();
+await page.keyboard.type('вторая тайная строка', { delay: 15 });
+await page.waitForTimeout(1600);
+
+await page.locator('.za-header__actions button').last().click();
+await page.waitForTimeout(600);
+await page.getByText('Зашифровать', { exact: true }).first().click();
+await page.waitForTimeout(900);
+
+const lockedSheet = page.locator('.z-sheet, .z-modal, [role=dialog]').first();
+const lockedSheetText = await lockedSheet.innerText().catch(() => '');
+check(
+  lockedSheetText.includes('Хранилище закрыто'),
+  'закрытое хранилище не названо: лист молчит о том, почему шифрование не пойдёт',
+  JSON.stringify(lockedSheetText.slice(0, 160)),
+);
+const unlockAndEncrypt = page.getByRole('button', { name: /^Разблокировать и зашифровать$/ }).last();
+check(
+  (await unlockAndEncrypt.count()) > 0,
+  'в закрытом хранилище нет кнопки, которая открывает и шифрует за один раз',
+);
+// Повтора пароля здесь быть не должно: пароль уже существует.
+check(
+  (await field('Повторите пароль').count()) === 0,
+  'у существующего пароля спрашивают повтор — значит мы не знаем, чего просим',
+);
+
+/*
+ * Дальше — только если поле пароля вообще появилось.
+ *
+ * Без этой развилки прогон с прежним поведением падал `TimeoutError` на
+ * `locator.fill`, то есть жаловался на локатор вместо продукта. Отчёт обязан
+ * называть отказ словами: «поля пароля нет» — это и есть тот тупик, из которого
+ * человек не может выйти.
+ */
+const vaultPasswordField = field('Пароль');
+if ((await vaultPasswordField.count()) === 0) {
+  check(false, 'в закрытом хранилище нет поля пароля — зашифровать нечем, выхода из тупика нет');
+} else {
+  // Неверный пароль обязан быть назван словами, а не «не удалось зашифровать».
+  await fill('Пароль', 'совсем не тот');
+  await unlockAndEncrypt.click();
+  await page.waitForTimeout(2500);
+  const afterWrongVault = await lockedSheet.innerText().catch(() => '');
+  check(
+    afterWrongVault.includes('Пароль не подошёл'),
+    'неверный пароль хранилища не объяснён в листе шифрования',
+    JSON.stringify(afterWrongVault.slice(0, 160)),
+  );
+
+  await fill('Пароль', PASSWORD);
+  await page.getByRole('button', { name: /^Разблокировать и зашифровать$/ }).last().click();
+  await page.waitForTimeout(3000);
+  check(
+    (await page.locator('.z-sheet, .z-modal, [role=dialog]').count()) === 0,
+    'лист шифрования не закрылся после верного пароля',
+  );
+  const secondLocked = await page
+    .locator('.za-editor__lock, .za-locked, .za-editor')
+    .innerText()
+    .catch(() => '');
+  check(
+    (await page.locator('.za-row').filter({ hasText: 'Вторая тайна' }).count()) > 0,
+    'вторая заметка исчезла из списка после шифрования',
+    JSON.stringify(secondLocked.slice(0, 120)),
+  );
+}
+
+/*
+ * Убрать лист со дороги, чем бы дело ни кончилось.
+ *
+ * Иначе оставшийся открытым лист перехватывает нажатия, и следующие разделы
+ * падают таймаутом клика — то есть прогон рапортует о поломке настроек, хотя
+ * сломано шифрование. Одна забытая модалка так превращает точный отчёт в
+ * загадку; проверено на себе при первой же проверке этого сторожа.
+ */
+if ((await page.locator('.z-sheet, .z-modal, [role=dialog]').count()) > 0) {
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(700);
+}
+
 // ── 6. Настройки → Безопасность ───────────────────────────────────────────
 await page.getByRole('button', { name: 'Настройки', exact: true }).first().click();
 await page.waitForTimeout(1000);

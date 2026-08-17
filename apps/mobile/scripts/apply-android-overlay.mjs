@@ -43,7 +43,11 @@ const GENERATED_MAIN = join(GENERATED_DIR, 'app', 'src', 'main');
 const BEGIN = '<!-- BEGIN zapiski overlay: apps/mobile/scripts/apply-android-overlay.mjs -->';
 const END = '<!-- END zapiski overlay -->';
 
-/** Разрешения, без которых оболочка не работает. */
+/**
+ * Разрешения, без которых оболочка не работает.
+ *
+ * Строка — просто имя; объект — имя с ограничением по версии (`maxSdkVersion`).
+ */
 const PERMISSIONS = [
   // Фид обновлений и загрузка APK.
   'android.permission.INTERNET',
@@ -51,6 +55,39 @@ const PERMISSIONS = [
   'android.permission.VIBRATE',
   // Установка скачанного обновления системным установщиком.
   'android.permission.REQUEST_INSTALL_PACKAGES',
+  /*
+   * Биометрия: `BiometricPrompt.authenticate()` и `BiometricManager
+   * .canAuthenticate()` помечены `@RequiresPermission(USE_BIOMETRIC)`, и без
+   * строки в манифесте система отвечает `SecurityException`.
+   *
+   * Разрешения здесь не было, и это стоило дорого. `canAuthenticate` из
+   * `Biometrics.available()` глотал исключение и отвечал «биометрии нет» —
+   * поэтому палец не предлагался на замке ни разу. А `authenticate` из
+   * `enroll` бросал то же исключение на ГЛАВНОМ потоке, где его никто не
+   * ловил: заказчик получил «при включении биометрии приложение просто
+   * крашится». Уровень защиты `normal` — у человека ничего не спрашивают,
+   * строка нужна ровно для того, чтобы система пустила нас к диалогу.
+   */
+  'android.permission.USE_BIOMETRIC',
+  /*
+   * Android 9: `BiometricManager` появился только в 10, поэтому на 9 честный
+   * ответ про «есть ли отпечаток» даёт `FingerprintManager` — а он требует
+   * своё, уже устаревшее разрешение. `maxSdkVersion` держит его ровно там, где
+   * оно нужно, и не тащит в листинг на новых версиях.
+   */
+  { name: 'android.permission.USE_FINGERPRINT', maxSdkVersion: 28 },
+];
+
+/**
+ * Возможности устройства, которые нам полезны, но не обязательны.
+ *
+ * `required="false"` здесь принципиально: с `true` Play спрятал бы приложение
+ * от планшетов без сканера отпечатка, хотя шифрование там работает паролем и
+ * ничего не теряет.
+ */
+const FEATURES = [
+  'android.hardware.biometrics',
+  'android.hardware.fingerprint',
 ];
 
 /**
@@ -272,14 +309,25 @@ export function patchManifest(source) {
   );
   manifest = manifest.replace(previous, '');
 
-  // 2. Разрешения — перед <application>, если их ещё нет.
-  const missing = PERMISSIONS.filter(
-    (name) => !manifest.includes(`android:name="${name}"`),
-  );
+  // 2. Разрешения и возможности — перед <application>, если их ещё нет.
+  const declarations = [
+    ...PERMISSIONS.map((entry) => (typeof entry === 'string' ? { name: entry } : entry)).map(
+      ({ name, maxSdkVersion }) => ({
+        name,
+        line:
+          maxSdkVersion === undefined
+            ? `    <uses-permission android:name="${name}" />`
+            : `    <uses-permission android:name="${name}" android:maxSdkVersion="${maxSdkVersion}" />`,
+      }),
+    ),
+    ...FEATURES.map((name) => ({
+      name,
+      line: `    <uses-feature android:name="${name}" android:required="false" />`,
+    })),
+  ];
+  const missing = declarations.filter(({ name }) => !manifest.includes(`android:name="${name}"`));
   if (missing.length > 0) {
-    const block = missing
-      .map((name) => `    <uses-permission android:name="${name}" />`)
-      .join('\n');
+    const block = missing.map(({ line }) => line).join('\n');
     manifest = insertBefore(manifest, /<application\b/, `${BEGIN}\n${block}\n    ${END}\n    `);
   }
 
@@ -505,6 +553,11 @@ const EXPECTATIONS = [
   ['разрешение INTERNET', 'android:name="android.permission.INTERNET"'],
   ['разрешение VIBRATE', 'android:name="android.permission.VIBRATE"'],
   ['разрешение REQUEST_INSTALL_PACKAGES', 'android:name="android.permission.REQUEST_INSTALL_PACKAGES"'],
+  /* Без этой строки диалог биометрии отвечает SecurityException — на главном
+     потоке, то есть крахом приложения. Сборка обязана падать, если она уедет. */
+  ['разрешение USE_BIOMETRIC', 'android:name="android.permission.USE_BIOMETRIC"'],
+  ['разрешение USE_FINGERPRINT для Android 9', 'android:name="android.permission.USE_FINGERPRINT"'],
+  ['сканер отпечатка необязателен', 'android:name="android.hardware.fingerprint" android:required="false"'],
   ['свой Application', 'android:name=".ZapiskiApplication"'],
   ['выключенный авто-бэкап', 'android:allowBackup="false"'],
   ['share-target: активность', 'android:name=".ShareActivity"'],
