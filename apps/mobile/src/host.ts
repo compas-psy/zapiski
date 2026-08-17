@@ -8,6 +8,7 @@ import { LOCAL_OWNER } from '@zapiski/core';
 
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
+import { onIntent, takeInitialIntent } from './platform/intents';
 import {
   adoptSafTree,
   chosenSafTree,
@@ -96,6 +97,16 @@ export function createHost(): AppHost {
 
     /** Системная кнопка и жест «назад» (см. `platform/back.ts`). */
     onSystemBack,
+
+    /**
+     * Плитка Quick Settings и виджет «Записать» (см. `platform/intents.ts`).
+     *
+     * Порт был объявлен в контракте и не реализован: событие доезжало до
+     * `main.tsx` и упиралось в пустой обработчик. Плитка и виджет выглядели
+     * рабочими и не делали ничего.
+     */
+    takeInitialIntent,
+    onIntent,
 
     /**
      * Где лежат заметки. Порядок такой:

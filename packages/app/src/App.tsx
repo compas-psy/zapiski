@@ -17,7 +17,7 @@ import {
   ToastProvider,
 } from "@zapiski/ui";
 import "./styles/app.css";
-import type { AppHost, Layout } from "./contract.js";
+import type { AppHost, AppIntent, Layout } from "./contract.js";
 import type { Locale } from "./i18n/index.js";
 import {
   AppProvider,
@@ -51,6 +51,7 @@ import { TrashScreen } from "./screens/TrashScreen.js";
 import { VersionsScreen } from "./screens/VersionsScreen.js";
 import { HelpScreen } from "./screens/HelpScreen.js";
 import { ShareSheet } from "./screens/ShareSheet.js";
+import { QuickNoteSheet } from "./screens/QuickNoteSheet.js";
 
 export interface AppProps {
   host: AppHost;
@@ -95,7 +96,16 @@ function useSideBySide(layout: Layout): boolean {
   return layout === "compact" && landscape;
 }
 
-function AppShell(): ReactNode {
+/**
+ * Каркас приложения — всё, что ниже провайдеров.
+ *
+ * Экспортируется намеренно: `App` создаёт контроллер сам, и тест, которому
+ * нужен СВОЙ контроллер или свой порт намерений, иначе не может смонтировать
+ * настоящий каркас — а значит не может проверить дорогу от нажатия до экрана.
+ * Ровно эта дыра однажды пропустила Справку, которая была готова и никуда не
+ * подключена.
+ */
+export function AppShell(): ReactNode {
   const app = useApp();
   const state = useAppState();
   const strings = useStrings();
@@ -140,8 +150,45 @@ function AppShell(): ReactNode {
     const hotkey = app.host.platform.globalHotkey;
     if (!hotkey) return;
     const accelerator = "Ctrl+Alt+N";
-    void hotkey.register(accelerator, () => void app.createNote());
+    void hotkey.register(accelerator, () => app.openQuickNote());
     return () => void hotkey.unregister(accelerator);
+  }, [app]);
+
+  /*
+    Намерения ОС: плитка в шторке, виджет «Записать», ассоциация `.md`.
+
+    Порт был объявлен в контракте и не подключён НИ С ОДНОЙ стороны: событие
+    доезжало до оболочки и упиралось в комментарий «намеренно пусто»
+    (`apps/mobile/src/main.tsx`). То есть плитка и виджет, которые в системе
+    выглядели рабочими, не делали ничего — человек нажимал и получал просто
+    запущенное приложение.
+
+    Разбирается намерение здесь, потому что это продуктовое решение: платформа
+    знает, что нажали, а что показать — знает продукт. «Записать» открывает
+    лист быстрой записки, а не пустой редактор: плитку жмут на ходу.
+
+    Начальное намерение забирается ОДИН раз — иначе следующий запуск
+    переоткрывал бы вчерашнее.
+  */
+  useEffect(() => {
+    const handle = (intent: AppIntent): void => {
+      switch (intent.kind) {
+        case "new-note":
+          app.openQuickNote();
+          return;
+        case "open-note":
+          app.openNote(intent.id);
+          return;
+        default:
+          /* `open-file` и `toggle-todo` живут в оболочках, которые их шлют;
+             молча игнорировать неизвестное здесь правильнее, чем падать. */
+          return;
+      }
+    };
+    void app.host.takeInitialIntent?.().then((intent) => {
+      if (intent) handle(intent);
+    });
+    return app.host.onIntent?.(handle);
   }, [app]);
 
   /* Карта хоткеев оболочки (BEHAVIOR §7). Команды текста — в редакторе:
@@ -247,6 +294,12 @@ function AppShell(): ReactNode {
   const overlays = (
     <>
       <CommandPalette />
+      {/*
+        Быстрая записка. Оверлей, а не маршрут: она приходит поверх того, что
+        человек делал, и обязана вернуть его туда же. Плитка в шторке, виджет
+        на рабочем столе и Ctrl+Alt+N зовут её одним и тем же намерением.
+      */}
+      <QuickNoteSheet />
       {/*
         Снятие шифрования — единственный лист на всё приложение.
 

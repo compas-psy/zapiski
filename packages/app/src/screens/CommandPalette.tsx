@@ -197,15 +197,22 @@ export function CommandPalette(): ReactNode {
       },
     ];
 
-    /* Возможности платформы нет → элемент СКРЫТ, а не выключен (ARCHITECTURE §2). */
-    if (app.host.platform.globalHotkey) {
-      shell.push({
-        id: 'app.quickNote',
-        group,
-        label: strings.commands.quickNote,
-        run: () => void app.createNote(),
-      });
-    }
+    /*
+      Быстрая записка — на всех платформах, а не только там, где есть глобальный
+      хоткей.
+
+      Раньше команда стояла под условием `globalHotkey` и делала то же, что
+      «Новая заметка»: то есть на Android её не было вовсе, а на Windows она
+      дублировала соседнюю строку. Теперь она открывает лист быстрой записки —
+      то же, что плитка в шторке и виджет, — и это осмысленно везде: на телефоне
+      это единственная дорога к листу из самого приложения.
+    */
+    shell.push({
+      id: 'app.quickNote',
+      group,
+      label: strings.commands.quickNote,
+      run: () => app.openQuickNote(),
+    });
 
     for (const entry of shell) {
       const hotkey = SHELL_HOTKEYS[entry.id];

@@ -247,6 +247,21 @@ export const en: AppCatalog = {
     openFailed: 'Could not open this file',
   },
 
+  quickNote: {
+    title: 'Quick note',
+    open: 'Quick note',
+    placeholder: 'What to write down?',
+    fieldLabel: 'Note text',
+    folderLabel: 'Folder',
+    rootFolder: 'All notes',
+    attach: 'Attach an image',
+    voice: 'Record with voice',
+    save: 'Add',
+    saving: 'Adding',
+    saved: 'Note added',
+    open2: 'Open',
+  },
+
   help: {
     title: 'Help',
     open: 'Help',
@@ -739,7 +754,7 @@ export const en: AppCatalog = {
     settings: 'Settings',
     exportNote: 'Export the note',
     togglePin: 'Pin / unpin',
-    quickNote: 'Quick note on top of every window',
+    quickNote: 'Quick note',
   },
 
   share: {
