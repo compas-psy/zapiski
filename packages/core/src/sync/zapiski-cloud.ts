@@ -120,6 +120,25 @@ export class ZapiskiCloudBackend implements SyncBackend {
     }));
   }
 
+  /**
+   * Пути, удалённые на сервере после `since` — надгробия (`blobs.deleted_at`).
+   *
+   * Сервер отдавал их с самого начала (`includeDeleted=1` → поле `removed`), а
+   * клиент не спрашивал и не читал: половина протокола удалений была написана и
+   * не соединена. Из-за этого удаление ездило только В облако — удалил на
+   * телефоне, на Windows заметка осталась и вернулась обратно.
+   *
+   * Отказ — пустой список, а не исключение: надгробия уточняют обмен, а не
+   * несут его. Сорвать из-за них весь синк было бы хуже.
+   */
+  async removals(since: number): Promise<VaultPath[]> {
+    const url = `${VAULT_ENDPOINTS.list}?since=${Math.max(0, Math.floor(since))}&includeDeleted=1`;
+    const response = await this.call(url).catch(() => null);
+    if (!response || !response.ok) return [];
+    const body = (await response.json().catch(() => null)) as CloudListResponse | null;
+    return (body?.removed ?? []).map((path) => normalizePath(path));
+  }
+
   async get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null> {
     const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`);
     if (response.status === 404) return null;

@@ -487,6 +487,20 @@ export interface SyncBackend {
   get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null>;
   put(path: VaultPath, data: Uint8Array, ifMatch?: string): Promise<{ etag: string }>;
   remove(path: VaultPath): Promise<void>;
+  /**
+   * Пути, удалённые НА ТОЙ СТОРОНЕ после `since` — надгробия.
+   *
+   * Необязательный порт: он есть только там, где удаление оставляет след.
+   * Облако Записок такой след держит (`blobs.deleted_at`), а обычная папка,
+   * WebDAV и Яндекс.Диск — нет: у них удалённый файл просто отсутствует, и
+   * отличить «удалили» от «ещё не залили» невозможно в принципе.
+   *
+   * Без этого порта удаление ездит только В облако, но не ИЗ него: удалил на
+   * телефоне — на Windows заметка осталась, и первая же синхронизация вернула
+   * её обратно на телефон. Именно это заказчик и описал словами «в нашем
+   * облаке практически невозможно удалить ЗАПИСКУ».
+   */
+  removals?(since: number): Promise<VaultPath[]>;
   /** Мгновенный синк там, где он есть (websocket у ZapiskiCloud). */
   subscribe?(onChange: (path: VaultPath) => void): () => void;
 }

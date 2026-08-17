@@ -2306,6 +2306,16 @@ export class AppController {
    */
   private noteMoved(from: VaultPath, to: VaultPath): void {
     if (from === to) return;
+    /*
+     * Облако узнаёт о переезде здесь же, и это не случайное место.
+     *
+     * Этот метод продукт уже объявил единственной воронкой смены пути, а
+     * `path-follow.test.ts` перечисляет его вызовы списком. Значит и намерения
+     * для облака правильно ставить тут: иначе каждый новый способ сдвинуть
+     * файл пришлось бы помнить дважды — и однажды не вспомнить, как это уже
+     * случилось с самим следованием за путём.
+     */
+    this.scheduleMove(from, to);
     /* Переезды помним недолго, но помним: правка редактора уходит по debounce
        500 мс, а таймер тикает раз в секунду — сохранение вполне может
        прилететь уже со старым путём. `save` проводит путь через эту карту и
@@ -2500,13 +2510,19 @@ export class AppController {
     const vault = this.vault;
     if (!vault) return;
     const operation = await vault.trash(path);
+    /* Для облака корзина — это удаление: файл уехал в служебный каталог, а он
+       не синкается. Восстановление вернёт путь обратно намерением `put`. */
+    this.scheduleDelete(path);
     this.undoable(operation);
     if (this.state.route.name === 'note' && this.state.route.id === path) this.back();
     await this.refresh();
   }
 
   async restoreFromTrash(entryId: string): Promise<void> {
-    await this.vault?.restore(entryId);
+    const restored = await this.vault?.restore(entryId);
+    /* Отмена удаления — такое же намерение, как правка: в очереди на путь
+       живёт одно намерение, и последнее побеждает. */
+    if (restored) this.scheduleSync(restored);
     await this.refresh();
   }
 
@@ -3336,6 +3352,10 @@ export class AppController {
         : await this.crypto.deriveMaster(password, parsed.salt);
     const target = await decryptNoteToDisk(vault.storage, this.crypto, path, master, password);
     if (!target) return null;
+    /* Снятие шифрования — тоже смена пути: `.md.enc` уходит, `.md` появляется.
+       Воронку здесь не звали вовсе, поэтому в облаке оставался контейнер и
+       приезжал обратно — заметка «снова зашифровывалась» сама. */
+    this.noteMoved(path, target);
     this.lockNote(path);
     await vault.rebuild();
     await this.refresh();
@@ -3436,6 +3456,44 @@ export class AppController {
      * что и от пропажи.
      */
     if (this.engine) void this.syncNow({ announce: changed });
+  }
+
+  /**
+   * Путь исчез с этого устройства — сказать об этом облаку словом.
+   *
+   * ── Почему это отдельный метод, а не молчание ───────────────────────────────
+   *
+   * Молчание облако прочитать не может. Движок при «локально нет, в облаке
+   * есть» СКАЧИВАЕТ файл обратно — и это правильно: так приезжает заметка,
+   * заведённая на другом устройстве. Поэтому удаление обязано быть намерением,
+   * а не отсутствием файла.
+   *
+   * Метод `SyncEngine.markDeleted` для этого и написан — и его не звал НИ ОДИН
+   * файл продукта. Отсюда жалоба заказчика: «в нашем облаке практически
+   * невозможно удалить ЗАПИСКУ, она возвращается при синхронизации». Хуже
+   * всего это выходило с шифрованием: `encryptNote` кладёт рядом `.md.enc` и
+   * убирает открытый `.md`, но в облаке открытый текст оставался и приезжал
+   * обратно — то есть обещание «всё шифруется» на глазах становилось
+   * неправдой.
+   *
+   * Обратный ход (`restore`, `decrypt`) — это `scheduleSync`: в очереди на путь
+   * живёт одно намерение, и последнее побеждает.
+   */
+  private scheduleDelete(path: VaultPath): void {
+    void this.changes?.enqueue(path, 'delete').then(() => this.patchPending());
+    if (!this.engine) return;
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.syncTimer = setTimeout(() => {
+      this.syncTimer = null;
+      void this.syncNow();
+    }, 5000);
+  }
+
+  /** Путь сменился: старого в облаке быть не должно, новый обязан появиться. */
+  private scheduleMove(from: VaultPath, to: VaultPath): void {
+    if (from === to) return;
+    this.scheduleDelete(from);
+    this.scheduleSync(to);
   }
 
   /** Автосинк после сохранения — debounce 5 с (BEHAVIOR §6). */

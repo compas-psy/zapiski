@@ -112,9 +112,22 @@ async function manifest(url: URL, init: RequestInit, wiring: Wiring): Promise<Re
 
   const body = (await response.json()) as {
     entries?: Array<{ path: string; etag: string; mtime: number; size: number }>;
+    removed?: string[];
   };
   const entries = (body.entries ?? []).map((entry) => ({ ...entry, etag: unquote(entry.etag) }));
-  return jsonResponse({ entries }, response.status);
+  /*
+   * `removed` пропускаем дальше, а не отбрасываем.
+   *
+   * Переходник раньше собирал ответ заново из одного поля — и надгробия,
+   * которые сервер честно присылал по `includeDeleted=1`, умирали здесь, на
+   * последнем метре. Ядро их не видело никогда, поэтому удаление не доезжало с
+   * устройства на устройство: «в облаке практически невозможно удалить
+   * ЗАПИСКУ».
+   */
+  return jsonResponse(
+    body.removed === undefined ? { entries } : { entries, removed: body.removed },
+    response.status,
+  );
 }
 
 /** `?path=` → сегменты пути: сервер читает путь из `*`, а не из query. */

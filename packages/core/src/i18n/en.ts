@@ -35,6 +35,8 @@ export const en: Catalog = {
     encryptFailed: 'Could not encrypt the note · Retry',
     /** The vault is locked — not the same thing as “could not encrypt”. */
     vaultLocked: 'The vault is locked · Enter the password',
+    /** Deleted on another device, but edited here — the edit wins, out loud. */
+    deletedElsewhereKept: 'This note was deleted on another device, but changed here — kept',
     subscriptionExpired: 'The subscription has ended. Your notes are here, syncing via Zapiski Cloud is paused',
     subscriptionRequired:
       'Syncing via Zapiski Cloud is part of the subscription. Your notes are here and open as usual',

@@ -150,6 +150,13 @@ export interface SyncOutcome extends SyncStatus {
   pulled: number;
   merged: number;
   conflicts: number;
+  /**
+   * Сколько заметок убрано здесь по надгробию той стороны — то есть удалено на
+   * другом устройстве. Необязательное: у мест без надгробий (папка, WebDAV,
+   * Яндекс.Диск) такого понятия нет вовсе, и ноль там значил бы «ничего не
+   * удаляли», а не «мы этого не умеем узнать».
+   */
+  removed?: number;
   /** Тексты для тостов — строго из реестра BEHAVIOR §11. */
   messages: string[];
   /**
@@ -376,6 +383,21 @@ export class SyncEngine {
       outcome.state = 'error';
     }
 
+    /*
+     * Надгробия той стороны — удаления, сделанные на другом устройстве.
+     *
+     * До этого удаление ездило только В облако: удалил на телефоне — на
+     * Windows заметка осталась, и первая же синхронизация вернула её обратно
+     * на телефон. Заказчик описал это как «в нашем облаке практически
+     * невозможно удалить ЗАПИСКУ». С шифрованием выходило хуже всего: открытый
+     * `.md` приезжал обратно рядом с `.md.enc`, и обещание «всё зашифровано»
+     * рассыпалось на глазах.
+     *
+     * Порядок именно такой — надгробия ПЕРЕД обходом путей: иначе тот же
+     * проход сначала скачал бы удалённый файл, а потом мы бы его убрали.
+     */
+    if (!vanished) await this.applyRemovals(local, remote, outcome);
+
     // Порядок важен: сначала заметки, потом CRDT-логи. Иначе при слиянии
     // локальный лог уже содержал бы чужие правки, и материализация `.md`
     // затёрла бы их (ТЗ §4.2).
@@ -476,6 +498,87 @@ export class SyncEngine {
       else if (isAttachmentPath(entry.path)) out.push(entry.path);
     }
     return out;
+  }
+
+  /**
+   * Применить удаления, сделанные на другом устройстве.
+   *
+   * ── Правило разрешения, и почему оно такое ──────────────────────────────────
+   *
+   * Приходит путь и факт «там его удалили». Здесь возможны три положения дел, и
+   * они разные по цене ошибки:
+   *
+   *  1. **файла у нас нет** — сходиться не о чем, только вычищаем память, чтобы
+   *     путь не считался «был засинкан»;
+   *  2. **файл есть и не менялся** после последнего обмена — удаляем. Это и есть
+   *     то самое «удалил на телефоне — исчезло на Windows»;
+   *  3. **файл есть и МЕНЯЛСЯ** здесь — оставляем и отправляем заново.
+   *
+   * Третий случай — намеренная несимметричность. Удаление на другом устройстве
+   * и правка на этом произошли, ничего не зная друг о друге; лишняя заметка
+   * стоит одного нажатия, а потерянный текст не стоит ничего вернуть. Поэтому
+   * правка побеждает удаление, и человеку об этом говорят словами: молча
+   * оставленная заметка выглядела бы как «удаление не работает».
+   *
+   * Чего здесь НЕТ намеренно: удаления в обход `deleted_at`. Надгробия
+   * спрашиваются с момента последнего успешного обмена (`lastSyncAt`), поэтому
+   * устройство, пролежавшее в ящике месяц, узнаёт об удалении при первом же
+   * включении, а не «пропускает» его.
+   */
+  private async applyRemovals(
+    local: Set<VaultPath>,
+    remote: Map<VaultPath, unknown>,
+    outcome: SyncOutcome,
+  ): Promise<void> {
+    if (!this.backend.removals) return;
+    /* Первый обмен: спрашивать надгробия не с нуля времени, а не спрашивать
+       вовсе. У нас ещё нет памяти о том, что мы вообще синхронизировали, — и
+       «удалить всё, что когда-то удаляли там» на новом устройстве означало бы
+       стереть файлы, которых мы никогда не видели. */
+    const since = this.state.lastSyncAt;
+    if (since === null) return;
+
+    let removed: VaultPath[];
+    try {
+      removed = await this.backend.removals(since);
+    } catch {
+      /* Надгробия — уточнение, а не основа обмена: не спросили — просто не
+         применили в этом проходе. Молчать об этом можно: ни одна правка
+         человека от этого не теряется. */
+      return;
+    }
+
+    for (const raw of removed) {
+      const path = normalizePath(raw);
+      if (!this.isSyncable(path)) continue;
+      /* Путь снова живой на той стороне (удалили и вернули) — надгробие
+         устарело, и трогать его нельзя. */
+      if (remote.has(path)) continue;
+
+      if (!local.has(path)) {
+        delete this.state.entries[path];
+        await this.queue.done(path);
+        continue;
+      }
+
+      const state = this.state.entries[path];
+      const data = await this.storage.read(path);
+      const changedHere = state === undefined || data === null || fnv1a(data) !== state.baseHash;
+      if (changedHere) {
+        /* Правка сильнее удаления — оставляем и отправляем заново. */
+        await this.queue.enqueue(path, 'put');
+        const message = this.strings.errors.deletedElsewhereKept;
+        if (!outcome.messages.includes(message)) outcome.messages.push(message);
+        continue;
+      }
+
+      await this.storage.remove(path).catch(() => undefined);
+      local.delete(path);
+      delete this.state.entries[path];
+      await this.queue.done(path);
+      outcome.removed = (outcome.removed ?? 0) + 1;
+    }
+    if ((outcome.removed ?? 0) > 0) await this.vault.rebuild();
   }
 
   private async syncOne(
