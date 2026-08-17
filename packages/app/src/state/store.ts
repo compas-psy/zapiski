@@ -1578,6 +1578,13 @@ export class AppController {
   ] as const);
 
   navigate(route: Route, options: { replace?: boolean } = {}): void {
+    /* Уходим с пустой только что созданной заметки — она исчезает (см.
+       `discardIfUntouched`). Иначе «Без названия» плодятся от каждого нажатия
+       «Новая заметка», о чём и написал заказчик. */
+    const leaving = this.state.route;
+    if (leaving.name === 'note' && !(route.name === 'note' && route.id === leaving.id)) {
+      void this.discardIfUntouched(leaving.id);
+    }
     const oneWay = AppController.ONE_WAY.has(this.state.route.name);
     const stack =
       options.replace || oneWay ? this.state.stack : [...this.state.stack, this.state.route];
@@ -2486,6 +2493,60 @@ export class AppController {
    * прямое нарушение «ноль трения» (§2 продукта). Поэтому тумблер в
    * настройках честно говорит, что действует при открытом хранилище.
    */
+  /**
+   * Пустая заметка, в которую ничего не написали, исчезает при уходе с неё.
+   *
+   * ── Что было ────────────────────────────────────────────────────────────────
+   *
+   * Заказчик: «нажал „Новая заметка“ → происходит автосохранение → в заметку
+   * ничего не вносится совсем → количество заметок „Без названия 2“ плодится».
+   * Так и было: «плюс» сразу создавал файл, автосохранение его записывало, и
+   * каждое случайное нажатие оставляло в списке ещё одну безымянную пустышку —
+   * которая вдобавок уезжала в облако и на другие устройства.
+   *
+   * ── Почему удаляем, а не «не создаём» ──────────────────────────────────────
+   *
+   * Не создавать файл до первого символа заманчиво, но тогда редактору некуда
+   * писать: путь нужен и автосохранению, и вложениям, и шифрованию новой
+   * заметки. Поэтому файл создаётся сразу, а вот ПУСТОЙ и НЕТРОНУТЫЙ он не
+   * переживает уход с экрана.
+   *
+   * ── Почему это безопасно ───────────────────────────────────────────────────
+   *
+   * Три условия вместе, и каждое обязательно: заметку создали в ЭТОМ сеансе
+   * нашим же «плюсом» (`fresh`), у неё нет ни заголовка, ни единого непробельного
+   * знака в теле, и она не зашифрована. Ни одно чужое или написанное слово под
+   * такое условие не попадает — терять нечего по построению. Тихо и без корзины:
+   * корзина для того, что человек написал и решил убрать, а здесь он не написал
+   * ничего.
+   */
+  private async discardIfUntouched(path: VaultPath): Promise<void> {
+    const vault = this.vault;
+    if (!vault || !this.freshNotes.has(path)) return;
+    this.freshNotes.delete(path);
+    if (isEncryptedPath(path)) return;
+    const note = await vault.read(path).catch(() => null);
+    if (!note) return;
+    /* Заголовок из имени файла («Без названия») за содержимое не считается: он
+       не написан человеком, а подставлен нами. */
+    const meta = vault.metaOf(path);
+    const named = meta?.untitled !== true;
+    if (named || note.body.trim() !== '') return;
+
+    /* Удаляем файл, а не отправляем в корзину: в корзине лежит написанное, а
+       здесь не написано ничего. Индекс пересобираем — иначе пустышка останется
+       в списке до следующего обхода папки. */
+    await vault.storage.remove(path).catch(() => undefined);
+    await vault.rebuild();
+    /* Намерение для облака снимаем целиком: пустышка не должна ни уехать, ни
+       оставить после себя надгробие — её там никогда и не было. */
+    await this.changes?.done(path).catch(() => undefined);
+    await this.refresh();
+  }
+
+  /** Пути, созданные «плюсом» в этом сеансе и ещё ни разу не тронутые. */
+  private freshNotes = new Set<VaultPath>();
+
   async createNote(folder?: string, title?: string): Promise<VaultPath | null> {
     const vault = this.vault;
     /* Молчаливый отказ хуже любой ошибки: человек жмёт «плюс», ничего не
@@ -2510,6 +2571,7 @@ export class AppController {
       const keyId = data ? this.crypto.parseHeader(data)?.keyId : undefined;
       if (keyId) this.putUnlocked(target, body, await this.crypto.deriveNoteKey(master, keyId));
       this.scheduleSync(target);
+      this.freshNotes.add(target);
       this.openNote(target);
       return target;
     }
@@ -2522,6 +2584,9 @@ export class AppController {
        она попадала в облако только следующей правкой, а до тех пор нигде не
        числилась. */
     this.scheduleSync(note.path);
+    /* Пометка «создана пустой в этом сеансе»: если человек уйдёт, не написав ни
+       знака, заметка исчезнет (см. `discardIfUntouched`). */
+    this.freshNotes.add(note.path);
     await this.refresh();
     this.openNote(note.path);
     return note.path;
@@ -2570,6 +2635,9 @@ export class AppController {
    */
   private noteMoved(from: VaultPath, to: VaultPath): void {
     if (from === to) return;
+    /* Переезд метки «создана пустой»: путь сменился, а трогали её или нет —
+       не изменилось. */
+    if (this.freshNotes.delete(from)) this.freshNotes.add(to);
     /*
      * Облако узнаёт о переезде здесь же, и это не случайное место.
      *
@@ -2656,6 +2724,9 @@ export class AppController {
    */
   async save(requested: VaultPath, body: string): Promise<void> {
     const vault = this.vault;
+    /* Написали хоть знак — заметка больше не «пустая только что созданная», и
+       исчезать при уходе она не должна ни при каких обстоятельствах. */
+    if (body.trim() !== '') this.freshNotes.delete(requested);
     /* Хранилища нет — писать некуда, и молчать об этом нельзя: человек
        набирает текст и считает, что он сохраняется. Ровно это и описано как
        «по факту ничего не сохраняется». Сообщение живёт в статусе, а не в
