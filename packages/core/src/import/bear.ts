@@ -37,6 +37,9 @@ export function importBearFiles(files: Map<string, Uint8Array>): ImportBundle {
     return bundle;
   }
 
+  /* Сколько ссылок на вложения привели к нашей конвенции — в отчёт. */
+  let rewritten = 0;
+
   for (const [key, entry] of bundles) {
     if (entry.text === undefined) {
       bundle.warnings.push(`${key}: нет text.md`);
@@ -46,13 +49,18 @@ export function importBearFiles(files: Map<string, Uint8Array>): ImportBundle {
     for (const asset of entry.assets) {
       const target = `${ATTACHMENTS_DIR}/${asset.name}`;
       bundle.assets.push({ relativePath: target, data: asset.data });
-      body = body.split(`assets/${asset.name}`).join(target);
+      /* Считаем подмены: отчёт обещает строку «Ссылок переписано», и число в
+         ней обязано быть настоящим. */
+      const pieces = body.split(`assets/${asset.name}`);
+      rewritten += pieces.length - 1;
+      body = pieces.join(target);
     }
     const stem = key.replace(/\.textbundle$/i, '').split('/').pop() as string;
     const title = extractTitle(body);
     const fileName = title !== '' ? title : stem;
     bundle.notes.push({ relativePath: `${sanitize(fileName)}.md`, body });
   }
+  bundle.linksRewritten = rewritten;
   return bundle;
 }
 

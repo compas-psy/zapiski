@@ -224,6 +224,8 @@ export { importFolder, importFolderZip, type FolderImportOptions } from './impor
 export { importBear, importBearFiles } from './import/bear.js';
 export { csvToMarkdownTable, importNotion, importNotionFiles, parseCsv } from './import/notion.js';
 export { enmlToMarkdown, importEvernote, parseEnexDate } from './import/evernote.js';
+export { defaultImportFolder, detectImportSource, type ImportSource } from './import/detect.js';
+export { scanImport, type ImportLoss, type ImportScan } from './import/scan.js';
 export {
   decode,
   emptyBundle,

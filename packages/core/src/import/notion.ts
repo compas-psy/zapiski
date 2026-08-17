@@ -19,16 +19,23 @@ export function importNotion(zip: Uint8Array): ImportBundle {
 export function importNotionFiles(files: Map<string, Uint8Array>): ImportBundle {
   const bundle = emptyBundle();
   const folders = new Set<string>();
+  /* Сколько ссылок переписали, срезая хвосты-идентификаторы. */
+  let rewritten = 0;
 
   for (const [rawName, data] of files) {
     if (rawName.includes('__MACOSX/') || rawName.endsWith('.DS_Store')) continue;
-    const name = normalizePath(stripHashes(rawName));
+    const name = normalizePath(stripNameHashes(rawName));
     if (name === '') continue;
     const slash = name.lastIndexOf('/');
     if (slash > 0) folders.add(name.slice(0, slash));
 
     if (isMarkdownFile(name)) {
-      bundle.notes.push({ relativePath: name.replace(/\.(markdown|txt)$/i, '.md'), body: stripHashes(decode(data)) });
+      const stripped = stripHashes(decode(data));
+      rewritten += stripped.rewritten;
+      bundle.notes.push({
+        relativePath: name.replace(/\.(markdown|txt)$/i, '.md'),
+        body: stripped.text,
+      });
       continue;
     }
     if (/\.csv$/i.test(name)) {
@@ -44,11 +51,29 @@ export function importNotionFiles(files: Map<string, Uint8Array>): ImportBundle 
     bundle.assets.push({ relativePath: name, data });
   }
   bundle.folders = folders.size;
+  bundle.linksRewritten = rewritten;
   return bundle;
 }
 
-function stripHashes(text: string): string {
-  return text.replace(NOTION_HASH, '');
+/**
+ * Срезать хвосты-идентификаторы Notion.
+ *
+ * Это не косметика: имена файлов мы тоже срезаем, значит ссылки внутри текста
+ * обязаны поехать за ними — иначе после импорта каждая внутренняя ссылка ведёт
+ * в никуда. Число подмен возвращается, потому что отчёт обещает строку
+ * «Ссылок переписано».
+ */
+function stripNameHashes(name: string): string {
+  return name.replace(NOTION_HASH, '');
+}
+
+function stripHashes(text: string): { text: string; rewritten: number } {
+  let rewritten = 0;
+  const out = text.replace(NOTION_HASH, () => {
+    rewritten += 1;
+    return '';
+  });
+  return { text: out, rewritten };
 }
 
 /** Разбор CSV с кавычками и переводами строк внутри полей. */
