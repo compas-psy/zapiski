@@ -724,14 +724,38 @@ jobs:
           # выпуском. Промостраница и письма ссылаются на постоянный адрес, а
           # он всегда указывает на последнее, что сюда приехало.
           latest="/var/www/zapiski.cmpas.ru/updates/latest"
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" \
-            "mkdir -p '${latest}' && cp -f \"\$(ls -t '${target}'/*.apk | head -1)\" '${latest}/zapiski.apk'"
+          # Копия СВЕРЯЕТСЯ, а не просто делается.
+          #
+          # Промостраница отдаёт ровно этот файл, и молчаливо устаревший он
+          # хуже отсутствующего: человек скачивает вчерашнюю сборку, находит в
+          # ней починенный дефект и пишет, что мы ничего не сделали. Поэтому
+          # после копирования сравниваются суммы, и расхождение валит шаг.
+          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" sh -s -- "${target}" "${latest}" <<'REMOTE'
+          set -eu
+          target="$1"
+          latest="$2"
+          apk="$(ls -t "${target}"/*.apk | head -1)"
+          mkdir -p "${latest}"
+          cp -f "${apk}" "${latest}/zapiski.apk.part"
+          mv "${latest}/zapiski.apk.part" "${latest}/zapiski.apk"
+          chmod 644 "${latest}/zapiski.apk"
+          built="$(sha256sum "${apk}" | cut -d' ' -f1)"
+          served="$(sha256sum "${latest}/zapiski.apk" | cut -d' ' -f1)"
+          [ "${built}" = "${served}" ] || {
+            echo "постоянная ссылка отдаёт не тот файл: ${served} вместо ${built}" >&2
+            exit 1
+          }
+          printf '%s  zapiski.apk\n' "${built}" > "${latest}/zapiski.apk.sha256"
+          echo "updates/latest/zapiski.apk = $(basename "${apk}"), sha256 ${built}"
+          REMOTE
           echo "Постоянная ссылка: https://zapiski.cmpas.ru/updates/latest/zapiski.apk"
 
       - name: APK должен быть хоть где-то
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}
           SHIP: ${{ steps.ship.outcome }}
+          # Сборки этой ветки и теги — те самые, что предлагает /promo.
+          PROMOTED: ${{ (github.ref_type == 'tag' || github.ref_name == github.event.repository.default_branch) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
@@ -740,6 +764,19 @@ jobs:
               echo '::warning::Артефакт GitHub не сохранён (обычная причина — исчерпанная квота хранилища аккаунта). APK забирайте с сервера.'
             fi
             if [ "${SHIP}" != 'success' ] && [ "${SHIP}" != 'skipped' ]; then
+              # На ветке, чьи сборки предлагает промостраница, неудачная
+              # доставка — не предупреждение, а провал.
+              #
+              # Раньше здесь стояло только `::warning::`, и это была тихая
+              # ложь: прогон зелёный, письмо со ссылкой отправлено, а
+              # /updates/latest/ держит вчерашний файл. Человек скачивает
+              # старую сборку, находит в ней уже починенный дефект и пишет,
+              # что мы ничего не сделали. Ветка при этом важна: на чужой ветке
+              # или в PR отсутствие сервера — норма, там артефакта достаточно.
+              if [ "${PROMOTED}" = 'true' ]; then
+                echo "::error::APK не уехал на сервер, а промостраница отдаёт именно его — https://zapiski.cmpas.ru/updates/latest/zapiski.apk остался прежним. Ссылка обещает свежую сборку и врёт."
+                exit 1
+              fi
               echo '::warning::APK не уехал на сервер. Он есть в артефактах прогона.'
             fi
             exit 0
