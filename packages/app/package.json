@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@floating-ui/react-dom": "^2.1.9",
     "@zapiski/core": "workspace:*",
     "@zapiski/editor": "workspace:*",
     "@zapiski/ui": "workspace:*"

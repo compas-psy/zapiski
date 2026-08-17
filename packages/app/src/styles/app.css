@@ -1779,11 +1779,32 @@
   быть не должно — плитку в шторке жмут на ходу, и каждая лишняя кнопка это
   секунда, за которую мысль успевает уйти.
 */
+/*
+  Лист быстрой записки: почти во весь экран и ВЫШЕ клавиатуры.
+
+  Заказчик прислал скриншот: «окошко очень маленькое для заметки», а при тапе в
+  поле «экранная клавиатура закрывает поле ввода». Обе беды из одного места —
+  лист жил на своей минимальной высоте и ничего не знал о клавиатуре.
+
+  `--z-keyboard` — её настоящая высота, измеренная по `visualViewport`
+  (`lib/keyboard.ts`); тем же значением уже поднят тулбар редактора. Отступ
+  снизу считается ОДНИМ выражением вместе с безопасной зоной: на телефоне без
+  клавиатуры остаётся вырез, с клавиатурой — её высота, и лист не прыгает.
+*/
+.za-quick-sheet {
+  max-block-size: 92dvh;
+  padding-block-end: calc(max(var(--sp-24), env(safe-area-inset-bottom)) + var(--z-keyboard, 0px));
+}
 .za-quick {
   display: grid;
+  /* Поле растёт, ряд кнопок держится внизу: писать в записку можно долго. */
+  grid-template-rows: 1fr auto;
   gap: var(--sp-12);
+  min-block-size: 46dvh;
 }
 .za-quick__text {
+  /* Не три строки, а всё свободное место: записка бывает и на абзац. */
+  min-block-size: 38dvh;
   inline-size: 100%;
   max-inline-size: 100%;
   box-sizing: border-box;
@@ -1812,6 +1833,7 @@
 }
 /* Папка: иконка и системный список рядом, одной кнопкой на вид. */
 .za-quick__folder {
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-4);
@@ -1820,6 +1842,66 @@
   color: var(--text-secondary);
   border: var(--border-w) solid var(--line);
   border-radius: var(--r-full, 99px);
+}
+/*
+  Всплывашка выбора папки. Живёт порталом в `body` (см. `FolderMenu.tsx`):
+  лист снизу — скролл-контейнер, и всё абсолютно позиционированное внутри него
+  обрезается. Ровно так однажды пропало меню панели форматирования.
+*/
+.za-folder-menu {
+  z-index: var(--z-overlay);
+  min-inline-size: 220px;
+  max-inline-size: 320px;
+  overflow-y: auto;
+  padding: var(--sp-4) 0;
+  background: var(--surface);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop);
+}
+.za-folder-menu__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  inline-size: 100%;
+  /* 44 — минимальная высота тапа: выбирать папку будут пальцем на телефоне. */
+  min-block-size: 44px;
+  padding-inline-end: var(--sp-12);
+  font: inherit;
+  font-size: var(--fs-md);
+  color: var(--text);
+  text-align: start;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+/* Подсветка наведением — только там, где мышь есть. На тач-экране `:hover`
+   прилипает после нажатия, и строка остаётся подсвеченной без причины; это
+   правило проекта, и его стережёт `packages/ui/test/styles.test.ts`. */
+@media (hover: hover) {
+  .za-folder-menu__row:hover {
+    background: var(--surface-hover, var(--surface-sunken));
+  }
+}
+.za-folder-menu__row:focus-visible {
+  background: var(--surface-hover, var(--surface-sunken));
+}
+.za-folder-menu__mark {
+  inline-size: 14px;
+  color: var(--accent);
+}
+.za-folder-menu__label {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Кнопка папки в листе: та же пилюля, что была у системного списка. */
+.za-quick__folder-name {
+  max-inline-size: 12ch;
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .za-quick__select {
   min-inline-size: 0;

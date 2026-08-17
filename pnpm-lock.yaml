@@ -173,6 +173,9 @@ importers:
 
   packages/app:
     dependencies:
+      '@floating-ui/react-dom':
+        specifier: ^2.1.9
+        version: 2.1.9(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@zapiski/core':
         specifier: workspace:*
         version: link:../core

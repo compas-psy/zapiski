@@ -110,6 +110,21 @@ describe('лист доводит записку до файла', () => {
     await waitFor(() => expect(app.getState().quickNoteOpen).toBe(false));
     const created = app.getState().notes.find((note) => note.title.includes('Позвонить'));
     expect(created, 'записка не появилась в хранилище').toBeDefined();
+
+    /*
+     * Набранное — ТЕЛО заметки, а не её заголовок.
+     *
+     * Сначала я уводил первую строку в `#`-заголовок, и тело оставалось пустым.
+     * Заказчик: «этот текст становится Заголовком (именем) записки, а не
+     * внутренним текстом». Быстрая записка — мысль на ходу, а не документ с
+     * названием; имя файла выводится из первой строки отдельно и в текст не
+     * подставляется.
+     */
+    const body = (await app.readNote(created!.path))?.body ?? '';
+    expect(body.trimStart().startsWith('#'), `текст уехал в заголовок: ${body}`).toBe(false);
+    expect(body).toContain('Позвонить в понедельник');
+    /* А в списке подпись всё равно осмысленная — из имени файла. */
+    expect(created?.title).toBe('Позвонить в понедельник');
   });
 
   it('пустую записку сохранить нельзя', async () => {
@@ -131,13 +146,23 @@ describe('лист доводит записку до файла', () => {
     tap();
     await screen.findByLabelText(ru.quickNote.fieldLabel);
 
-    const folder = screen.getByLabelText(ru.quickNote.folderLabel);
+    /*
+     * Папка выбирается ВСПЛЫВАШКОЙ, а не системным списком.
+     *
+     * Заказчик: «окно выбора папок — системное и выглядит очень неаккуратно и
+     * не учитывает вложенность». Поэтому и проверка идёт по-человечески: нажать
+     * кнопку папки, увидеть список, выбрать строку. Заодно это ловит тот отказ,
+     * из-за которого однажды пропало меню панели: всплывашка внутри листа со
+     * `overflow-y: auto` обрезается, если её не унести порталом.
+     */
+    fireEvent.click(screen.getByRole('button', { name: ru.quickNote.folderLabel }));
+    const options = await screen.findByRole('listbox', { name: ru.quickNote.folderLabel });
     expect(
-      [...(folder as HTMLSelectElement).options].map((option) => option.value),
+      [...options.querySelectorAll('[role="option"]')].map((node) => node.textContent),
       'в списке папок нет папки хранилища',
     ).toContain('Работа');
 
-    fireEvent.change(folder, { target: { value: 'Работа' } });
+    fireEvent.click(screen.getByRole('option', { name: 'Работа' }));
     fireEvent.change(field(), { target: { value: 'Смета на плитку' } });
     fireEvent.click(screen.getByRole('button', { name: ru.quickNote.save }));
 

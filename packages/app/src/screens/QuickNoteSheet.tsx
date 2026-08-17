@@ -25,9 +25,10 @@
  * возможности означает «скрыть», а не «показать выключенным» (BEHAVIOR §5.1).
  * Когда порт появится, здесь останется убрать одно условие.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { BottomSheet, Button, IconButton, IconFolder, IconMic, IconPaperclip } from '@zapiski/ui';
 
+import { FolderMenu, folderMenuItems } from '../components/FolderMenu.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 
 /** Порт голосового ввода. Появится — кнопка покажется сама. */
@@ -41,6 +42,9 @@ export function QuickNoteSheet(): ReactNode {
 
   const [text, setText] = useState('');
   const [folder, setFolder] = useState('');
+  /* Всплывашка папок и кнопка, у которой она живёт. */
+  const [folderOpen, setFolderOpen] = useState(false);
+  const folderButton = useRef<HTMLButtonElement | null>(null);
   const [saving, setSaving] = useState(false);
   const area = useRef<HTMLTextAreaElement | null>(null);
   const file = useRef<HTMLInputElement | null>(null);
@@ -74,22 +78,33 @@ export function QuickNoteSheet(): ReactNode {
     setText('');
   }
 
-  /* Папки хранилища плюс корень. Дерево здесь не нужно: выбор из списка
-     быстрее, а вложенность видна по пути. */
-  const folders = state.folders.map((node) => node.path);
+  /*
+   * Папки хранилища плюс корень — с вложенностью.
+   *
+   * Раньше здесь стоял системный `<select>`, и заказчик справедливо назвал его
+   * неаккуратным: он рисуется поверх всего чужим шрифтом, а `<option>` не умеет
+   * показать дерево — «Практика/Супервизии» выглядела одноуровневой строкой.
+   */
+  const folderItems = useMemo(
+    () => folderMenuItems(state.folders.map((node) => node.path), copy.rootFolder),
+    [state.folders, copy.rootFolder],
+  );
+  const folderLabel = folderItems.find((item) => item.path === folder)?.label ?? copy.rootFolder;
 
   return (
     <BottomSheet
       open={state.quickNoteOpen}
       onClose={() => app.closeQuickNote()}
       label={copy.title}
+      /* Высота и подъём над клавиатурой — в `app.css`, класс `za-quick-sheet`:
+         лист общий, а такое поведение нужно только записке. */
+      className="za-quick-sheet"
     >
       <div className="za-quick">
         <textarea
           ref={area}
           className="za-quick__text"
           value={text}
-          rows={3}
           placeholder={copy.placeholder}
           aria-label={copy.fieldLabel}
           onChange={(event) => setText(event.target.value)}
@@ -110,23 +125,27 @@ export function QuickNoteSheet(): ReactNode {
             открывается системным списком, который человек уже знает, и не
             требует места на листе.
           */}
-          <label className="za-quick__folder">
+          <button
+            ref={folderButton}
+            type="button"
+            className="za-quick__folder"
+            aria-label={copy.folderLabel}
+            aria-haspopup="listbox"
+            aria-expanded={folderOpen}
+            onClick={() => setFolderOpen((open) => !open)}
+          >
             <IconFolder size={16} />
-            <span className="z-visually-hidden">{copy.folderLabel}</span>
-            <select
-              className="za-quick__select"
-              value={folder}
-              aria-label={copy.folderLabel}
-              onChange={(event) => setFolder(event.target.value)}
-            >
-              <option value="">{copy.rootFolder}</option>
-              {folders.map((path) => (
-                <option key={path} value={path}>
-                  {path}
-                </option>
-              ))}
-            </select>
-          </label>
+            <span className="za-quick__folder-name">{folderLabel}</span>
+          </button>
+          <FolderMenu
+            open={folderOpen}
+            onClose={() => setFolderOpen(false)}
+            anchor={folderButton.current}
+            items={folderItems}
+            value={folder}
+            onPick={setFolder}
+            label={copy.folderLabel}
+          />
 
           <IconButton
             icon={<IconPaperclip size={18} />}
