@@ -86,6 +86,9 @@ export const en: AppCatalog = {
     privacyNotice: 'What happens to your data is in the',
     consentMarketing: 'Send me letters about updates and offers',
     consentMarketingHint: 'Optional. You can withdraw it at any time in account settings',
+    consentAnalytics: 'Allow anonymous usage statistics',
+    consentAnalyticsHint:
+      'No note content, titles, or search queries — only facts and counts. You can withdraw it at any time in account settings',
     termsLink: 'Terms of use',
     privacyLink: 'Personal data policy',
     title: 'An account is only needed for the cloud',

@@ -6,6 +6,9 @@
  * работает в вебе, на Windows и на Android (ARCHITECTURE §1).
  */
 import {
+  AnalyticsQueue,
+  buildAnalyticsEvent,
+  lengthBucket,
   ChangeQueue,
   LEGACY_CONTAINER_VERSION,
   MemoryVaultStorage,
@@ -61,6 +64,7 @@ import {
   type VaultPath,
   type VaultStorage,
   type VersionSnapshot,
+  type AnalyticsEventName,
   joinTitle,
 } from '@zapiski/core';
 import type {
@@ -122,6 +126,11 @@ export interface AccountState {
    * потому что и отзывается там же — в настройках, а не в переписке с нами.
    */
   marketingOptIn?: boolean;
+  /**
+   * Согласие на продуктовую аналитику (ТЗ §6, O-260817-05). По умолчанию
+   * выключено: до него `track()` не ставит в очередь и не отправляет ничего.
+   */
+  analyticsOptIn?: boolean;
 }
 
 /** Расшифрованная заметка живёт ТОЛЬКО в памяти (ТЗ §3.3, BEHAVIOR §5.3). */
@@ -506,6 +515,9 @@ export class AppController {
    * (она на диске, BEHAVIOR §6) и передаётся движку, когда место появляется.
    */
   private changes: ChangeQueue | null = null;
+  /** Очередь аналитики (O-260817-05) — живёт с хранилищем, как и `changes`. */
+  private analytics: AnalyticsQueue | null = null;
+  private analyticsFlushTimer: ReturnType<typeof setTimeout> | null = null;
   /** История версий доступна и без бэкенда: снапшоты лежат в `.zapiski/`. */
   private versions: VersionHistory | null = null;
   private backend: SyncBackend | null = null;
@@ -858,6 +870,11 @@ export class AppController {
        открыто, и терять его из-за очереди нельзя. */
     await changes.load().catch(() => undefined);
     this.changes = changes;
+    /* Та же дисциплина, что у `changes`: своя очередь на новое хранилище,
+       читаем накопленное с диска вместо того, чтобы начать с пустоты. */
+    const analytics = new AnalyticsQueue(storage);
+    await analytics.load().catch(() => undefined);
+    this.analytics = analytics;
     /* Движок — на новое место, и прямо здесь, а не побочным действием
        `resumeCloud` в конце метода: тот выходит раньше без живой сессии, и
        облако осталось бы привязанным к прежней папке. */
@@ -907,6 +924,7 @@ export class AppController {
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.searchTimer) clearTimeout(this.searchTimer);
     if (this.syncTimer) clearTimeout(this.syncTimer);
+    if (this.analyticsFlushTimer) clearTimeout(this.analyticsFlushTimer);
     if (this.vaultRetryTimer) clearTimeout(this.vaultRetryTimer);
     this.authOff?.();
     this.authOff = null;
@@ -1056,6 +1074,7 @@ export class AppController {
         email: session.email,
         plan: this.state.account?.plan ?? 'free',
         marketingOptIn: session.marketingOptIn === true,
+        analyticsOptIn: session.analyticsOptIn === true,
       },
     });
   }
@@ -1133,6 +1152,7 @@ export class AppController {
         /* Согласие приезжает из `/auth/me`: настройки обязаны показывать то,
            что записано на сервере, а не то, что человек нажимал год назад. */
         marketingOptIn: session.marketingOptIn === true,
+        analyticsOptIn: session.analyticsOptIn === true,
       });
       this.patch({ authBusy: false });
       /*
@@ -1255,6 +1275,25 @@ export class AppController {
     }
     const account = this.state.account;
     if (account) this.patch({ account: { ...account, marketingOptIn: applied } });
+    return applied;
+  }
+
+  /**
+   * Отозвать или снова дать согласие на продуктовую аналитику (ТЗ §6,
+   * O-260817-05). Тот же принцип: тумблер показывает то, что записал сервер.
+   * Отзыв ещё и стирает накопленную офлайн-очередь: то, что не успело уйти
+   * до отзыва, не должно уйти после него.
+   */
+  async setAnalyticsConsent(optIn: boolean): Promise<boolean> {
+    const applied = await this.session.setAnalyticsConsent(optIn).catch(() => null);
+    if (applied === null) {
+      this.toast({ message: this.strings.errors.syncFailed });
+      return this.state.account?.analyticsOptIn ?? false;
+    }
+    const account = this.state.account;
+    if (account) this.patch({ account: { ...account, analyticsOptIn: applied } });
+    if (applied) void this.flushAnalytics();
+    else await this.analytics?.clear();
     return applied;
   }
 
@@ -2368,6 +2407,7 @@ export class AppController {
         return;
       }
       this.touchLock(path);
+      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -2402,7 +2442,9 @@ export class AppController {
         await encryptNoteFileSafely(vault, this.crypto, path, body, key);
       } catch (error) {
         this.reportError(diskErrorMessage(error, this.strings));
+        return;
       }
+      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -2414,6 +2456,7 @@ export class AppController {
       return;
     }
     this.scheduleSync(path);
+    this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: false });
   }
 
   /**
@@ -2542,7 +2585,12 @@ export class AppController {
       this.patch({ results: [] });
       return;
     }
-    this.patch({ results: vault.index.search(parsed, 200) });
+    const results = vault.index.search(parsed, 200);
+    this.patch({ results });
+    this.track('note_searched', {
+      query_length_bucket: lengthBucket(parsed.text.length),
+      results_count: results.length,
+    });
   }
 
   /** Запомнить запрос в «НЕДАВНИЕ» (до 8, BEHAVIOR §4). */
@@ -3410,6 +3458,11 @@ export class AppController {
     return this.changes?.size ?? 0;
   }
 
+  /** Сколько аналитических событий ждут отправки (O-260817-05). */
+  analyticsPendingCount(): number {
+    return this.analytics?.size ?? 0;
+  }
+
   /** Показать в состоянии текущее число неотправленных. */
   private patchPending(): void {
     const pending = this.pendingCount();
@@ -3445,6 +3498,13 @@ export class AppController {
     try {
       const outcome = await engine.sync();
       this.patch({ sync: outcome, syncError: outcome.error ?? null });
+      if (outcome.error === undefined) {
+        this.track('sync_completed', {
+          pushed: outcome.pushed,
+          pulled: outcome.pulled,
+          conflicts: outcome.conflicts,
+        });
+      }
       for (const message of outcome.messages) this.toast({ message });
       if (options.announce === true && outcome.error === undefined) {
         this.toast({
@@ -3471,7 +3531,53 @@ export class AppController {
       },
       syncError: online ? this.state.syncError : null,
     });
-    if (online) void this.syncNow();
+    if (online) {
+      void this.syncNow();
+      void this.flushAnalytics();
+    }
+  }
+
+  // ── Аналитика (ТЗ §6, O-260817-05) ──────────────────────────────────────────
+  //
+  // Правило 2 (charter/12_ANALYTICS.md §1): содержание не измеряется никогда.
+  // `track` не принимает ничего, что не прошло через `buildAnalyticsEvent` —
+  // неизвестное имя события или поле, не объявленное в реестре, туда просто
+  // не попадёт (см. packages/core/src/analytics/schema.ts).
+
+  /**
+   * Поставить событие в очередь. Без согласия — молчаливый no-op: ничего не
+   * считается, не пишется на диск и не отправляется (до `analyticsOptIn` нет
+   * даже очереди на диске).
+   */
+  private track(name: AnalyticsEventName, props: Record<string, unknown>): void {
+    if (this.state.account?.analyticsOptIn !== true) return;
+    const queue = this.analytics;
+    if (!queue) return;
+    const event = buildAnalyticsEvent(name, props);
+    if (!event) return;
+    void queue.enqueue(event).then(() => {
+      if (this.state.online) void this.flushAnalytics();
+    });
+  }
+
+  /** Отправка накопленного — debounce, чтобы не дёргать сеть на каждое событие. */
+  private async flushAnalytics(): Promise<void> {
+    if (this.analyticsFlushTimer) return;
+    this.analyticsFlushTimer = setTimeout(() => {
+      this.analyticsFlushTimer = null;
+      void this.doFlushAnalytics();
+    }, 3000);
+  }
+
+  private async doFlushAnalytics(): Promise<void> {
+    const queue = this.analytics;
+    if (!queue || queue.size === 0 || !this.state.online) return;
+    if (this.state.account?.analyticsOptIn !== true) return;
+    const queued = queue.list();
+    const ok = await this.session
+      .sendAnalyticsEvents(queued.map((item) => item.event))
+      .catch(() => false);
+    if (ok) await queue.ack(queued.map((item) => item.id));
   }
 
   /** Ошибка живёт в статусе. Ввод текста она не трогает (приёмочный критерий №5). */
@@ -3508,10 +3614,12 @@ export class AppController {
       if (data.byteLength > 0) {
         await this.host.saveFile(`${note.title || stemOf(path)}.pdf`, data, 'application/pdf');
       }
+      this.track('export_requested', { format, notes_count: 1 });
       return;
     }
     const file = exportNote(note, format);
     await this.host.saveFile(file.name, file.data, MIME[format]);
+    this.track('export_requested', { format, notes_count: 1 });
   }
 
   /** Все заметки — zip со структурой папок и `attachments`. */
@@ -3521,6 +3629,7 @@ export class AppController {
     const paths = this.state.notes.filter((note) => !note.encrypted).map((note) => note.path);
     const data = await exportArchive(vault, paths);
     await this.host.saveFile('zapiski.zip', data, 'application/zip');
+    this.track('export_requested', { format: 'zip', notes_count: paths.length });
   }
 
   // ── Аккаунт ────────────────────────────────────────────────────────────────
