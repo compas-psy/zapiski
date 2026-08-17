@@ -34,11 +34,30 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       checks['blobs'] = 'fail';
     }
 
+    /*
+     * Почта проверяется, но НЕ роняет пробу.
+     *
+     * Без релея сервис остаётся полезным: заметки синхронизируются, вход через
+     * Яндекс ID работает. Ронять контейнер из-за почты значило бы выключить
+     * рабочее облако из-за неработающего письма. Поэтому `mail` попадает в
+     * ответ отдельным полем: мониторинг его видит, а `status` от него не
+     * зависит.
+     */
+    let mail: 'ok' | 'fail';
+    try {
+      mail = (await ctx.mailer.verify()) ? 'ok' : 'fail';
+    } catch {
+      mail = 'fail';
+    }
+
     const healthy = Object.values(checks).every((value) => value === 'ok');
     return reply.code(healthy ? 200 : 503).send({
       status: healthy ? 'ok' : 'degraded',
       uptimeSeconds: Math.floor((Date.now() - startedAt) / 1000),
       checks,
+      /* `mail: 'fail'` — вход по почте сейчас не работает, и причина вне
+         приложения: релей недоступен или не пускает. Яндекс ID при этом жив. */
+      mail,
     });
   });
 

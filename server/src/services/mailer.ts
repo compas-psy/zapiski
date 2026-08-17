@@ -14,6 +14,18 @@ export interface MagicLinkMail {
 
 export interface Mailer {
   sendMagicLink(mail: MagicLinkMail): Promise<void>;
+  /**
+   * Готов ли релей принять письмо — БЕЗ отправки.
+   *
+   * Заведено по отказу, который иначе не виден снаружи: вход по почте отвечал
+   * «письмо отправить не удалось», и это единственное, что знал владелец
+   * продукта. Причина каждый раз одна и та же по классу — релея нет или он не
+   * пускает, — но проверить это можно было только по логам на сервере.
+   *
+   * Теперь состояние почты видно в `/api/v1/health` рядом с базой и томом:
+   * `mail: fail` означает «чинить релей», а не «чинить приложение».
+   */
+  verify(): Promise<boolean>;
 }
 
 export interface SmtpOptions {
@@ -47,6 +59,14 @@ export class SmtpMailer implements Mailer {
     });
   }
 
+  async verify(): Promise<boolean> {
+    /* `verify` открывает соединение и здоровается — письма не уходит. */
+    return this.#transport.verify().then(
+      () => true,
+      () => false,
+    );
+  }
+
   async sendMagicLink(mail: MagicLinkMail): Promise<void> {
     const { subject, text, html } = renderMagicLink(mail);
     await this.#transport.sendMail({
@@ -62,6 +82,10 @@ export class SmtpMailer implements Mailer {
 /** Мейлер для тестов и локальной разработки: письма копятся в памяти. */
 export class MemoryMailer implements Mailer {
   readonly sent: MagicLinkMail[] = [];
+
+  async verify(): Promise<boolean> {
+    return true;
+  }
 
   async sendMagicLink(mail: MagicLinkMail): Promise<void> {
     this.sent.push(mail);
