@@ -74,6 +74,9 @@
     }
   },
   "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    },
     "deep-link": {
       "desktop": {
         "schemes": ["zapiski"]

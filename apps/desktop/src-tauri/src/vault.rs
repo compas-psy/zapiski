@@ -41,6 +41,19 @@ impl VaultRoot {
 /// Заголовок с путём внутри vault'а у сырого (бинарного) запроса записи.
 const PATH_HEADER: &str = "x-vault-path";
 
+/// Служебный каталог хранилища — тот же `META_DIR`, что в ядре
+/// (`packages/core/src/util/path.ts`).
+///
+/// Он выдаётся в скоуп ОТДЕЛЬНОЙ заявкой, потому что шаблон `<root>/**`,
+/// который заводит `allow_directory`, не покрывает компоненты пути,
+/// начинающиеся с точки, когда включена опция `require_literal_leading_dot`.
+/// На Windows она выключена по умолчанию, на Unix — включена; сборка под Linux
+/// ловила бы ровно тот отказ, который стоил Android полной неработоспособности
+/// каталога приложения (подробный разбор — в `apps/mobile/src-tauri/src/vault.rs`).
+/// Точка, написанная в шаблоне буквой, требованию удовлетворяет при любом
+/// значении опции.
+const META_DIR: &str = ".zapiski";
+
 /// Открыть каталог как vault.
 ///
 /// Здесь же каталог выдаётся в рантайм-скоупы: `fs` — чтобы фронтенд мог
@@ -62,12 +75,15 @@ pub fn vault_open<R: Runtime>(
         return Err(format!("{} — не каталог", root.display()));
     }
 
-    app.fs_scope()
-        .allow_directory(&root, true)
-        .map_err(|error| format!("не удалось выдать доступ к {}: {error}", root.display()))?;
-    app.asset_protocol_scope()
-        .allow_directory(&root, true)
-        .map_err(|error| format!("не удалось выдать доступ к {}: {error}", root.display()))?;
+    let meta = root.join(META_DIR);
+    for dir in [&root, &meta] {
+        app.fs_scope()
+            .allow_directory(dir, true)
+            .map_err(|error| format!("не удалось выдать доступ к {}: {error}", dir.display()))?;
+        app.asset_protocol_scope()
+            .allow_directory(dir, true)
+            .map_err(|error| format!("не удалось выдать доступ к {}: {error}", dir.display()))?;
+    }
 
     state.set(root.clone());
     Ok(root.to_string_lossy().into_owned())

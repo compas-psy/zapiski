@@ -25,6 +25,11 @@ use tauri_plugin_fs::FsExt;
 /// Имя каталога vault'а внутри каталога приложения.
 const VAULT_DIR: &str = "Записки";
 
+/// Служебный каталог хранилища — тот же `META_DIR`, что в ядре
+/// (`packages/core/src/util/path.ts`). Здесь он нужен, чтобы выдать его в
+/// скоуп ОТДЕЛЬНО: см. `allow_vault_dir`.
+const META_DIR: &str = ".zapiski";
+
 /// Корень открытого vault'а. `None` — vault ещё не открывали.
 #[derive(Default)]
 pub struct VaultRoot(Mutex<Option<PathBuf>>);
@@ -65,9 +70,7 @@ pub fn vault_open<R: Runtime>(
         return Err(format!("{} — не каталог", root.display()));
     }
 
-    app.fs_scope()
-        .allow_directory(&root, true)
-        .map_err(|error| format!("не удалось выдать доступ к {}: {error}", root.display()))?;
+    allow_vault_dir(&app, &root)?;
 
     state.set(root.clone());
 
@@ -78,6 +81,48 @@ pub fn vault_open<R: Runtime>(
     crate::platform::flush_quick_note();
 
     Ok(root.to_string_lossy().into_owned())
+}
+
+/// Выдать каталог vault'а в рантайм-скоуп плагина `fs` — целиком, включая
+/// служебный `.zapiski`.
+///
+/// ── Почему одного `allow_directory(root)` не хватает ────────────────────────
+///
+/// Он заводит два шаблона: `<root>` и `<root>/**` (tauri 2.11.5,
+/// `src/scope/fs.rs`, `allow_directory`). Сопоставление идёт `glob`-ом с
+/// опцией `require_literal_leading_dot`, а при ней подстановка `**` **не
+/// совпадает** с компонентой пути, начинающейся с точки. На Unix — а Android
+/// это Unix — опция включена, и выключить её конфигом нельзя: рантайм-скоуп
+/// плагин строит из `FsScope::default()`, куда настройка `plugins.fs` не
+/// доезжает (tauri-plugin-fs 2.5.1, `src/lib.rs`, `setup`).
+///
+/// Итог был такой: `<root>/.zapiski` не покрывался ни одним шаблоном, и плагин
+/// отвечал `forbidden path: …/Записки/.zapiski`. А в `.zapiski` лежит вся
+/// служебная часть хранилища — снимок индекса, журнал корзины, логи CRDT,
+/// история версий и каталог `tmp`, через который идёт атомарная запись.
+/// Поэтому каталог приложения на Android не работал ВООБЩЕ: первая же попытка
+/// сохранить что-либо звала `mkdir('.zapiski')` и получала отказ. Человеку это
+/// показывали как «Папка недоступна» — о папке, которую приложение секунду
+/// назад само же и создало.
+///
+/// Лечится не настройкой, а шаблоном: точка, написанная в шаблоне БУКВОЙ,
+/// требованию `require_literal_leading_dot` удовлетворяет. Поэтому служебный
+/// каталог выдаётся отдельной заявкой, и она работает при любом значении
+/// опции.
+fn allow_vault_dir<R: Runtime>(app: &AppHandle<R>, root: &Path) -> Result<(), String> {
+    for dir in scope_dirs(root) {
+        app.fs_scope()
+            .allow_directory(&dir, true)
+            .map_err(|error| format!("не удалось выдать доступ к {}: {error}", dir.display()))?;
+    }
+    Ok(())
+}
+
+/// Каталоги, на которые подаётся заявка в скоуп. Отдельной функцией — чтобы
+/// сторож в тестах проверял РЕШЕНИЕ, а не свою копию этого решения: уберите
+/// отсюда служебный каталог, и тест покраснеет.
+fn scope_dirs(root: &Path) -> Vec<PathBuf> {
+    vec![root.to_path_buf(), root.join(META_DIR)]
 }
 
 /// Абсолютный путь открытого vault'а — фронтенду он нужен, чтобы строить
@@ -283,6 +328,95 @@ mod tests {
         );
         assert_eq!(percent_decode("plain.md").unwrap(), "plain.md");
         assert!(percent_decode("%D0").is_err());
+    }
+
+    /// Шаблоны, которые заводит `Scope::allow_directory(path, recursive)`
+    /// (tauri 2.11.5, `src/scope/fs.rs`): сам каталог и его содержимое.
+    fn patterns_of(dir: &Path) -> Vec<String> {
+        let dir = dir.to_string_lossy().into_owned();
+        vec![dir.clone(), format!("{dir}/**")]
+    }
+
+    /// Пустит ли скоуп по этим шаблонам к этому пути.
+    ///
+    /// Опции — те же, что у скоупа: `require_literal_separator` включён всегда
+    /// (иначе `<dir>/*` покрывал бы подкаталоги — GHSA-6mv3-wm7j-h4w5), а
+    /// `require_literal_leading_dot` берётся из среды: на Unix он включён.
+    fn allowed(patterns: &[String], path: &str, literal_dot: bool) -> bool {
+        let path: PathBuf = PathBuf::from(path).components().collect();
+        patterns.iter().any(|pattern| {
+            glob::Pattern::new(pattern).expect("шаблон").matches_path_with(
+                &path,
+                glob::MatchOptions {
+                    require_literal_separator: true,
+                    require_literal_leading_dot: literal_dot,
+                    ..Default::default()
+                },
+            )
+        })
+    }
+
+    /// Всё, что хранилище само кладёт в `.zapiski` (`packages/core`).
+    fn служебные_пути(root: &str) -> Vec<String> {
+        [
+            String::new(),
+            "/index.json".to_owned(),
+            "/trash/index.json".to_owned(),
+            "/tmp/1a2b-3.tmp".to_owned(),
+            "/crdt/note-1.bin".to_owned(),
+            "/versions/note-1.json".to_owned(),
+            "/rename.journal.json".to_owned(),
+        ]
+        .iter()
+        .map(|tail| format!("{root}/{META_DIR}{tail}"))
+        .collect()
+    }
+
+    #[test]
+    fn заявка_на_корень_не_покрывает_служебный_каталог() {
+        /*
+         * Сторож самой причины, а не её следствия.
+         *
+         * Пока этот тест красный при `literal_dot = true`, отдельная заявка на
+         * `.zapiski` обязана оставаться в `allow_vault_dir`. Если однажды
+         * позеленеет — значит библиотека сменила правило, и заявку можно будет
+         * убрать осознанно, а не «на всякий случай».
+         */
+        let root = "/storage/emulated/0/Android/data/ru.cmpas.zapiski/files/Записки";
+        let only_root = patterns_of(Path::new(root));
+
+        assert!(
+            allowed(&only_root, &format!("{root}/Заметка.md"), true),
+            "обычная заметка обязана быть доступна одной заявкой на корень"
+        );
+        for path in служебные_пути(root) {
+            assert!(
+                !allowed(&only_root, &path, true),
+                "{path}: заявка на корень неожиданно покрыла скрытый путь — \
+                 перечитайте allow_vault_dir",
+            );
+        }
+    }
+
+    #[test]
+    fn отдельная_заявка_открывает_служебный_каталог_при_любой_опции() {
+        let root = "/storage/emulated/0/Android/data/ru.cmpas.zapiski/files/Записки";
+        /* Заявки берутся у самого кода, а не переписываются здесь: уберите
+           служебный каталог из `scope_dirs` — и тест покраснеет. */
+        let patterns: Vec<String> = scope_dirs(Path::new(root))
+            .iter()
+            .flat_map(|dir| patterns_of(dir))
+            .collect();
+
+        for literal_dot in [true, false] {
+            for path in служебные_пути(root) {
+                assert!(
+                    allowed(&patterns, &path, literal_dot),
+                    "{path}: недоступен при require_literal_leading_dot={literal_dot} — \
+                     хранилище не сможет сохранить ни индекс, ни корзину, ни заметку",
+                );
+            }
+        }
     }
 
     #[test]

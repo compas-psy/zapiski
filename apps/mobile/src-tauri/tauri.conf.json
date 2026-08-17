@@ -45,5 +45,9 @@
       "minSdkVersion": 24
     }
   },
-  "plugins": {}
+  "plugins": {
+    "fs": {
+      "requireLiteralLeadingDot": false
+    }
+  }
 }

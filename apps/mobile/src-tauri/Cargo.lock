@@ -4790,6 +4790,7 @@ dependencies = [
 name = "zapiski-mobile"
 version = "0.1.0"
 dependencies = [
+ "glob",
  "jni",
  "log",
  "serde",
