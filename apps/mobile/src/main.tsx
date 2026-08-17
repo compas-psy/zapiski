@@ -18,7 +18,6 @@ import './shell.css';
 import '@zapiski/app/styles.css';
 
 import { createHost } from './host';
-import { EVENTS, on } from './platform/ipc';
 
 /**
  * Тема применяется до первого рендера: иначе тёмная тема мигает светлым на
