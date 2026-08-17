@@ -250,6 +250,76 @@ export const en: AppCatalog = {
     openFailed: 'Could not open this file',
   },
 
+  feedback: {
+    open: 'Report a problem',
+    title: 'Report a problem',
+    intro: 'Write it as it happened, in your own words. People who build ZAPISKI read this.',
+
+    kindLabel: 'What happened',
+    kinds: {
+      broken: 'Broken',
+      brokenHint: 'Something does not work',
+      awkward: 'Awkward',
+      awkwardHint: 'Works, but gets in the way',
+      'want-feature': 'Missing',
+      'want-featureHint': 'What I need is not there',
+      other: 'Other',
+      otherHint: 'Something else',
+    },
+
+    textLabel: 'What happened',
+    textPlaceholder: 'For example: after changing the folder the list stayed empty',
+    textRequired: 'Write a few words — otherwise there is nothing to work with',
+
+    contactLabel: 'Email for a reply',
+    contactHint: 'Optional. Without it we will read but cannot answer.',
+
+    diagnosticsTitle: 'What will be sent',
+    diagnosticsHint:
+      'Not a line from your notes — no text, no titles, no folder names. Only what is listed below; any item can be turned off.',
+    diagnostics: {
+      version: 'App version',
+      platform: 'Platform',
+      locale: 'Interface language',
+      notes: 'Roughly how many notes',
+      encryption: 'Whether encryption is on',
+      errorCodes: 'Codes of recent failures',
+      daysSinceInstall: 'Days since install',
+    },
+    notesBuckets: {
+      '<100': 'fewer than 100',
+      '100-500': '100 to 500',
+      '500+': 'more than 500',
+    },
+    on: 'yes',
+    off: 'no',
+    none: 'none',
+    screenshotLabel: 'Attach a screenshot',
+    screenshotWarning:
+      'A screenshot may show the text of your notes. Look at it yourself before attaching.',
+    screenshotPick: 'Choose an image',
+    screenshotAttached: 'Screenshot attached',
+    screenshotRemove: 'Remove screenshot',
+    screenshotFailed: 'Could not read the image',
+
+    submit: 'Send',
+    sending: 'Sending',
+    sentTitle: 'Thank you — received',
+    sentHint: 'If you left an email, we will reply to it.',
+    queuedTitle: 'We will send it when you are online',
+    queuedHint: 'Saved on this device and will go out on its own. You can close the app.',
+    done: 'Done',
+
+    prompt: {
+      error: 'Something went wrong. Tell us how it looked?',
+      sync_conflict: 'A note diverged across two devices. Tell us what happened?',
+      slow_op: 'That took longer than usual. Tell us how it looked?',
+      menu: 'Report a problem?',
+      action: 'Tell us',
+      dismiss: 'Not now',
+    },
+  },
+
   quickNote: {
     title: 'Quick note',
     open: 'Quick note',

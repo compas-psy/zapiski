@@ -50,6 +50,8 @@ import { ArchiveScreen } from "./screens/ArchiveScreen.js";
 import { TrashScreen } from "./screens/TrashScreen.js";
 import { VersionsScreen } from "./screens/VersionsScreen.js";
 import { HelpScreen } from "./screens/HelpScreen.js";
+import { FeedbackScreen } from "./screens/FeedbackScreen.js";
+import { FeedbackPrompt } from "./components/FeedbackPrompt.js";
 import { ShareSheet } from "./screens/ShareSheet.js";
 import { QuickNoteSheet } from "./screens/QuickNoteSheet.js";
 
@@ -100,10 +102,10 @@ function useSideBySide(layout: Layout): boolean {
  * Каркас приложения — всё, что ниже провайдеров.
  *
  * Экспортируется намеренно: `App` создаёт контроллер сам, и тест, которому
- * нужен СВОЙ контроллер или свой порт намерений, иначе не может смонтировать
- * настоящий каркас — а значит не может проверить дорогу от нажатия до экрана.
- * Ровно эта дыра однажды пропустила Справку, которая была готова и никуда не
- * подключена.
+ * нужен СВОЙ контроллер (перехваченная сеть, заданные настройки) или свой порт
+ * намерений ОС, иначе не может смонтировать настоящий каркас — а значит не
+ * может проверить дорогу от нажатия до экрана. Ровно эта дыра однажды
+ * пропустила Справку, которая была готова и никуда не подключена.
  */
 export function AppShell(): ReactNode {
   const app = useApp();
@@ -407,6 +409,10 @@ export function AppShell(): ReactNode {
          монтировал экран напрямую: дорогу к экрану он проверить не мог. */
       case "help":
         return <HelpScreen />;
+      /* Обращение из беты — тоже полноэкранное: человек в этот момент
+         рассказывает о сбое, и делить экран со списком заметок ему незачем. */
+      case "feedback":
+        return <FeedbackScreen />;
       /* Поиск полноэкранный (SCREENS §6) — в том числе на desktop. */
       case "search":
         return <SearchScreen />;
@@ -496,6 +502,7 @@ export function AppShell(): ReactNode {
     return (
       <div className="za-app">
         <TitleBar />
+        <FeedbackPrompt />
         <div className="za-frame">
           <div className="za-pane">
             {state.route.name === "note" ? notePane : listPane}
@@ -509,6 +516,7 @@ export function AppShell(): ReactNode {
   return (
     <div className="za-app">
       <TitleBar />
+      <FeedbackPrompt />
       <div className={`za-frame za-frame--${layout}`}>
         {/* ≥1200: библиотека — постоянная панель 224, а не оверлей. */}
         {layout === "triple" ? (

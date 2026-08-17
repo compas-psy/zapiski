@@ -18,6 +18,7 @@ import type {
   VaultStorage,
   SyncBackend,
 } from '@zapiski/core/contract';
+import type { FeedbackContext, FeedbackEntry } from '@zapiski/core';
 
 /** Всё, что приложение получает от платформы. Больше ему ничего не нужно. */
 export interface AppHost {
@@ -124,7 +125,16 @@ export type Route =
   | { name: 'import' }
   | { name: 'versions'; noteId: string }
   /** Справка: горячие клавиши и шпаргалка по разметке. */
-  | { name: 'help' };
+  | { name: 'help' }
+  /**
+   * Обращение из беты.
+   *
+   * `entry` — откуда пришли. Это не украшение статистики: по нему видно, какая
+   * точка входа вообще работает, а какая стоит мёртвой. Контекст приходит с
+   * маршрутом, а не собирается экраном: к моменту открытия формы сбой уже
+   * позади, и спрашивать о нём состояние поздно.
+   */
+  | { name: 'feedback'; entry: FeedbackEntry; context?: FeedbackContext };
 
 export type SettingsSection =
   | 'appearance'

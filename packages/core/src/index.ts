@@ -245,3 +245,41 @@ export { exportPdf, PDF_PAGE_SETUP, renderPdfSource } from './export/pdf.js';
 
 // ── i18n ───────────────────────────────────────────────────────────────────
 export { catalog, DEFAULT_LOCALE, en, isLocale, ru, storedLocale, type Catalog, type Locale } from './i18n/i18n.js';
+
+// ── Обратная связь беты ────────────────────────────────────────────────────
+export {
+  buildFeedbackReport,
+  isErrorCode,
+  notesBucket,
+  type BuildFeedbackReportInput,
+  type DiagnosticsConsent,
+  type FeedbackContext,
+  type FeedbackDiagnostics,
+  type FeedbackDraft,
+  type FeedbackEntry,
+  type FeedbackKind,
+  type FeedbackPlatform,
+  type FeedbackReport,
+  type NotesBucket,
+} from './feedback/report.js';
+export {
+  assertNoFreeText,
+  charsBucket,
+  feedbackCancelled,
+  feedbackOpened,
+  feedbackPrompted,
+  feedbackSubmitted,
+  type CharsBucket,
+  type FeedbackCancelledEvent,
+  type FeedbackEvent,
+  type FeedbackOpenedEvent,
+  type FeedbackPromptedEvent,
+  type FeedbackSubmittedEvent,
+  type FeedbackSubmittedInput,
+} from './feedback/events.js';
+export {
+  DISMISS_QUIET_MS,
+  PROMPT_QUIET_MS,
+  shouldOfferFeedback,
+  type FeedbackPromptTimes,
+} from './feedback/prompt.js';

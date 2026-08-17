@@ -1444,10 +1444,23 @@ function PlusSection(): ReactNode {
  */
 function AboutSection(): ReactNode {
   const app = useApp();
-  const copy = useStrings().settings.about;
+  const strings = useStrings();
+  const copy = strings.settings.about;
 
   return (
     <>
+      {/*
+        Постоянная дорога к обратной связи.
+
+        Контекстная полоса появляется после сбоя и не чаще раза в сутки — и это
+        правильно, но у неё есть обратная сторона: человек, которому есть что
+        сказать СЕЙЧАС, не должен ждать, пока что-нибудь сломается. Поэтому
+        вход из меню безусловный и стоит первым, а не под списком лицензий.
+      */}
+      <Button variant="secondary" onClick={() => app.openFeedback('menu')}>
+        {strings.feedback.open}
+      </Button>
+
       <div className="za-info__row">
         <span>{copy.product}</span>
         <span className="za-info__value">{copy.productName}</span>

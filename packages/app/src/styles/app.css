@@ -1772,6 +1772,140 @@
   color: var(--accent);
 }
 
+/* ── Обратная связь беты ──────────────────────────────────────────────────── */
+
+/*
+  Контекстная полоса. Живёт между строкой заголовка и рабочей областью: не
+  перекрывает ничего и не исчезает сама, в отличие от тоста.
+
+  Тон нейтральный, а не тревожный. Красная плашка после каждого сбоя приучает
+  бояться приложения; здесь мы не сообщаем об ошибке — про неё человек уже
+  знает, — а спрашиваем, готов ли он рассказать.
+*/
+.za-feedback-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  padding: var(--sp-8) var(--sp-16);
+  background: var(--surface-2, var(--surface));
+  border-block-end: var(--border-w) solid var(--line);
+  /* Полоса появляется поверх уже нарисованного экрана: сдвиг сверху и
+     проявление, 160 мс — столько же, сколько у остальных всплывающих частей. */
+  animation: za-feedback-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.za-feedback-bar__text {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-secondary);
+}
+@keyframes za-feedback-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .za-feedback-bar {
+    animation: none;
+  }
+}
+
+/* Тип обращения: строка на вариант — четыре подписи в ряд не помещаются на
+   телефоне, этим уже болели сегменты в настройках. */
+.za-feedback__kinds {
+  display: grid;
+  gap: var(--sp-8);
+}
+/* Имя и пояснение — одна группа: тесно между собой, свободно от соседей.
+   Проверено в браузере: с общим отступом пояснение читалось как подпись к
+   следующему варианту. */
+.za-feedback__kind {
+  display: grid;
+  gap: 1px;
+}
+.za-feedback__kind-name {
+  color: var(--text);
+}
+.za-feedback__kind-hint {
+  font-size: var(--fs-xs);
+  /* Не `--text-tertiary`: на светлом фоне это ниже 4.5:1, а пояснение здесь
+     несёт смысл — по нему выбирают между «Неудобно» и «Другое». */
+  color: var(--text-secondary);
+}
+
+/* Поле рассказа. Отдельная `textarea`, потому что поля в одну строку в наборе
+   нет, а рассказ о сбое — это несколько предложений. */
+.za-feedback__text {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12) var(--sp-12);
+  font: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-input, var(--r-card));
+  resize: vertical;
+}
+.za-feedback__text::placeholder {
+  /* Пример в подсказке читают — значит он обязан быть читаемым (≥4.5:1). */
+  color: var(--text-secondary);
+}
+.za-feedback__text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.za-feedback__error {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--danger, var(--text-secondary));
+}
+
+/* Диагностика: галочка и ЗНАЧЕНИЕ справа. Согласие на «Количество заметок» без
+   самого количества — согласие вслепую. */
+.za-feedback__diagnostics {
+  display: grid;
+  gap: var(--sp-4);
+}
+.za-feedback__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-16);
+  padding: var(--sp-8) 0;
+  border-block-end: var(--border-w) solid var(--line-soft, var(--line));
+}
+.za-feedback__value {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  text-align: end;
+}
+
+.za-feedback__shot {
+  display: grid;
+  gap: var(--sp-8);
+  justify-items: start;
+}
+.za-feedback__preview {
+  max-inline-size: 100%;
+  max-block-size: 240px;
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-card);
+}
+.za-feedback__submit {
+  padding-block-start: var(--sp-8);
+}
+.za-feedback__done {
+  text-align: center;
+  justify-items: center;
+  padding-block-start: var(--sp-32, 32px);
+}
+
 /* ── Быстрая записка ──────────────────────────────────────────────────────── */
 
 /*
