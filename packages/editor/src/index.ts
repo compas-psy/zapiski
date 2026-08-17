@@ -144,6 +144,7 @@ export {
   insertDivider,
   insertFootnote,
   insertImage,
+  isImagesOnlyLine,
   splitLine,
 } from './commands/formatting.js';
 export type { LineParts } from './commands/formatting.js';
