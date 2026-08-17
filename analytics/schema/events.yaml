@@ -1,0 +1,59 @@
+# Реестр событий аналитики ЗАПИСОК (O-260817-05, charter/12_ANALYTICS.md Ф3).
+#
+# Правило 2 (12_ANALYTICS.md §1): содержание не измеряется никогда — ни
+# заметка, ни заголовок, ни поисковый запрос, ни путь к файлу. Только факт,
+# задержка и корзина длины (bucket), никогда — точный текст или точная длина,
+# которая могла бы послужить отпечатком содержимого.
+#
+# Правило 3: у каждого события есть владелец и вопрос, на который оно
+# отвечает. Изменение состава событий и полей — только после ревью InfoSec
+# (шапка charter/12_ANALYTICS.md).
+#
+# Источник истины по типам и валидации — packages/core/src/analytics/schema.ts
+# (клиент) и server/src/routes/analytics.ts (сервер); тест
+# packages/core/test/analytics-schema-registry.test.ts держит их в согласии с
+# этим файлом.
+#
+# Отправка — только с явного согласия в настройках (переключатель в разделе
+# аккаунта, рядом с рекламным согласием), по умолчанию выключена. До согласия
+# ничего не считается и не ставится в очередь.
+
+version: 1
+
+events:
+  note_saved:
+    question: "Люди действительно сохраняют заметки — и как часто пишут длинные?"
+    props:
+      length_bucket:
+        type: enum
+        values: [xs, s, m, l, xl]
+      encrypted:
+        type: boolean
+
+  note_searched:
+    question: "Работает ли поиск как основной способ найти заметку?"
+    props:
+      query_length_bucket:
+        type: enum
+        values: [xs, s, m, l, xl]
+      results_count:
+        type: number
+
+  sync_completed:
+    question: "Синк вообще случается, и с каким объёмом изменений?"
+    props:
+      pushed:
+        type: number
+      pulled:
+        type: number
+      conflicts:
+        type: number
+
+  export_requested:
+    question: "Каким форматом экспорта пользуются и насколько массово?"
+    props:
+      format:
+        type: enum
+        values: [md, html, docx, pdf, zip]
+      notes_count:
+        type: number

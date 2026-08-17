@@ -89,6 +89,10 @@ export const errors = {
   billingDisabled: (): ApiError =>
     new ApiError(404, 'billing_disabled', PENDING_REGISTRY.billingDisabled),
 
+  /** Флаг выключен или согласия нет/отозвано — оба случая неотличимы снаружи. */
+  analyticsDisabled: (): ApiError =>
+    new ApiError(404, 'analytics_disabled', PENDING_REGISTRY.analyticsDisabled),
+
   etagMismatch: (): ApiError => new ApiError(412, 'etag_mismatch', PENDING_REGISTRY.etagMismatch),
 
   blobTooLarge: (): ApiError => new ApiError(413, 'blob_too_large', PENDING_REGISTRY.blobTooLarge),

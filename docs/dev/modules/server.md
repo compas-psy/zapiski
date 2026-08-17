@@ -264,6 +264,21 @@ HTML приходит **от клиента** (ключей у сервера н
 `platforms` сопоставляются точно и по префиксу (`windows` → `windows-x86_64`).
 Сравнение версий — semver, предрелиз младше релиза.
 
+### Аналитика
+
+`POST /api/v1/analytics/events` (ТЗ §6, O-260817-05) — `{ events: AnalyticsEvent[] }`,
+до 200 штук за раз. `AnalyticsEvent` — `{ event, ts, props }`, `event` и состав
+`props` фиксированы реестром `analytics/schema/events.yaml` (`note_saved`,
+`note_searched`, `sync_completed`, `export_requested`); лишнее поле в `props`
+роняет батч целиком `400 bad_analytics_event`, а не отбрасывается молча.
+
+Два независимых условия, оба обязательны: флаг `ANALYTICS_ENABLED` (по
+умолчанию `false`) и `users.analytics_opt_in` конкретного человека
+(`POST /api/v1/auth/analytics-consent`), проверяется на каждый запрос — отзыв
+согласия закрывает приёмник немедленно, а не только останавливает клиент.
+Любое из двух отсутствующих условий — `404 analytics_disabled`, без разницы,
+какое именно (снаружи это не должно быть различимо). Успех — `200 { accepted }`.
+
 ### Здоровье
 
 | Путь | Ответ |
@@ -309,6 +324,16 @@ HTML приходит **от клиента** (ключей у сервера н
 | `subscriptions` | `plan`, `status`, даты пробного/периода/льготы, `provider`, `auto_renew` |
 | `billing_events` | `(provider, event_id)` уникально — идемпотентность вебхуков |
 | `published_pages` | `slug`, `storage_key`, `content_hash`, `size`, `revoked_at` |
+
+### `0005_analytics_events.sql`
+
+| Таблица | Ключевые поля |
+| --- | --- |
+| `analytics_events` | `user_id`, `event`, `props` (jsonb — только то, что прошло `.strict()`-схему маршрута), `client_ts`, `received_at` |
+
+Только добавляющая миграция — ничего из `0001`–`0003` не меняет. Ретенция
+сырых событий (`charter/12_ANALYTICS.md §4`: 180 дней) фоновой уборкой пока
+не реализована — решение вне рамок O-260817-05.
 
 ### Том блобов
 

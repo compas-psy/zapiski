@@ -12,6 +12,7 @@ export const VERSIONS_DIR = `${META_DIR}/versions`;
 export const INDEX_FILE = `${META_DIR}/index.json`;
 export const CONFIG_FILE = `${META_DIR}/config.json`;
 export const QUEUE_FILE = `${META_DIR}/sync-queue.json`;
+export const ANALYTICS_QUEUE_FILE = `${META_DIR}/analytics-queue.json`;
 export const ATTACHMENTS_DIR = 'attachments';
 
 /**

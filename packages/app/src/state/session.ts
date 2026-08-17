@@ -67,6 +67,8 @@ export class AuthError extends Error {
 export interface CloudSession {
   /** Согласие на рекламные письма — как оно записано на сервере. */
   marketingOptIn?: boolean;
+  /** Согласие на продуктовую аналитику (O-260817-05) — как оно записано на сервере. */
+  analyticsOptIn?: boolean;
   accessToken: string;
   refreshToken: string;
   /** Абсолютный момент истечения access-токена, мс эпохи. */
@@ -232,6 +234,44 @@ export class SessionStore {
   }
 
   /**
+   * Дать или отозвать согласие на продуктовую аналитику (ТЗ §6, O-260817-05).
+   * Тот же принцип, что у рекламного согласия: показываем то, что записал
+   * сервер, не то, что нажали.
+   */
+  async setAnalyticsConsent(optIn: boolean): Promise<boolean> {
+    const token = await this.accessToken();
+    if (token === null) throw new AuthError('server');
+    const response = await this.send(`${this.base}/auth/analytics-consent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ optIn }),
+    });
+    if (!response.ok) throw new AuthError('server');
+    const body = (await response.json()) as { analyticsOptIn?: unknown };
+    return body.analyticsOptIn === true;
+  }
+
+  /**
+   * Отправка партии аналитических событий (O-260817-05). Возвращает `false`
+   * молча на любой сетевой отказ — очередь на диске остаётся нетронутой,
+   * `AnalyticsQueue` попробует снова при следующем выходе в сеть.
+   */
+  async sendAnalyticsEvents(events: readonly unknown[]): Promise<boolean> {
+    const token = await this.accessToken();
+    if (token === null) return false;
+    try {
+      const response = await this.send(`${this.base}/analytics/events`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+        body: JSON.stringify({ events }),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Замкнуть вход по тому, что принесла оболочка.
    *
    * `magicToken` обменивается здесь и только здесь: `device_id` знает
@@ -366,6 +406,7 @@ export class SessionStore {
       userId: body.user?.id ?? '',
       email: body.user?.email ?? '',
       deviceId: body.device?.id ?? fallbackDevice,
+      analyticsOptIn: body.user?.analyticsOptIn === true,
     };
   }
 
@@ -384,6 +425,7 @@ export class SessionStore {
         email?: string;
         device?: { id?: string };
         marketingOptIn?: unknown;
+        analyticsOptIn?: unknown;
       }>(response);
       return {
         ...session,
@@ -391,6 +433,7 @@ export class SessionStore {
         email: body.email ?? session.email,
         deviceId: body.device?.id ?? session.deviceId,
         marketingOptIn: body.marketingOptIn === true,
+        analyticsOptIn: body.analyticsOptIn === true,
       };
     } catch {
       return session;
