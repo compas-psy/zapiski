@@ -181,6 +181,17 @@ export { CrdtStore } from './crdt/store.js';
 // ── Синхронизация ──────────────────────────────────────────────────────────
 export { SyncEngine, type SyncEngineOptions, type SyncMode, type SyncOutcome } from './sync/engine.js';
 export { ChangeQueue, type ChangeKind, type QueuedChange } from './sync/queue.js';
+export {
+  ANALYTICS_EVENT_SCHEMA,
+  ANALYTICS_SCHEMA_VERSION,
+  LENGTH_BUCKETS,
+  buildAnalyticsEvent,
+  lengthBucket,
+  type AnalyticsEvent,
+  type AnalyticsEventName,
+  type LengthBucket,
+} from './analytics/schema.js';
+export { AnalyticsQueue } from './analytics/queue.js';
 export { MAX_SNAPSHOTS, VersionHistory } from './sync/versions.js';
 export { diff3, type Diff3Result } from './sync/diff3.js';
 export { etagOf, LocalFolderBackend, PreconditionFailed, type LocalFolderOptions } from './sync/local-folder.js';
