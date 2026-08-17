@@ -257,8 +257,8 @@ mod api {
         let started = with_env(|env| {
             let key = env.new_string(key_id)?;
             let data = env.byte_array_from_slice(secret)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "biometricsEnroll",
                 "(JLjava/lang/String;[B)V",
                 &[
@@ -280,8 +280,8 @@ mod api {
         let (id, rx) = register();
         let started = with_env(|env| {
             let key = env.new_string(key_id)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "biometricsUnlock",
                 "(JLjava/lang/String;)V",
                 &[JValue::Long(id), JValue::Object(&key)],
@@ -298,8 +298,8 @@ mod api {
     pub fn biometrics_remove(key_id: &str) -> Result<(), String> {
         with_env(|env| {
             let key = env.new_string(key_id)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "biometricsRemove",
                 "(Ljava/lang/String;)V",
                 &[JValue::Object(&key)],
@@ -312,8 +312,8 @@ mod api {
         let (id, rx) = register();
         let started = with_env(|env| {
             let source = env.new_string(html)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "renderPdf",
                 "(JLjava/lang/String;D)V",
                 &[
@@ -359,8 +359,8 @@ mod api {
         let started = with_env(|env| {
             let source = env.new_string(url)?;
             let target = env.new_string(destination)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "download",
                 "(JLjava/lang/String;Ljava/lang/String;)V",
                 &[
@@ -381,8 +381,8 @@ mod api {
     pub fn install_apk(path: &str) -> Result<(), String> {
         with_env(|env| {
             let target = env.new_string(path)?;
-            env.call_static_method(
-                BRIDGE,
+            call_bridge(
+                env,
                 "installApk",
                 "(Ljava/lang/String;)V",
                 &[JValue::Object(&target)],
@@ -567,8 +567,8 @@ mod api {
             let first = env.new_string(first)?;
             match second {
                 None => {
-                    env.call_static_method(
-                        BRIDGE,
+                    call_bridge(
+                env,
                         method,
                         "(Ljava/lang/String;Ljava/lang/String;)V",
                         &[JValue::Object(&tree), JValue::Object(&first)],
@@ -576,8 +576,8 @@ mod api {
                 }
                 Some(second) => {
                     let second = env.new_string(second)?;
-                    env.call_static_method(
-                        BRIDGE,
+                    call_bridge(
+                env,
                         method,
                         "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
                         &[
@@ -933,3 +933,53 @@ pub use api::{
     saf_pick_folder, saf_read, saf_release_trees, saf_remove, saf_rename, saf_stat,
     saf_supports_rename, saf_write, save_to_downloads, set_secure, share_text,
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Сторож моста
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    /// Ни один вызов Java не ищет класс по имени в обход кеша.
+    ///
+    /// ── Что было ────────────────────────────────────────────────────────────
+    ///
+    /// `BRIDGE_CLASS` завели, чтобы не искать класс `FindClass`-ем в потоках
+    /// пула Tauri: там загрузчик системный и классов приложения не знает.
+    /// Но перевели на него не всё — восемь вызовов (биометрия, печать,
+    /// загрузка APK, установка, `safMkdir`, `safRemove`, `safRename`)
+    /// продолжали звать `call_static_method(BRIDGE, …)` напрямую. Кеш при этом
+    /// выглядел рабочим: часть вызовов шла через него, часть — мимо, и
+    /// `ClassNotFoundException: ru.cmpas.zapiski.NativeBridge` приходил
+    /// избирательно. Заказчик видел его на выборе папки и не мог понять,
+    /// почему «то работает, то нет».
+    ///
+    /// ── Правило ─────────────────────────────────────────────────────────────
+    ///
+    /// Имя класса знает ровно одна функция — `call_bridge`. Все остальные
+    /// зовут её. Здесь это сторожится механически: в файле допустимы ровно два
+    /// упоминания `call_static_method`, и оба — внутри `call_bridge` (ветка с
+    /// кешем и запасная).
+    ///
+    /// Если добавляете новый вызов Java — пишите `call_bridge(env, …)`, и тест
+    /// останется зелёным сам собой.
+    #[test]
+    fn вызовы_java_идут_только_через_кеш_класса() {
+        let source = include_str!("android.rs");
+        /* Себя тест не считает: упоминания в этом комментарии и в проверке
+        ниже — не вызовы. Поэтому смотрим только код до модуля тестов. */
+        let code = source
+            .split_once("mod tests {")
+            .map(|(before, _)| before)
+            .unwrap_or(source);
+        let direct = code.matches("call_static_method").count();
+
+        assert_eq!(
+            direct, 2,
+            "вызовов `call_static_method` в обход `call_bridge`: {}. \
+             Класс моста знает только `call_bridge` — иначе вызов из потока \
+             пула Tauri получит ClassNotFoundException",
+            direct.saturating_sub(2),
+        );
+    }
+}

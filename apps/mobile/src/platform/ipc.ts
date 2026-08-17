@@ -68,17 +68,54 @@ export function call<T>(command: string, args?: Record<string, unknown>): Promis
 }
 
 /**
- * `invoke` с сырым телом: байты уходят как есть, а не как JSON-массив чисел.
- * Разница не косметическая — на вложении в несколько мегабайт JSON-путь
- * стоит секунд и утраивает пиковую память.
+ * Размер куска при кодировании в base64.
+ *
+ * `String.fromCharCode(...bytes)` разворачивает массив в аргументы вызова, а
+ * их число ограничено размером стека: на вложении в мегабайты это не «медленно»,
+ * а `RangeError: Maximum call stack size exceeded`. 8192 — заведомо безопасно.
+ */
+const BASE64_CHUNK = 8192;
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let at = 0; at < bytes.length; at += BASE64_CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(at, at + BASE64_CHUNK));
+  }
+  return btoa(binary);
+}
+
+/**
+ * `invoke` с телом-байтами: запись заметки, запись в папку SAF, экспорт файла.
+ *
+ * ── Почему base64, а не `Uint8Array`, как в документации ───────────────────
+ *
+ * Документация Tauri («Accessing Raw Request») говорит: пошлите `Uint8Array`,
+ * примите `InvokeBody::Raw`. Здесь так и было — и на Android не работало
+ * НИКОГДА. В транспорте Tauri (`tauri/scripts/ipc-protocol.js`) стоит
+ * `const canUseCustomProtocol = osName !== 'android'`: на Android запрос
+ * уходит не POST-ом со своим телом, а через `window.ipc.postMessage`, где всё
+ * сообщение проходит через `JSON.stringify`. Сырого тела там не бывает в
+ * принципе, и `Uint8Array` превращается в массив чисел.
+ *
+ * Цена была полной: ни одна заметка не могла сохраниться. Приложение
+ * отвечало «тело запроса должно быть бинарным» на свои же данные.
+ *
+ * Раз тело всё равно станет JSON-ом, выбираем то представление, которое
+ * дешевле: массив чисел даёт ~4 байта текста на байт данных и вектор из
+ * миллионов значений при разборе, base64 — 1.33 байта и одну строку. На
+ * вложении в 3 МБ это разница между десятками мегабайт кучи и четырьмя.
+ *
+ * Rust принимает оба вида (`src-tauri/src/body.rs`), так что путь своего
+ * протокола на других платформах ничего не теряет.
  */
 export function callRaw<T>(
   command: string,
   body: Uint8Array,
   headers?: Record<string, string>,
 ): Promise<T> {
-  // ArrayBufferView передаётся в IPC как InvokeBody::Raw.
-  return invoke<T>(command, body, headers === undefined ? undefined : { headers });
+  /* Имя поля — то же, что читает `src-tauri/src/body.rs`. Объект, а не голая
+     строка: `InvokeArgs` строку не принимает. */
+  return invoke<T>(command, { data: toBase64(body) }, headers === undefined ? undefined : { headers });
 }
 
 export function on<T>(event: string, handler: (payload: T) => void): Promise<UnlistenFn> {

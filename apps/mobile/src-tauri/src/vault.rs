@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::Request;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tauri_plugin_fs::FsExt;
 
@@ -176,14 +176,13 @@ pub async fn vault_write_atomic<R: Runtime>(
         .ok_or_else(|| format!("в запросе нет заголовка {PATH_HEADER}"))?;
     let relative = percent_decode(relative)?;
 
-    let data = match request.body() {
-        InvokeBody::Raw(bytes) => bytes.as_slice(),
-        InvokeBody::Json(_) => return Err("тело запроса должно быть бинарным".to_owned()),
-    };
+    /* Байты, а не «тело обязано быть сырым»: на Android сырого тела не бывает
+    в принципе — см. `body.rs`. */
+    let data = crate::body::request_bytes(&request)?;
 
     let root = state.get().ok_or_else(|| "vault не открыт".to_owned())?;
     let target = resolve_in_root(&root, &relative)?;
-    write_atomic(&target, data).map_err(|error| format!("{}: {error}", target.display()))
+    write_atomic(&target, &data).map_err(|error| format!("{}: {error}", target.display()))
 }
 
 /// tmp → fsync → rename. Именно в этом порядке и без возврата управления

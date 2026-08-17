@@ -14,6 +14,7 @@
 
 mod android;
 mod biometrics;
+mod body;
 mod files;
 mod platform;
 mod print;

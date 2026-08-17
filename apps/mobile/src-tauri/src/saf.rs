@@ -29,7 +29,7 @@
 //! делает Kotlin (`apps/mobile/android/.../Saf.kt`) через единственный
 //! JNI-модуль `android.rs`.
 
-use tauri::ipc::{InvokeBody, Request, Response};
+use tauri::ipc::{Request, Response};
 
 use crate::android;
 
@@ -132,11 +132,9 @@ pub fn saf_read(tree: String, path: String) -> Result<Response, String> {
 pub async fn saf_write(request: Request<'_>) -> Result<String, String> {
     let tree = header(&request, TREE_HEADER)?;
     let path = header(&request, PATH_HEADER)?;
-    let data = match request.body() {
-        InvokeBody::Raw(bytes) => bytes.as_slice(),
-        InvokeBody::Json(_) => return Err("тело запроса должно быть бинарным".to_owned()),
-    };
-    android::saf_write(&tree, &path, data)
+    /* На Android сырого тела не бывает в принципе — см. `body.rs`. */
+    let data = crate::body::request_bytes(&request)?;
+    android::saf_write(&tree, &path, &data)
 }
 
 #[tauri::command(async)]

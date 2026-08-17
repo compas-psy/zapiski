@@ -33,6 +33,7 @@ tauri-plugin-store = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 log = "0.4"
+base64 = "0.22"
 
 # JNI нужен только на Android: FLAG_SECURE, вибрация, BiometricPrompt, печать,
 # скачивание обновления и перерисовка виджетов делаются платформенными API,

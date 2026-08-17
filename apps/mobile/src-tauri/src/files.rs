@@ -16,7 +16,7 @@
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use tauri::ipc::{InvokeBody, Request};
+use tauri::ipc::Request;
 use tauri::{AppHandle, Manager, Runtime};
 
 const NAME_HEADER: &str = "x-file-name";
@@ -27,10 +27,8 @@ pub async fn save_file<R: Runtime>(app: AppHandle<R>, request: Request<'_>) -> R
     let name = header(&request, NAME_HEADER)?;
     let mime = header(&request, MIME_HEADER)?;
 
-    let data = match request.body() {
-        InvokeBody::Raw(bytes) => bytes.as_slice(),
-        InvokeBody::Json(_) => return Err("тело запроса должно быть бинарным".to_owned()),
-    };
+    /* На Android сырого тела не бывает в принципе — см. `body.rs`. */
+    let data = crate::body::request_bytes(&request)?;
 
     if name.contains('/') || name.contains('\\') || name.starts_with('.') {
         // Имя приходит из заголовка заметки, то есть из текста пользователя.
