@@ -161,6 +161,26 @@ describe('форма обращения', () => {
   });
 });
 
+describe('дорога к форме', () => {
+  it('в библиотеке есть постоянный вход — не только в настройках', async () => {
+    /*
+     * Требование альфа-тестирования: путь в три касания сквозь настройки
+     * означает, что напишут единицы. Человек, у которого что-то не получилось,
+     * закрывает приложение, а не идёт искать раздел «О приложении».
+     *
+     * Сторож проверяет именно НАЖАТИЕ, а не наличие метода: `openFeedback`
+     * работал и до этой кнопки, а дойти до него человек не мог.
+     */
+    const { app } = await boot();
+
+    const entry = await screen.findByRole('button', { name: ru.feedback.open });
+    fireEvent.click(entry);
+
+    expect(await screen.findByRole('button', { name: ru.feedback.submit })).toBeTruthy();
+    expect(app.getState().route.name).toBe('feedback');
+  });
+});
+
 describe('контекстная полоса', () => {
   it('появляется после сбоя и ведёт в форму', async () => {
     const { app } = await boot();

@@ -81,6 +81,20 @@ export const IconHelp = (p: AppIconProps): ReactNode => (
   </Glyph>
 );
 
+/**
+ * Обратная связь: реплика в облачке.
+ *
+ * Не восклицательный знак и не треугольник — они означают «ошибка», а здесь
+ * приглашение поговорить. Не конверт: письмо обещает переписку, а обращение
+ * может остаться без ответа, если человек не оставил почту.
+ */
+export const IconFeedback = (p: AppIconProps): ReactNode => (
+  <Glyph {...p}>
+    <path d="M20 12a7 7 0 0 1-7 7H9l-4 3v-4.2A7 7 0 0 1 4 12v-.5A6.5 6.5 0 0 1 10.5 5h3A6.5 6.5 0 0 1 20 11.5z" />
+    <path d="M9 12h.01M12 12h.01M15 12h.01" />
+  </Glyph>
+);
+
 export const IconQuote = (p: AppIconProps): ReactNode => (
   <Glyph {...p}>
     <path d="M6 6v12M10 9h9M10 15h9" />

@@ -25,7 +25,7 @@ import {
   Tree,
   type TreeNode,
 } from '@zapiski/ui';
-import { IconArchive, IconHelp, IconSettings } from '../components/icons.js';
+import { IconArchive, IconFeedback, IconHelp, IconSettings } from '../components/icons.js';
 import { useLongPress } from '../lib/gestures.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { Section, TreeSkeleton } from '../components/ScreenStates.js';
@@ -347,6 +347,27 @@ export function LibraryPanel(): ReactNode {
           >
             <IconHelp size={15} />
             {strings.help.open}
+          </button>
+          {/*
+            Обратная связь — здесь, а не только в «Настройках → О приложении».
+
+            На альфа-тестировании с живыми людьми путь в три касания сквозь
+            настройки означает, что напишут единицы: человек, у которого что-то
+            не получилось, закрывает приложение, а не идёт искать раздел. А
+            контекстная полоса появляется только после сбоя и не чаще раза в
+            сутки — то есть тому, кому есть что сказать прямо сейчас, ждать
+            нечего.
+
+            Последней в списке намеренно: это не частое действие, и уводить
+            внимание от «Настроек» ему незачем.
+          */}
+          <button
+            type="button"
+            className="za-nav__item"
+            onClick={() => app.openFeedback('menu')}
+          >
+            <IconFeedback size={15} />
+            {strings.feedback.open}
           </button>
         </div>
       </div>
