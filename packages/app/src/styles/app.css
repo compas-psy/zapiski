@@ -1905,3 +1905,72 @@
   justify-items: center;
   padding-block-start: var(--sp-32, 32px);
 }
+
+/* ── Быстрая записка ──────────────────────────────────────────────────────── */
+
+/*
+  Лист над клавиатурой: поле и одна строка кнопок. Больше на нём ничего нет и
+  быть не должно — плитку в шторке жмут на ходу, и каждая лишняя кнопка это
+  секунда, за которую мысль успевает уйти.
+*/
+.za-quick {
+  display: grid;
+  gap: var(--sp-12);
+}
+.za-quick__text {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  box-sizing: border-box;
+  padding: var(--sp-12);
+  font: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-input, var(--r-card));
+  resize: none;
+}
+.za-quick__text::placeholder {
+  color: var(--text-secondary);
+}
+.za-quick__text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
+.za-quick__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+}
+/* Папка: иконка и системный список рядом, одной кнопкой на вид. */
+.za-quick__folder {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  min-inline-size: 0;
+  padding: var(--sp-4) var(--sp-8);
+  color: var(--text-secondary);
+  border: var(--border-w) solid var(--line);
+  border-radius: var(--r-full, 99px);
+}
+.za-quick__select {
+  min-inline-size: 0;
+  max-inline-size: 12ch;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  /* Список рисует система: свой открывался бы поверх клавиатуры. */
+  appearance: none;
+}
+.za-quick__select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.za-quick__grow {
+  flex: 1 1 auto;
+}

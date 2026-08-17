@@ -630,6 +630,8 @@ jobs:
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}
           SHIP: ${{ steps.ship.outcome }}
+          # Сборки этой ветки и теги — те самые, что предлагает /promo.
+          PROMOTED: ${{ (github.ref_type == 'tag' || github.ref_name == github.event.repository.default_branch) && 'true' || 'false' }}
         run: |
           set -euo pipefail
           echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
@@ -638,6 +640,14 @@ jobs:
               echo '::warning::Артефакт GitHub не сохранён (обычная причина — исчерпанная квота хранилища аккаунта). Установщик забирайте с сервера.'
             fi
             if [ "${SHIP}" != 'success' ] && [ "${SHIP}" != 'skipped' ]; then
+              # На ветке, чьи сборки предлагает промостраница, неудачная
+              # доставка — провал, а не предупреждение: ссылка обещает свежий
+              # установщик, а отдаёт вчерашний, и узнаётся это от человека,
+              # который скачал и не нашёл в сборке починенного.
+              if [ "${PROMOTED}" = 'true' ]; then
+                echo "::error::Установщик не уехал на сервер, а промостраница отдаёт именно его — https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe остался прежним."
+                exit 1
+              fi
               echo '::warning::Установщик не уехал на сервер. Он есть в артефактах прогона.'
             fi
             exit 0
