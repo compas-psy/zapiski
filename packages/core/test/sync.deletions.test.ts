@@ -184,3 +184,89 @@ describe('чужое удаление приезжает сюда', () => {
     expect(localStorage.snapshot()['Смета.md'], 'первый же обмен стёр локальный файл').toBeDefined();
   });
 });
+
+/**
+ * Каталоги, опустевшие от чужого удаления.
+ *
+ * ── Что было ────────────────────────────────────────────────────────────────
+ *
+ * Заказчик: «Windows и Web показывают одну картину, а Android другую. В первых
+ * 2-х состояние верно». На телефоне в дереве стояли ЗАПИСКИ в корне и SignalAI
+ * внутри СИМПАС/ЗАПИСКИ — обе без счётчика, то есть пустые. Папки переносили на
+ * Windows: там каталог убирает сама операция переноса, а на телефон приезжают
+ * только удаления ФАЙЛОВ. Понятия папки в обмене нет вовсе, поэтому пустая
+ * оболочка оставалась навсегда, и убрать её человеку было нечем.
+ *
+ * ── Что здесь сторожится ────────────────────────────────────────────────────
+ *
+ * Разница между «опустело от удаления» и «пусто с самого начала». Первое
+ * убирается, второе — нет: папку, заведённую заранее, приложение не вправе
+ * трогать («файл важнее приложения», человек раскладывает структуру сам).
+ */
+describe('пустые каталоги после чужого удаления', () => {
+  /** Плоский список путей дерева, как его видит библиотека. */
+  async function folderPaths(vault: Vault): Promise<string[]> {
+    const out: string[] = [];
+    const walk = (nodes: Awaited<ReturnType<Vault['folders']>>): void => {
+      for (const node of nodes) {
+        out.push(node.path);
+        walk(node.children);
+      }
+    };
+    walk(await vault.folders());
+    return out.sort();
+  }
+
+  it('дерево не остаётся призраком: опустевшие каталоги уходят вместе с файлом', async () => {
+    const { localStorage, remoteStorage, vault, engine, tombstones } = await setup({
+      'СИМПАС/ЗАПИСКИ/Смета.md': '# Смета\n\nчисла\n',
+      'Личное/Дневник.md': '# Дневник\n\nстрока\n',
+    });
+
+    /* Ровно то, что делает перенос папки на другом устройстве: файла там нет,
+       надгробие есть. */
+    await remoteStorage.remove('СИМПАС/ЗАПИСКИ/Смета.md');
+    tombstones.set('СИМПАС/ЗАПИСКИ/Смета.md', Date.now() + 1);
+
+    await engine.sync();
+
+    expect(localStorage.snapshot()['СИМПАС/ЗАПИСКИ/Смета.md']).toBeUndefined();
+    const folders = await folderPaths(vault);
+    expect(folders, 'пустая папка осталась призраком в дереве').not.toContain('СИМПАС/ЗАПИСКИ');
+    expect(folders, 'опустевший родитель тоже обязан уйти').not.toContain('СИМПАС');
+    expect(folders, 'заодно снесли чужую папку').toContain('Личное');
+  });
+
+  it('папку, заведённую заранее и пустую, не трогает никто', async () => {
+    const { localStorage, remoteStorage, vault, engine, tombstones } = await setup({
+      'Работа/Смета.md': '# Смета\n\nчисла\n',
+    });
+    /* Человек разложил структуру вперёд содержимого — обычный сценарий и прямое
+       следствие обещания «файл важнее приложения». */
+    await localStorage.mkdir('Идеи');
+    await vault.rebuild();
+
+    await remoteStorage.remove('Работа/Смета.md');
+    tombstones.set('Работа/Смета.md', Date.now() + 1);
+    await engine.sync();
+
+    const folders = await folderPaths(vault);
+    expect(folders, 'пустую папку человека снесли заодно').toContain('Идеи');
+    expect(folders, 'опустевшая папка осталась').not.toContain('Работа');
+  });
+
+  it('чужой файл в папке держит её: синк не удаляет то, чего не знает', async () => {
+    const { localStorage, remoteStorage, vault, engine, tombstones } = await setup({
+      'Работа/Смета.md': '# Смета\n\nчисла\n',
+      /* Формат, который синк не берёт (SEC-023): для него папка непуста. */
+      'Работа/схема.excalidraw': '{"чужой":"формат"}',
+    });
+
+    await remoteStorage.remove('Работа/Смета.md');
+    tombstones.set('Работа/Смета.md', Date.now() + 1);
+    await engine.sync();
+
+    expect(localStorage.snapshot()['Работа/схема.excalidraw'], 'чужой файл пропал').toBeDefined();
+    expect(await folderPaths(vault), 'папку с чужим файлом снесли').toContain('Работа');
+  });
+});
