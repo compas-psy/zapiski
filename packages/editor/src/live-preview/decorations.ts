@@ -568,7 +568,9 @@ class LivePreviewBuilder {
        * если открыть файл напрямую. Своего синтаксиса не выдумываем: заметка
        * с ним читалась бы правильно только у нас.
        */
-      const inline = /^<\/?(small|sup|sub)\s*>$/i.exec(tag);
+      /* `u` — подчёркнутый: того же рода html, что и три остальных, и по той
+         же причине — своего синтаксиса у markdown для него нет. */
+      const inline = /^<\/?(small|sup|sub|u)\s*>$/i.exec(tag);
       if (inline) {
         const kind = (inline[1] ?? '').toLowerCase();
         const paragraph = this.stack[this.stack.length - 2];

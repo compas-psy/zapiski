@@ -834,3 +834,78 @@ describe('меню вынесено из обрезающего контейне
     expect(menuLayer()).toBeNull();
   });
 });
+
+/**
+ * Начертания на панели: курсив, подчёркнутый, зачёркнутый.
+ *
+ * ── Что было ────────────────────────────────────────────────────────────────
+ *
+ * Заказчик: «сильный проёб в меню форматирования — нет кнопок зачёркнутый,
+ * подчёркнутый и италик (причём в hot keys есть, но это Android не помогает)».
+ *
+ * Он прав дважды. Курсив и зачёркивание жили в меню под ДОЛГИМ нажатием на
+ * «B» — жест, о котором на телефоне никто не догадывается, — а подчёркивания
+ * не было вовсе. Сочетания клавиш там, где клавиатуры нет, помочь не могут по
+ * устройству, и «в hot keys есть» означает ровно «на Android нет».
+ *
+ * ── Что сторожится ──────────────────────────────────────────────────────────
+ *
+ * Поведение, описанное заказчиком по шагам и взятое из Telegram: выделил →
+ * средний блок подменился начертаниями → применил → блок вернулся.
+ */
+describe('начертания появляются на выделении', () => {
+  it('выделил фрагмент — вместо стиля абзаца стоят B · I · U · S', () => {
+    const panel = mount('текст «важное» дальше');
+
+    for (const label of [
+      ru.panel.weights.bold,
+      ru.panel.weights.italic,
+      ru.panel.weights.underline,
+      ru.panel.weights.strike,
+    ]) {
+      expect(
+        panel.querySelector(`button[aria-label="${label}"]`),
+        `кнопки «${label}» нет на панели`,
+      ).not.toBeNull();
+    }
+    /* Средний блок именно ПОДМЕНЁН: иначе четыре кнопки не влезли бы в
+       ширину телефона, ради которой всё и затевалось. */
+    expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).toBeNull();
+  });
+
+  it('без выделения начертаний не предлагают: форматировать нечего', () => {
+    const panel = mount('текст|');
+
+    expect(panel.querySelector(`button[aria-label="${ru.panel.weights.italic}"]`)).toBeNull();
+    expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).not.toBeNull();
+  });
+
+  it('нажал «Зачёркнутый» — разметка легла, блок вернулся', () => {
+    const panel = mount('текст «важное» дальше');
+
+    press(button(panel, ru.panel.weights.strike));
+
+    expect(view?.state.doc.toString()).toBe('текст ~~важное~~ дальше');
+    /* «и общий средний блок возвращается» — дословно из просьбы. Выделение
+       при этом остаётся на месте, поэтому обычной проверки «есть выделение»
+       здесь мало: блок обязан вернуться именно от применения. */
+    expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).not.toBeNull();
+    expect(panel.querySelector(`button[aria-label="${ru.panel.weights.italic}"]`)).toBeNull();
+  });
+
+  it('«Подчёркнутый» кладёт <u>, потому что своего знака у markdown нет', () => {
+    const panel = mount('текст «важное» дальше');
+
+    press(button(panel, ru.panel.weights.underline));
+
+    expect(view?.state.doc.toString()).toBe('текст <u>важное</u> дальше');
+  });
+
+  it('«Курсив» на месте и работает одним нажатием, без долгого', () => {
+    const panel = mount('текст «важное» дальше');
+
+    press(button(panel, ru.panel.weights.italic));
+
+    expect(view?.state.doc.toString()).toBe('текст *важное* дальше');
+  });
+});

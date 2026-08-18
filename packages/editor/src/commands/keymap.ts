@@ -31,6 +31,7 @@ import {
   toggleOrderedList,
   toggleQuote,
   toggleStrike,
+  toggleUnderline,
   toggleTaskList,
 } from './formatting.js';
 import { completeDivider, completeFencedCode } from '../input/autoformat.js';
@@ -78,6 +79,16 @@ export const editorCommands: EditorCommandSpec[] = [
   { id: 'format.italic', key: 'Mod-i', run: toggleItalic },
   { id: 'format.highlight', key: 'Mod-u', run: toggleHighlight },
   { id: 'format.strike', key: 'Mod-Shift-x', run: toggleStrike },
+  /*
+   * Подчёркнутый — Ctrl+Shift+U, а не Ctrl+U.
+   *
+   * Ctrl+U в этом продукте занят подсветкой, и занят намеренно: BEHAVIOR §7
+   * решал так в те времена, когда подчёркивания у нас не было вовсе. Теперь
+   * оно есть, и привычное по Word сочетание просится ему — но менять чужое
+   * сочетание молча нельзя: у человека уже есть привычка к нашей подсветке.
+   * Поэтому подчёркивание получает своё, а перестановка — вопрос к заказчику.
+   */
+  { id: 'format.underline', key: 'Mod-Shift-u', run: toggleUnderline },
   { id: 'format.h1', key: 'Mod-1', run: setHeading(1) },
   { id: 'format.h2', key: 'Mod-2', run: setHeading(2) },
   { id: 'format.h3', key: 'Mod-3', run: setHeading(3) },

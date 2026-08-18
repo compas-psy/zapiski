@@ -452,4 +452,22 @@ describe('снимки веб-версии', () => {
     expect(found.some((deco) => deco.class === 'cm-z-sup')).toBe(true);
     expect(found.some((deco) => deco.class === 'cm-z-sub')).toBe(true);
   });
+
+  it('подчёркнутый набирается тегом и показывается подчёркиванием', () => {
+    /*
+     * Заказчик просил кнопку «подчёркнутый» рядом с курсивом и зачёркнутым.
+     * Своего знака у markdown для него нет — берём тот же html, что уже взят
+     * для надстрочного: `<u>` понимают все, а выдуманный синтаксис читался бы
+     * правильно только у нас.
+     */
+    const doc = 'обычный <u>подчёркнутый</u> текст';
+    const found = decorationsOf(makeState(doc, { selection: { anchor: doc.length } }));
+    expect(found.some((deco) => deco.class === 'cm-z-u'), 'подчёркивание не нарисовано').toBe(true);
+    /* Сами теги на экране не нужны: курсор далеко, показывать их незачем. */
+    const marker = doc.indexOf('<u>');
+    expect(
+      found.some((deco) => deco.from === marker && deco.to === marker + 3),
+      'тег <u> остался на экране',
+    ).toBe(true);
+  });
 });

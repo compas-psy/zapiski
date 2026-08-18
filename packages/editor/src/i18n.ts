@@ -67,7 +67,14 @@ export interface EditorStrings {
     back: string;
     weight: string;
     weights: Record<
-      'bold' | 'italic' | 'strike' | 'highlight' | 'mono' | 'superscript' | 'subscript',
+      | 'bold'
+      | 'italic'
+      | 'underline'
+      | 'strike'
+      | 'highlight'
+      | 'mono'
+      | 'superscript'
+      | 'subscript',
       string
     >;
     lists: string;
@@ -179,6 +186,7 @@ export const ru: EditorStrings = {
     weights: {
       bold: 'Жирный',
       italic: 'Курсив',
+      underline: 'Подчёркнутый',
       strike: 'Зачёркнутый',
       highlight: 'Подсветка',
       mono: 'Моноширинный',
@@ -296,6 +304,7 @@ export const en: EditorStrings = {
     weights: {
       bold: 'Bold',
       italic: 'Italic',
+      underline: 'Underline',
       strike: 'Strikethrough',
       highlight: 'Highlight',
       mono: 'Monospace',

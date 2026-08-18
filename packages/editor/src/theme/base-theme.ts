@@ -267,6 +267,9 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
      это обычные символы, и поднимать их можно только оформлением. */
   '.cm-z-sup': { verticalAlign: 'super', fontSize: '0.7em', lineHeight: '0' },
   '.cm-z-sub': { verticalAlign: 'sub', fontSize: '0.7em', lineHeight: '0' },
+  /* Подчёркнутый. Отступ у линии — чтобы она не резала выносные элементы
+     кириллицы («р», «у»): подчёркивание вплотную читается как зачёркивание. */
+  '.cm-z-u': { textDecoration: 'underline', textUnderlineOffset: '0.18em' },
 
   '.cm-z-summary': { fontWeight: '600' },
   '.cm-z-summary-arrow': {

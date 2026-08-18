@@ -129,6 +129,7 @@ export {
   toggleItalic,
   toggleHighlight,
   toggleStrike,
+  toggleUnderline,
   toggleInlineCode,
   bulletListWith,
   toggleBulletList,

@@ -19,6 +19,7 @@ import {
   toggleOrderedList,
   toggleQuote,
   toggleStrike,
+  toggleUnderline,
   toggleTaskList,
 } from '../src/commands/formatting.js';
 import { editorCommands } from '../src/commands/keymap.js';
@@ -106,6 +107,20 @@ describe('парные маркеры', () => {
     const v = open('важно', 0, 5);
     toggleHighlight(v);
     expect(v.state.doc.toString()).toBe('==важно==');
+  });
+
+  it('подчёркнутый оборачивает в <u> и снимается повторным нажатием', () => {
+    /*
+     * Заказчик попросил кнопку подчёркивания рядом с курсивом и зачёркнутым.
+     * Своего знака у markdown для него нет ни в CommonMark, ни в GFM, поэтому
+     * берётся html — тот же приём, что уже взят для надстрочного текста.
+     */
+    const v = open('важно', 0, 5);
+    toggleUnderline(v);
+    expect(v.state.doc.toString()).toBe('<u>важно</u>');
+
+    toggleUnderline(v);
+    expect(v.state.doc.toString(), 'повторное нажатие не сняло разметку').toBe('важно');
   });
 });
 
@@ -213,6 +228,7 @@ describe('карта хоткеев', () => {
       'Mod-b',
       'Mod-i',
       'Mod-u',
+      'Mod-Shift-u',
       'Mod-1',
       'Mod-2',
       'Mod-3',

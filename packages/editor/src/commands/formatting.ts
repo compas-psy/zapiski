@@ -143,6 +143,21 @@ export const toggleItalic: StateCommand = toggleWrap('*');
 export const toggleHighlight: StateCommand = toggleWrap('==');
 export const toggleStrike: StateCommand = toggleWrap('~~');
 export const toggleInlineCode: StateCommand = toggleWrap('`');
+/**
+ * Подчёркнутый — `<u>текст</u>`.
+ *
+ * Заказчик: «нет кнопок зачёркнутый, подчёркнутый и италик», с примером
+ * Telegram. Зачёркнутый и курсив у markdown свои (`~~`, `*`), а подчёркивания
+ * нет ни в CommonMark, ни в GFM — его там нет намеренно, чтобы не путать с
+ * ссылкой.
+ *
+ * Берём html, как уже взяли для надстрочного и подстрочного: markdown
+ * пропускает его как есть, `<u>` понимают все — и GitHub, и Obsidian, и
+ * браузер, если открыть файл напрямую. Свой синтаксис (`__текст__` в старом
+ * значении) выдумывать нельзя: заметка читалась бы правильно только у нас,
+ * а в любом другом редакторе превратилась бы в жирный.
+ */
+export const toggleUnderline: StateCommand = toggleWrap('<u>', '</u>');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Блочные маркеры

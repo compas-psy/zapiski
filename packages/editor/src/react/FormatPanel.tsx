@@ -62,6 +62,7 @@ import {
   toggleOrderedList,
   toggleQuote,
   toggleStrike,
+  toggleUnderline,
   toggleTaskList,
 } from '../commands/formatting.js';
 import {
@@ -564,8 +565,57 @@ export function FormatPanel({
      текст, — и понять, что уже применено, было нельзя. */
   const inline = view
     ? inlineActiveAt(view.state)
-    : { bold: false, italic: false, strike: false, highlight: false, code: false };
+    : {
+        bold: false,
+        italic: false,
+        underline: false,
+        strike: false,
+        highlight: false,
+        code: false,
+      };
   void tick;
+
+  /*
+   * Выделен ли фрагмент — от этого зависит, что стоит в среднем блоке панели.
+   *
+   * ── Зачем ────────────────────────────────────────────────────────────────
+   *
+   * Заказчик: «сильный проёб в меню форматирования — нет кнопок зачёркнутый,
+   * подчёркнутый и италик (причём в hot keys есть, но это Android не
+   * помогает)». Он прав дважды. Кнопок действительно не было: курсив и
+   * зачёркивание жили в меню под ДОЛГИМ нажатием на «B» — жест, о котором на
+   * телефоне никто не догадывается. А сочетания клавиш там, где клавиатуры
+   * нет, помочь не могут по устройству.
+   *
+   * Поведение взято из Telegram и описано заказчиком по шагам: выделил
+   * фрагмент → средний блок подменился начертаниями → применил → блок
+   * вернулся. Это не только про место на панели: пока ничего не выделено,
+   * четыре кнопки начертаний нечего и предлагать.
+   */
+  const selected = view ? !view.state.selection.main.empty : false;
+  const range = view ? `${view.state.selection.main.from}:${view.state.selection.main.to}` : '';
+  const [styling, setStyling] = useState(false);
+  /*
+   * Блок поднимается на НОВОМ выделении — на любом, которое человек сделал
+   * сам, включая расширение прежнего: после «зачеркнуть» обычно хочется ещё и
+   * «курсивом», и заставлять ради этого снимать выделение было бы издевательством.
+   *
+   * Отличить своё изменение от чужого просто: применённая команда сдвигает
+   * границы выделения на длину маркеров, и `runStyle` записывает получившийся
+   * отрезок сюда же. Значит выделение «то же самое», блок не всплывает, и
+   * обещание «применяю → общий средний блок возвращается» держится.
+   */
+  const lastRange = useRef('');
+  useEffect(() => {
+    if (!selected) {
+      lastRange.current = '';
+      setStyling(false);
+      return;
+    }
+    if (lastRange.current === range) return;
+    lastRange.current = range;
+    setStyling(true);
+  }, [selected, range, tick]);
 
   /** Выполнить команду и вернуть курсор в текст — §4, «панель не берёт фокус». */
   const run = (command: (target: EditorView) => boolean) => (): void => {
@@ -574,6 +624,21 @@ export function FormatPanel({
     setOpen(null);
     view.focus();
   };
+
+  /** Начертание применили — средний блок возвращается к обычному виду. */
+  const runStyle =
+    (command: (target: EditorView) => boolean) =>
+    (): void => {
+      run(command)();
+      setStyling(false);
+      /* Отрезок после команды считается «уже виденным»: маркеры сдвинули
+         границы, но выделение осталось тем же самым, и всплывать заново
+         блоку не с чего. */
+      if (view) {
+        const { from, to } = view.state.selection.main;
+        lastRange.current = `${from}:${to}`;
+      }
+    };
 
   const menuFor = (which: Exclude<OpenMenu, null>) => (): void =>
     setOpen((current) => (current === which ? null : which));
@@ -608,229 +673,275 @@ export function FormatPanel({
       </Pill>
 
       <Pill>
-        <MenuButton
-          label={copy.blockStyle}
-          expanded={open === 'style' || open === 'heading'}
-          onPress={menuFor('style')}
-          menu={
-            open === 'style' ? (
-              <Menu>
-                <MenuItem
-                  label={copy.styles.heading}
-                  glyph="heading"
-                  submenu
-                  checked={style.startsWith('h')}
-                  onPress={() => setOpen('heading')}
-                />
-                <MenuItem
-                  label={copy.styles.text}
-                  glyph="text"
-                  hotkey={copy.hotkeys.text}
-                  checked={style === 'text'}
-                  onPress={run(setHeading(0))}
-                />
-                <MenuItem
-                  label={copy.styles.quote}
-                  glyph="quote"
-                  hotkey={copy.hotkeys.quote}
-                  checked={style === 'quote'}
-                  onPress={run(toggleQuote)}
-                />
-                {/* Автор цитаты (замечание 4). Пункт живёт под самой цитатой
-                    и виден всегда: пустая атрибуция места в просмотре не
-                    занимает, поэтому предлагать её не страшно. */}
-                <MenuItem
-                  label={copy.styles.quoteAuthor}
-                  glyph="quote"
-                  onPress={run(insertQuoteAuthor)}
-                />
-                <MenuItem
-                  label={copy.styles.callout}
-                  glyph="callout"
-                  checked={style === 'callout'}
-                  onPress={run(insertCallout)}
-                />
-                <MenuItem
-                  label={copy.styles.code}
-                  glyph="code"
-                  hotkey={copy.hotkeys.code}
-                  checked={style === 'code'}
-                  onPress={run(insertCodeBlock)}
-                />
-                <MenuItem
-                  label={copy.styles.small}
-                  glyph="small"
-                  checked={style === 'small'}
-                  onPress={run(insertSmall)}
-                />
-                {/* Разделитель — вставка, а не стиль: отделён хайрлайном. */}
-                <MenuItem label={copy.styles.divider} separated onPress={run(insertDivider)} />
-              </Menu>
-            ) : open === 'heading' ? (
-              <Menu>
-                <MenuItem label={copy.back} back onPress={() => setOpen('style')} />
-                {[1, 2, 3, 4, 5, 6].map((level) => (
-                  <MenuItem
-                    key={level}
-                    label={copy.headingLevel(level)}
-                    /* Пункт набран своим реальным кеглем: человек видит
-                       результат, а не читает название (§4). */
-                    sample={`h${level}`}
-                    index={`H${SUBSCRIPT[level - 1] ?? ''}`}
-                    checked={style === `h${level}`}
-                    onPress={run(setHeading(level))}
-                  />
-                ))}
-              </Menu>
-            ) : null
-          }
-        >
-          <IconStyle />
-        </MenuButton>
-
-        <Divider />
-
-        <MenuButton
-          label={copy.weight}
-          expanded={open === 'weight'}
-          /* Подсвечена и когда открыто меню, и когда курсор внутри жирного. */
-          active={inline.bold}
-          onPress={run(toggleBold)}
-          onLongPress={menuFor('weight')}
-          menu={
-            open === 'weight' ? (
-              <Menu>
-                <MenuItem
-                  label={copy.weights.bold}
-                  glyph="bold"
-                  hotkey={copy.hotkeys.bold}
-                  checked={inline.bold}
-                  onPress={run(toggleBold)}
-                />
-                <MenuItem
-                  label={copy.weights.italic}
-                  glyph="italic"
-                  hotkey={copy.hotkeys.italic}
-                  checked={inline.italic}
-                  onPress={run(toggleItalic)}
-                />
-                <MenuItem
-                  label={copy.weights.strike}
-                  glyph="strike"
-                  checked={inline.strike}
-                  onPress={run(toggleStrike)}
-                />
-                <MenuItem
-                  label={copy.weights.highlight}
-                  glyph="highlight"
-                  checked={inline.highlight}
-                  onPress={run(toggleHighlight)}
-                />
-                <MenuItem
-                  label={copy.weights.mono}
-                  glyph="mono"
-                  checked={inline.code}
-                  onPress={run(toggleInlineCode)}
-                />
-                {/* Степень и индекс — html-теги: своего синтаксиса у markdown
-                    для них нет, а `<sup>`/`<sub>` понимают все. */}
-                <MenuItem
-                  label={copy.weights.superscript}
-                  glyph="superscript"
-                  onPress={run(insertSuperscript)}
-                />
-                <MenuItem
-                  label={copy.weights.subscript}
-                  glyph="subscript"
-                  onPress={run(insertSubscript)}
-                />
-              </Menu>
-            ) : null
-          }
-        >
-          <IconBold />
-        </MenuButton>
-
-        <Divider />
-
-        <MenuButton
-          label={copy.lists}
-          expanded={open === 'list'}
-          onPress={menuFor('list')}
-          menu={
-            open === 'list' ? (
-              <Menu>
-                <MenuItem
-                  label={copy.listKinds.none}
-                  glyph="listNone"
-                  checked={list === 'none'}
-                  onPress={run(clearList)}
-                />
-                <MenuItem
-                  label={copy.listKinds.bullet}
-                  glyph="listBullet"
-                  hotkey={copy.hotkeys.bullet}
-                  checked={list === 'bullet'}
-                  onPress={run(bulletListWith(bulletMarker))}
-                />
-                <MenuItem
-                  label={copy.listKinds.ordered}
-                  glyph="listOrdered"
-                  hotkey={copy.hotkeys.ordered}
-                  checked={list === 'ordered'}
-                  onPress={run(toggleOrderedList)}
-                />
-                <MenuItem
-                  label={copy.listKinds.task}
-                  glyph="listTask"
-                  hotkey={copy.hotkeys.task}
-                  checked={list === 'task'}
-                  onPress={run(toggleTaskList)}
-                />
-                <MenuItem
-                  label={copy.listKinds.details}
-                  glyph="listDetails"
-                  checked={list === 'details'}
-                  onPress={run(insertCollapsible)}
-                />
-              </Menu>
-            ) : null
-          }
-        >
-          <IconList />
-        </MenuButton>
-
-        <Divider />
-
         {/*
-          Таблица. Вне таблицы кнопка вставляет 3×3, внутри — открывает
-          редактор: вся таблица целиком, с ручками строк и столбцов
-          (ITERATION-1 §4).
-
-          Раньше здесь было меню, и правило в нём было одно: «сделать что-то
-          с той ячейкой, где стоит курсор». Заказчик попросил виджет по
-          образцу диалога ссылки — и он прав: переставить строку, не видя
-          таблицы и не помня, где каретка, нельзя. Диалог встаёт у каретки,
-          а не у кнопки: панель может быть далеко внизу у клавиатуры.
+          Средний блок сменный. Пока ничего не выделено — привычный набор:
+          стиль абзаца, «B», списки, таблица. Как только фрагмент выделен, на
+          их место встают начертания: B · I · U · S. Так это сделано в
+          Telegram, на который заказчик и сослался, и так это единственный
+          способ дать четыре кнопки, не отняв места у остальных: панель уже
+          еле помещается в ширину телефона.
         */}
-        <MenuButton
-          label={copy.table}
-          expanded={open === 'table'}
-          anchorToCaret={() => caretRect(view)}
-          onPress={table ? menuFor('table') : run(insertTable)}
-          menu={
-            open === 'table' && table && view ? (
-              <TableDialog
-                copy={copy}
-                view={view}
-                {...(onUndoable ? { onUndoable } : {})}
-                onClose={() => setOpen(null)}
-              />
-            ) : null
-          }
-        >
-          <IconTable />
-        </MenuButton>
+        {styling ? (
+          <>
+            <PanelButton
+              label={copy.weights.bold}
+              active={inline.bold}
+              onPress={runStyle(toggleBold)}
+            >
+              <IconBold />
+            </PanelButton>
+            <Divider />
+            <PanelButton
+              label={copy.weights.italic}
+              active={inline.italic}
+              onPress={runStyle(toggleItalic)}
+            >
+              <IconItalic />
+            </PanelButton>
+            <Divider />
+            <PanelButton
+              label={copy.weights.underline}
+              active={inline.underline}
+              onPress={runStyle(toggleUnderline)}
+            >
+              <IconUnderline />
+            </PanelButton>
+            <Divider />
+            <PanelButton
+              label={copy.weights.strike}
+              active={inline.strike}
+              onPress={runStyle(toggleStrike)}
+            >
+              <IconStrike />
+            </PanelButton>
+          </>
+        ) : (
+          <>
+            <MenuButton
+              label={copy.blockStyle}
+              expanded={open === 'style' || open === 'heading'}
+              onPress={menuFor('style')}
+              menu={
+                open === 'style' ? (
+                  <Menu>
+                    <MenuItem
+                      label={copy.styles.heading}
+                      glyph="heading"
+                      submenu
+                      checked={style.startsWith('h')}
+                      onPress={() => setOpen('heading')}
+                    />
+                    <MenuItem
+                      label={copy.styles.text}
+                      glyph="text"
+                      hotkey={copy.hotkeys.text}
+                      checked={style === 'text'}
+                      onPress={run(setHeading(0))}
+                    />
+                    <MenuItem
+                      label={copy.styles.quote}
+                      glyph="quote"
+                      hotkey={copy.hotkeys.quote}
+                      checked={style === 'quote'}
+                      onPress={run(toggleQuote)}
+                    />
+                    {/* Автор цитаты (замечание 4). Пункт живёт под самой цитатой
+                        и виден всегда: пустая атрибуция места в просмотре не
+                        занимает, поэтому предлагать её не страшно. */}
+                    <MenuItem
+                      label={copy.styles.quoteAuthor}
+                      glyph="quote"
+                      onPress={run(insertQuoteAuthor)}
+                    />
+                    <MenuItem
+                      label={copy.styles.callout}
+                      glyph="callout"
+                      checked={style === 'callout'}
+                      onPress={run(insertCallout)}
+                    />
+                    <MenuItem
+                      label={copy.styles.code}
+                      glyph="code"
+                      hotkey={copy.hotkeys.code}
+                      checked={style === 'code'}
+                      onPress={run(insertCodeBlock)}
+                    />
+                    <MenuItem
+                      label={copy.styles.small}
+                      glyph="small"
+                      checked={style === 'small'}
+                      onPress={run(insertSmall)}
+                    />
+                    {/* Разделитель — вставка, а не стиль: отделён хайрлайном. */}
+                    <MenuItem label={copy.styles.divider} separated onPress={run(insertDivider)} />
+                  </Menu>
+                ) : open === 'heading' ? (
+                  <Menu>
+                    <MenuItem label={copy.back} back onPress={() => setOpen('style')} />
+                    {[1, 2, 3, 4, 5, 6].map((level) => (
+                      <MenuItem
+                        key={level}
+                        label={copy.headingLevel(level)}
+                        /* Пункт набран своим реальным кеглем: человек видит
+                           результат, а не читает название (§4). */
+                        sample={`h${level}`}
+                        index={`H${SUBSCRIPT[level - 1] ?? ''}`}
+                        checked={style === `h${level}`}
+                        onPress={run(setHeading(level))}
+                      />
+                    ))}
+                  </Menu>
+                ) : null
+              }
+            >
+              <IconStyle />
+            </MenuButton>
+
+            <Divider />
+
+            <MenuButton
+              label={copy.weight}
+              expanded={open === 'weight'}
+              /* Подсвечена и когда открыто меню, и когда курсор внутри жирного. */
+              active={inline.bold}
+              onPress={run(toggleBold)}
+              onLongPress={menuFor('weight')}
+              menu={
+                open === 'weight' ? (
+                  <Menu>
+                    <MenuItem
+                      label={copy.weights.bold}
+                      glyph="bold"
+                      hotkey={copy.hotkeys.bold}
+                      checked={inline.bold}
+                      onPress={run(toggleBold)}
+                    />
+                    <MenuItem
+                      label={copy.weights.italic}
+                      glyph="italic"
+                      hotkey={copy.hotkeys.italic}
+                      checked={inline.italic}
+                      onPress={run(toggleItalic)}
+                    />
+                    <MenuItem
+                      label={copy.weights.strike}
+                      glyph="strike"
+                      checked={inline.strike}
+                      onPress={run(toggleStrike)}
+                    />
+                    <MenuItem
+                      label={copy.weights.highlight}
+                      glyph="highlight"
+                      checked={inline.highlight}
+                      onPress={run(toggleHighlight)}
+                    />
+                    <MenuItem
+                      label={copy.weights.mono}
+                      glyph="mono"
+                      checked={inline.code}
+                      onPress={run(toggleInlineCode)}
+                    />
+                    {/* Степень и индекс — html-теги: своего синтаксиса у markdown
+                        для них нет, а `<sup>`/`<sub>` понимают все. */}
+                    <MenuItem
+                      label={copy.weights.superscript}
+                      glyph="superscript"
+                      onPress={run(insertSuperscript)}
+                    />
+                    <MenuItem
+                      label={copy.weights.subscript}
+                      glyph="subscript"
+                      onPress={run(insertSubscript)}
+                    />
+                  </Menu>
+                ) : null
+              }
+            >
+              <IconBold />
+            </MenuButton>
+
+            <Divider />
+
+            <MenuButton
+              label={copy.lists}
+              expanded={open === 'list'}
+              onPress={menuFor('list')}
+              menu={
+                open === 'list' ? (
+                  <Menu>
+                    <MenuItem
+                      label={copy.listKinds.none}
+                      glyph="listNone"
+                      checked={list === 'none'}
+                      onPress={run(clearList)}
+                    />
+                    <MenuItem
+                      label={copy.listKinds.bullet}
+                      glyph="listBullet"
+                      hotkey={copy.hotkeys.bullet}
+                      checked={list === 'bullet'}
+                      onPress={run(bulletListWith(bulletMarker))}
+                    />
+                    <MenuItem
+                      label={copy.listKinds.ordered}
+                      glyph="listOrdered"
+                      hotkey={copy.hotkeys.ordered}
+                      checked={list === 'ordered'}
+                      onPress={run(toggleOrderedList)}
+                    />
+                    <MenuItem
+                      label={copy.listKinds.task}
+                      glyph="listTask"
+                      hotkey={copy.hotkeys.task}
+                      checked={list === 'task'}
+                      onPress={run(toggleTaskList)}
+                    />
+                    <MenuItem
+                      label={copy.listKinds.details}
+                      glyph="listDetails"
+                      checked={list === 'details'}
+                      onPress={run(insertCollapsible)}
+                    />
+                  </Menu>
+                ) : null
+              }
+            >
+              <IconList />
+            </MenuButton>
+
+            <Divider />
+
+            {/*
+              Таблица. Вне таблицы кнопка вставляет 3×3, внутри — открывает
+              редактор: вся таблица целиком, с ручками строк и столбцов
+              (ITERATION-1 §4).
+
+              Раньше здесь было меню, и правило в нём было одно: «сделать что-то
+              с той ячейкой, где стоит курсор». Заказчик попросил виджет по
+              образцу диалога ссылки — и он прав: переставить строку, не видя
+              таблицы и не помня, где каретка, нельзя. Диалог встаёт у каретки,
+              а не у кнопки: панель может быть далеко внизу у клавиатуры.
+            */}
+            <MenuButton
+              label={copy.table}
+              expanded={open === 'table'}
+              anchorToCaret={() => caretRect(view)}
+              onPress={table ? menuFor('table') : run(insertTable)}
+              menu={
+                open === 'table' && table && view ? (
+                  <TableDialog
+                    copy={copy}
+                    view={view}
+                    {...(onUndoable ? { onUndoable } : {})}
+                    onClose={() => setOpen(null)}
+                  />
+                ) : null
+              }
+            >
+              <IconTable />
+            </MenuButton>
+          </>
+        )}
 
         <Divider />
         {/* Ссылка — диалог «Текст» + «Адрес» с предзаполнением из выделения
@@ -1521,6 +1632,7 @@ export type MenuGlyphName =
   | 'divider'
   | 'bold'
   | 'italic'
+  | 'underline'
   | 'strike'
   | 'highlight'
   | 'mono'
@@ -1551,6 +1663,8 @@ const GLYPH: Record<MenuGlyphName, string[]> = {
   divider: ['M4 12h16'],
   bold: ['M8 5h5a3.5 3.5 0 010 7H8zM8 12h6a3.5 3.5 0 010 7H8z'],
   italic: ['M10 5h7M7 19h7M14 5l-4 14'],
+  /* «U»: дуга и черта под ней — тот же знак, что во всех редакторах. */
+  underline: ['M7 5v6a5 5 0 0010 0V5', 'M6 19h12'],
   strike: ['M7 12h10', 'M8 7h8M8 17h8'],
   highlight: ['M5 16h14v3H5z', 'M8 13l4-8 4 8'],
   mono: ['M4 6h16v12H4z', 'M9 10l-2 2 2 2M15 10l2 2-2 2'],
@@ -1620,6 +1734,27 @@ const IconBold = (): ReactElement => (
   <svg {...ICON}>
     <path d="M7 5h6a3.5 3.5 0 0 1 0 7H7z" />
     <path d="M7 12h7a3.5 3.5 0 0 1 0 7H7z" />
+  </svg>
+);
+/* Курсив, подчёркнутый и зачёркнутый — те же знаки, что во всех редакторах:
+   человек узнаёт их без подписи, и это единственная причина, по которой на
+   кнопке вообще может стоять значок вместо слова. */
+const IconItalic = (): ReactElement => (
+  <svg {...ICON}>
+    <path d="M10 5h7M7 19h7M14.5 5 9.5 19" />
+  </svg>
+);
+const IconUnderline = (): ReactElement => (
+  <svg {...ICON}>
+    <path d="M7 4v6a5 5 0 0 0 10 0V4" />
+    <path d="M6 20h12" />
+  </svg>
+);
+const IconStrike = (): ReactElement => (
+  <svg {...ICON}>
+    <path d="M4 12h16" />
+    <path d="M7 7.5A3.5 3.5 0 0 1 10.5 5h3a3.5 3.5 0 0 1 3.2 2" />
+    <path d="M7 16.5A3.5 3.5 0 0 0 10.5 19h3a3.5 3.5 0 0 0 3.5-3.5" />
   </svg>
 );
 const IconList = (): ReactElement => (

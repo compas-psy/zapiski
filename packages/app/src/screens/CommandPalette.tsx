@@ -68,6 +68,8 @@ function editorCommandLabel(id: string, strings: Strings): string | null {
       return c.highlight;
     case 'format.strike':
       return c.strike;
+    case 'format.underline':
+      return c.underline;
     case 'format.paragraph':
       return c.paragraph;
     case 'format.bulletList':
