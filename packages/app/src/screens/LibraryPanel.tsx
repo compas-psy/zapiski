@@ -14,7 +14,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import type { FolderNode, VaultPath } from '@zapiski/core';
+import { isMarkdownFile, type FolderNode, type VaultPath } from '@zapiski/core';
 import {
   Button,
   IconFolder,
@@ -27,7 +27,7 @@ import {
 } from '@zapiski/ui';
 import { IconArchive, IconFeedback, IconHelp, IconSettings } from '../components/icons.js';
 import { useLongPress } from '../lib/gestures.js';
-import { useApp, useAppState, useStrings } from '../state/context.js';
+import { useApp, useAppState, useLayout, useStrings } from '../state/context.js';
 import { Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
 import {
@@ -46,10 +46,39 @@ import { SyncIndicator } from '../components/SyncIndicator.js';
  */
 export const NOTE_DRAG_TYPE = 'application/x-zapiski-note';
 
+/**
+ * Чем помечена папка, которую тащат.
+ *
+ * Отдельный тип от заметки: цели у них разные. Заметку принимает и папка, и
+ * корень; папку нельзя уронить в саму себя и в собственную подпапку, и решать
+ * это надо ещё до броска — пока указатель летит над деревом.
+ */
+export const FOLDER_DRAG_TYPE = 'application/x-zapiski-folder';
+
+/**
+ * Можно ли уронить папку `from` в папку `to`.
+ *
+ * Три отказа, и каждый — не формальность:
+ *   · сама в себя — бессмыслица;
+ *   · в свою же подпапку — ветка уехала бы внутрь себя, и путь потерялся бы;
+ *   · в собственного родителя — она уже там, перенос ничего не изменит.
+ *
+ * Проверяется ЗАРАНЕЕ, чтобы такая цель не подсвечивалась вовсе: подсветка —
+ * обещание, что бросок сработает.
+ */
+export function canDropFolder(from: string | null, to: string): boolean {
+  if (from === null || from === '') return false;
+  if (to === from || to.startsWith(`${from}/`)) return false;
+  const slash = from.lastIndexOf('/');
+  return (slash === -1 ? '' : from.slice(0, slash)) !== to;
+}
+
 export function LibraryPanel(): ReactNode {
   const app = useApp();
   const state = useAppState();
   const strings = useStrings();
+  const layout = useLayout();
+  const isMobile = layout === 'mobile' || layout === 'compact';
   const [folderMenu, setFolderMenu] = useState<string | null>(null);
   const [tagMenu, setTagMenu] = useState<string | null>(null);
   /** Куда создаём папку: путь родителя. `null` — диалог закрыт. */
@@ -82,6 +111,8 @@ export function LibraryPanel(): ReactNode {
     : undefined;
   /** Папка под указателем при переносе — она подсвечивается. */
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  /** Папка, которую сейчас тащат: во время `dragover` данных переноса не видно. */
+  const [dragging, setDragging] = useState<string | null>(null);
   const pressedFolder = useRef<string | null>(null);
   const pressedTag = useRef<string | null>(null);
   /** Пути служебных папок вложений — их создаёт приложение. */
@@ -121,10 +152,51 @@ export function LibraryPanel(): ReactNode {
   });
 
   /**
-   * Папка принимает заметку, которую на неё тащат.
+   * Что именно летит над папкой — и примет ли она это.
    *
-   * Заказчик: «я не могу перетягивать записки в папки». Строка списка теперь
-   * тащится (см. `NoteRow`), а принимает её эта пара обработчиков.
+   * Во время `dragover` содержимое переноса прочитать нельзя: браузер отдаёт
+   * только СПИСОК ТИПОВ, сами данные появятся в `drop`. Поэтому путь тащимой
+   * папки живёт в состоянии (`dragging`) — без него нельзя решить, что цель
+   * недопустима, и подсветка обещала бы перенос, которого не будет.
+   */
+  const dropKind = (
+    event: ReactDragEvent<HTMLElement>,
+    folder: string,
+  ): 'note' | 'folder' | 'files' | null => {
+    const types = event.dataTransfer.types;
+    if (types.includes(NOTE_DRAG_TYPE)) return 'note';
+    if (types.includes(FOLDER_DRAG_TYPE)) return canDropFolder(dragging, folder) ? 'folder' : null;
+    if (types.includes('Files')) return 'files';
+    return null;
+  };
+
+  /**
+   * Файлы, брошенные на папку: заметки ложатся в неё и открываются.
+   *
+   * Заказчик: «Если перетаскиваю, наводя на конкретную папку в меню, то записка
+   * копируется в неё и сразу открывается в редакторе, а фокус в меню переходит
+   * на папку, куда перетащен документ». Порядок здесь ровно этот: сначала
+   * фокус на папку, потом открытие заметки, — иначе список успевает показать
+   * прежнюю папку поверх только что открытой заметки.
+   */
+  const dropFilesInto = async (files: File[], folder: string): Promise<void> => {
+    const notes = files.filter((file) => isMarkdownFile(file.name));
+    if (notes.length === 0) {
+      app.toast({ message: strings.library.droppedNotNotes });
+      return;
+    }
+    const paths = await app.importDroppedNotes(notes, folder);
+    app.openFolder(folder);
+    const first = paths[0];
+    if (first !== undefined) app.openNote(first);
+  };
+
+  /**
+   * Папка принимает то, что на неё тащат: заметку, другую папку или файл.
+   *
+   * Заказчик: «я не могу перетягивать записки в папки», позже — «я в меню
+   * „взял“ мышкой папку и перетянул в другую папку → должно подсвечиваться,
+   * куда сейчас перетягиваю + папка физически перемещается».
    *
    * `preventDefault` в `dragover` — не формальность: без него браузер считает,
    * что бросать сюда нельзя, и `drop` не приходит вовсе. Подсветка цели
@@ -133,20 +205,60 @@ export function LibraryPanel(): ReactNode {
    */
   const dropPropsFor = (folder: string): Record<string, unknown> => ({
     onDragOver: (event: ReactDragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes(NOTE_DRAG_TYPE)) return;
+      const kind = dropKind(event, folder);
+      if (kind === null) return;
       event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
+      event.dataTransfer.dropEffect = kind === 'files' ? 'copy' : 'move';
       if (dropTarget !== folder) setDropTarget(folder);
     },
     onDragLeave: () => setDropTarget((current) => (current === folder ? null : current)),
+    /*
+     * В `drop` решаем по САМИМ ДАННЫМ, а не по списку типов: здесь они уже
+     * доступны, и запомненный путь тащимой папки для решения больше не нужен —
+     * он приходит в переносе. Список типов остаётся только там, где иначе
+     * нельзя, — в `dragover`.
+     */
     onDrop: (event: ReactDragEvent<HTMLElement>) => {
-      const path = event.dataTransfer.getData(NOTE_DRAG_TYPE);
       setDropTarget(null);
-      if (!path) return;
+      setDragging(null);
+      const note = event.dataTransfer.getData(NOTE_DRAG_TYPE);
+      if (note) {
+        event.preventDefault();
+        void app.move(note as VaultPath, folder);
+        return;
+      }
+      const dragged = event.dataTransfer.getData(FOLDER_DRAG_TYPE);
+      if (dragged) {
+        if (!canDropFolder(dragged, folder)) return;
+        event.preventDefault();
+        void app.moveFolder(dragged, folder);
+        return;
+      }
+      const files = Array.from(event.dataTransfer.files);
+      if (files.length === 0) return;
       event.preventDefault();
-      void app.move(path as VaultPath, folder);
+      void dropFilesInto(files, folder);
     },
     'data-drop-target': dropTarget === folder ? 'true' : undefined,
+  });
+
+  /**
+   * Папку можно взять мышью. На телефоне — нет: там у строки уже есть долгое
+   * нажатие (меню папки), и перетаскивание отобрало бы его себе.
+   */
+  const dragPropsFor = (folder: string): Record<string, unknown> => ({
+    draggable: true,
+    onDragStart: (event: ReactDragEvent<HTMLElement>) => {
+      event.dataTransfer.setData(FOLDER_DRAG_TYPE, folder);
+      event.dataTransfer.effectAllowed = 'move';
+      setDragging(folder);
+    },
+    /* Бросок мимо цели — тоже конец переноса: без этого подсветка и
+       запомненный путь остались бы висеть до следующего переноса. */
+    onDragEnd: () => {
+      setDragging(null);
+      setDropTarget(null);
+    },
   });
 
   const screenState = app.screenState('library', state.folders.length === 0);
@@ -260,9 +372,11 @@ export function LibraryPanel(): ReactNode {
                 onSelect={(id) => app.openFolder(id)}
                 nodeProps={(id) => ({
                   ...nodePropsFor(pressedFolder, folderPress)(id),
-                  /* Папка вложений заметку не принимает: заметка в `Images`
-                     потерялась бы среди файлов, а найти её было бы негде. */
+                  /* Папку вложений не тащат и не принимают: её создаёт
+                     приложение, новые файлы всё равно лягут в `Images`, а
+                     заметка внутри потерялась бы среди вложений. */
                   ...(systemFolders.has(id) ? {} : dropPropsFor(id)),
+                  ...(systemFolders.has(id) || isMobile ? {} : dragPropsFor(id)),
                 })}
               />
               {/*

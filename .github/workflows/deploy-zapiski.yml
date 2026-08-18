@@ -283,6 +283,14 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/check-table-render.mjs --strict
 
+      # Перетаскивание папки и файла .md в библиотеке. Половина требования —
+      # про экран: «должно подсвечиваться, куда сейчас перетягиваю». Атрибут в
+      # дереве и правило обводки живут в разных пакетах и складываются только
+      # в браузере, а модульные тесты видят лишь атрибут.
+      - name: Живой браузер — перетаскивание
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-drag-drop.mjs --strict
+
       # Кнопки «Скачать» на промостранице обязаны указывать на файлы, которые
       # workflow'ы Android и Windows действительно кладут в updates/latest.
       # Имя живёт в HTML и в YAML сразу, и переименование в одном месте делало

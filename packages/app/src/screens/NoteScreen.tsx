@@ -5,12 +5,21 @@
  * «Инфо», backlinks, статус-строка и режим фокуса. Всё, что касается текста
  * (live-preview, автоформат, IME, автосохранение), живёт в редакторе.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent as ReactDragEvent,
+  type ReactNode,
+} from 'react';
 import {
   countWords,
   extractTags,
   isEncryptedPath,
   isImageAttachment,
+  isMarkdownFile,
   joinTitle,
   splitTitle,
   stemOf,
@@ -127,6 +136,32 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
   const [attachKind, setAttachKind] = useState<'image' | 'file' | 'audio'>('image');
   /** Файл висит над областью текста — подсветка зоны (ITERATION-1 §5). */
   const [dragOver, setDragOver] = useState(false);
+  /**
+   * Приём файла в область текста — на ОБЕИХ поверхностях экрана.
+   *
+   * Обработчики были только у зашифрованной (экран замка), а у обычной их не
+   * было вовсе: файл, бро́шенный в открытую заметку, не делал ничего — окно
+   * просто пыталось открыть его само. Один объект на оба места, чтобы такое
+   * расхождение больше не заводилось.
+   */
+  const dropProps = {
+    onDragOver: (event: ReactDragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      setDragOver(true);
+    },
+    onDragLeave: (event: ReactDragEvent<HTMLElement>) => {
+      if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+      setDragOver(false);
+    },
+    onDrop: (event: ReactDragEvent<HTMLElement>) => {
+      const dropped = Array.from(event.dataTransfer.files);
+      if (dropped.length === 0) return;
+      event.preventDefault();
+      setDragOver(false);
+      void acceptDropped(dropped);
+    },
+  };
   /**
    * Мост «путь вложения → URL».
    *
@@ -332,30 +367,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         <NoteHeader />
         <div
           className={`za-editor__surface${dragOver ? ' za-editor__surface--drop' : ''}`}
-          /* Перетаскивание файла в область текста — третий способ вставки
-             (ITERATION-1 §5). Зона подсвечивается рамкой и фоном, чтобы было
-             видно, куда именно уронят файл. */
-          onDragOver={(event) => {
-            if (!event.dataTransfer.types.includes('Files')) return;
-            event.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-            setDragOver(false);
-          }}
-          onDrop={(event) => {
-            const dropped = Array.from(event.dataTransfer.files);
-            if (dropped.length === 0) return;
-            event.preventDefault();
-            setDragOver(false);
-            /* По одному и по порядку: параллельная запись нескольких файлов в
-               одну папку даёт гонку за именем. */
-            void dropped.reduce(
-              (chain, file) => chain.then(() => attachAndInsert(file)),
-              Promise.resolve(),
-            );
-          }}
+          {...dropProps}
         >
           <LockScreen
             path={path}
@@ -387,7 +399,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
         {/* Хром скрыт полностью, кроме подсказки «фокус · Esc — выйти». */}
         {state.focusMode ? <span className="za-editor__hint">{strings.note.focusHint}</span> : null}
 
-        <div className="za-editor__surface">
+        <div
+          className={`za-editor__surface${dragOver ? ' za-editor__surface--drop' : ''}`}
+          {...dropProps}
+        >
           <div className="za-editor__column">
             {/* Шаг 3 онбординга — здесь, а не на отдельном экране (SCREENS §1). */}
             {state.firstRun ? (
@@ -803,6 +818,35 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       return;
     }
     app.toast({ message: strings.note.shareFailed(outcome.reason) });
+  }
+
+  /**
+   * Что делать с тем, что уронили в область текста.
+   *
+   * Развилка одна и проходит по расширению:
+   *
+   *   · `.md` — это ЗАМЕТКА, а не вложение. Заказчик: «Если перетаскиваю,
+   *     например, из Explorer в окно редактора, то заметка .md открывается в
+   *     редакторе, а сохраняется в текущей выбранной в меню папке». До сих пор
+   *     такой файл прикреплялся карточкой «файл» — то есть текст заметки
+   *     оказывался вложением, недоступным ни поиску, ни синхронизации как
+   *     заметка;
+   *   · всё остальное — вложение, как и было (ITERATION-1 §5).
+   *
+   * Порядок важен: вложения вставляются в ТЕКУЩУЮ заметку, поэтому они идут
+   * первыми — открытие импортированной заметки сменит экран.
+   */
+  async function acceptDropped(files: File[]): Promise<void> {
+    const notes = files.filter((file) => isMarkdownFile(file.name));
+    /* По одному и по порядку: параллельная запись нескольких файлов в одну
+       папку даёт гонку за именем. */
+    for (const file of files) {
+      if (!isMarkdownFile(file.name)) await attachAndInsert(file);
+    }
+    if (notes.length === 0) return;
+    const paths = await app.importDroppedNotes(notes, state.folder ?? undefined);
+    const first = paths[0];
+    if (first !== undefined) app.openNote(first);
   }
 
   async function attachAndInsert(file: File): Promise<void> {

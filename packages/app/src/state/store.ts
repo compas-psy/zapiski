@@ -18,6 +18,7 @@ import {
   VersionHistory,
   WebCryptoProvider,
   YandexDiskBackend,
+  applyImport,
   catalog as coreCatalog,
   countWords,
   createEncryptedNote,
@@ -29,7 +30,9 @@ import {
   exportNote,
   exportPdf,
   fromBase64,
+  importFolder,
   isEncryptedPath,
+  isMarkdownFile,
   parseQuery,
   passwordHint,
   readJson,
@@ -2542,6 +2545,59 @@ export class AppController {
        оставить после себя надгробие — её там никогда и не было. */
     await this.changes?.done(path).catch(() => undefined);
     await this.refresh();
+  }
+
+  /**
+   * Файлы, брошенные мышью в приложение, становятся заметками.
+   *
+   * ── Что просил заказчик ─────────────────────────────────────────────────
+   *
+   * «Перетаскивание документов .md в редактор и или в конкретную папку в
+   * приложении Windows или сайта должно копировать перетаскиваемую записку в
+   * соответствующую папку ЗАПИСОК». Дальше — два случая: из проводника в окно
+   * редактора (кладём в выбранную сейчас папку) и на конкретную папку в меню
+   * (кладём в неё, туда же переводим фокус). Оба зовут этот метод, разница
+   * только в том, какую папку они передают.
+   *
+   * ── Почему через тот же `applyImport`, что и мастер импорта ─────────────
+   *
+   * Инвариант BEHAVIOR §9 «импорт никогда не перезаписывает существующие
+   * заметки» держится в одном месте — в ядре. Написать здесь «прочитать файл и
+   * создать заметку» значило бы завести вторую дорогу в хранилище, у которой
+   * этого правила нет: файл с уже занятым именем молча затёр бы чужой текст.
+   * Заодно бесплатно достаются суффиксы при совпадении имён и переписывание
+   * `[[ссылок]]`, поехавших за этими суффиксами.
+   *
+   * Возвращает пути созданных заметок в порядке файлов: экран открывает
+   * первую. Не-markdown сюда не попадает — их разбирает место броска
+   * (в редакторе они становятся вложениями).
+   */
+  async importDroppedNotes(files: readonly File[], folder?: string): Promise<VaultPath[]> {
+    const vault = this.vault;
+    if (!vault) {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return [];
+    }
+    const map = new Map<string, Uint8Array>();
+    for (const file of files) {
+      if (!isMarkdownFile(file.name)) continue;
+      map.set(file.name, new Uint8Array(await file.arrayBuffer()));
+    }
+    if (map.size === 0) return [];
+
+    /*
+     * `stripRoot: false` — имена и так без папок: у файла, брошенного мышью,
+     * пути нет вовсе. А общий префикс на одном файле срезал бы его имя.
+     */
+    const bundle = importFolder(map, { stripRoot: false });
+    const report = await applyImport(vault, bundle, {
+      targetFolder: folder ?? '',
+      locale: this.state.locale,
+    });
+    for (const path of report.paths) this.scheduleSync(path);
+    await this.refresh();
+    this.toast({ message: this.strings.library.droppedImported(report.imported) });
+    return report.paths;
   }
 
   /** Пути, созданные «плюсом» в этом сеансе и ещё ни разу не тронутые. */

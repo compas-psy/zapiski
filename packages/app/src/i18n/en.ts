@@ -437,6 +437,8 @@ export const en: AppCatalog = {
     folderNamePrompt: 'Folder name',
     folderNameHint: 'For example, Supervision',
     create: 'Create',
+    droppedImported: (count: number): string => `${count} ${pl(count, 'note', 'notes')} imported`,
+    droppedNotNotes: 'Drop .md files here · use Import for a whole folder',
     moveFolder: 'Move',
     moveFolderTitle: 'Move to',
     moveToRoot: 'To root',
