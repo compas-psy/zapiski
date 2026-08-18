@@ -291,6 +291,15 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/check-drag-drop.mjs --strict
 
+      # Расход памяти на настоящем хранилище из 800 заметок. Заведён по отказу
+      # «открытый сайт в Chrome занимает 804 МБ»: индекс поиска держал текст
+      # деревом строковых склеек V8, и корпус в 2 МБ стоил 78 МБ кучи. Ни один
+      # модульный тест этого не видит — ни happy-dom, ни куча node не считают
+      # строки так, как их считает движок браузера.
+      - name: Живой браузер — память
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/check-memory.mjs --strict
+
       # Кнопки «Скачать» на промостранице обязаны указывать на файлы, которые
       # workflow'ы Android и Windows действительно кладут в updates/latest.
       # Имя живёт в HTML и в YAML сразу, и переименование в одном месте делало
