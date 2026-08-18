@@ -108,11 +108,34 @@ describe('vault: корзина, архив, закрепление', () => {
     const { vault } = await makeVault();
     const note = await vault.create({ title: 'Черновик' });
     const toast = await vault.trash(note.path);
-    expect(toast.message).toBe('Заметка в корзине · Отменить');
+    expect(toast.message).toBe('Заметка в корзине');
     expect(vault.notes()).toHaveLength(0);
     expect(vault.listTrash()).toHaveLength(1);
     await toast.onAction?.();
     expect(vault.notes()).toHaveLength(1);
+  });
+
+  it('тост не повторяет подпись своей же кнопки', async () => {
+    /*
+     * Заказчик увидел это на снимке корзины: «Заметка в корзине · Отменить»
+     * рядом с кнопкой «Отменить» — слово напечатано дважды. Реестр
+     * BEHAVIOR §11 описывал тост целиком, вместе с действием, а код читал ту
+     * же строку как ТЕКСТ и добавлял кнопку от себя.
+     *
+     * Проверка написана на паре, а не на строке: важно не «текст такой-то», а
+     * «текст и кнопка не дублируют друг друга» — то есть свойство, которое
+     * легко потерять в любом следующем тосте с действием.
+     */
+    const { vault } = await makeVault();
+    const note = await vault.create({ title: 'Черновик' });
+
+    for (const toast of [await vault.archiveWithUndo(note.path), await vault.trash(note.path)]) {
+      expect(toast.actionLabel, 'у тоста с отменой нет подписи действия').toBeTruthy();
+      expect(
+        toast.message.includes(toast.actionLabel as string),
+        `тост «${toast.message}» повторяет свою кнопку «${toast.actionLabel}»`,
+      ).toBe(false);
+    }
   });
 
   it('чистка корзины удаляет только записи старше 30 дней', async () => {
@@ -132,7 +155,7 @@ describe('vault: корзина, архив, закрепление', () => {
     const { vault } = await makeVault();
     const note = await vault.create({ title: 'В архив' });
     const toast = await vault.archiveWithUndo(note.path);
-    expect(toast.message).toBe('Заметка в архиве · Отменить');
+    expect(toast.message).toBe('Заметка в архиве');
     expect(vault.metaOf(note.path)?.archived).toBe(true);
     await toast.onAction?.();
     expect(vault.metaOf(note.path)?.archived).toBe(false);

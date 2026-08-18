@@ -44,8 +44,8 @@ export const en: Catalog = {
     linksUpdated: (count: number): string => `Links updated: ${count}`,
     renamedTags: (count: number): string =>
       `Renamed in ${count} note${count === 1 ? '' : 's'}`,
-    noteArchived: 'Note archived · Undo',
-    noteTrashed: 'Note moved to trash · Undo',
+    noteArchived: 'Note archived',
+    noteTrashed: 'Note moved to trash',
   },
   actions: {
     undo: 'Undo',
