@@ -466,6 +466,12 @@ const PREF = {
   yandexToken: 'sync.yandexToken',
   /** «Шифровать новые заметки» — раздел «Безопасность» (ТЗ §3.3). */
   encryptNewNotes: 'security.encryptNewNotes',
+  /**
+   * Согласие на продуктовую аналитику БЕЗ аккаунта (O-260817-15). Пока нет
+   * `account`, это единственное место, где живёт согласие — на сервере при
+   * аккаунте оно отдельно (`AccountState.analyticsOptIn`, `users.analytics_opt_in`).
+   */
+  analyticsOptIn: 'analytics.optIn',
   /** Включена ли биометрия для хранилища. Сам ключ живёт в keystore. */
   biometrics: 'security.biometrics',
   onboarded: 'onboarded',
@@ -638,6 +644,13 @@ export class AppController {
    */
   private subfolderNotes = false;
   /**
+   * Согласие на продуктовую аналитику БЕЗ аккаунта (O-260817-15) — по
+   * умолчанию выключено, как и было. Пока `account` нет, это единственный
+   * источник правды для тумблера в настройках; с аккаунтом источник —
+   * `AccountState.analyticsOptIn`, как раньше (`analyticsOptInValue()`).
+   */
+  private deviceAnalyticsOptIn = false;
+  /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
    */
@@ -805,6 +818,7 @@ export class AppController {
       savedDownscale,
       savedFoldersShown,
       savedSubfolderNotes,
+      savedDeviceAnalyticsOptIn,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -821,9 +835,11 @@ export class AppController {
       this.host.prefs.get<boolean>(PREF.attachmentDownscale, true),
       this.host.prefs.get<boolean>(PREF.attachmentFoldersShown, true),
       this.host.prefs.get<boolean>(PREF.subfolderNotes, false),
+      this.host.prefs.get<boolean>(PREF.analyticsOptIn, false),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
+    this.deviceAnalyticsOptIn = savedDeviceAnalyticsOptIn;
     /* Язык: `setLocale` писал ключ, а читать его было некому — выбор не
        переживал перезапуск (ITERATION-1 §2). Русский по умолчанию, английский
        только явным выбором; локаль ОС не спрашиваем. */
@@ -1385,18 +1401,43 @@ export class AppController {
    * O-260817-05). Тот же принцип: тумблер показывает то, что записал сервер.
    * Отзыв ещё и стирает накопленную офлайн-очередь: то, что не успело уйти
    * до отзыва, не должно уйти после него.
+   *
+   * O-260817-15: с аккаунтом ничего не поменялось — согласие по-прежнему
+   * живёт на сервере при `userId`. Без аккаунта (вход в проде не доведён,
+   * а ЗАПИСКИ работает локально) — тот же тумблер пишет согласие устройства
+   * (`analytics.optIn` в prefs + `analytics_device_consent` на сервере).
    */
   async setAnalyticsConsent(optIn: boolean): Promise<boolean> {
-    const applied = await this.session.setAnalyticsConsent(optIn).catch(() => null);
+    const account = this.state.account;
+    if (account) {
+      const applied = await this.session.setAnalyticsConsent(optIn).catch(() => null);
+      if (applied === null) {
+        this.toast({ message: this.strings.errors.syncFailed });
+        return account.analyticsOptIn ?? false;
+      }
+      this.patch({ account: { ...account, analyticsOptIn: applied } });
+      if (applied) void this.flushAnalytics();
+      else await this.analytics?.clear();
+      return applied;
+    }
+
+    const applied = await this.session.setDeviceAnalyticsConsent(optIn).catch(() => null);
     if (applied === null) {
       this.toast({ message: this.strings.errors.syncFailed });
-      return this.state.account?.analyticsOptIn ?? false;
+      return this.deviceAnalyticsOptIn;
     }
-    const account = this.state.account;
-    if (account) this.patch({ account: { ...account, analyticsOptIn: applied } });
+    this.deviceAnalyticsOptIn = applied;
+    this.persistPref(PREF.analyticsOptIn, applied);
+    this.patch({});
     if (applied) void this.flushAnalytics();
     else await this.analytics?.clear();
     return applied;
+  }
+
+  /** Что видит и меняет тумблер согласия — сервер при аккаунте, устройство без него. */
+  analyticsOptInValue(): boolean {
+    const account = this.state.account;
+    return account ? account.analyticsOptIn === true : this.deviceAnalyticsOptIn;
   }
 
   /** Выход из аккаунта — одно из ТРЁХ мест с диалогом подтверждения. */
@@ -3966,7 +4007,7 @@ export class AppController {
    * даже очереди на диске).
    */
   private track(name: AnalyticsEventName, props: Record<string, unknown>): void {
-    if (this.state.account?.analyticsOptIn !== true) return;
+    if (!this.analyticsOptInValue()) return;
     const queue = this.analytics;
     if (!queue) return;
     const event = buildAnalyticsEvent(name, props);
@@ -3988,7 +4029,7 @@ export class AppController {
   private async doFlushAnalytics(): Promise<void> {
     const queue = this.analytics;
     if (!queue || queue.size === 0 || !this.state.online) return;
-    if (this.state.account?.analyticsOptIn !== true) return;
+    if (!this.analyticsOptInValue()) return;
     const queued = queue.list();
     const ok = await this.session
       .sendAnalyticsEvents(queued.map((item) => item.event))

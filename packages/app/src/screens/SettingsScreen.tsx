@@ -1235,6 +1235,36 @@ function VaultLocationChoice(): ReactNode {
   );
 }
 
+/**
+ * Согласие на продуктовую аналитику (ТЗ §6, O-260817-05) — отдельным
+ * тумблером и другими словами, чем рекламное или чек-ин самочувствия (та же
+ * граница, что закрыла B-260817-03 в МОМЕНТАХ).
+ *
+ * O-260817-15: аккаунт для метаданных не обязателен — вход в проде не
+ * доведён, а ЗАПИСКИ работает локально. Показывается независимо от входа:
+ * с аккаунтом читает/пишет `AccountState.analyticsOptIn` (сервер, как
+ * раньше), без него — согласие устройства (`AppController.analyticsOptInValue`).
+ * По умолчанию выключено в обоих случаях.
+ */
+function AnalyticsConsentSwitch(): ReactNode {
+  const app = useApp();
+  const strings = useStrings();
+  useAppState(); // подписка на изменения account/deviceAnalyticsOptIn
+
+  return (
+    <>
+      <div className="za-field-row">
+        <Switch
+          label={strings.signIn.consentAnalytics}
+          checked={app.analyticsOptInValue()}
+          onChange={(event) => void app.setAnalyticsConsent(event.target.checked)}
+        />
+      </div>
+      <p className="za-muted za-hint">{strings.signIn.consentAnalyticsHint}</p>
+    </>
+  );
+}
+
 function AccountSection(): ReactNode {
   const app = useApp();
   const state = useAppState();
@@ -1249,6 +1279,7 @@ function AccountSection(): ReactNode {
         <Button onClick={() => app.beginSignIn({ name: 'settings', section: 'account' })}>
           {copy.signIn}
         </Button>
+        <AnalyticsConsentSwitch />
       </>
     );
   }
@@ -1285,20 +1316,7 @@ function AccountSection(): ReactNode {
       </div>
       <p className="za-muted za-hint">{strings.signIn.consentMarketingHint}</p>
 
-      {/*
-        Согласие на продуктовую аналитику (ТЗ §6, O-260817-05) — рядом с
-        рекламным, но отдельным тумблером и другими словами: это два разных
-        решения, и молчаливо связывать их с чек-ином самочувствия или друг с
-        другом нельзя (та же граница, что закрыла B-260817-03 в МОМЕНТАХ).
-      */}
-      <div className="za-field-row">
-        <Switch
-          label={strings.signIn.consentAnalytics}
-          checked={state.account.analyticsOptIn === true}
-          onChange={(event) => void app.setAnalyticsConsent(event.target.checked)}
-        />
-      </div>
-      <p className="za-muted za-hint">{strings.signIn.consentAnalyticsHint}</p>
+      <AnalyticsConsentSwitch />
 
       <Button variant="secondary" onClick={() => setConfirm(true)}>
         {copy.signOut}
