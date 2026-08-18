@@ -192,6 +192,56 @@ for path in sorted(glob.glob('.github/workflows/*.yml')):
                 'Положите значение в env у job\'а и проверяйте env.'
             )
 
+# ── Ворота производственной подписи Android ────────────────────────────────
+#
+# Заказчик: «сертификат подписи в андроид блокируется проверкой при установке и
+# не проходит проверку Play Защиты». Дело было не в ключе: сборка работала
+# fail-open — нет секретов, берём отладочный ключ, собираем `--debug`, и те же
+# строки кладут результат в `/updates/latest/zapiski.apk`, откуда его качает
+# человек по кнопке.
+#
+# Правило восстановлению не подлежит: публичный файл трогает только
+# производственная сборка с ПРОВЕРЕННОЙ подписью. Ниже — три утверждения о
+# самом файле workflow, потому что логика правил живёт в
+# `apps/mobile/scripts/android-release-gate.mjs` (её испытывают тесты), а вот
+# проводка этих правил существует только здесь.
+android = '.github/workflows/build-android.yml'
+try:
+    spec = yaml.safe_load(open(android, encoding='utf-8'))
+except Exception as error:  # разобрать не удалось — об этом уже сказано выше
+    spec = None
+
+if spec:
+    steps = spec['jobs']['build']['steps']
+    ship = next((s for s in steps if 'сервер' in str(s.get('name', ''))), None)
+    if ship is None:
+        problems.append(f'{android}: шага доставки на сервер нет — проверять нечего')
+    else:
+        script = ship.get('run', '')
+        # Режем по НАЗНАЧЕНИЮ каталога, а не по первому упоминанию строки:
+        # ворота объясняются комментарием, и комментарий тоже содержит адрес.
+        head = script.split('latest="/var/www')[0]
+        if 'PROMOTED' not in head or 'VERIFIED' not in head:
+            problems.append(
+                f'{android}: путь к /updates/latest/ не закрыт воротами PROMOTED+VERIFIED — '
+                'публичную ссылку снова может переписать отладочная сборка'
+            )
+
+    build_step = next((s for s in steps if s.get('name') == 'tauri android build'), None)
+    if build_step and '--debug' in build_step.get('run', ''):
+        if 'build_type' not in build_step.get('run', ''):
+            problems.append(
+                f'{android}: выбор `--debug` не опирается на build_type — '
+                'производственная сборка снова сможет оказаться отладочной'
+            )
+
+    release_if = str(spec['jobs']['release'].get('if', ''))
+    if 'verified_release' not in release_if:
+        problems.append(
+            f'{android}: job `release` не требует verified_release — '
+            'в GitHub Release может уехать непроверенный APK'
+        )
+
 for problem in problems:
     print(problem, file=sys.stderr)
 sys.exit(1 if problems else 0)

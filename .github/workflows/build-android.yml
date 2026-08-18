@@ -12,20 +12,41 @@ name: Сборка Android
 #   Android ставит обновление поверх установленного приложения, только если
 #   подпись совпадает. Сменили keystore или алиас — пользователь обязан
 #   удалить приложение и поставить заново, потеряв локальные настройки; в
-#   Google Play смена ключа невозможна вовсе. Поэтому:
-#     * ключ приезжает ровно из секретов ANDROID_KEYSTORE_BASE64 / …,
-#     * после подписи в лог печатается отпечаток сертификата (`apksigner
-#       verify --print-certs`), и его можно сверить с предыдущим релизом,
-#     * ключ подписи в репозитории не хранится никогда (.gitignore, *.jks;
-#       исключений там нет и добавлять их нельзя — стережёт security.yml).
+#   Google Play смена ключа невозможна вовсе.
 #
-# СЕКРЕТОВ ПОДПИСИ ПОКА НЕТ, И ЭТО НЕ ПОВОД ПАДАТЬ.
-#   Без ключа собирается DEBUG-APK: он подписан отладочным ключом, который
-#   AGP заводит сам, ставится на устройство и годится для проверки. В логе об
-#   этом пишется `::warning::`, в имени артефакта появляется `-debug`, а job
-#   `release` (GitHub Release + latest.json на сервере) не запускается вовсе:
-#   неподписанное нашим ключом обновление клиент отвергнет, а манифест с
-#   ссылкой на debug-сборку собьёт с толку тех, у кого уже стоит релиз.
+# ДВА КАНАЛА, И ОНИ НЕ СМЕШИВАЮТСЯ.
+#
+#   production — тег `v*`, пуш в ветку по умолчанию и ручной запуск с явно
+#   выбранным каналом. Здесь правило жёсткое: APK либо собран как release,
+#   подписан постоянным ключом из ANDROID_* и прошёл проверку готового файла,
+#   либо его нет вовсе. Нет хотя бы одного из четырёх секретов — падаем ДО
+#   получаса компиляции. Неполный комплект — падаем всегда, на любом канале:
+#   половина настройки это ошибка, а не повод собрать что-нибудь.
+#
+#   development — всё остальное: pull request, чужая ветка, ручной запуск без
+#   выбора. Здесь допустим DEBUG-APK, и он честно называется `-debug`. Он
+#   живёт ровно в одном месте — во вкладке Actions, семь дней. Он НИКОГДА не
+#   попадает ни в /updates/latest/zapiski.apk, ни в latest.json, ни в GitHub
+#   Release, ни в кнопку «Скачать» на промостранице.
+#
+# ПОЧЕМУ ЭТО ПЕРЕПИСАНО.
+#   Заказчик: «сертификат подписи в андроид блокируется проверкой при
+#   установке и не проходит проверку Play Защиты». Дело было не в ключе.
+#   Сборка работала fail-open: нет секретов — молча берём ОТЛАДОЧНЫЙ ключ,
+#   собираем `--debug`, и дальше те же строки кладут результат в
+#   /updates/latest/zapiski.apk. То есть публичная кнопка могла отдавать
+#   пакет с `CN=Android Debug` — первое, на что реагирует Play Защита.
+#
+#   Теперь единственная дорога наружу такая:
+#     ANDROID_* → проверка keystore и алиаса → EXPECTED_SIGNER_SHA256 →
+#     release-сборка → zipalign → apksigner sign (v1+v2+v3) →
+#     apksigner verify → отказ при CN=Android Debug → отпечаток APK совпал с
+#     ключом → verified_release=true → сервер, Release, фид обновлений.
+#   Всё остальное — разработка, и пользовательским APK не становится никогда.
+#
+#   Ключ подписи в репозитории не хранится (.gitignore, *.jks; стережёт
+#   security.yml), а в лог печатается только ПУБЛИЧНЫЙ отпечаток сертификата —
+#   по нему сверяют, что выпуск подписан тем же ключом, что и прошлый.
 
 on:
   # Фильтра `paths` здесь нет намеренно: GitHub применил бы его и к тегам, и
@@ -54,6 +75,20 @@ on:
       - 'package.json'
       - '.github/workflows/build-android.yml'
   workflow_dispatch:
+    inputs:
+      # Производственный канал руками — только явным выбором.
+      #
+      # Умолчание безопасное: ручной запуск считается разработческим, пока не
+      # попросили обратного. Обратный порядок означал бы, что случайный запуск
+      # не с той ветки способен переписать файл, который люди качают по кнопке.
+      channel:
+        description: 'Канал сборки: development (по умолчанию) или production'
+        required: false
+        default: development
+        type: choice
+        options:
+          - development
+          - production
 
 permissions:
   contents: read
@@ -151,10 +186,28 @@ jobs:
       signed: ${{ steps.keystore.outputs.signed }}
       apk: ${{ steps.collect.outputs.name }}
       artifact: ${{ steps.collect.outputs.artifact }}
+      channel: ${{ steps.channel.outputs.channel }}
+      promoted: ${{ steps.channel.outputs.promoted }}
+      # Единственный флаг, от которого зависит публикация. `signed` означает
+      # лишь «keystore восстановился»; здесь — «готовый APK проверен и подписан
+      # именно этим ключом».
+      verified_release: ${{ steps.verify.outputs.verified_release }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ── Канал сборки ──────────────────────────────────────────────────────
+      #
+      # Считается ОДИН раз и в одном месте — до тяжёлых шагов. Дальше все
+      # решения («падать ли без ключа», «можно ли трогать latest») читают этот
+      # флаг, а не пересчитывают своё представление о production по-своему.
+      - name: Канал сборки
+        id: channel
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+        run: node apps/mobile/scripts/android-release-gate.mjs channel
 
       # ── Инструменты ───────────────────────────────────────────────────────
 
@@ -525,20 +578,42 @@ jobs:
           cat "${rules}"
 
       # ── Ключ подписи ──────────────────────────────────────────────────────
+      #
+      # ЗДЕСЬ БЫЛА ГЛАВНАЯ ДЫРА, из-за которой заказчику прилетало «Play Защита
+      # блокирует установку».
+      #
+      # Шаг работал fail-open: нет секретов — не падаем, берём общеизвестный
+      # ОТЛАДОЧНЫЙ ключ, собираем `--debug`, и дальше те же строки кладут
+      # результат в `/updates/latest/zapiski.apk` — файл, который человек
+      # качает по кнопке. То есть публичная ссылка могла отдавать пакет,
+      # подписанный `CN=Android Debug`. Это первое, на что реагирует Play
+      # Защита, и это же ломает обновление поверх релиза.
+      #
+      # Теперь правило одно и жёсткое: производственная сборка либо подписана
+      # постоянным ключом из ANDROID_*, либо её нет. Половина комплекта —
+      # отказ на любом канале: это ошибка настройки, а не повод собрать debug.
       - name: Подготовить keystore
         id: keystore
         env:
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+          # Скрипту сообщается ЕСТЬ или НЕТ, а не значение: секретов он не видит.
+          HAS_ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+          HAS_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
+          HAS_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS != '' }}
+          HAS_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD != '' }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          if [ -z "${ANDROID_KEYSTORE_BASE64}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD}" ] \
-             || [ -z "${ANDROID_KEY_ALIAS}" ] || [ -z "${ANDROID_KEY_PASSWORD}" ]; then
-            echo 'signed=false' >> "$GITHUB_OUTPUT"
-            echo "::warning::Секретов подписи нет (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) — собираем DEBUG-APK"
-            echo "::warning::Debug-APK подписан отладочным ключом репозитория: он ставится на устройство, но релизом НЕ является и обновлением поверх релизной сборки не встанет"
+          # Политика решается в проверяемом месте: `android-release-gate.mjs`
+          # падает сам при неполном комплекте и при production без ключа.
+          node apps/mobile/scripts/android-release-gate.mjs policy
+
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "::warning::Секретов подписи нет — собираем DEBUG-APK для разработки"
+            echo "::warning::Debug-APK НИКОГДА не публикуется: ни в /updates/latest/, ни в latest.json, ни в GitHub Release"
 
             # ПОСТОЯННЫЙ отладочный ключ вместо случайного.
             #
@@ -560,14 +635,41 @@ jobs:
             exit 0
           fi
 
+          umask 077
           mkdir -p "${RUNNER_TEMP}/signing"
-          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/signing/zapiski.jks"
+          keystore="${RUNNER_TEMP}/signing/zapiski.jks"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${keystore}"
+          # Файл есть и не пуст: base64 с опечаткой даёт нулевой размер, и без
+          # этой строчки отказ всплыл бы получасом позже, на подписи.
+          test -s "${keystore}"
           # Проверяем ключ до сборки: полчаса компиляции ради «пароль не
-          # подошёл» в самом конце — плохая сделка.
-          keytool -list -keystore "${RUNNER_TEMP}/signing/zapiski.jks" \
+          # подошёл» в самом конце — плохая сделка. Проверяются обе двери:
+          # пароль хранилища и пароль самого ключа.
+          keytool -list -keystore "${keystore}" \
             -storepass "${ANDROID_KEYSTORE_PASSWORD}" -alias "${ANDROID_KEY_ALIAS}" >/dev/null
+          # `-certreq` требует ПРИВАТНЫЙ ключ и ничего не меняет в хранилище:
+          # проверка пароля ключа, которая не портит то, что проверяет.
+          # (`-keypasswd` сделал бы то же самое, но записью в keystore.)
+          keytool -certreq -keystore "${keystore}" \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" -alias "${ANDROID_KEY_ALIAS}" \
+            -keypass "${ANDROID_KEY_PASSWORD}" >/dev/null 2>&1 \
+            || { echo '::error::ANDROID_KEY_PASSWORD не подходит к алиасу ANDROID_KEY_ALIAS'; exit 1; }
+
+          # Отпечаток ожидаемой подписи — из САМОГО keystore, до сборки.
+          #
+          # Это точка отсчёта: после подписи с ним сверяется отпечаток готового
+          # APK. Публичный отпечаток сертификата секретом не является и в лог
+          # печатается сознательно — по нему заказчик сверяет, что выпуск
+          # подписан тем же ключом, что и прошлый.
+          expected="$(LANG=C keytool -list -v -keystore "${keystore}" \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" -alias "${ANDROID_KEY_ALIAS}" \
+            | awk -F'SHA256: ' '/SHA256:/ { gsub(":", "", $2); print tolower($2); exit }')"
+          test -n "${expected}"
+          echo "EXPECTED_SIGNER_SHA256=${expected}" >> "$GITHUB_ENV"
+          echo "expected_signer_sha256=${expected}" >> "$GITHUB_OUTPUT"
           echo 'signed=true' >> "$GITHUB_OUTPUT"
-          echo 'Ключ подписи на месте, алиас найден.'
+          echo 'Ключ подписи на месте, алиас найден, пароль ключа подходит.'
+          echo "Expected signer SHA-256: ${expected}"
 
       # ── Сборка ────────────────────────────────────────────────────────────
       - name: tauri android build
@@ -582,7 +684,10 @@ jobs:
           CARGO_PROFILE_DEV_STRIP: 'symbols'
         run: |
           set -euo pipefail
-          if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+          # `release` — не «если получится», а следствие политики: до этого
+          # шага production без ключа уже упал. Дорога «production → нет
+          # секретов → --debug» в этом файле отсутствует физически.
+          if [ "${{ steps.keystore.outputs.build_type }}" = 'release' ]; then
             pnpm --filter @zapiski/mobile exec tauri android build --apk \
               --target aarch64 --target armv7
           else
@@ -599,6 +704,7 @@ jobs:
       # штатные zipalign и apksigner. Заодно получаем `verify --print-certs`,
       # то есть доказательство стабильности подписи прямо в логе.
       - name: Подписать APK
+        id: sign
         if: steps.keystore.outputs.signed == 'true'
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -624,18 +730,52 @@ jobs:
           echo "Подписываем ${unsigned}"
 
           "${tools}/zipalign" -p -f 4 "${unsigned}" "${RUNNER_TEMP}/aligned.apk"
+          # Схемы названы явно, а не отданы на усмотрение инструмента:
+          # v2 обязательна (при minSdk 24 без неё пакет проверяется только
+          # JAR-подписью), v3 даёт возможность когда-нибудь сменить ключ без
+          # переустановки, v1 оставлен ради совместимости со старым софтом,
+          # который читает APK как обычный zip. v4 не нужна: она про
+          # инкрементальную установку с ADB, а не про sideload.
           "${tools}/apksigner" sign \
             --ks "${RUNNER_TEMP}/signing/zapiski.jks" \
             --ks-pass "pass:${ANDROID_KEYSTORE_PASSWORD}" \
             --ks-key-alias "${ANDROID_KEY_ALIAS}" \
             --key-pass "pass:${ANDROID_KEY_PASSWORD}" \
+            --v1-signing-enabled true \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
             --out "${RUNNER_TEMP}/signed.apk" \
             "${RUNNER_TEMP}/aligned.apk"
+          echo "apksigner=${tools}/apksigner" >> "$GITHUB_OUTPUT"
 
-          echo '── Отпечаток сертификата подписи ──'
-          echo 'Он обязан совпадать с предыдущими релизами: иначе обновление'
-          echo '«на месте» не встанет и потребует удаления приложения.'
-          "${tools}/apksigner" verify --print-certs "${RUNNER_TEMP}/signed.apk"
+      # ── Проверка готового APK ─────────────────────────────────────────────
+      #
+      # Раньше здесь просто печатался сертификат. Печать в лог — не проверка:
+      # её никто не читает, и ни одно решение от неё не зависело. Теперь это
+      # ВОРОТА: только пройденная проверка открывает публикацию.
+      #
+      # Проверяется готовый распространяемый файл, а не намерение. «Keystore
+      # восстановился» и «APK подписан этим ключом» — разные утверждения, и до
+      # сих пор проверялось только первое.
+      - name: Проверить подпись APK
+        id: verify
+        if: steps.keystore.outputs.signed == 'true'
+        env:
+          EXPECTED_SIGNER_SHA256: ${{ steps.keystore.outputs.expected_signer_sha256 }}
+        run: |
+          set -uo pipefail
+          apksigner='${{ steps.sign.outputs.apksigner }}'
+          set +e
+          "${apksigner}" verify --verbose --print-certs "${RUNNER_TEMP}/signed.apk" \
+            > "${RUNNER_TEMP}/apksigner.txt" 2>&1
+          code=$?
+          set -e
+          cat "${RUNNER_TEMP}/apksigner.txt"
+
+          node apps/mobile/scripts/android-release-gate.mjs verify \
+            --output "${RUNNER_TEMP}/apksigner.txt" \
+            --expected "${EXPECTED_SIGNER_SHA256}" \
+            --exit-code "${code}"
 
       - name: Собрать артефакт
         id: collect
@@ -644,7 +784,7 @@ jobs:
           version='${{ steps.version.outputs.version }}'
           mkdir -p artifacts
 
-          if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+          if [ "${{ steps.keystore.outputs.build_type }}" = 'release' ]; then
             name="zapiski-${version}.apk"
             artifact="zapiski-android-${version}"
             cp "${RUNNER_TEMP}/signed.apk" "artifacts/${name}"
@@ -659,14 +799,33 @@ jobs:
           fi
 
           size="$(stat -c%s "artifacts/${name}")"
+          apk_sha256="$(sha256sum "artifacts/${name}" | cut -d' ' -f1)"
           echo "name=${name}" >> "$GITHUB_OUTPUT"
           echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
+          echo "apk_sha256=${apk_sha256}" >> "$GITHUB_OUTPUT"
           echo "Артефакт: ${artifact} → ${name}, размер: $((size / 1024 / 1024)) МБ"
+          echo "APK SHA-256: ${apk_sha256}"
+
+          # Паспорт сборки: чем подписано и из чего собрано.
+          #
+          # Едет рядом с APK и в GitHub Release. Секретов в нём нет и быть не
+          # может — только два публичных отпечатка, версия и ссылка на коммит.
+          # Нужен затем, что «мы подписали правильным ключом» и «вот этот файл
+          # подписан вот этим ключом» — разные утверждения, и второе обязано
+          # оставаться доказуемым после того, как прогон истёк.
+          node apps/mobile/scripts/android-release-gate.mjs provenance \
+            --out "artifacts/${artifact}.json" \
+            --channel '${{ steps.channel.outputs.channel }}' \
+            --version "${version}" \
+            --application-id "$(node -p "require('./apps/mobile/src-tauri/tauri.conf.json').identifier")" \
+            --apk-sha256 "${apk_sha256}" \
+            --signer-sha256 '${{ steps.verify.outputs.signer_sha256 }}' \
+            --build-type "${{ steps.keystore.outputs.build_type }}"
           # ТЗ §6: APK <30 МБ. Не роняем сборку — сообщаем, чтобы бюджет не
           # переползли молча. Debug тяжелее release по определению, поэтому для
           # него это заметка, а не претензия.
           if [ "${size}" -gt 31457280 ]; then
-            if [ "${{ steps.keystore.outputs.signed }}" = 'true' ]; then
+            if [ "${{ steps.keystore.outputs.build_type }}" = 'release' ]; then
               echo "::warning::APK больше 30 МБ (${size} байт) — бюджет ТЗ §6 превышен"
             else
               echo "::notice::debug-APK больше 30 МБ (${size} байт); бюджет ТЗ §6 меряется по release-сборке"
@@ -688,7 +847,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.collect.outputs.artifact }}
-          path: artifacts/*.apk
+          path: |
+            artifacts/*.apk
+            artifacts/*.json
           if-no-files-found: error
           retention-days: 7
 
@@ -703,6 +864,9 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          CHANNEL: ${{ steps.channel.outputs.channel }}
+          PROMOTED: ${{ steps.channel.outputs.promoted }}
+          VERIFIED: ${{ steps.verify.outputs.verified_release }}
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
@@ -716,6 +880,25 @@ jobs:
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
           scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
           echo "APK лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
+
+          # ── Ворота пользовательского канала ─────────────────────────────
+          #
+          # ЗДЕСЬ БЫЛА ВТОРАЯ ПОЛОВИНА ДЫРЫ. Ниже лежит копирование в
+          # `/updates/latest/zapiski.apk` — файл, который отдаёт кнопка
+          # «Скачать» на промостранице. Раньше сюда доезжала ЛЮБАЯ сборка,
+          # включая отладочную с чужой ветки: каталог сборок и постоянная
+          # ссылка обновлялись одними и теми же строками.
+          #
+          # Теперь дорога открыта только производственной сборке, чья подпись
+          # проверена на готовом файле. Всё остальное останавливается здесь и
+          # живёт в каталоге сборок, откуда его берут руками и осознанно.
+          if [ "${PROMOTED}" != 'true' ] || [ "${VERIFIED}" != 'true' ]; then
+            echo "Канал: ${CHANNEL}; подпись проверена: ${VERIFIED:-false}."
+            echo '::notice::Постоянная ссылка /updates/latest/zapiski.apk НЕ обновляется: это не проверенная производственная сборка.'
+            echo 'Production publish gate: CLOSED'
+            exit 0
+          fi
+          echo 'Production publish gate: OPEN'
 
           # Постоянный адрес свежей сборки.
           #
@@ -754,8 +937,10 @@ jobs:
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}
           SHIP: ${{ steps.ship.outcome }}
-          # Сборки этой ветки и теги — те самые, что предлагает /promo.
-          PROMOTED: ${{ (github.ref_type == 'tag' || github.ref_name == github.event.repository.default_branch) && 'true' || 'false' }}
+          # Канал считается ОДИН раз, в шаге «Канал сборки». Раньше здесь
+          # стояло своё выражение — вторая версия того же правила, и разойтись
+          # они могли молча.
+          PROMOTED: ${{ steps.channel.outputs.promoted }}
         run: |
           set -euo pipefail
           echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
@@ -798,7 +983,10 @@ jobs:
   release:
     name: Релиз и выкладка
     needs: build
-    if: github.ref_type == 'tag' && needs.build.outputs.signed == 'true'
+    # `verified_release`, а не `signed`. Второе означает лишь «keystore
+    # восстановился»; публиковать людям можно только то, чья подпись проверена
+    # на ГОТОВОМ файле: не отладочная, совпадающая с ключом, со схемой v2.
+    if: github.ref_type == 'tag' && needs.build.outputs.verified_release == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -825,9 +1013,9 @@ jobs:
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
           if gh release view "${tag}" >/dev/null 2>&1; then
-            gh release upload "${tag}" artifacts/*.apk --clobber
+            gh release upload "${tag}" artifacts/*.apk artifacts/*.json --clobber
           else
-            gh release create "${tag}" artifacts/*.apk \
+            gh release create "${tag}" artifacts/*.apk artifacts/*.json \
               --title "ЗАПИСКИ ${{ needs.build.outputs.version }}" \
               --generate-notes
           fi
