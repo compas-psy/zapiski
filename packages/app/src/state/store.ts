@@ -61,6 +61,7 @@ import {
   type Catalog,
   type UndoableToast,
   type UnlockGuardRecord,
+  type IndexMode,
   type VaultLocation,
   type VaultLocationInfo,
   type VaultOwner,
@@ -446,6 +447,8 @@ const PREF = {
   attachmentFoldersShown: 'attachments.showFolders',
   /** Показывать ли в папке заметки из вложенных папок. */
   subfolderNotes: 'list.subfolderNotes',
+  /** Размен «скорость поиска ↔ память» (решение заказчика). */
+  searchMode: 'search.mode',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -641,6 +644,14 @@ export class AppController {
    */
   private subfolderNotes = false;
   /**
+   * Чем платить за поиск: временем запроса или памятью.
+   *
+   * Умолчание — скорость: так решил заказчик. Экономия памяти нужна на очень
+   * больших хранилищах и на слабых машинах, и это осознанный размен, а не то,
+   * что стоит включать за человека.
+   */
+  private searchMode: IndexMode = 'speed';
+  /**
    * Счётчик неудачных попыток пароля (BEHAVIOR §5.2, SEC-024). До `boot()` —
    * пустой: настоящий приезжает из настроек и переживает перезапуск.
    */
@@ -808,6 +819,7 @@ export class AppController {
       savedDownscale,
       savedFoldersShown,
       savedSubfolderNotes,
+      savedSearchMode,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -824,6 +836,7 @@ export class AppController {
       this.host.prefs.get<boolean>(PREF.attachmentDownscale, true),
       this.host.prefs.get<boolean>(PREF.attachmentFoldersShown, true),
       this.host.prefs.get<boolean>(PREF.subfolderNotes, false),
+      this.host.prefs.get<string>(PREF.searchMode, 'speed'),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -843,6 +856,9 @@ export class AppController {
     this.attachmentDownscale = savedDownscale;
     this.attachmentFoldersShown = savedFoldersShown;
     this.subfolderNotes = savedSubfolderNotes;
+    if (savedSearchMode === 'memory' || savedSearchMode === 'speed') {
+      this.searchMode = savedSearchMode;
+    }
     /* Задержка после неверных попыток продолжает действовать после
        перезапуска, а не начинается заново (BEHAVIOR §5.2, SEC-024). */
     await this.restoreUnlockGuard(unlockGuard);
@@ -943,6 +959,9 @@ export class AppController {
     let vault: Vault;
     try {
       vault = await Vault.open(storage, { locale: this.state.locale });
+      /* Размен «скорость ↔ память» — свойство индекса, а живёт он в vault: у
+         каждого открытия свой, и настройку надо донести до него заново. */
+      vault.index.setMode(this.searchMode);
     } catch (error) {
       this.patch({ booting: false });
       /* Причина остаётся в консоли: она нужна разработчику, а человеку из неё
@@ -2001,6 +2020,25 @@ export class AppController {
   /** Показывать ли в открытой папке заметки из вложенных папок. */
   subfolderNotesValue(): boolean {
     return this.subfolderNotes;
+  }
+
+  /** Нынешний размен поиска — его показывают настройки. */
+  searchModeValue(): IndexMode {
+    return this.searchMode;
+  }
+
+  /**
+   * Переключить размен «скорость поиска ↔ память».
+   *
+   * Применяется к живому индексу сразу: перестройка не нужна, меняется только
+   * то, хранится ли вторая копия текста. Человек, выбравший экономию, обязан
+   * увидеть её эффект тут же, а не после перезапуска.
+   */
+  async setSearchMode(mode: IndexMode): Promise<void> {
+    this.searchMode = mode;
+    this.vault?.index.setMode(mode);
+    await this.host.prefs.set(PREF.searchMode, mode);
+    this.patch({});
   }
 
   async setSubfolderNotes(value: boolean): Promise<void> {

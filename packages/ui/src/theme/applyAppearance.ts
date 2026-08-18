@@ -5,15 +5,18 @@ import {
   BASE_LINE_HEIGHT,
   DEFAULT_APPEARANCE,
   DEFAULT_EDITOR_PREFERENCES,
+  DEFAULT_PANE_WIDTHS,
   EDITOR_COLUMN_WIDTHS,
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
   PANEL_PLACEMENTS,
+  PANE_LIMITS,
   THEME_PREFERENCES,
   migrateAccent,
   migrateTheme,
   resolveTheme,
   type AppearanceState,
+  type PaneWidths,
   type PanelSpot,
   type Theme,
 } from './types';
@@ -67,6 +70,27 @@ export function parseAppearance(raw: unknown): AppearanceState {
         : DEFAULT_EDITOR_PREFERENCES.panelPlacement,
       panelSpot: parsePanelSpot(editorSrc['panelSpot']),
     },
+    panes: parsePanes(src['panes']),
+  };
+}
+
+/**
+ * Ширины панелей из сохранённого оформления.
+ *
+ * Числа зажимаются в те же границы, что и при перетаскивании: в хранилище
+ * могло попасть что угодно — от чужой версии до правки руками, — а панель
+ * шириной в три пикселя не открыть обратно ничем.
+ */
+function parsePanes(raw: unknown): PaneWidths {
+  const src = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const pick = (value: unknown, key: keyof PaneWidths): number => {
+    const limits = PANE_LIMITS[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_PANE_WIDTHS[key];
+    return Math.min(limits.max, Math.max(limits.min, Math.round(value)));
+  };
+  return {
+    library: pick(src['library'], 'library'),
+    list: pick(src['list'], 'list'),
   };
 }
 

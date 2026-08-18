@@ -3,10 +3,11 @@
  *
  * Структура: `<Заметка>.textbundle/text.md` + `assets/` + `info.json`.
  * Bear пишет ссылки на вложения как `assets/…`; переписываем их в конвенцию
- * ЗАПИСОК `attachments/…` — «единая конвенция на всех платформах» (ТЗ §3.2).
+ * ЗАПИСОК — «единая конвенция на всех платформах» (ТЗ §3.2), то есть в те же
+ * `Images` / `Audio` / `Other files`, куда кладёт вложения само приложение.
  */
 import { decode, emptyBundle, unzip, type ImportBundle } from './types.js';
-import { ATTACHMENTS_DIR } from '../util/path.js';
+import { attachmentDirFor } from '../util/path.js';
 import { extractTitle } from '../markdown/parse.js';
 
 export function importBear(zip: Uint8Array): ImportBundle {
@@ -47,7 +48,8 @@ export function importBearFiles(files: Map<string, Uint8Array>): ImportBundle {
     }
     let body = entry.text;
     for (const asset of entry.assets) {
-      const target = `${ATTACHMENTS_DIR}/${asset.name}`;
+      const dot = asset.name.lastIndexOf('.');
+      const target = `${attachmentDirFor(dot > 0 ? asset.name.slice(dot + 1) : '')}/${asset.name}`;
       bundle.assets.push({ relativePath: target, data: asset.data });
       /* Считаем подмены: отчёт обещает строку «Ссылок переписано», и число в
          ней обязано быть настоящим. */

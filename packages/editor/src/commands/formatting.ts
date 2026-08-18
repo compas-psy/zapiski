@@ -57,10 +57,38 @@ function wrapTarget(state: EditorState, range: SelectionRange): SelectionRange {
   return range;
 }
 
+/**
+ * Отрезать пробелы по краям выделения.
+ *
+ * ── Отказ, ради которого написано ───────────────────────────────────────────
+ *
+ * Заказчик: «метки ~~ вставляются с обоих сторон выделенного блока, но фрагмент
+ * не перечёркивается». Так и было, и виноват один пробел.
+ *
+ * Двойной щелчок по слову почти везде выделяет слово ВМЕСТЕ с пробелом за ним.
+ * Обернув такое выделение, мы получаем `~~текст ~~`, а по правилам markdown
+ * закрывающий маркер, перед которым стоит пробел, закрывающим не считается —
+ * ни один разборщик такую пару не увидит. На экране: тильды стоят обычным
+ * текстом, зачёркивания нет. То же самое с `**`, `*` и `==`, и то же самое при
+ * выделении строки целиком — там на конце перевод строки.
+ *
+ * Поэтому маркеры ставятся ВНУТРЬ пробелов: выделение остаётся тем же, что
+ * выбрал человек, а разметка ложится на слово.
+ */
+function trimRange(state: EditorState, range: SelectionRange): SelectionRange {
+  if (range.empty) return range;
+  const text = state.sliceDoc(range.from, range.to);
+  const leading = text.length - text.trimStart().length;
+  const trailing = text.length - text.trimEnd().length;
+  /* Выделены одни пробелы — оборачивать нечего: ведём себя как без выделения. */
+  if (leading + trailing >= text.length) return EditorSelection.cursor(range.from);
+  return EditorSelection.range(range.from + leading, range.to - trailing);
+}
+
 export function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     const tr = state.changeByRange((cursor) => {
-      const range = wrapTarget(state, cursor);
+      const range = wrapTarget(state, trimRange(state, cursor));
       const outerFrom = range.from - open.length;
       const outerTo = range.to + close.length;
       const hasOuter =

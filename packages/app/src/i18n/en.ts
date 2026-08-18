@@ -23,6 +23,8 @@ export const en: AppCatalog = {
     skip: 'Skip',
     loading: 'Loading',
     untitled: 'Untitled',
+    resizeLibrary: 'Library width',
+    resizeList: 'Note list width',
     crashed: 'Something broke on this screen',
     crashedHint: 'The rest of the app still works. Your notes are safe — they live in files.',
     crashedRetry: 'Try again',
@@ -570,6 +572,13 @@ export const en: AppCatalog = {
         own: 'This folder only',
         nested: 'Include subfolders',
       },
+      searchMode: 'Search: what matters more',
+      searchModeValues: {
+        speed: 'Search speed',
+        memory: 'Less memory',
+      },
+      searchModeHint:
+        'For fast search the app keeps a second, prepared copy of your note text in memory. On a vault of thousands of notes that is tens of megabytes. With «less memory» there is no copy — search computes it on the fly and answers slower.',
       subfolderNotesHint:
         'With «this folder only» an open folder shows its own contents, like a file manager. With «include subfolders» notes from nested folders appear too, each labelled with the folder it lives in.',
     },

@@ -26,12 +26,29 @@ const MAX_FRAGMENTS = 3;
 /** Ограничение выдачи по умолчанию (BEHAVIOR §4). */
 const DEFAULT_LIMIT = 200;
 
+/**
+ * Чем платим за поиск: временем или памятью.
+ *
+ * Решение заказчика: «можно сделать ползунок в настройках: скорость поиска ↔
+ * память и пусть пользователь выбирает. По умолчанию — скорость поиска».
+ *
+ * `speed` — нормализованный текст лежит рядом с исходным: поиск подстрок и
+ * фраз идёт по готовой строке. Это вторая копия корпуса в памяти.
+ * `memory` — второй копии нет, нормализация считается на лету и только для
+ * заметок-кандидатов. На большом хранилище это заметно дешевле по памяти и
+ * заметно дороже по времени запроса.
+ */
+export type IndexMode = 'speed' | 'memory';
+
 interface IndexedNote {
   meta: NoteMeta;
   /** Текст без разметки. У зашифрованных — пустая строка (ТЗ §3.3). */
   plain: string;
-  /** Нормализованный текст той же длины — для поиска подстрок и фраз. */
-  normalized: string;
+  /**
+   * Нормализованный текст той же длины — для поиска подстрок и фраз.
+   * `null` в режиме экономии памяти: считается на лету при запросе.
+   */
+  normalized: string | null;
   normalizedTitle: string;
   /** Ключи, по которым на заметку можно сослаться. */
   refKeys: string[];
@@ -121,6 +138,8 @@ interface Scored {
 
 export class InvertedIndex implements NoteIndex {
   private notes = new Map<NoteId, IndexedNote>();
+  /** Чем платим за поиск. Умолчание — скоростью запроса (решение заказчика). */
+  private mode: IndexMode = 'speed';
   private byPath = new Map<VaultPath, NoteId>();
   /** term → заметки, где терм встречается в заголовке. */
   private titlePostings = new Map<string, Set<NoteId>>();
@@ -134,6 +153,32 @@ export class InvertedIndex implements NoteIndex {
 
   // ── Изменение состава ──────────────────────────────────────────────────────
 
+  /**
+   * Переключить размен «скорость ↔ память».
+   *
+   * Переключение немедленное и без перестройки индекса: постинги, по которым
+   * ищутся термы, от режима не зависят — меняется только то, хранится ли
+   * вторая копия текста. Поэтому переключатель в настройках отвечает сразу, а
+   * не заставляет ждать переиндексации хранилища.
+   */
+  setMode(mode: IndexMode): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    for (const entry of this.notes.values()) {
+      entry.normalized = mode === 'memory' ? null : normalizeKeepingLength(entry.plain);
+    }
+  }
+
+  /** Нынешний размен — его показывают настройки и сторожат тесты. */
+  get indexMode(): IndexMode {
+    return this.mode;
+  }
+
+  /** Нормализованный текст заметки: готовый или посчитанный на месте. */
+  private normalizedOf(entry: IndexedNote): string {
+    return entry.normalized ?? normalizeKeepingLength(entry.plain);
+  }
+
   add(note: Note): void {
     this.remove(note.id);
     const encrypted = note.encrypted;
@@ -143,7 +188,7 @@ export class InvertedIndex implements NoteIndex {
     const entry: IndexedNote = {
       meta: { ...note as NoteMeta },
       plain,
-      normalized: normalizeKeepingLength(plain),
+      normalized: this.mode === 'memory' ? null : normalizeKeepingLength(plain),
       normalizedTitle: encrypted ? '' : normalizeKeepingLength(note.title),
       refKeys: referenceKeys(note),
       outRefs: encrypted ? [] : outgoingRefs(note.path, note.body),
@@ -364,7 +409,7 @@ export class InvertedIndex implements NoteIndex {
       let phraseOk = true;
       for (const phrase of phrases) {
         const inTitle = entry.normalizedTitle.includes(phrase);
-        const inBody = entry.normalized.includes(phrase);
+        const inBody = this.normalizedOf(entry).includes(phrase);
         if (!inTitle && !inBody) {
           phraseOk = false;
           break;
@@ -379,7 +424,7 @@ export class InvertedIndex implements NoteIndex {
         if (
           (this.bodyPostings.get(term)?.has(id) ?? false) ||
           (this.titlePostings.get(term)?.has(id) ?? false) ||
-          entry.normalized.includes(term) ||
+          this.normalizedOf(entry).includes(term) ||
           entry.normalizedTitle.includes(term)
         ) {
           hasExcluded = true;
@@ -421,7 +466,11 @@ export class InvertedIndex implements NoteIndex {
       hits.push({
         note: item.entry.meta,
         score: Math.round(item.score * 100) / 100,
-        fragments: buildFragments(item.entry.plain, item.entry.normalized, item.needles),
+        fragments: buildFragments(
+          item.entry.plain,
+          this.normalizedOf(item.entry),
+          item.needles,
+        ),
         encryptedPlaceholder: false,
       });
     }
@@ -456,7 +505,7 @@ export class InvertedIndex implements NoteIndex {
         const entry: IndexedNote = {
           meta,
           plain: item.plain,
-          normalized: normalizeKeepingLength(item.plain),
+          normalized: this.mode === 'memory' ? null : normalizeKeepingLength(item.plain),
           normalizedTitle: meta.encrypted ? '' : normalizeKeepingLength(meta.title),
           refKeys: referenceKeys(meta),
           outRefs: Array.isArray(item.refs) ? item.refs : [],

@@ -7,7 +7,7 @@
  * что не поддалось — упоминается в отчёте.
  */
 import { decode, emptyBundle, type ImportBundle } from './types.js';
-import { ATTACHMENTS_DIR } from '../util/path.js';
+import { attachmentDirFor } from '../util/path.js';
 import { fromBase64, shortHash } from '../util/bytes.js';
 import { isoDate } from '../util/text.js';
 
@@ -38,7 +38,7 @@ export function importEvernote(data: Uint8Array | string): ImportBundle {
 
     let body = enmlToMarkdown(content);
 
-    // Ресурсы: base64 → attachments, ссылки по хешу заменяем на markdown.
+    // Ресурсы: base64 → папки вложений, ссылки по хешу заменяем на markdown.
     for (const resource of block.match(/<resource>[\s\S]*?<\/resource>/g) ?? []) {
       const base64 = tagText(resource, 'data');
       const mime = tagText(resource, 'mime') ?? 'application/octet-stream';
@@ -48,7 +48,7 @@ export function importEvernote(data: Uint8Array | string): ImportBundle {
       const extension = fileName ? fileName.slice(fileName.lastIndexOf('.')) : (MIME_EXT[mime] ?? '.bin');
       const date = isoDate(created ? parseEnexDate(created) : Date.now());
       const name = `${date}_${shortHash(bytes)}${extension}`;
-      const target = `${ATTACHMENTS_DIR}/${name}`;
+      const target = `${attachmentDirFor(extension)}/${name}`;
       bundle.assets.push({ relativePath: target, data: bytes });
       const isImage = mime.startsWith('image/');
       body += `\n\n${isImage ? '!' : ''}[${fileName ?? name}](${target})`;

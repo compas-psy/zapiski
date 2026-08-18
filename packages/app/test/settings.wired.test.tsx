@@ -17,7 +17,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ThemeProvider, ToastProvider, type EditorPreferences } from '@zapiski/ui';
+import { DEFAULT_PANE_WIDTHS, ThemeProvider, ToastProvider, type EditorPreferences } from '@zapiski/ui';
 import { AppProvider } from '../src/state/context.js';
 import { NoteScreen } from '../src/screens/NoteScreen.js';
 import { AppController } from '../src/state/store.js';
@@ -52,6 +52,7 @@ async function mountWith(editor: Partial<EditorPreferences>) {
           panelSpot: null,
           ...editor,
         },
+        panes: DEFAULT_PANE_WIDTHS,
       }}
     >
       <ToastProvider>

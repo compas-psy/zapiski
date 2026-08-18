@@ -251,6 +251,26 @@ function AppearanceSection(): ReactNode {
       />
       <p className="za-muted">{copy.subfolderNotesHint}</p>
 
+      {/*
+        Размен «скорость поиска ↔ память» (решение заказчика по итогам замера).
+
+        Живёт рядом со списком, а не в «Хранилище»: человек выбирает не место
+        файлов, а поведение приложения. Умолчание — скорость: экономия нужна на
+        очень больших хранилищах и слабых машинах, и включать её за человека
+        значило бы замедлить поиск всем ради тех, кто об этом не просил.
+      */}
+      <Section>{copy.searchMode}</Section>
+      <SegmentedControl<'speed' | 'memory'>
+        label={copy.searchMode}
+        value={app.searchModeValue()}
+        onChange={(value) => void app.setSearchMode(value)}
+        options={[
+          { value: 'speed', label: copy.searchModeValues.speed },
+          { value: 'memory', label: copy.searchModeValues.memory },
+        ]}
+      />
+      <p className="za-muted">{copy.searchModeHint}</p>
+
       <Button variant="text" iconStart={<IconBug size={16} />} onClick={() => app.toggleDebug(true)}>
         {strings.settings.debugMenu}
       </Button>

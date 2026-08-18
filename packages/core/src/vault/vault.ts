@@ -5,14 +5,24 @@
  * диске, индекс и служебные метаданные восстановимы, удаление `.zapiski/`
  * не теряет ни одной заметки.
  */
-import type { Note, NoteId, NoteMeta, UndoableToast, VaultPath, VaultStorage } from '../contract.js';
+import type {
+  Note,
+  NoteId,
+  NoteMeta,
+  UndoableToast,
+  VaultEntry,
+  VaultPath,
+  VaultStorage,
+} from '../contract.js';
 import { catalog, DEFAULT_LOCALE, type Locale } from '../i18n/i18n.js';
 import { InvertedIndex } from '../index/note-index.js';
 import { joinFrontmatter, splitFrontmatter, Frontmatter } from '../markdown/frontmatter.js';
 import { parseNote } from '../markdown/parse.js';
 import { fnv1a, newId, shortHash } from '../util/bytes.js';
 import {
+  ATTACHMENT_DIRS,
   ATTACHMENTS_DIR,
+  attachmentDirFor,
   baseName,
   dirName,
   INDEX_FILE,
@@ -102,7 +112,7 @@ export interface CreateNoteInput {
 
 /** Куда и под каким именем класть вложение (ITERATION-1 §5). */
 export interface AddAttachmentOptions {
-  /** Папка. Пусто — общая `attachments/` в корне хранилища. */
+  /** Папка. Не задана — общая папка по типу файла: `Images` / `Audio` / `Other files`. */
   folder?: VaultPath;
   naming?: AttachmentNaming;
   /** Имя, под которым файл пришёл из системы, — для правил `original`. */
@@ -477,6 +487,25 @@ export class Vault {
     return out;
   }
 
+  /**
+   * Все файлы внутри каталога — ЛЮБЫЕ, не только заметки.
+   *
+   * Папка человека состоит не из одних `.md`: там вложения, сканы, чужие
+   * форматы. Переезд папки, который видит только заметки, оставляет остальное
+   * на месте — и это ровно тот отказ, который заказчик описал как «папка
+   * копируется, а не перемещается».
+   */
+  private async listFilesRecursive(dir: VaultPath): Promise<VaultPath[]> {
+    const out: VaultPath[] = [];
+    const entries = await this.storage.list(dir).catch(() => []);
+    for (const entry of entries) {
+      if (isMetaPath(entry.path)) continue;
+      if (entry.isDirectory) out.push(...(await this.listFilesRecursive(entry.path)));
+      else out.push(entry.path);
+    }
+    return out;
+  }
+
   // ── Папки ──────────────────────────────────────────────────────────────────
   //
   // Папка здесь — настоящий каталог на диске, а не выдумка приложения.
@@ -547,6 +576,16 @@ export class Vault {
     }
 
     await this.storage.mkdir(target);
+    const at = (path: VaultPath): VaultPath => joinPath(target, path.slice(source.length + 1));
+
+    /*
+     * Каталоги создаём ЗАРАНЕЕ и все сразу: файлам должно быть куда лечь, и
+     * пустая подпапка обязана пережить переезд — она такая же часть структуры,
+     * как заметка.
+     */
+    const dirs = await this.listDirsRecursive(source);
+    for (const dir of dirs) await this.storage.mkdir(at(dir));
+
     let updatedLinks = 0;
     /* Снимок путей до начала: во время цикла индекс меняется под нами. */
     const inside = this.index
@@ -554,13 +593,29 @@ export class Vault {
       .map((note) => note.path)
       .filter((path) => path === source || path.startsWith(`${source}/`));
     for (const path of inside) {
-      const result = await this.renameTo(path, joinPath(target, path.slice(source.length + 1)));
+      const result = await this.renameTo(path, at(path));
       updatedLinks += result.updatedLinks;
     }
 
-    /* Пустые подкаталоги переносим следом, иначе структура схлопнется. */
-    for (const dir of await this.listDirsRecursive(source)) {
-      await this.storage.mkdir(joinPath(target, dir.slice(source.length + 1)));
+    /*
+     * Всё остальное — тоже переезжает.
+     *
+     * Отказ, ради которого это написано: заказчик увидел «папка копируется, а
+     * не перемещается». Переезжали только ЗАМЕТКИ ИЗ ИНДЕКСА, а вложения,
+     * сканы и чужие форматы оставались на месте. Дальше — как повезёт с
+     * хранилищем: где удаление каталога рекурсивно, эти файлы ИСЧЕЗАЛИ вместе
+     * с исходной папкой; где нет — папка оставалась на старом месте, и на
+     * экране их становилось две. Оба исхода одинаково недопустимы, и молчащий
+     * `.catch(() => undefined)` на удалении прятал ровно их.
+     */
+    for (const file of await this.listFilesRecursive(source)) {
+      await this.storage.rename(file, at(file)).catch(() => undefined);
+    }
+
+    /* Каталоги убираем снизу вверх: удаление непустого отвергает часть
+       хранилищ, а после переноса им и нечего содержать. */
+    for (const dir of [...dirs].sort((a, b) => b.length - a.length)) {
+      await this.storage.remove(dir).catch(() => undefined);
     }
     await this.storage.remove(source).catch(() => undefined);
     this.emit([source, target]);
@@ -1125,12 +1180,18 @@ export class Vault {
     /* Куда класть — настройка (ITERATION-1 §5). «Рядом с заметкой» означает
        папку самой заметки, а не подпапку в ней: подпапка на каждую заметку
        превращает хранилище в дерево из одного файла в каждом узле. */
-    /* `undefined` — правило не задано, значит общая папка. Пустая строка —
-       это КОРЕНЬ хранилища, и он законное значение: заметка в корне, у
-       которой вложения кладутся «рядом», кладёт их именно туда. Смешать эти
-       два случая означало бы, что «рядом с заметкой» для корневой заметки
-       молча превращается в `attachments/`. */
-    const folder = options.folder === undefined ? ATTACHMENTS_DIR : normalizePath(options.folder);
+    /* `undefined` — правило не задано, значит общая папка по типу файла
+       (`Images` / `Audio` / `Other files`). Пустая строка — это КОРЕНЬ
+       хранилища, и он законное значение: заметка в корне, у которой вложения
+       кладутся «рядом», кладёт их именно туда. Смешать эти два случая
+       означало бы, что «рядом с заметкой» для корневой заметки молча
+       превращается в общую папку.
+
+       Прежде умолчанием была единая `attachments/` — раскладка первых версий.
+       Приложение туда давно не кладёт ничего, и папка появлялась у человека
+       ниоткуда: её оставляли импорт и вызовы ядра без явной папки. */
+    const folder =
+      options.folder === undefined ? attachmentDirFor(extension) : normalizePath(options.folder);
 
     const name = attachmentFileName(
       options.naming ?? 'hash',
@@ -1156,9 +1217,20 @@ export class Vault {
     return { path: target, markdown: `${isImage ? '!' : ''}[](${mdUrl(target)})` };
   }
 
-  /** Вложения, на которые никто не ссылается (Настройки → Хранилище). */
+  /**
+   * Вложения, на которые никто не ссылается (Настройки → Хранилище).
+   *
+   * Смотрим во ВСЕ папки вложений. Раньше проверялась только старая единая
+   * `attachments/`, а приложение уже давно кладёт файлы в `Images`, `Audio` и
+   * `Other files`: список «ненужных вложений» у большинства был пуст всегда, и
+   * это выглядело как «всё чисто», а не как «мы смотрели не туда».
+   */
   async orphanAttachments(): Promise<VaultPath[]> {
-    const entries = await this.storage.list(ATTACHMENTS_DIR).catch(() => []);
+    const entries: VaultEntry[] = [];
+    const folders: string[] = [...Object.values(ATTACHMENT_DIRS), ATTACHMENTS_DIR];
+    for (const dir of folders) {
+      entries.push(...(await this.storage.list(dir).catch(() => [])));
+    }
     const used = new Set<string>();
     for (const meta of this.index.all()) {
       const note = await this.read(meta.path);

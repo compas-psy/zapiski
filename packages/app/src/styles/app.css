@@ -156,13 +156,18 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
-/* 900–1200: две панели, библиотека — оверлей по кнопке */
+/* 900–1200: две панели, библиотека — оверлей по кнопке.
+   Ширины берутся из переменных: их задаёт мышью человек (`PaneResizer`), а
+   числа в `var(...)` — те же умолчания, что стояли здесь раньше. */
 .za-frame--dual {
-  grid-template-columns: 288px minmax(0, 1fr);
+  grid-template-columns: var(--za-pane-list, 288px) minmax(0, 1fr);
 }
-/* ≥1200: библиотека 224 | список 288 | редактор */
+/* ≥1200: библиотека | список | редактор */
 .za-frame--triple {
-  grid-template-columns: 224px 288px minmax(0, 1fr);
+  grid-template-columns:
+    var(--za-pane-library, 224px)
+    var(--za-pane-list, 288px)
+    minmax(0, 1fr);
 }
 .za-frame--compact {
   grid-template-columns: minmax(0, 1fr);
@@ -179,6 +184,8 @@
 }
 
 .za-pane {
+  /* Ручка ширины стоит по кромке панели — значит панель ей система координат. */
+  position: relative;
   min-inline-size: 0;
   min-block-size: 0;
   display: flex;
@@ -191,6 +198,52 @@
 }
 .za-pane--list {
   border-inline-end: var(--border-w) solid var(--line);
+}
+
+/*
+ * Граница между панелями, за которую тянут (`PaneResizer`).
+ *
+ * Заказчик: «навёл на границу, появился соответствующий стандартный курсор и
+ * при клике и перетаскивании ширина меняется и запоминается». Курсор именно
+ * системный `col-resize` — свой рисунок здесь был бы хуже: человек узнаёт
+ * границу по нему, а не по нашей выдумке.
+ *
+ * Полоса лежит ВНУТРИ панели по её кромке: у панели `overflow: hidden`, и
+ * ручка, вынесенная наружу, была бы обрезана. Семь пикселей — попасть мышью
+ * легко, а место у текста не отнимается: полоса прозрачная.
+ */
+.za-resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  inline-size: 7px;
+  z-index: 4;
+  cursor: col-resize;
+  /* Прозрачная по умолчанию: линию рисует рамка самой панели. */
+  background-color: transparent;
+  transition: background-color var(--dur-fast) var(--ease-standard);
+  /* Перетаскивание не должно выделять текст в соседней панели. */
+  touch-action: none;
+  user-select: none;
+}
+/* Подсветка только там, где есть настоящий курсор: на тач-экране границы нет. */
+@media (hover: hover) {
+  .za-resizer:hover {
+    background-color: var(--accent-soft);
+  }
+}
+.za-resizer:focus-visible {
+  outline: var(--focus-w) solid var(--focus);
+  outline-offset: -2px;
+}
+.za-resizer--active {
+  background-color: var(--accent-soft);
+}
+/* На узких раскладках панелей рядом нет — тянуть нечего. */
+@media (max-width: 899px) {
+  .za-resizer {
+    display: none;
+  }
 }
 
 /* ── Шапка экрана ────────────────────────────────────────────────────────── */

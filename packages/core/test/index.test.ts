@@ -241,6 +241,54 @@ describe('поиск', () => {
   });
 });
 
+describe('размен «скорость поиска ↔ память»', () => {
+  /*
+   * Решение заказчика по итогам замера памяти: «можно сделать ползунок в
+   * настройках: скорость поиска ↔ память и пусть пользователь выбирает. По
+   * умолчанию — скорость поиска».
+   *
+   * Экономия достигается тем, что индекс перестаёт хранить вторую копию
+   * текста — нормализованную — и считает её при запросе. Значит главное, что
+   * нужно сторожить: ВЫДАЧА ОТ ЭТОГО НЕ МЕНЯЕТСЯ. Человек выбирает, чем
+   * платить, а не какие заметки ему найдутся.
+   */
+  const queries = ['гирлянду', 'ЁЛКА', '"разбор главы"', 'разбор -вебинара', 'tag:практика'];
+
+  it('находит то же самое и подсвечивает то же самое', () => {
+    const fast = makeIndex();
+    const lean = makeIndex();
+    lean.setMode('memory');
+
+    for (const text of queries) {
+      const query = parseQuery(text);
+      const a = fast.search(query);
+      const b = lean.search(query);
+      expect(makeIds(b), `запрос «${text}»`).toEqual(makeIds(a));
+      expect(b.map((hit) => hit.fragments), `фрагменты запроса «${text}»`).toEqual(
+        a.map((hit) => hit.fragments),
+      );
+    }
+  });
+
+  it('переключение туда и обратно ничего не теряет', () => {
+    const index = makeIndex();
+    const before = makeIds(index.search(parseQuery('"разбор главы"')));
+    index.setMode('memory');
+    index.setMode('speed');
+    expect(makeIds(index.search(parseQuery('"разбор главы"')))).toEqual(before);
+  });
+
+  it('заметка, добавленная в режиме экономии, тоже находится', () => {
+    /* Новая заметка приходит уже без второй копии — и обязана искаться так же. */
+    const index = makeIndex();
+    index.setMode('memory');
+    index.add(
+      note({ id: '5', path: 'Новая.md', body: '# Новая\n\nсовершенно особенное слово' }),
+    );
+    expect(makeIds(index.search(parseQuery('особенное')))).toEqual(['5']);
+  });
+});
+
 describe('backlinks (BEHAVIOR §2.10)', () => {
   it('считает wiki-ссылки и markdown-ссылки', () => {
     const index = new InvertedIndex();

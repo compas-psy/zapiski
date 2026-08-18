@@ -47,13 +47,25 @@ export function linkDraft(state: EditorState): LinkDraft {
     }
   }
 
+  /*
+   * Пробелы по краям выделения в подпись не идут: двойной щелчок по слову
+   * отдаёт его вместе с пробелом за ним, и ссылка получала подчёркнутый хвост
+   * `[слово ](адрес)`. Границы правки сдвигаются вместе с текстом — пробел
+   * остаётся в тексте, снаружи ссылки.
+   */
+  const raw = state.sliceDoc(from, to);
+  const leading = raw.length - raw.trimStart().length;
+  const trailing = raw.length - raw.trimEnd().length;
+  const selected = raw.trim();
+  const start = selected === '' ? from : from + leading;
+  const end = selected === '' ? to : to - trailing;
+
   /* Выделили адрес, а не подпись — это тоже частый случай: скопировали ссылку,
      выделили, нажали кнопку. Тогда выделение идёт в «Адрес». */
-  const selected = state.sliceDoc(from, to);
   if (selected !== '' && isUrl(selected)) {
-    return { text: '', url: selected, from, to, editing: false };
+    return { text: '', url: selected, from: start, to: end, editing: false };
   }
-  return { text: selected, url: '', from, to, editing: false };
+  return { text: selected, url: '', from: start, to: end, editing: false };
 }
 
 /** Похоже ли выделение на адрес, а не на подпись. */

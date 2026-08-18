@@ -149,11 +149,13 @@ describe('vault: корзина, архив, закрепление', () => {
 });
 
 describe('vault: вложения (ТЗ §3.2)', () => {
-  it('кладёт файл в attachments/ГГГГ-ММ-ДД_хеш.ext и даёт относительную ссылку', async () => {
+  it('кладёт файл в папку по типу и даёт относительную ссылку', async () => {
     const { vault } = await makeVault();
     const data = new Uint8Array([1, 2, 3, 4]);
     const { path, markdown } = await vault.addAttachment(data, 'png');
-    expect(path).toMatch(/^attachments\/\d{4}-\d{2}-\d{2}_[0-9a-f]{6}\.png$/);
+    /* `Images`, а не старая единая `attachments`: раскладка по типу — та, что
+       живёт в настройках и в библиотеке. */
+    expect(path).toMatch(/^Images\/\d{4}-\d{2}-\d{2}_[0-9a-f]{6}\.png$/);
     expect(markdown).toBe(`![](${path})`);
   });
 

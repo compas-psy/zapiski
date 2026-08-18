@@ -145,7 +145,7 @@ export {
 } from './vault/rename.js';
 
 // ── Индекс и поиск ─────────────────────────────────────────────────────────
-export { InvertedIndex, buildFragments, outgoingRefs, passesFilters, referenceKeys } from './index/note-index.js';
+export { type IndexMode, InvertedIndex, buildFragments, outgoingRefs, passesFilters, referenceKeys } from './index/note-index.js';
 export { formatQuery, parseDateToken, parseQuery } from './index/query.js';
 
 // ── Крипто ─────────────────────────────────────────────────────────────────

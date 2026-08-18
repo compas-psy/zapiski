@@ -11,10 +11,12 @@ import {
 } from 'react';
 import {
   DEFAULT_APPEARANCE,
+  PANE_LIMITS,
   resolveTheme,
   type Accent,
   type AppearanceState,
   type EditorPreferences,
+  type PaneWidths,
   type Theme,
   type ThemePreference,
 } from './types';
@@ -32,11 +34,14 @@ export interface ThemeContextValue {
   theme: Theme;
   accent: Accent;
   editor: EditorPreferences;
+  /** Ширины панелей каркаса, заданные мышью. */
+  panes: PaneWidths;
   prefersDark: boolean;
   prefersReducedMotion: boolean;
   setTheme: (preference: ThemePreference) => void;
   setAccent: (accent: Accent) => void;
   setEditor: (patch: Partial<EditorPreferences>) => void;
+  setPanes: (patch: Partial<PaneWidths>) => void;
   reset: () => void;
 }
 
@@ -139,6 +144,25 @@ export function ThemeProvider({
     setState((prev) => ({ ...prev, editor: { ...prev.editor, ...patch } }));
   }, []);
 
+  /**
+   * Ширина панели, заданная мышью.
+   *
+   * Зажимается здесь, а не у ручки: границы — свойство раскладки, и обойти их
+   * не должно ни перетаскивание, ни стрелки, ни чужая запись в хранилище.
+   */
+  const setPanes = useCallback((patch: Partial<PaneWidths>) => {
+    setState((prev) => {
+      const next = { ...prev.panes };
+      for (const key of Object.keys(patch) as Array<keyof PaneWidths>) {
+        const value = patch[key];
+        if (value === undefined) continue;
+        const limits = PANE_LIMITS[key];
+        next[key] = Math.min(limits.max, Math.max(limits.min, Math.round(value)));
+      }
+      return { ...prev, panes: next };
+    });
+  }, []);
+
   const reset = useCallback(() => setState(DEFAULT_APPEARANCE), []);
 
   const value = useMemo<ThemeContextValue>(
@@ -147,14 +171,16 @@ export function ThemeProvider({
       theme: resolveTheme(state.theme, prefersDark),
       accent: state.accent,
       editor: state.editor,
+      panes: state.panes,
       prefersDark,
       prefersReducedMotion,
       setTheme,
       setAccent,
       setEditor,
+      setPanes,
       reset,
     }),
-    [state, prefersDark, prefersReducedMotion, setTheme, setAccent, setEditor, reset],
+    [state, prefersDark, prefersReducedMotion, setTheme, setAccent, setEditor, setPanes, reset],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

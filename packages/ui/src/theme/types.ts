@@ -139,11 +139,38 @@ export interface EditorPreferences {
   panelSpot: PanelSpot | null;
 }
 
+/**
+ * Ширины панелей каркаса, заданные мышью.
+ *
+ * Заказчик: «Ширина блоков Меню, список заметок, редактор должна быть
+ * настраиваема мышкой — навёл на границу, появился соответствующий стандартный
+ * курсор и при клике и перетаскивании ширина меняется и запоминается».
+ *
+ * Хранятся две ширины, а не три: редактор занимает остаток, и отдельное число
+ * для него означало бы два источника истины на одну раскладку.
+ */
+export interface PaneWidths {
+  /** Библиотека — левая панель трёхпанельной раскладки. */
+  library: number;
+  /** Список заметок. */
+  list: number;
+}
+
+/** Границы, за которые ширину не пускаем: панель уже 160 px нечитаема. */
+export const PANE_LIMITS = {
+  library: { min: 160, max: 420 },
+  list: { min: 200, max: 560 },
+} as const;
+
 export interface AppearanceState {
   theme: ThemePreference;
   accent: Accent;
   editor: EditorPreferences;
+  panes: PaneWidths;
 }
+
+/** Умолчания — те же числа, что стояли в сетке каркаса (SCREENS «Каркас»). */
+export const DEFAULT_PANE_WIDTHS: PaneWidths = { library: 224, list: 288 };
 
 export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   fontSize: 16,
@@ -176,6 +203,7 @@ export const DEFAULT_APPEARANCE: AppearanceState = {
   /** «Гранат» — акцент по умолчанию во всех темах (Р5). */
   accent: 'garnet',
   editor: DEFAULT_EDITOR_PREFERENCES,
+  panes: DEFAULT_PANE_WIDTHS,
 };
 
 /** Ключ в localStorage. Выбор пользователя переживает перезапуск. */

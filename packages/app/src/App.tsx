@@ -6,15 +6,23 @@
  * ниже, — каркас из SCREENS «Каркас»: четыре раскладки по брейкпоинтам
  * 600 / 900 / 1200, маршрутизация, оверлеи и карта хоткеев BEHAVIOR §7.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type { SharedPayload, VaultPath } from "@zapiski/core";
 /* `@zapiski/ui` подключает токены и стили компонентов сам (side effect). */
 import {
   Button,
   Drawer,
   IconPen,
+  PANE_LIMITS,
   ThemeProvider,
   ToastProvider,
+  useTheme,
 } from "@zapiski/ui";
 import "./styles/app.css";
 import type { AppHost, AppIntent, Layout } from "./contract.js";
@@ -32,6 +40,7 @@ import { flushActiveEditor } from "./state/active-editor.js";
 import { IconBug } from "./components/icons.js";
 import { EmptyBlock } from "./components/ScreenStates.js";
 import { ScreenBoundary } from "./components/ScreenBoundary.js";
+import { PaneResizer } from "./components/PaneResizer.js";
 import { CommandPalette } from "./screens/CommandPalette.js";
 import { RemoveEncryptionSheet } from "./screens/NoteMenu.js";
 import { DebugMenu } from "./screens/DebugMenu.js";
@@ -112,7 +121,13 @@ export function AppShell(): ReactNode {
   const state = useAppState();
   const strings = useStrings();
   const layout = useLayout();
+  const theme = useTheme();
   const sideBySide = useSideBySide(layout);
+  /** Ширина панели, пока её тянут. `null` — никто ничего не тянет. */
+  const [draggingPane, setDraggingPane] = useState<{
+    key: "library" | "list";
+    width: number;
+  } | null>(null);
   /* Высота экранной клавиатуры в `--z-keyboard`: без неё тулбар редактора
      остаётся ПОД клавиатурой, что заказчик и увидел на Android. */
   useKeyboardInset();
@@ -513,18 +528,61 @@ export function AppShell(): ReactNode {
     );
   }
 
+  /*
+   * Ширины панелей — переменными CSS, а не классами: их значения приходят от
+   * мыши и могут быть любыми. Во время перетаскивания берётся черновик, чтобы
+   * ширина менялась под указателем, а в оформление она попадает один раз, на
+   * отпускании (см. `PaneResizer`).
+   */
+  const paneWidths = {
+    library: draggingPane?.key === "library" ? draggingPane.width : theme.panes.library,
+    list: draggingPane?.key === "list" ? draggingPane.width : theme.panes.list,
+  };
+
   return (
     <div className="za-app">
       <TitleBar />
       <FeedbackPrompt />
-      <div className={`za-frame za-frame--${layout}`}>
-        {/* ≥1200: библиотека — постоянная панель 224, а не оверлей. */}
+      <div
+        className={`za-frame za-frame--${layout}`}
+        style={
+          {
+            "--za-pane-library": `${paneWidths.library}px`,
+            "--za-pane-list": `${paneWidths.list}px`,
+          } as CSSProperties
+        }
+      >
+        {/* ≥1200: библиотека — постоянная панель, а не оверлей. */}
         {layout === "triple" ? (
           <div className="za-pane za-pane--library">
             <LibraryPanel />
+            <PaneResizer
+              width={paneWidths.library}
+              min={PANE_LIMITS.library.min}
+              max={PANE_LIMITS.library.max}
+              label={strings.app.resizeLibrary}
+              onPreview={(width) => setDraggingPane({ key: "library", width })}
+              onCommit={(width) => {
+                setDraggingPane(null);
+                theme.setPanes({ library: width });
+              }}
+            />
           </div>
         ) : null}
-        <div className="za-pane za-pane--list">{listPane}</div>
+        <div className="za-pane za-pane--list">
+          {listPane}
+          <PaneResizer
+            width={paneWidths.list}
+            min={PANE_LIMITS.list.min}
+            max={PANE_LIMITS.list.max}
+            label={strings.app.resizeList}
+            onPreview={(width) => setDraggingPane({ key: "list", width })}
+            onCommit={(width) => {
+              setDraggingPane(null);
+              theme.setPanes({ list: width });
+            }}
+          />
+        </div>
         <div className="za-pane">{notePane}</div>
       </div>
       {overlays}

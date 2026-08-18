@@ -18,6 +18,7 @@ import {
   toggleItalic,
   toggleOrderedList,
   toggleQuote,
+  toggleStrike,
   toggleTaskList,
 } from '../src/commands/formatting.js';
 import { editorCommands } from '../src/commands/keymap.js';
@@ -34,6 +35,52 @@ function open(doc: string, anchor: number, head?: number): EditorView {
   view = makeView(doc, { selection: { anchor, ...(head === undefined ? {} : { head }) } });
   return view;
 }
+
+describe('пробел в выделении не ломает разметку', () => {
+  /*
+   * Заказчик: «метки ~~ вставляются с обоих сторон выделенного блока, но
+   * фрагмент не перечёркивается». Причина — один пробел: двойной щелчок по
+   * слову выделяет его ВМЕСТЕ с пробелом за ним, а закрывающий маркер, перед
+   * которым стоит пробел, по правилам markdown закрывающим не считается. На
+   * экране оставались обычные тильды и никакого зачёркивания.
+   *
+   * Проверяется текст документа: именно он уезжает в файл и именно его читает
+   * любой другой редактор.
+   */
+  const cases: Array<[string, (view: EditorView) => boolean, string]> = [
+    ['зачёркнутый', toggleStrike, '~~'],
+    ['жирный', toggleBold, '**'],
+    ['курсив', toggleItalic, '*'],
+    ['подсветка', toggleHighlight, '=='],
+  ];
+
+  for (const [name, run, mark] of cases) {
+    it(`${name}: маркеры ложатся внутрь пробелов`, () => {
+      /* Выделено «текст » — со хвостовым пробелом, как отдаёт двойной щелчок. */
+      const v = open('Обычный текст здесь', 8, 14);
+      run(v);
+      expect(v.state.doc.toString()).toBe(`Обычный ${mark}текст${mark} здесь`);
+    });
+  }
+
+  it('выделение целой строки с переводом строки не ломается', () => {
+    const v = open('Первая строка\nвторая', 0, 14);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('**Первая строка**\nвторая');
+  });
+
+  it('выделены одни пробелы — ведём себя как без выделения', () => {
+    const v = open('до    после', 2, 6);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('до****    после');
+  });
+
+  it('пробелы внутри выделения не трогаются', () => {
+    const v = open('раз два три', 0, 11);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('**раз два три**');
+  });
+});
 
 describe('парные маркеры', () => {
   it('Ctrl+B оборачивает выделение', () => {

@@ -116,7 +116,7 @@ describe('импорт папки .md / Obsidian-vault', () => {
 });
 
 describe('импорт Bear (.bear2bk)', () => {
-  it('разбирает textbundle и переносит assets в attachments', async () => {
+  it('разбирает textbundle и кладёт вложения в общие папки приложения', async () => {
     const zip = zipSync({
       'Заметка.textbundle/text.md': utf8('# Из Bear\n\n![](assets/фото.png)\n'),
       'Заметка.textbundle/assets/фото.png': new Uint8Array([1, 2, 3]),
@@ -124,8 +124,12 @@ describe('импорт Bear (.bear2bk)', () => {
     });
     const bundle = importBear(zip);
     expect(bundle.notes[0]?.relativePath).toBe('Из Bear.md');
-    expect(bundle.notes[0]?.body).toContain('![](attachments/фото.png)');
-    expect(bundle.assets[0]?.relativePath).toBe('attachments/фото.png');
+    /* Картинка ложится туда же, куда её кладёт само приложение, — в `Images`.
+       Прежде импорт заводил отдельную папку `attachments`, которой в продукте
+       больше нет нигде: человек получал её только от импорта и не понимал,
+       откуда она взялась. */
+    expect(bundle.notes[0]?.body).toContain('![](Images/фото.png)');
+    expect(bundle.assets[0]?.relativePath).toBe('Images/фото.png');
 
     const vault = await emptyVault();
     const report = await applyImport(vault, bundle);
