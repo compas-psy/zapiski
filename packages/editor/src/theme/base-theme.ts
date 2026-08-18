@@ -350,6 +350,68 @@ export const zapiskiBaseTheme = EditorView.baseTheme({
   '.cm-z-table-last': { borderRadius: '0 0 12px 12px' },
   '.cm-z-table-delim': { color: 'var(--line)' },
 
+  /*
+   * Нарисованная таблица (`live-preview/table-view.ts`) — на месте строк
+   * исходника, когда курсор не в ней.
+   *
+   * Ширины колонок считает браузер, а не пробелы в файле: чужой `.md` не
+   * выровнен ничем, и колонки в нём стоят ровно там, где кончилось слово.
+   * Поэтому `table-layout: auto` и перенос ВНУТРИ ячейки — предложение в
+   * ячейке обязано переноситься, а не растягивать таблицу за край экрана.
+   *
+   * Прокрутка вбок — на случай, когда колонок много и ужимать их дальше
+   * некуда: на телефоне это единственный способ показать восьмиколоночную
+   * таблицу, не превращая каждое слово в столбик по букве. Скруглённые углы
+   * рисует сам контейнер: прокручиваемый блок обрезает содержимое по своей
+   * рамке, и радиус работает без `overflow: hidden`.
+   */
+  '.cm-z-tableview': {
+    margin: '10px 0',
+    border: '1px solid var(--line)',
+    borderRadius: '12px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    backgroundColor: 'var(--bg)',
+    cursor: 'text',
+  },
+  '.cm-z-tableview table': {
+    borderCollapse: 'collapse',
+    inlineSize: '100%',
+    tableLayout: 'auto',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  '.cm-z-tableview th, .cm-z-tableview td': {
+    padding: '7px 10px',
+    textAlign: 'start',
+    verticalAlign: 'top',
+    /*
+     * Перенос по словам — вопреки правилам самого CodeMirror.
+     *
+     * `.cm-lineWrapping` (его ставит `EditorView.lineWrapping`) объявляет
+     * `word-break: break-word` и `overflow-wrap: anywhere`, и это правильно для
+     * текста: длинный адрес не должен распирать колонку. Но ячейке таблицы
+     * `anywhere` обнуляет минимальную ширину — раскладка решает, что колонка
+     * может быть в одну букву, и получается «Чернови/к». Наследование здесь
+     * гасится: колонка не уже самого длинного слова, а рвётся только то, что
+     * иначе не помещается совсем.
+     */
+    whiteSpace: 'normal',
+    wordBreak: 'normal',
+    overflowWrap: 'break-word',
+    /* Колонка уже пяти знаков нечитаема: пусть лучше поедет прокрутка. */
+    minInlineSize: '5ch',
+    borderInlineStart: '1px solid var(--line)',
+    borderBlockStart: '1px solid var(--line)',
+  },
+  /* Грани только между ячейками: рамку вокруг рисует контейнер, и вторая
+     линия поверх неё дала бы ту самую «двойную» кромку. */
+  '.cm-z-tableview tr > *:first-child': { borderInlineStart: 'none' },
+  '.cm-z-tableview thead tr:first-child > *': { borderBlockStart: 'none' },
+  '.cm-z-tableview th': {
+    backgroundColor: 'var(--surface)',
+    fontWeight: '600',
+  },
+
   // ───────────────────────────────────────────────────────────────────────────
   // Ссылки, wiki-ссылки, теги, сноски
   // ───────────────────────────────────────────────────────────────────────────

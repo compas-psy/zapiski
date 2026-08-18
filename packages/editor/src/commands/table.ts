@@ -36,41 +36,75 @@ export interface TableModel {
 }
 
 /** Строка таблицы: начинается и заканчивается палкой, между ними — ячейки. */
-const ROW = /^\s*\|.*\|\s*$/;
+export const TABLE_ROW = /^\s*\|.*\|\s*$/;
 /** Разделитель шапки: `| --- | :-: |`. */
-const DIVIDER = /^\s*\|(?:\s*:?-{1,}:?\s*\|)+\s*$/;
+export const TABLE_DIVIDER = /^\s*\|(?:\s*:?-{1,}:?\s*\|)+\s*$/;
+
+/** Ячейка вместе с её местом в строке — смещения от начала строки. */
+export interface CellSpan {
+  /** Текст ячейки без окружающих пробелов. */
+  text: string;
+  /** Начало текста ячейки в строке. */
+  from: number;
+  /** Конец текста ячейки в строке. */
+  to: number;
+}
 
 /**
- * Разбирает строку в ячейки, снимая крайние палки.
+ * Разбирает строку в ячейки, снимая крайние палки, и запоминает их место.
  *
  * Экранированная палка `\|` — часть текста, а не граница ячейки: так её
  * понимает GFM, и так её пишет редактор таблицы, когда палку набирают внутри
  * ячейки. Обычный `split('|')` разорвал бы такую ячейку надвое, и таблица
  * молча получала бы лишний столбец.
+ *
+ * Смещения нужны показу: нарисованную таблицу правят, ткнув в ячейку, и
+ * попасть курсор обязан ровно в ту ячейку, куда ткнули. Считать их отдельным
+ * разбором значило бы завести второе место, где толкуется `\|`, — а два таких
+ * места однажды разойдутся.
  */
-function cells(line: string): string[] {
-  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  const out: string[] = [];
-  let current = '';
-  for (let index = 0; index < trimmed.length; index += 1) {
-    const char = trimmed[index] as string;
-    if (char === '\\' && trimmed[index + 1] === '|') {
-      current += '\\|';
-      index += 1;
+export function cellSpans(line: string): CellSpan[] {
+  const first = line.indexOf('|');
+  if (first < 0) return [];
+  /* Строка без закрывающей палки — всё до конца строки одна ячейка: так же
+     её понимал прежний разбор, и терять на этом столбец не за что. */
+  const last = line.lastIndexOf('|');
+  const end = last > first ? last : line.length;
+
+  const out: CellSpan[] = [];
+  let start = first + 1;
+  const push = (stop: number): void => {
+    let from = start;
+    let to = stop;
+    while (from < to && (line[from] as string).trim() === '') from += 1;
+    while (to > from && (line[to - 1] as string).trim() === '') to -= 1;
+    out.push({ text: line.slice(from, to), from, to });
+  };
+
+  let index = start;
+  while (index < end) {
+    const char = line[index] as string;
+    if (char === '\\' && line[index + 1] === '|') {
+      index += 2;
       continue;
     }
     if (char === '|') {
-      out.push(current.trim());
-      current = '';
-      continue;
+      push(index);
+      start = index + 1;
     }
-    current += char;
+    index += 1;
   }
-  out.push(current.trim());
+  push(end);
   return out;
 }
 
-function alignOf(spec: string): ColumnAlign {
+/** Только тексты ячеек — большей части кода правки таблицы места не нужны. */
+function cells(line: string): string[] {
+  return cellSpans(line).map((cell) => cell.text);
+}
+
+/** Выравнивание колонки по её куску строки-разделителя: `:-:`, `--:`, `:--`. */
+export function alignOf(spec: string): ColumnAlign {
   const value = spec.trim();
   const left = value.startsWith(':');
   const right = value.endsWith(':');
@@ -97,18 +131,18 @@ function alignSpec(align: ColumnAlign, width: number): string {
 export function tableAt(state: EditorState, pos = state.selection.main.head): TableModel | null {
   const doc = state.doc;
   const cursorLine = doc.lineAt(pos);
-  if (!ROW.test(cursorLine.text)) return null;
+  if (!TABLE_ROW.test(cursorLine.text)) return null;
 
   let first = cursorLine.number;
-  while (first > 1 && ROW.test(doc.line(first - 1).text)) first -= 1;
+  while (first > 1 && TABLE_ROW.test(doc.line(first - 1).text)) first -= 1;
   let last = cursorLine.number;
-  while (last < doc.lines && ROW.test(doc.line(last + 1).text)) last += 1;
+  while (last < doc.lines && TABLE_ROW.test(doc.line(last + 1).text)) last += 1;
 
   const lines: string[] = [];
   for (let n = first; n <= last; n += 1) lines.push(doc.line(n).text);
 
   /* Разделитель — всегда вторая строка: markdown другого места ему не даёт. */
-  const header = lines.length >= 2 && DIVIDER.test(lines[1] as string);
+  const header = lines.length >= 2 && TABLE_DIVIDER.test(lines[1] as string);
   const aligns = header ? cells(lines[1] as string).map(alignOf) : [];
   const rows = lines.filter((_line, index) => !(header && index === 1)).map(cells);
   if (rows.length === 0) return null;

@@ -17,6 +17,7 @@ import { listMarkTint } from './list-mark-tint.js';
 import { rawMode, rawModeField, setRawMode } from './raw-mode.js';
 import { toggleCollapsed } from './collapsed.js';
 import { imageSelection, selectImage } from './image-select.js';
+import { tableView } from './table-view.js';
 import { imeSupport, isComposing, noteDeferral, redecorateEffect } from '../ime/composition.js';
 
 const EMPTY: LivePreviewSets = { decorations: Decoration.none, atomic: Decoration.none };
@@ -116,6 +117,11 @@ export const livePreview: Extension = [
   rawMode,
   imeSupport,
   imageSelection,
+  /* Таблица заменяется настоящей `<table>` — блочной заменой, а такую
+     CodeMirror принимает только напрямую от поля состояния, не от плагина
+     (`EditorView.decorations`). Отсюда и отдельное расширение рядом. Стоит
+     ПОСЛЕ `rawMode`: поле читает его значение. */
+  tableView,
   livePreviewPlugin,
   listMarkTint,
 ];
