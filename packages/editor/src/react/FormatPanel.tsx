@@ -587,35 +587,31 @@ export function FormatPanel({
    * телефоне никто не догадывается. А сочетания клавиш там, где клавиатуры
    * нет, помочь не могут по устройству.
    *
-   * Поведение взято из Telegram и описано заказчиком по шагам: выделил
-   * фрагмент → средний блок подменился начертаниями → применил → блок
-   * вернулся. Это не только про место на панели: пока ничего не выделено,
-   * четыре кнопки начертаний нечего и предлагать.
-   */
-  const selected = view ? !view.state.selection.main.empty : false;
-  const range = view ? `${view.state.selection.main.from}:${view.state.selection.main.to}` : '';
-  const [styling, setStyling] = useState(false);
-  /*
-   * Блок поднимается на НОВОМ выделении — на любом, которое человек сделал
-   * сам, включая расширение прежнего: после «зачеркнуть» обычно хочется ещё и
-   * «курсивом», и заставлять ради этого снимать выделение было бы издевательством.
+   * ── Правило, и почему оно именно такое ───────────────────────────────────
    *
-   * Отличить своё изменение от чужого просто: применённая команда сдвигает
-   * границы выделения на длину маркеров, и `runStyle` записывает получившийся
-   * отрезок сюда же. Значит выделение «то же самое», блок не всплывает, и
-   * обещание «применяю → общий средний блок возвращается» держится.
+   * Блок начертаний стоит РОВНО ПОКА ЕСТЬ ВЫДЕЛЕНИЕ. Не «до первого нажатия»,
+   * а до снятия выделения.
+   *
+   * Первая версия убирала блок сразу после применения — я так прочитал слова
+   * «применяю форматирование и общий средний блок возвращается». Вышло плохо,
+   * и заказчик описал это точно: «нажимаешь I — она исчезает и проявляется
+   * полная панель, где нажатие происходит уже не на I, а на B или Aa. В итоге
+   * моргание и бесит».
+   *
+   * Он прав, и причина механическая: кнопки стоят в одной строке, поэтому
+   * подмена набора сдвигает соседей ПОД ПАЛЬЦЕМ. Человек целится в «U», а
+   * попадает туда, где за 16 мс до этого оказалась другая кнопка. Интерфейс,
+   * который переставляет цель между нажатиями, нельзя чинить точностью — его
+   * надо переставать переставлять.
+   *
+   * К тому же одно начертание редко ходит одно: «жирный курсив», «зачёркнутый
+   * и подчёркнутый». Пока фрагмент выделен, все четыре нужны одновременно, и
+   * каждая подсвечивается, если уже применена.
+   *
+   * Отсюда состояния нет вовсе: `styling` — производная от выделения. Нечему
+   * рассинхронизироваться, нечему моргнуть.
    */
-  const lastRange = useRef('');
-  useEffect(() => {
-    if (!selected) {
-      lastRange.current = '';
-      setStyling(false);
-      return;
-    }
-    if (lastRange.current === range) return;
-    lastRange.current = range;
-    setStyling(true);
-  }, [selected, range, tick]);
+  const styling = view ? !view.state.selection.main.empty : false;
 
   /** Выполнить команду и вернуть курсор в текст — §4, «панель не берёт фокус». */
   const run = (command: (target: EditorView) => boolean) => (): void => {
@@ -624,21 +620,6 @@ export function FormatPanel({
     setOpen(null);
     view.focus();
   };
-
-  /** Начертание применили — средний блок возвращается к обычному виду. */
-  const runStyle =
-    (command: (target: EditorView) => boolean) =>
-    (): void => {
-      run(command)();
-      setStyling(false);
-      /* Отрезок после команды считается «уже виденным»: маркеры сдвинули
-         границы, но выделение осталось тем же самым, и всплывать заново
-         блоку не с чего. */
-      if (view) {
-        const { from, to } = view.state.selection.main;
-        lastRange.current = `${from}:${to}`;
-      }
-    };
 
   const menuFor = (which: Exclude<OpenMenu, null>) => (): void =>
     setOpen((current) => (current === which ? null : which));
@@ -686,7 +667,7 @@ export function FormatPanel({
             <PanelButton
               label={copy.weights.bold}
               active={inline.bold}
-              onPress={runStyle(toggleBold)}
+              onPress={run(toggleBold)}
             >
               <IconBold />
             </PanelButton>
@@ -694,7 +675,7 @@ export function FormatPanel({
             <PanelButton
               label={copy.weights.italic}
               active={inline.italic}
-              onPress={runStyle(toggleItalic)}
+              onPress={run(toggleItalic)}
             >
               <IconItalic />
             </PanelButton>
@@ -702,7 +683,7 @@ export function FormatPanel({
             <PanelButton
               label={copy.weights.underline}
               active={inline.underline}
-              onPress={runStyle(toggleUnderline)}
+              onPress={run(toggleUnderline)}
             >
               <IconUnderline />
             </PanelButton>
@@ -710,7 +691,7 @@ export function FormatPanel({
             <PanelButton
               label={copy.weights.strike}
               active={inline.strike}
-              onPress={runStyle(toggleStrike)}
+              onPress={run(toggleStrike)}
             >
               <IconStrike />
             </PanelButton>

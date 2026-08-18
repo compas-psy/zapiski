@@ -148,32 +148,80 @@ for (const device of [
     if (!info.reachable) fail(`кнопка «${label}» перекрыта — нажатие уйдёт мимо`);
   }
 
-  /* Одно касание — и разметка легла. Не «команда существует», а «палец
-     доводит до результата». */
-  const strike = page.locator('.zp-panel button[aria-label="Зачёркнутый"]');
-  if (await strike.count()) {
-    if (device.touch) await strike.tap();
-    else await strike.click();
-    await page.waitForTimeout(500);
-    const marked = await page.locator('.cm-z-strike').count();
-    if (marked === 0) fail('после нажатия «Зачёркнутый» текст не зачёркнут');
-    /* «и общий средний блок возвращается» — дословно из просьбы. */
-    const back = await page.locator('.zp-panel button[aria-label="Стиль абзаца"]').count();
-    if (back === 0) fail('средний блок не вернулся после применения начертания');
+  /*
+   * Три начертания ПОДРЯД, не снимая выделения, — тот самый сценарий, на
+   * котором всё ломалось.
+   *
+   * Заказчик: «нажимаешь I — она исчезает и проявляется полная панель, где
+   * нажатие происходит уже не на I, а на B или Aa. В итоге моргание и бесит —
+   * фиг выберешь то, что хочешь нажать». Причина механическая: подмена набора
+   * двигает соседние кнопки ПОД ПАЛЬЦЕМ. Поэтому здесь меряется не только
+   * «разметка легла», но и ГЕОМЕТРИЯ: прямоугольник кнопки обязан остаться
+   * тем же самым после нажатия соседней.
+   */
+  const boxOf = async (label) =>
+    page.evaluate((label) => {
+      const node = document.querySelector(`.zp-panel button[aria-label="${label}"]`);
+      if (!node) return null;
+      const box = node.getBoundingClientRect();
+      return { x: Math.round(box.x), y: Math.round(box.y), w: Math.round(box.width) };
+    }, label);
+
+  const before = {
+    italic: await boxOf('Курсив'),
+    underline: await boxOf('Подчёркнутый'),
+    strike: await boxOf('Зачёркнутый'),
+  };
+
+  const tap = async (label) => {
+    const node = page.locator(`.zp-panel button[aria-label="${label}"]`);
+    if ((await node.count()) === 0) {
+      fail(`кнопка «${label}» исчезла — нажимать нечего`);
+      return false;
+    }
+    if (device.touch) await node.tap();
+    else await node.click();
+    await page.waitForTimeout(400);
+    return true;
+  };
+
+  for (const [label, mark] of [
+    ['Зачёркнутый', '.cm-z-strike'],
+    ['Курсив', '.cm-z-em'],
+    ['Подчёркнутый', '.cm-z-u'],
+  ]) {
+    if (!(await tap(label))) break;
+    if ((await page.locator(mark).count()) === 0) {
+      fail(`после нажатия «${label}» разметки на экране нет`);
+    }
+    /* Панель обязана остаться той же: выделение не снимали. */
+    const now = {
+      italic: await boxOf('Курсив'),
+      underline: await boxOf('Подчёркнутый'),
+      strike: await boxOf('Зачёркнутый'),
+    };
+    for (const key of ['italic', 'underline', 'strike']) {
+      if (now[key] === null) {
+        fail(`после нажатия «${label}» кнопка ${key} пропала — блок подменился под пальцем`);
+        continue;
+      }
+      const was = before[key];
+      if (was && (Math.abs(was.x - now[key].x) > 2 || Math.abs(was.y - now[key].y) > 2)) {
+        fail(
+          `после нажатия «${label}» кнопка ${key} переехала: была ${was.x}×${was.y}, стала ${now[key].x}×${now[key].y} — палец промахнётся`,
+        );
+      }
+    }
   }
 
-  /* Подчёркивание — новая разметка, её показ проверяем отдельно. */
-  await selectLine(null);
-  const underline = page.locator('.zp-panel button[aria-label="Подчёркнутый"]');
-  if (await underline.count()) {
-    if (device.touch) await underline.tap();
-    else await underline.click();
-    await page.waitForTimeout(500);
-    if ((await page.locator('.cm-z-u').count()) === 0) {
-      fail('после нажатия «Подчёркнутый» подчёркивания на экране нет');
-    }
-  } else {
-    fail('кнопка «Подчёркнутый» пропала после первого применения');
+  /* Снятие выделения — и только оно — возвращает обычный набор. */
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(400);
+  if ((await page.locator('.zp-panel button[aria-label="Стиль абзаца"]').count()) === 0) {
+    fail('после снятия выделения обычный набор не вернулся');
+  }
+  if ((await page.locator('.zp-panel button[aria-label="Курсив"]').count()) > 0) {
+    fail('без выделения кнопки начертаний остались на панели');
   }
 
   await context.close();

@@ -880,15 +880,60 @@ describe('начертания появляются на выделении', ()
     expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).not.toBeNull();
   });
 
-  it('нажал «Зачёркнутый» — разметка легла, блок вернулся', () => {
+  it('нажал «Зачёркнутый» — разметка легла, а блок ОСТАЛСЯ', () => {
     const panel = mount('текст «важное» дальше');
 
     press(button(panel, ru.panel.weights.strike));
 
     expect(view?.state.doc.toString()).toBe('текст ~~важное~~ дальше');
-    /* «и общий средний блок возвращается» — дословно из просьбы. Выделение
-       при этом остаётся на месте, поэтому обычной проверки «есть выделение»
-       здесь мало: блок обязан вернуться именно от применения. */
+    /*
+     * Первая версия убирала блок сразу после применения, и заказчик описал,
+     * во что это превращается: «нажимаешь I — она исчезает и проявляется
+     * полная панель, где нажатие происходит уже не на I, а на B или Aa. В
+     * итоге моргание и бесит». Кнопки стоят в одной строке, поэтому подмена
+     * набора двигает соседей ПОД ПАЛЬЦЕМ.
+     *
+     * Правило теперь одно: блок стоит, пока стоит выделение.
+     */
+    expect(
+      panel.querySelector(`button[aria-label="${ru.panel.weights.italic}"]`),
+      'блок начертаний исчез после применения — кнопки поедут под пальцем',
+    ).not.toBeNull();
+    expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).toBeNull();
+  });
+
+  it('три начертания подряд ложатся с трёх нажатий, без промахов', () => {
+    /* Ровно тот сценарий, на котором ломалось: подряд, не снимая выделения. */
+    const panel = mount('текст «важное» дальше');
+
+    press(button(panel, ru.panel.weights.strike));
+    press(button(panel, ru.panel.weights.italic));
+    press(button(panel, ru.panel.weights.underline));
+
+    /* Каждое следующее начертание ложится ВНУТРЬ предыдущего: выделение после
+       команды охватывает сам текст, а не маркеры вокруг него. Так и надо —
+       иначе третий тап оборачивал бы уже обёрнутое вместе со звёздочками. */
+    expect(view?.state.doc.toString()).toBe('текст ~~*<u>важное</u>*~~ дальше');
+  });
+
+  it('применённое начертание подсвечено — видно, что уже сделано', () => {
+    const panel = mount('текст «важное» дальше');
+
+    press(button(panel, ru.panel.weights.strike));
+
+    expect(
+      button(panel, ru.panel.weights.strike).className,
+      'применённое начертание не подсвечено',
+    ).toContain('--active');
+  });
+
+  it('сняли выделение — вернулся обычный набор', () => {
+    const panel = mount('текст «важное» дальше');
+
+    act(() => {
+      view?.dispatch({ selection: { anchor: 0 } });
+    });
+
     expect(panel.querySelector(`button[aria-label="${ru.panel.blockStyle}"]`)).not.toBeNull();
     expect(panel.querySelector(`button[aria-label="${ru.panel.weights.italic}"]`)).toBeNull();
   });
