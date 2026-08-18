@@ -56,6 +56,27 @@ export function shortDate(timestamp: number): string {
   return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`;
 }
 
+/**
+ * Где лежала заметка — хвост пути, а не путь целиком.
+ *
+ * В корзине и в истории строка отвечает на вопрос «откуда это», и отвечает на
+ * него ХВОСТ: «…/ЗАПИСКИ/ТЕСТЫ» человек узнаёт, а «СИМПАС/ЗАПИСКИ/ТЕСТЫ»
+ * приходится дочитывать. Имя файла отбрасывается вовсе: его уже несёт
+ * заголовок строки, и печатать «Шифруемая заметка» дважды — один раз словами,
+ * второй раз путём с расширением — значит забить единственную строку метаданных
+ * тем, что и так видно.
+ *
+ * Обрезка здесь, а не многоточием CSS, по той же причине: `text-overflow`
+ * срезает КОНЕЦ, то есть именно ту часть, ради которой строку и читают.
+ */
+export function folderTrail(path: string, keep = 2): string {
+  const parts = path.split('/').filter(Boolean);
+  parts.pop();
+  if (parts.length === 0) return '';
+  if (parts.length <= keep) return parts.join('/');
+  return `…/${parts.slice(-keep).join('/')}`;
+}
+
 /** Время в статусе синка: 14:32. */
 export function clockTime(timestamp: number): string {
   const date = new Date(timestamp);

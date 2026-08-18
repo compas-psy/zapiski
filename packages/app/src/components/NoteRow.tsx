@@ -158,7 +158,7 @@ export function NoteRow({
             {folderHint ? (
               <span className="za-row__folder">
                 <IconFolder size={11} aria-hidden="true" />
-                {folderHint}
+                <span className="za-row__folder-name">{folderHint}</span>
               </span>
             ) : null}
             {folderHint ? ' · ' : ''}
