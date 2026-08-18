@@ -255,20 +255,50 @@ export class SessionStore {
    * Отправка партии аналитических событий (O-260817-05). Возвращает `false`
    * молча на любой сетевой отказ — очередь на диске остаётся нетронутой,
    * `AnalyticsQueue` попробует снова при следующем выходе в сеть.
+   *
+   * O-260817-15: аккаунт для метаданных не обязателен — вход в проде не
+   * доведён. С access-токеном ничего не поменялось (Bearer, как раньше); без
+   * него уходит `device_id` — тот же, что несёт устройство для входа
+   * (`deviceId()`), сервер принимает его по отдельному согласию
+   * (`setDeviceAnalyticsConsent`, `analytics_device_consent`).
    */
   async sendAnalyticsEvents(events: readonly unknown[]): Promise<boolean> {
     const token = await this.accessToken();
-    if (token === null) return false;
     try {
+      const body: Record<string, unknown> = { events };
+      const headers: Record<string, string> = { 'content-type': 'application/json' };
+      if (token !== null) {
+        headers.authorization = `Bearer ${token}`;
+      } else {
+        body.device_id = await this.deviceId();
+      }
       const response = await this.send(`${this.base}/analytics/events`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
-        body: JSON.stringify({ events }),
+        headers,
+        body: JSON.stringify(body),
       });
       return response.ok;
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Согласие устройства без аккаунта на продуктовую аналитику (O-260817-15).
+   * Не требует входа: пишется на сервер за тем же `deviceId`, что уже несёт
+   * устройство для входа. Возвращает то, что записал сервер, — тот же
+   * принцип, что у `setAnalyticsConsent`.
+   */
+  async setDeviceAnalyticsConsent(optIn: boolean): Promise<boolean> {
+    const deviceId = await this.deviceId();
+    const response = await this.send(`${this.base}/analytics/device-consent`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ device_id: deviceId, opt_in: optIn }),
+    });
+    if (!response.ok) throw new AuthError('server');
+    const body = (await response.json()) as { analyticsOptIn?: unknown };
+    return body.analyticsOptIn === true;
   }
 
   /**

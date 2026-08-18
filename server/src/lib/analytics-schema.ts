@@ -12,6 +12,10 @@
  */
 import { z } from 'zod';
 
+import { isValidDeviceKey } from './vaultPath.ts';
+
+const deviceId = z.string().refine(isValidDeviceKey, 'некорректный идентификатор устройства');
+
 const lengthBucket = z.enum(['xs', 's', 'm', 'l', 'xl']);
 const nonNegativeInt = z.number().int().nonnegative();
 
@@ -65,4 +69,12 @@ export const MAX_EVENTS_PER_REQUEST = 200;
 
 export const analyticsBatchBody = z.object({
   events: z.array(analyticsEventSchema).min(1).max(MAX_EVENTS_PER_REQUEST),
+  /** Только для запроса без Bearer-токена (O-260817-15) — иначе владелец уже известен по сессии. */
+  device_id: deviceId.optional(),
+});
+
+/** `POST /api/v1/analytics/device-consent` (O-260817-15) — согласие устройства без аккаунта. */
+export const deviceConsentBody = z.object({
+  device_id: deviceId,
+  opt_in: z.boolean(),
 });

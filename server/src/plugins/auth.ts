@@ -14,35 +14,46 @@ import { findSessionById } from '../services/accounts.ts';
  */
 export function registerAuth(app: FastifyInstance): void {
   app.decorate('requireAuth', async (request: FastifyRequest) => {
-    const token = extractToken(request);
-    if (token === null) throw errors.authRequired();
-
-    const verified = verifyJwt(token, app.ctx.env.AUTH_SECRET, app.ctx.now().getTime());
-    if (!verified.ok) {
-      throw verified.reason === 'expired' ? errors.sessionExpired() : errors.authRequired();
-    }
-    const claims = verified.claims;
-    if (claims.typ !== 'access') throw errors.authRequired();
-    if (
-      typeof claims.sub !== 'string' ||
-      typeof claims.sid !== 'string' ||
-      typeof claims.did !== 'string'
-    ) {
-      throw errors.authRequired();
-    }
-
-    const session = await findSessionById(app.ctx.db, claims.sid);
-    if (session === null || session.user_id !== claims.sub) throw errors.authRequired();
-    if (session.revoked_at !== null) throw errors.sessionExpired();
-    if (session.expires_at.getTime() <= app.ctx.now().getTime()) throw errors.sessionExpired();
-
-    const auth: AuthContext = {
-      userId: claims.sub,
-      sessionId: claims.sid,
-      deviceId: claims.did,
-    };
+    const auth = await tryAuthenticate(app, request);
+    if (auth === null) throw errors.authRequired();
     request.auth = auth;
   });
+}
+
+/**
+ * Та же проверка, что у `requireAuth`, но без обязательности токена — для
+ * маршрутов, где отсутствие входа не отказ, а другой путь (O-260817-15:
+ * аналитика ЗАПИСОК без аккаунта, по deviceId). Токен есть, но
+ * недействителен — это по-прежнему отказ, не молчаливый анонимный путь:
+ * подделанный или просроченный токен не должен тихо превращаться в «гостя».
+ */
+export async function tryAuthenticate(
+  app: FastifyInstance,
+  request: FastifyRequest,
+): Promise<AuthContext | null> {
+  const token = extractToken(request);
+  if (token === null) return null;
+
+  const verified = verifyJwt(token, app.ctx.env.AUTH_SECRET, app.ctx.now().getTime());
+  if (!verified.ok) {
+    throw verified.reason === 'expired' ? errors.sessionExpired() : errors.authRequired();
+  }
+  const claims = verified.claims;
+  if (claims.typ !== 'access') throw errors.authRequired();
+  if (
+    typeof claims.sub !== 'string' ||
+    typeof claims.sid !== 'string' ||
+    typeof claims.did !== 'string'
+  ) {
+    throw errors.authRequired();
+  }
+
+  const session = await findSessionById(app.ctx.db, claims.sid);
+  if (session === null || session.user_id !== claims.sub) throw errors.authRequired();
+  if (session.revoked_at !== null) throw errors.sessionExpired();
+  if (session.expires_at.getTime() <= app.ctx.now().getTime()) throw errors.sessionExpired();
+
+  return { userId: claims.sub, sessionId: claims.sid, deviceId: claims.did };
 }
 
 /** Достаёт токен для обычного запроса. */

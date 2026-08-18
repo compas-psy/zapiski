@@ -310,18 +310,31 @@ describe('сессия облака', () => {
     expect(headers.get('authorization')).toBe('Bearer access-1');
   });
 
-  it('отправка событий аналитики — на батч-ручку с токеном, без него не пытается', async () => {
+  it('отправка событий аналитики — с токеном Bearer, без него по deviceId (O-260817-15)', async () => {
     const host = createTestHost();
-    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    const anonCalls: { url: string; body: string }[] = [];
+    const session = new SessionStore(host, {
+      fetch: async (url, init) => {
+        anonCalls.push({ url, body: String(init?.body ?? '') });
+        if (new URL(url).pathname === '/api/v1/analytics/events') return jsonOk({ accepted: 1 });
+        return jsonOk(SESSION_BODY);
+      },
+    });
 
-    /* Аккаунта ещё нет — отправлять точно нечем, и ходить в сеть незачем. */
-    expect(await session.sendAnalyticsEvents([{ event: 'note_saved' }])).toBe(false);
+    /* Аккаунта ещё нет (вход в проде не доведён) — отправка не пропускается,
+       идёт по deviceId устройства: ждать входа ради метаданных незачем. */
+    const okAnon = await session.sendAnalyticsEvents([{ event: 'note_saved', props: {} }]);
+    expect(okAnon).toBe(true);
+    const anonCall = anonCalls.find((call) => new URL(call.url).pathname === '/api/v1/analytics/events');
+    expect(anonCall).toBeDefined();
+    const anonBody = JSON.parse(anonCall!.body) as { device_id?: unknown };
+    expect(typeof anonBody.device_id).toBe('string');
 
     await session.adopt({ magicToken: 'ottt' });
-    const calls: string[] = [];
+    const calls: { url: string; init?: RequestInit }[] = [];
     const authed = new SessionStore(host, {
-      fetch: async (url) => {
-        calls.push(url);
+      fetch: async (url, init) => {
+        calls.push({ url, init });
         return jsonOk({ accepted: 1 });
       },
     });
@@ -329,7 +342,33 @@ describe('сессия облака', () => {
     const ok = await authed.sendAnalyticsEvents([{ event: 'note_saved', props: {} }]);
 
     expect(ok).toBe(true);
-    expect(calls.some((url) => new URL(url).pathname === '/api/v1/analytics/events')).toBe(true);
+    const authedCall = calls.find((call) => new URL(call.url).pathname === '/api/v1/analytics/events');
+    expect(authedCall).toBeDefined();
+    const headers = new Headers(authedCall!.init?.headers);
+    expect(headers.get('authorization')).toBe('Bearer access-1');
+    /* С токеном владелец известен по сессии — deviceId в теле не нужен. */
+    expect((JSON.parse(authedCall!.init?.body as string) as { device_id?: unknown }).device_id).toBeUndefined();
+  });
+
+  it('согласие устройства без аккаунта — POST на device-consent без токена, отзыв стирает очередь (O-260817-15)', async () => {
+    const host = createTestHost();
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const session = new SessionStore(host, {
+      fetch: async (url, init) => {
+        calls.push({ url, init });
+        return jsonOk({ analyticsOptIn: true });
+      },
+    });
+
+    const applied = await session.setDeviceAnalyticsConsent(true);
+
+    expect(applied).toBe(true);
+    const consentCall = calls.find((call) => new URL(call.url).pathname === '/api/v1/analytics/device-consent');
+    expect(consentCall).toBeDefined();
+    expect(new Headers(consentCall!.init?.headers).has('authorization')).toBe(false);
+    const body = JSON.parse(consentCall!.init?.body as string) as { device_id?: unknown; opt_in?: unknown };
+    expect(typeof body.device_id).toBe('string');
+    expect(body.opt_in).toBe(true);
   });
 });
 

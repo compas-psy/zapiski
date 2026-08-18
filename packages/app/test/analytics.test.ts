@@ -149,4 +149,41 @@ describe('отправка: тело запроса никогда не несё
     expect(Object.keys(events[0].props).sort()).toEqual(['encrypted', 'length_bucket']);
     app.dispose();
   });
+
+  /**
+   * O-260817-15: то же самое, но БЕЗ аккаунта вовсе — вход в проде не
+   * доведён, а метаданные не должны его ждать. Согласие и отправка идут по
+   * deviceId устройства, а не по userId.
+   */
+  it('без аккаунта, только с согласием устройства — тоже не появляется содержимое заметки', async () => {
+    const captured: unknown[] = [];
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.includes('/analytics/device-consent')) return jsonOk({ analyticsOptIn: true });
+      if (url.includes('/analytics/events')) {
+        captured.push(init?.body);
+        return jsonOk({ accepted: 1 });
+      }
+      return jsonOk({ entries: [], quota: { usedBytes: 0, limitBytes: 1 } });
+    });
+
+    const app = await boot();
+    expect(app.getState().account).toBeNull();
+    const applied = await app.setAnalyticsConsent(true);
+    expect(applied).toBe(true);
+
+    await app.save('Заметки/Первая.md', NOTE_SECRET);
+    await waitFor(() => expect(app.analyticsPendingCount()).toBeGreaterThan(0));
+
+    await waitFor(() => expect(captured.length).toBeGreaterThan(0), { timeout: 4000 });
+    await waitFor(() => expect(app.analyticsPendingCount()).toBe(0), { timeout: 4000 });
+
+    for (const body of captured) {
+      expect(String(body)).not.toContain(NOTE_SECRET);
+    }
+    const sent = JSON.parse(String(captured[0])) as { events: Array<{ event: string; props: Record<string, unknown> }>; device_id?: unknown };
+    expect(sent.events[0]?.event).toBe('note_saved');
+    expect(Object.keys(sent.events[0]?.props ?? {}).sort()).toEqual(['encrypted', 'length_bucket']);
+    expect(typeof sent.device_id).toBe('string');
+    app.dispose();
+  });
 });
