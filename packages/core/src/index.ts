@@ -55,6 +55,13 @@ export { MemoryVaultStorage, type MemoryVaultStorageOptions } from './memory-sto
 /* Редакция документов, на которые даётся согласие при регистрации. */
 export { LEGAL_URLS, LEGAL_VERSION } from './legal.js';
 export { BILLING_ENABLED } from './billing.js';
+export {
+  TRIAL_DAYS_EARLY,
+  TRIAL_DAYS_REGULAR,
+  TRIAL_EARLY_UNTIL,
+  trialDaysFor,
+  trialEndsAt,
+} from './trial.js';
 export { LOCAL_OWNER, ownerKeyOf } from './contract.js';
 
 // ── Утилиты путей и текста ─────────────────────────────────────────────────

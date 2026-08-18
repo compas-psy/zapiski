@@ -630,6 +630,10 @@ export const en: AppCatalog = {
       yandexToken: 'Yandex.Disk access token',
       yandexHint: 'Disk access is granted separately from signing in',
       cloud: 'Zapiski Cloud',
+      trialNotice: (days: number): string =>
+        `Test version: the cloud is free for ${days} ${pl(days, 'day', 'days')} from the moment you connect it`,
+      trialNoticeHint:
+        'There is no payment yet. Your notes stay in your folder after the period ends — the cloud simply stops syncing them',
       cloudBadge: 'ZAPISKI+',
       localFolder: 'Folder on this device',
       conflictsMonth: (count: number): string =>

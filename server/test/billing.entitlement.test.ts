@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { trialDaysFor } from '../src/lib/trial.ts';
 
 import { REGISTRY } from '../src/lib/messages.ts';
 import { evaluate } from '../src/services/subscription.ts';
@@ -135,7 +136,7 @@ describe.skipIf(noDatabase())('подписка и доступ к данным'
     expect(response.statusCode).toBe(204);
   });
 
-  it('пробный период на 14 дней включается один раз', async () => {
+  it('пробный период включается один раз, длина — по правилу MVP', async () => {
     const user = await createUser(harness, { subscribed: false });
 
     const first = await harness.app.inject({
@@ -156,8 +157,15 @@ describe.skipIf(noDatabase())('подписка и доступ к данным'
     expect(started.status).toBe('trial');
     expect(started.versionRetentionDays).toBe(30);
 
+    /*
+     * Длина берётся из правила, а не из константы теста: в MVP это 30 дней для
+     * подключивших облако до 01.09.2026 и 14 после (решение заказчика). Число
+     * здесь и текст на экране подключения считает одна и та же функция —
+     * зафиксировать в тесте «14» значило бы через две недели получить зелёный
+     * тест при неверном обещании человеку.
+     */
     const days = (new Date(started.trialEndsAt).getTime() - harness.ctx.now().getTime()) / 86_400_000;
-    expect(Math.round(days)).toBe(14);
+    expect(Math.round(days)).toBe(trialDaysFor(harness.ctx.now().getTime()));
 
     const second = await harness.app.inject({
       method: 'POST',

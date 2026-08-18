@@ -32,6 +32,7 @@ import {
 import {
   BILLING_ENABLED,
   LocalFolderBackend,
+  trialDaysFor,
   WebDAVBackend,
   type AttachmentNaming,
   type SyncBackend,
@@ -763,6 +764,25 @@ function SyncSection(): ReactNode {
         current={choiceOrBackend}
         onChoose={() => connect('zapiski')}
       />
+
+      {/*
+        Дисклеймер тестовой версии — рядом с карточкой облака и ДО подключения.
+
+        Решение заказчика: в MVP облако бесплатно 30 дней тем, кто подключил его
+        до 1 сентября 2026-го, дальше — 14. Число берётся из ядра
+        (`trialDaysFor`), тем же правилом сервер поставит дату окончания: если
+        считать в двух местах, человек однажды увидит «30 дней», а доступ
+        кончится раньше.
+
+        Стоит здесь, а не в мелком тексте внизу: обещание срока — часть решения
+        «подключать ли облако», и узнавать о нём после подключения поздно.
+      */}
+      <InfoNote icon={<IconInfo size={15} />}>
+        <span className="za-stack za-stack--tight">
+          <span>{copy.trialNotice(trialDaysFor(Date.now()))}</span>
+          <span className="za-muted">{copy.trialNoticeHint}</span>
+        </span>
+      </InfoNote>
 
       {/* Где лежит сама папка — часть того же вопроса, а не отдельный раздел. */}
       <VaultLocationChoice />

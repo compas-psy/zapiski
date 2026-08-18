@@ -9,6 +9,7 @@ import { authOf } from '../plugins/auth.ts';
 import type { BillingStatus } from '../protocol.ts';
 import { PlayVerificationError } from '../services/googlePlay.ts';
 import { quotaStatus } from '../services/quota.ts';
+import { trialDaysFor } from '../lib/trial.ts';
 import {
   activatePaidPeriod,
   cancelAutoRenew,
@@ -63,10 +64,13 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
   app.post('/api/v1/billing/trial', { preHandler: app.requireAuth }, async (request, reply) => {
     requireBilling();
     const auth = authOf(request);
+    /* Длительность — из ядра, а не из переменной окружения: тем же правилом
+       интерфейс обещает срок при подключении облака, и разъехаться им нельзя.
+       Решение заказчика: 30 дней подключившим до 01.09.2026, дальше 14. */
     const result = await startTrial(
       ctx.db,
       auth.userId,
-      ctx.env.TRIAL_DAYS,
+      trialDaysFor(ctx.now().getTime()),
       ctx.retention,
       ctx.env.BILLING_ENABLED,
       ctx.now(),
