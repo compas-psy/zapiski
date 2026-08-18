@@ -48,6 +48,7 @@ import {
   writeAtomic,
   writeJsonAtomic,
   type FolderNode,
+  type RelocatedPath,
   type AddAttachmentOptions,
   type AttachmentEntry,
   type AttachmentNaming,
@@ -2123,9 +2124,25 @@ export class AppController {
    */
   private async afterFolderRelocated(
     path: string,
-    result: { to: string; updatedLinks: number },
+    result: { to: string; updatedLinks: number; moved: RelocatedPath[] },
   ): Promise<string> {
+    /*
+     * Про КАЖДЫЙ переехавший файл, а не только про открытый.
+     *
+     * Раньше здесь стоял ровно один вызов — для заметки на экране, — и этого
+     * хватало, пока смотрели на локальный диск. С подключённым облаком вышло
+     * то, что заказчик описал дословно: «перетащил папку ЗАПИСКИ в СИМПАС →
+     * папка скопировалась, но не удалилась из корня». Локально она удалялась
+     * честно; на сервере оставались файлы по старым путям, а движок при
+     * «локально нет, в облаке есть» скачивает файл обратно — и папка
+     * возвращалась сама. Удаление обязано быть намерением, а не отсутствием
+     * файла, поэтому каждая пара «старый путь → новый» проходит через
+     * `noteMoved`: он ставит `delete` на старый и `put` на новый.
+     */
+    for (const item of result.moved) this.noteMoved(item.from, item.to);
     if (this.state.route.name === 'note' && this.state.route.id.startsWith(`${path}/`)) {
+      /* Страховка на случай файла, которого не было в перечне: экран не должен
+         остаться с покойником в маршруте. */
       this.noteMoved(this.state.route.id, `${result.to}${this.state.route.id.slice(path.length)}`);
     }
     if (this.state.folder === path) this.patch({ folder: result.to });
@@ -2147,16 +2164,29 @@ export class AppController {
   ): Promise<number> {
     const vault = this.vault;
     if (!vault) return 0;
-    const trashed = await vault.deleteFolder(path, mode);
+    const removal = await vault.deleteFolder(path, mode);
+    /*
+     * Облаку рассказываем про всё содержимое, а не только про саму папку.
+     *
+     * Каталогов у синхронизации нет — она знает файлы. Пока про них молчали,
+     * сервер держал их у себя и присылал обратно, а вместе с ними
+     * восстанавливалась и удалённая папка: «удалил папку SignalAI из СИМПАС и
+     * она осталась в корне, но потом вернулась в СИМПАС тоже».
+     */
+    for (const note of removal.trashed) this.scheduleDelete(note);
+    for (const item of removal.moved) this.noteMoved(item.from, item.to);
+    for (const file of removal.removed) this.scheduleDelete(file);
     if (this.state.folder === path) this.openFolder(null);
+    /* Проверка маршрута — ПОСЛЕ `noteMoved`: в режиме «только папку» заметка
+       уехала к родителю, и уводить с неё экран не за что. */
     if (this.state.route.name === 'note' && this.state.route.id.startsWith(`${path}/`)) {
       this.navigate({ name: 'list' }, { replace: true });
     }
     await this.refresh();
-    if (trashed.length > 0 && mode === 'notes-to-trash') {
-      this.toast({ message: this.strings.library.folderTrashed(trashed.length) });
+    if (removal.trashed.length > 0 && mode === 'notes-to-trash') {
+      this.toast({ message: this.strings.library.folderTrashed(removal.trashed.length) });
     }
-    return trashed.length;
+    return removal.trashed.length;
   }
 
   openSettings(section: SettingsSection = 'appearance'): void {

@@ -402,7 +402,18 @@ export class SyncEngine {
     // локальный лог уже содержал бы чужие правки, и материализация `.md`
     // затёрла бы их (ТЗ §4.2).
     for (const path of [...paths].sort(byNotesFirst)) {
-      if (!this.isSyncable(path)) continue;
+      if (!this.isSyncable(path)) {
+        /*
+         * Намерение по пути, который синк не берёт, — это не «ждёт отправки»,
+         * а «не отправится никогда». Оставить его в очереди значит навсегда
+         * зажечь «есть неотправленное» и никогда не показать «синхронизировано»
+         * (`outcome.state` ниже переводится в `syncing` при непустой очереди).
+         * Попасть туда легко: в удалённой папке лежал чужой файл, и удаление
+         * папки честно заказало удаление всего её содержимого.
+         */
+        if (this.queue.has(path)) await this.queue.done(path);
+        continue;
+      }
       try {
         await this.syncOne(path, local.has(path), remote.get(path), outcome);
       } catch (error) {

@@ -42,9 +42,42 @@ export class ChangeQueue {
     }
   }
 
-  private async flush(): Promise<void> {
-    const file: QueueFile = { version: QUEUE_VERSION, changes: [...this.changes.values()] };
-    await writeJsonAtomic(this.storage, QUEUE_FILE, file);
+  /** Хвост записи: пока он не разрешился, следующая запись не начинается. */
+  private writing: Promise<void> = Promise.resolve();
+  /** Запись уже назначена и ещё не начала собирать файл. */
+  private scheduled = false;
+
+  /**
+   * Сохранить очередь на диск — одной записью на пачку правок.
+   *
+   * Раньше каждый `enqueue` писал файл сам, и на одиночной правке это верно.
+   * Но пути меняются пачками: переезд папки ставит по два намерения на КАЖДУЮ
+   * заметку внутри, удаление папки — по одному на каждый файл. Сотня заметок
+   * превращалась в четыре сотни перезаписей растущего JSON, причём на Android
+   * каждая — это ещё и обращение к SAF через IPC. Пользователь при этом просто
+   * тащит папку мышью.
+   *
+   * Склейка безопасна, потому что запись не инкрементальная: файл собирается
+   * из текущего состояния в момент записи, а не из аргументов вызова. Значит
+   * одна запись после пачки содержит ровно то же, что содержала бы последняя
+   * из ста. Хвост `writing` держит записи по одной: два перекрывающихся
+   * atomic-write могли бы завершиться в обратном порядке и оставить на диске
+   * снимок постарше.
+   */
+  private flush(): Promise<void> {
+    if (!this.scheduled) {
+      this.scheduled = true;
+      const write = (): Promise<void> => {
+        this.scheduled = false;
+        const file: QueueFile = { version: QUEUE_VERSION, changes: [...this.changes.values()] };
+        return writeJsonAtomic(this.storage, QUEUE_FILE, file);
+      };
+      /* Обе ветви ведут в `write`: сорвавшаяся запись (диск отключили, места
+         нет) не имеет права заклинить очередь навсегда — следующая правка
+         обязана попробовать снова. */
+      this.writing = this.writing.then(write, write);
+    }
+    return this.writing;
   }
 
   async enqueue(path: VaultPath, kind: ChangeKind = 'put'): Promise<void> {

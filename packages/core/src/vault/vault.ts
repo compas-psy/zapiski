@@ -164,6 +164,31 @@ export interface FolderNode {
   system?: boolean;
 }
 
+/**
+ * Файл, сменивший путь: старый адрес → новый.
+ *
+ * Возвращается наружу не ради красоты. Про каждую такую пару обязано узнать
+ * облако: старый путь надо пометить удалённым, новый — отправить. Пока переезд
+ * папки молчал, синхронизация видела на сервере файлы, которых у нас больше
+ * нет, и добросовестно скачивала их обратно — папка возвращалась на прежнее
+ * место сама, а рядом оставалась копия. Заказчик описал это дословно: «удалил
+ * папку… но потом вернулась».
+ */
+export interface RelocatedPath {
+  from: VaultPath;
+  to: VaultPath;
+}
+
+/** Что стало с содержимым удалённой папки — для очереди отправки в облако. */
+export interface FolderRemoval {
+  /** Заметки, уехавшие в корзину: их считает тост. */
+  trashed: VaultPath[];
+  /** Заметки, поднятые к родителю (режим «только папку»). */
+  moved: RelocatedPath[];
+  /** Файлы, удалённые вместе с папкой: вложения и чужие форматы. */
+  removed: VaultPath[];
+}
+
 /** Файл вложения так, как его показывают человеку. */
 export interface AttachmentEntry {
   path: VaultPath;
@@ -538,7 +563,10 @@ export class Vault {
    * пересчитаются идентификаторы CRDT-логов. Цена — цикл по заметкам; выгода —
    * ни одной битой ссылки, что и обещает BEHAVIOR.
    */
-  async renameFolder(from: VaultPath, name: string): Promise<{ to: VaultPath; updatedLinks: number }> {
+  async renameFolder(
+    from: VaultPath,
+    name: string,
+  ): Promise<{ to: VaultPath; updatedLinks: number; moved: RelocatedPath[] }> {
     const source = normalizePath(from);
     return this.relocateFolder(source, dirName(source), safeFileName(name));
   }
@@ -554,11 +582,14 @@ export class Vault {
    * потерянное и для дерева, и для диска. Такая попытка возвращает папку на
    * месте, без изменений.
    */
-  async moveFolder(from: VaultPath, parent: VaultPath): Promise<{ to: VaultPath; updatedLinks: number }> {
+  async moveFolder(
+    from: VaultPath,
+    parent: VaultPath,
+  ): Promise<{ to: VaultPath; updatedLinks: number; moved: RelocatedPath[] }> {
     const source = normalizePath(from);
     const destination = normalizePath(parent);
     if (destination === source || destination.startsWith(`${source}/`)) {
-      return { to: source, updatedLinks: 0 };
+      return { to: source, updatedLinks: 0, moved: [] };
     }
     return this.relocateFolder(source, destination, baseName(source));
   }
@@ -568,9 +599,9 @@ export class Vault {
     source: VaultPath,
     parent: VaultPath,
     base: string,
-  ): Promise<{ to: VaultPath; updatedLinks: number }> {
+  ): Promise<{ to: VaultPath; updatedLinks: number; moved: RelocatedPath[] }> {
     let target = joinPath(parent, base);
-    if (target === source) return { to: source, updatedLinks: 0 };
+    if (target === source) return { to: source, updatedLinks: 0, moved: [] };
     for (let n = 2; n < 10_000 && (await this.storage.stat(target)) !== null; n += 1) {
       target = joinPath(parent, `${base} ${n}`);
     }
@@ -587,6 +618,7 @@ export class Vault {
     for (const dir of dirs) await this.storage.mkdir(at(dir));
 
     let updatedLinks = 0;
+    const moved: RelocatedPath[] = [];
     /* Снимок путей до начала: во время цикла индекс меняется под нами. */
     const inside = this.index
       .all()
@@ -595,6 +627,9 @@ export class Vault {
     for (const path of inside) {
       const result = await this.renameTo(path, at(path));
       updatedLinks += result.updatedLinks;
+      /* Путь берём у переименования, а не считаем во второй раз: где адрес
+         вычисляют дважды, там однажды разойдутся два вычисления. */
+      moved.push({ from: path, to: result.to });
     }
 
     /*
@@ -610,6 +645,7 @@ export class Vault {
      */
     for (const file of await this.listFilesRecursive(source)) {
       await this.storage.rename(file, at(file)).catch(() => undefined);
+      moved.push({ from: file, to: at(file) });
     }
 
     /* Каталоги убираем снизу вверх: удаление непустого отвергает часть
@@ -619,7 +655,7 @@ export class Vault {
     }
     await this.storage.remove(source).catch(() => undefined);
     this.emit([source, target]);
-    return { to: target, updatedLinks };
+    return { to: target, updatedLinks, moved };
   }
 
   /**
@@ -636,7 +672,7 @@ export class Vault {
   async deleteFolder(
     path: VaultPath,
     mode: 'notes-to-trash' | 'notes-to-parent' = 'notes-to-trash',
-  ): Promise<VaultPath[]> {
+  ): Promise<FolderRemoval> {
     const folder = normalizePath(path);
     /* Снимок до начала: индекс меняется под нами на каждом шаге. */
     const inside = this.index
@@ -644,12 +680,25 @@ export class Vault {
       .map((note) => note.path)
       .filter((item) => item.startsWith(`${folder}/`));
 
+    const result: FolderRemoval = { trashed: [], moved: [], removed: [] };
     if (mode === 'notes-to-parent') {
       const parent = dirName(folder);
-      for (const note of inside) await this.move(note, parent);
+      for (const note of inside) {
+        const outcome = await this.move(note, parent);
+        result.moved.push({ from: note, to: outcome.to });
+      }
     } else {
       for (const note of inside) await this.trash(note);
+      result.trashed = inside;
     }
+
+    /*
+     * Всё, что осталось в папке, исчезает вместе с ней: вложения, сканы, чужие
+     * форматы. Перечисляем их ДО удаления — про каждый обязано узнать облако,
+     * иначе на следующей синхронизации сервер вернёт файлы обратно, а вместе с
+     * ними и саму папку.
+     */
+    result.removed = await this.listFilesRecursive(folder);
 
     /* Вложенные каталоги убираем снизу вверх, иначе удаление непустого
        каталога отвергается частью хранилищ. */
@@ -657,7 +706,7 @@ export class Vault {
     for (const dir of nested) await this.storage.remove(dir).catch(() => undefined);
     await this.storage.remove(folder).catch(() => undefined);
     this.emit([folder]);
-    return inside;
+    return result;
   }
 
   // ── Чтение и запись заметок ────────────────────────────────────────────────

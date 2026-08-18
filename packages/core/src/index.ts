@@ -125,6 +125,8 @@ export {
   type AttachmentEntry,
   type CreateNoteInput,
   type FolderNode,
+  type FolderRemoval,
+  type RelocatedPath,
   type TrashEntry,
   type VaultOptions,
 } from './vault/vault.js';
