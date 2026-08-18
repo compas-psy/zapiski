@@ -93,7 +93,8 @@ export const serializers = {
 export const redactPaths = [
   'req.headers.authorization',
   'req.headers.cookie',
-  'req.headers["x-yookassa-signature"]',
+  '*.RebillId',
+  '*.rebillId',
   'req.headers["sec-websocket-key"]',
   'headers.authorization',
   'headers.cookie',

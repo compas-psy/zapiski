@@ -1,11 +1,10 @@
-import { createHmac } from 'node:crypto';
-
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, createUser, noDatabase, type Harness } from './helpers/app.ts';
 import { createMagicToken } from '../src/services/accounts.ts';
 import { sanitizeHtml } from '../src/lib/sanitizeHtml.ts';
 import { parseTrustProxy } from '../src/config/env.ts';
+import { computeToken } from '../src/services/tbank.ts';
 
 /**
  * Периметр сервера — проверки безопасности (docs/dev/security/AUDIT.md).
@@ -583,29 +582,28 @@ describe.skipIf(noDatabase())('периметр: публикация по сс�
   });
 });
 
-describe.skipIf(noDatabase())('периметр: адрес клиента и вебхук ЮKassa', () => {
-  const SECRET = 'секрет-вебхука-для-теста-периметра';
+describe.skipIf(noDatabase())('периметр: вебхук Т-Кассы', () => {
+  const TERMINAL_KEY = 'PERIMETER0001';
+  const PASSWORD = 'пароль-терминала-для-периметра';
   let harness: Harness;
 
-  const signed = (id: string, userId: string): { payload: string; signature: string } => {
-    const payload = JSON.stringify({
-      event: 'payment.succeeded',
-      object: {
-        id,
-        status: 'succeeded',
-        paid: true,
-        metadata: { user_id: userId, plan: 'yearly' },
-      },
-    });
-    const signature = createHmac('sha256', SECRET).update(Buffer.from(payload, 'utf8')).digest('hex');
-    return { payload, signature };
+  const notification = (paymentId: string): Record<string, unknown> => {
+    const body: Record<string, unknown> = {
+      TerminalKey: TERMINAL_KEY,
+      OrderId: `order-${paymentId}`,
+      Success: true,
+      Status: 'CONFIRMED',
+      PaymentId: paymentId,
+      Amount: 29900,
+    };
+    return { ...body, Token: computeToken(body, PASSWORD) };
   };
 
   beforeAll(async () => {
     harness = await createHarness({
       env: {
-        YOOKASSA_WEBHOOK_SECRET: SECRET,
-        YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27',
+        TINKOFF_TERMINAL_KEY: TERMINAL_KEY,
+        TINKOFF_PASSWORD: PASSWORD,
         TRUST_PROXY: '1',
         /* Проверка «подделанный вебхук не включил подписку» смотрит на
            canWrite: при выключенной оплате оно истинно у всех, и подделку
@@ -619,99 +617,69 @@ describe.skipIf(noDatabase())('периметр: адрес клиента и в
     await harness.close();
   });
 
+  const send = (body: unknown, headers: Record<string, string> = {}) =>
+    harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/tbank/webhook',
+      headers: { 'content-type': 'application/json', ...headers },
+      payload: JSON.stringify(body),
+    });
+
+  const canWrite = async (user: { authHeader: { authorization: string } }): Promise<boolean> =>
+    (
+      (
+        await harness.app.inject({
+          method: 'GET',
+          url: '/api/v1/billing/status',
+          headers: user.authHeader,
+        })
+      ).json() as { canWrite: boolean }
+    ).canWrite;
+
   /**
-   * SEC-002. nginx ставит `X-Forwarded-For $proxy_add_x_forwarded_for`, то
-   * есть ДОПИСЫВАЕТ адрес клиента к тому, что клиент прислал сам. При
-   * `TRUST_PROXY=true` Fastify доверяет всей цепочке и берёт самый левый
-   * элемент — назначенный злоумышленником. Тогда список сетей ЮKassa
-   * обходится одним заголовком.
+   * SEC-002, в новой редакции. Раньше подлинность уведомления частично
+   * опиралась на адрес отправителя, а адрес приходит из `X-Forwarded-For` —
+   * заголовка, который nginx ДОПИСЫВАЕТ к присланному клиентом. Подставленный
+   * слева «адрес провайдера» обходил проверку.
    *
-   * Здесь закреплено обратное: доверяем ровно последнему переходу, поэтому
-   * подставленный слева «адрес ЮKassa» ничего не даёт.
+   * У Т-Кассы подпись лежит в теле уведомления, и адрес в проверке не
+   * участвует вовсе. Здесь это закреплено тестом: никакие заголовки не
+   * помогают телу без верной подписи.
    */
-  it('подставленный слева адрес ЮKassa не проходит проверку сети', async () => {
+  it('никакой заголовок не заменяет подпись в теле', async () => {
     const user = await createUser(harness, { subscribed: false });
-    const { payload, signature } = signed('forged-1', user.userId);
+    const forged = { ...notification('forged-1'), Token: 'f'.repeat(64) };
 
-    const forged = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        // Слева — то, что прислал злоумышленник; справа — то, что дописал nginx.
-        'x-forwarded-for': '185.71.76.5, 203.0.113.9',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(forged.statusCode).toBe(400);
-    expect(forged.json()).toMatchObject({ error: { code: 'yookassa_ip_not_allowed' } });
-
-    const status = await harness.app.inject({
-      method: 'GET',
-      url: '/api/v1/billing/status',
-      headers: user.authHeader,
-    });
-    const body = status.json() as { plan: string; canWrite: boolean };
-    expect(body.plan).not.toBe('yearly');
-    expect(body.canWrite).toBe(false);
-  });
-
-  it('честное уведомление из сети ЮKassa с верной подписью применяется', async () => {
-    const user = await createUser(harness, { subscribed: false });
-    const { payload, signature } = signed('honest-1', user.userId);
-
-    const accepted = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(accepted.statusCode).toBe(200);
-    expect(accepted.json()).toMatchObject({ applied: 'activated' });
-
-    // Повтор того же уведомления идемпотентен — защита от воспроизведения.
-    const replay = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(replay.json()).toMatchObject({ duplicate: true });
-  });
-
-  it('верная сеть, но чужая подпись — отказ', async () => {
-    const user = await createUser(harness, { subscribed: false });
-    const { payload } = signed('bad-sig-1', user.userId);
-    const wrong = createHmac('sha256', 'не тот секрет').update(Buffer.from(payload, 'utf8')).digest('hex');
-
-    const response = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': wrong,
-      },
-      payload,
+    const response = await send(forged, {
+      'x-forwarded-for': '91.194.226.5, 203.0.113.9',
+      'x-real-ip': '91.194.226.5',
     });
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'yookassa_bad_signature' } });
+    expect(response.json()).toMatchObject({ error: { code: 'tbank_bad_token' } });
+    expect(await canWrite(user)).toBe(false);
   });
 
-  it('разбор TRUST_PROXY по умолчанию доверяет ровно одному переходу', () => {
-    expect(parseTrustProxy(undefined)).toBe(1);
-    expect(parseTrustProxy('1')).toBe(1);
-    expect(parseTrustProxy('false')).toBe(false);
-    // `true` остаётся доступным, но это отладочный режим — в deploy его нет.
-    expect(parseTrustProxy('true')).toBe(true);
+  /**
+   * Подпись верна, но платёж начинали не мы. Такое уведомление не должно
+   * включать подписку никому: связь «кто и за что» живёт у нас, и без неё
+   * применять нечего.
+   */
+  it('верная подпись без нашей записи о платеже подписку не включает', async () => {
+    const user = await createUser(harness, { subscribed: false });
+    const response = await send(notification('чужой-платёж'));
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('OK');
+    expect(await canWrite(user)).toBe(false);
+  });
+
+  /**
+   * Пароль терминала — секрет. Он не должен появляться ни в ответе, ни в
+   * сообщении об ошибке: отказ обязан быть коротким кодом, а не рассказом.
+   */
+  it('в ответе на отказ нет ни пароля, ни ключа терминала', async () => {
+    const response = await send({ ...notification('leak-1'), Token: 'нет' });
+    expect(response.statusCode).toBe(400);
+    expect(response.body).not.toContain(PASSWORD);
+    expect(response.body).not.toContain(TERMINAL_KEY);
   });
 });

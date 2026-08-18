@@ -93,16 +93,17 @@ const schema = z.object({
   YANDEX_CLIENT_SECRET: z.string().optional(),
   YANDEX_REDIRECT_URI: z.string().optional(),
 
-  /** Проверка подписи вебхука ЮKassa (HMAC-SHA256 по сырому телу). */
-  YOOKASSA_WEBHOOK_SECRET: z.string().optional(),
-  YOOKASSA_SHOP_ID: z.string().optional(),
-  YOOKASSA_SECRET_KEY: z.string().optional(),
-  /** Доп. слой: список сетей уведомлений ЮKassa, CIDR через запятую. */
-  YOOKASSA_ALLOWED_CIDRS: z.string().optional(),
-
-  GOOGLE_PLAY_PACKAGE_NAME: z.string().optional(),
-  GOOGLE_PLAY_SA_EMAIL: z.string().optional(),
-  GOOGLE_PLAY_SA_PRIVATE_KEY: z.string().optional(),
+  /**
+   * Т-Касса (Т-Банк) — единственный эквайринг портфеля, решение учредителя от
+   * 18.08.2026. Подпись уведомления считается по паролю терминала, отдельного
+   * секрета вебхука у протокола нет: пароль и есть секрет.
+   *
+   * Нет ключей — оплата отвечает «эквайринг не настроен» и ничего не делает.
+   * Молчаливый откат на демо-терминал запрещён: он выглядит как работающая
+   * касса, мимо которой идут деньги.
+   */
+  TINKOFF_TERMINAL_KEY: z.string().optional(),
+  TINKOFF_PASSWORD: z.string().optional(),
 
   /** ТЗ §7: 10 ГБ на аккаунт. */
   QUOTA_BYTES: int(10 * GIB),
@@ -148,8 +149,8 @@ const schema = z.object({
   TRIAL_DAYS: int(14),
   /** Льготный период после неудачного продления. */
   GRACE_DAYS: int(7),
-  PRICE_MONTHLY_RUB: int(199),
-  PRICE_YEARLY_MONTHLY_RUB: int(149),
+  PRICE_MONTHLY_RUB: int(299),
+  PRICE_YEARLY_MONTHLY_RUB: int(224),
 
   /** Фид автообновлений: JSON на диске. Формат — см. README. */
   UPDATES_MANIFEST_PATH: z.string().optional(),
@@ -182,12 +183,8 @@ const schema = z.object({
 
 export type TrustProxySetting = boolean | number | string[];
 
-export type Env = Omit<
-  z.infer<typeof schema>,
-  'CORS_ORIGINS' | 'YOOKASSA_ALLOWED_CIDRS' | 'TRUST_PROXY'
-> & {
+export type Env = Omit<z.infer<typeof schema>, 'CORS_ORIGINS' | 'TRUST_PROXY'> & {
   corsOrigins: string[];
-  yookassaAllowedCidrs: string[];
   trustProxy: TrustProxySetting;
 };
 
@@ -212,11 +209,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Конфигурация окружения не прошла проверку:\n${lines.join('\n')}`);
   }
-  const { CORS_ORIGINS, YOOKASSA_ALLOWED_CIDRS, TRUST_PROXY, ...rest } = parsed.data;
+  const { CORS_ORIGINS, TRUST_PROXY, ...rest } = parsed.data;
   return {
     ...rest,
     corsOrigins: splitList(CORS_ORIGINS),
-    yookassaAllowedCidrs: splitList(YOOKASSA_ALLOWED_CIDRS),
     trustProxy: parseTrustProxy(TRUST_PROXY),
   };
 }

@@ -55,8 +55,8 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     },
   );
 
-  // JSON разбираем сами, чтобы сохранить сырые байты: подпись вебхука ЮKassa
-  // считается по ним, а не по повторной сериализации разобранного объекта.
+  // JSON разбираем сами и сохраняем сырые байты: они нужны проверкам, которым
+  // важно именно пришедшее, а не повторно сериализованный объект.
   app.addContentTypeParser(
     'application/json',
     { parseAs: 'buffer' },

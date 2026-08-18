@@ -96,7 +96,7 @@ describe.skipIf(noDatabase())('оплата выключена — облако 
   it('платёж не создать: платить не за что', async () => {
     const response = await harness.app.inject({
       method: 'POST',
-      url: '/api/v1/billing/yookassa/payment',
+      url: '/api/v1/billing/tbank/payment',
       headers: { ...fresh.authHeader, 'content-type': 'application/json' },
       payload: { plan: 'monthly', returnUrl: 'https://zapiski.cmpas.ru/' },
     });

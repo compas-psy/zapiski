@@ -176,7 +176,7 @@ describe.skipIf(noDatabase())('подписка и доступ к данным'
     expect((second.json() as { started: boolean }).started).toBe(false);
   });
 
-  it('статус отдаёт цены 199/149 и квоту 10 ГБ', async () => {
+  it('статус отдаёт цены 299/224 и квоту 10 ГБ', async () => {
     const user = await createUser(harness);
     const response = await harness.app.inject({
       method: 'GET',
@@ -191,8 +191,8 @@ describe.skipIf(noDatabase())('подписка и доступ к данным'
       canWrite: boolean;
       versionRetentionDays: number;
     };
-    expect(body.prices.monthlyRub).toBe(199);
-    expect(body.prices.yearlyMonthlyRub).toBe(149);
+    expect(body.prices.monthlyRub).toBe(299);
+    expect(body.prices.yearlyMonthlyRub).toBe(224);
     expect(body.quota.limitBytes).toBe(10 * 1024 * 1024 * 1024);
     expect(body.canWrite).toBe(true);
     expect(body.versionRetentionDays).toBe(365);

@@ -221,12 +221,12 @@ Magic-токен: TTL 15 минут, **одноразовый**, привяза�
 | `GET /api/v1/billing/status` | `BillingStatus`: план, статус, `canWrite`, даты периода/льготы/пробного, `quota`, `versionRetentionDays`, цены |
 | `POST /api/v1/billing/trial` | Пробный период 14 дней. Без карты и без таймеров |
 | `POST /api/v1/billing/cancel` | Отмена автопродления. Доступ — до конца оплаченного периода |
-| `POST /api/v1/billing/yookassa/payment` | `{ plan: 'monthly'\|'yearly', returnUrl }` → `{ paymentId, status, confirmationUrl }` |
-| `POST /api/v1/billing/yookassa/webhook` | Уведомление ЮKassa. Подпись HMAC-SHA256 **по сырым байтам** тела + опциональный список CIDR. После успешной проверки всегда `200`, даже на неизвестное событие, — иначе ЮKassa будет ретраить сутки |
-| `POST /api/v1/billing/google-play/verify` | `{ purchaseToken, productId? }`. Сервер сам спрашивает Google Play Developer API: результату проверки на устройстве не доверяем |
+| `POST /api/v1/billing/tbank/payment` | `{ plan: 'monthly'\|'yearly', successUrl, failUrl }` → `{ paymentId, status, confirmationUrl }`. Связь «кто и за что» пишется у нас до оплаты: в уведомлении Т-Кассы её нет |
+| `POST /api/v1/billing/tbank/webhook` | Уведомление Т-Кассы. Подпись — поле `Token` **внутри тела**: значения корневых параметров по алфавиту ключей + пароль терминала, SHA-256. Ответ банку — ровно текст `OK`, иначе уведомление считается недоставленным и повторяется сутки |
+
 
 Планы: `free` · `trial` · `monthly` · `yearly`. Статусы: `none` · `trial` ·
-`active` · `grace` · `expired`. Цены по умолчанию — 199 ₽/мес и 149 ₽/мес при
+`active` · `grace` · `expired`. Цены по умолчанию — 299 ₽/мес и 224 ₽/мес при
 годовой оплате, льготный период 7 дней.
 
 Главное правило модуля: **истечение подписки не блокирует данные**. Считается
@@ -375,7 +375,8 @@ HTML приходит **от клиента** (ключей у сервера н
 | `MAX_BLOB_BYTES` / `MAX_CRDT_BYTES` / `MAX_PUBLISHED_BYTES` | 64 / 4 / 2 МиБ | |
 | `VERSION_RETENTION_TRIAL_DAYS` / `_PAID_DAYS` | 30 / 365 | ТЗ §4.2 |
 | `TRIAL_DAYS` / `GRACE_DAYS` | 14 / 7 | |
-| `PRICE_MONTHLY_RUB` / `PRICE_YEARLY_MONTHLY_RUB` | 199 / 149 | |
+| `PRICE_MONTHLY_RUB` / `PRICE_YEARLY_MONTHLY_RUB` | 299 / 224 | Год считается как 224 × 12 = 2 688 ₽ |
+| `TINKOFF_TERMINAL_KEY` / `TINKOFF_PASSWORD` | — | Нет ключей — оплата отвечает «эквайринг не настроен» |
 | `YANDEX_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI` | — | Не заданы → вход через Яндекс ID выключен, вход по почте работает |
 | `YOOKASSA_*`, `GOOGLE_PLAY_*` | — | Не заданы → `503 billing_unavailable` |
 | `UPDATES_MANIFEST_PATH` | — | Не задан → фид обновлений отвечает `204` |

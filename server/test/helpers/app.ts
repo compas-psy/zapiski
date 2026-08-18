@@ -12,7 +12,6 @@ import { signJwt } from '../../src/lib/jwt.ts';
 import { BlobStore } from '../../src/services/blobStore.ts';
 import { LiveBus } from '../../src/services/liveBus.ts';
 import { MemoryMailer } from '../../src/services/mailer.ts';
-import type { PlayVerifier } from '../../src/services/googlePlay.ts';
 import {
   createSession,
   ensureDevice,
@@ -23,8 +22,8 @@ import { ensureQuotaRow } from '../../src/services/quota.ts';
 
 /**
  * Тестовый стенд: настоящее приложение поверх настоящей базы и настоящего
- * тома во временном каталоге. Подменены ровно три вещи — почта, часы и
- * проверяльщик Google Play: всё, что ходит наружу.
+ * тома во временном каталоге. Подменены ровно две вещи — почта и
+ * часы: всё, что ходит наружу.
  */
 
 export const TEST_AUTH_SECRET = 'test-secret-for-hs256-not-used-anywhere-else';
@@ -51,7 +50,6 @@ export interface Harness {
 
 export interface HarnessOptions {
   env?: Partial<Record<string, string>>;
-  play?: PlayVerifier | null;
 }
 
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
@@ -83,7 +81,6 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     mailer,
     live: new LiveBus(),
     yandex: null,
-    play: options.play ?? null,
     retention: {
       trialDays: env.VERSION_RETENTION_TRIAL_DAYS,
       paidDays: env.VERSION_RETENTION_PAID_DAYS,

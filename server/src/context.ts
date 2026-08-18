@@ -3,13 +3,12 @@ import type { Db } from './db/pool.ts';
 import type { BlobStore } from './services/blobStore.ts';
 import type { LiveBus } from './services/liveBus.ts';
 import type { Mailer } from './services/mailer.ts';
-import type { PlayVerifier } from './services/googlePlay.ts';
 import type { YandexOAuth } from './services/yandex.ts';
 import type { RetentionPolicy } from './services/subscription.ts';
 
 /**
  * Всё, что нужно хендлерам. Собирается один раз в `buildApp` и передаётся
- * явно — тесты подменяют мейлер, часы и проверяльщик Google Play, не трогая
+ * явно — тесты подменяют мейлер, часы и сеть, не трогая
  * ни глобальных переменных, ни сети.
  */
 export interface AppContext {
@@ -20,8 +19,6 @@ export interface AppContext {
   live: LiveBus;
   /** null, если YANDEX_CLIENT_ID/SECRET не заданы — вход по почте работает. */
   yandex: YandexOAuth | null;
-  /** null, если сервисный аккаунт Google Play не настроен. */
-  play: PlayVerifier | null;
   retention: RetentionPolicy;
   /** Источник времени. Подменяется в тестах TTL и сроков подписки. */
   now: () => Date;
@@ -42,8 +39,9 @@ declare module 'fastify' {
   interface FastifyRequest {
     auth?: AuthContext;
     /**
-     * Сырые байты JSON-тела. Нужны только вебхуку ЮKassa: подпись считается по
-     * тому, что пришло, а не по повторной сериализации разобранного объекта.
+     * Сырые байты JSON-тела. Оставлены на случай проверок, которым нужно
+     * именно пришедшее, а не повторно сериализованный объект. Подпись
+     * Т-Кассы лежит внутри тела и в них не нуждается.
      */
     rawBody?: Buffer;
   }

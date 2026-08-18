@@ -21,7 +21,7 @@ export interface SubscriptionRow {
   current_period_start: Date | null;
   current_period_end: Date | null;
   grace_ends_at: Date | null;
-  provider: 'yookassa' | 'google_play' | null;
+  provider: 'tbank' | null;
   provider_customer_id: string | null;
   provider_subscription_id: string | null;
   auto_renew: boolean;
@@ -230,7 +230,7 @@ export async function startTrial(
 export interface ActivationInput {
   userId: string;
   plan: 'monthly' | 'yearly';
-  provider: 'yookassa' | 'google_play';
+  provider: 'tbank';
   periodStart: Date;
   periodEnd: Date;
   autoRenew: boolean;

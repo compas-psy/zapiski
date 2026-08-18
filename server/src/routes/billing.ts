@@ -1,13 +1,10 @@
-import { randomUUID } from 'node:crypto';
-
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 
 import type { AppContext } from '../context.ts';
 import { errors } from '../lib/errors.ts';
 import { authOf } from '../plugins/auth.ts';
 import type { BillingStatus } from '../protocol.ts';
-import { PlayVerificationError } from '../services/googlePlay.ts';
 import { quotaStatus } from '../services/quota.ts';
 import { trialDaysFor } from '../lib/trial.ts';
 import {
@@ -21,13 +18,20 @@ import {
 import {
   amountRub,
   createPayment,
+  newOrderId,
   parseNotification,
   periodEnd,
   verifyNotification,
-} from '../services/yookassa.ts';
+  type TbankCredentials,
+} from '../services/tbank.ts';
 
 /**
- * Подписка (ТЗ §5.5). 199 ₽/мес, 149 ₽/мес при годовой оплате.
+ * Подписка (ТЗ §5.5). 299 ₽/мес, 224 ₽/мес при годовой оплате.
+ *
+ * Эквайринг один на весь портфель — Т-Касса (решение учредителя 18.08.2026).
+ * ЮKassa и Google Play Billing удалены вместе с кодом: у Google с декабря 2024
+ * нет выплат российским разработчикам, и держать мёртвый путь оплаты опаснее,
+ * чем не иметь его вовсе.
  *
  * Главное правило, которое этот модуль обязан сохранять: **истечение подписки
  * не блокирует данные**. Здесь считается только `canWrite`; ни один эндпоинт
@@ -36,10 +40,10 @@ import {
  */
 
 const planSchema = z.enum(['monthly', 'yearly']);
-const paymentBody = z.object({ plan: planSchema, returnUrl: z.string().url() });
-const playBody = z.object({
-  purchaseToken: z.string().min(8).max(4096),
-  productId: z.string().min(1).max(200).optional(),
+const paymentBody = z.object({
+  plan: planSchema,
+  successUrl: z.string().url(),
+  failUrl: z.string().url(),
 });
 
 export async function registerBillingRoutes(app: FastifyInstance): Promise<void> {
@@ -60,7 +64,7 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     if (!ctx.env.BILLING_ENABLED) throw errors.billingDisabled();
   };
 
-  /** SCREENS §9: кнопка «Попробовать 14 дней». Без карты и без таймеров. */
+  /** SCREENS §9: кнопка «Попробовать». Без карты и без таймеров. */
   app.post('/api/v1/billing/trial', { preHandler: app.requireAuth }, async (request, reply) => {
     requireBilling();
     const auth = authOf(request);
@@ -89,180 +93,133 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
   });
 
   // ───────────────────────────────────────────────────────────────────────────
-  // ЮKassa
+  // Т-Касса
   // ───────────────────────────────────────────────────────────────────────────
 
   app.post(
-    '/api/v1/billing/yookassa/payment',
+    '/api/v1/billing/tbank/payment',
     { preHandler: app.requireAuth },
     async (request, reply) => {
       requireBilling();
-      const shopId = ctx.env.YOOKASSA_SHOP_ID;
-      const secretKey = ctx.env.YOOKASSA_SECRET_KEY;
-      if (!shopId || !secretKey) throw errors.billingUnavailable();
+      const credentials = credentialsOf(ctx);
+      if (credentials === null) throw errors.billingUnavailable();
 
       const parsed = paymentBody.safeParse(request.body);
       if (!parsed.success) throw errors.badRequest('bad_plan');
       const auth = authOf(request);
       await ensureSubscription(ctx.db, auth.userId);
 
-      const payment = await createPayment(
-        { shopId, secretKey },
-        {
-          userId: auth.userId,
-          plan: parsed.data.plan,
-          amountRub: amountRub(parsed.data.plan, {
-            monthlyRub: ctx.env.PRICE_MONTHLY_RUB,
-            yearlyMonthlyRub: ctx.env.PRICE_YEARLY_MONTHLY_RUB,
-          }),
-          description: parsed.data.plan === 'yearly' ? 'ЗАПИСКИ+ на год' : 'ЗАПИСКИ+ на месяц',
-          returnUrl: parsed.data.returnUrl,
-          idempotenceKey: randomUUID(),
-        },
+      const orderId = newOrderId();
+      const payment = await createPayment(credentials, {
+        orderId,
+        amountRub: amountRub(parsed.data.plan, {
+          monthlyRub: ctx.env.PRICE_MONTHLY_RUB,
+          yearlyMonthlyRub: ctx.env.PRICE_YEARLY_MONTHLY_RUB,
+        }),
+        description: parsed.data.plan === 'yearly' ? 'ЗАПИСКИ+ на год' : 'ЗАПИСКИ+ на месяц',
+        successUrl: parsed.data.successUrl,
+        failUrl: parsed.data.failUrl,
+        notificationUrl: `${ctx.env.PUBLIC_BASE_URL.replace(/\/+$/, '')}/api/v1/billing/tbank/webhook`,
+        customerKey: auth.userId,
+      });
+
+      /*
+       * Кто и за что платит, знаем мы, а не банк: в уведомлении Т-Кассы нет ни
+       * идентификатора человека, ни тарифа. Поэтому связь пишется здесь, до
+       * оплаты, и вебхук потом находит её по номеру платежа. Отправлять свои
+       * идентификаторы на чужую сторону ради удобства разбора — лишняя утечка.
+       */
+      await recordEvent(
+        ctx,
+        `init:${payment.paymentId}`,
+        'payment.init',
+        auth.userId,
+        { plan: parsed.data.plan, orderId },
       );
 
       return reply.send({
-        paymentId: payment.id,
+        paymentId: payment.paymentId,
         status: payment.status,
-        confirmationUrl: payment.confirmationUrl,
+        confirmationUrl: payment.paymentUrl,
       });
     },
   );
 
   /**
-   * Уведомления ЮKassa. Аутентичность проверяется до разбора тела: HMAC по
-   * сырым байтам и/или список сетей отправителя.
+   * Уведомления Т-Кассы. Подпись лежит внутри тела (`Token`), поэтому тело
+   * сначала разбирается и только потом получает доверие.
    *
-   * Ответ всегда 200 после успешной проверки, даже на неизвестное событие, —
-   * иначе ЮKassa будет ретраить сутки. Проваленная проверка подписи — 400.
+   * Ответ банку — ровно текст `OK`, иначе уведомление считается недоставленным
+   * и повторяется сутки. На неизвестное событие тоже отвечаем `OK`: повтор
+   * ничего не изменит, а очередь ретраев засорит.
    */
-  app.post('/api/v1/billing/yookassa/webhook', async (request, reply) => {
-    const raw = request.rawBody ?? Buffer.alloc(0);
-    const check = verifyNotification({
-      rawBody: raw,
-      signatureHeader: headerOf(request, 'x-yookassa-signature') ?? headerOf(request, 'signature'),
-      remoteAddress: request.ip,
-      secret: ctx.env.YOOKASSA_WEBHOOK_SECRET,
-      allowedCidrs: ctx.env.yookassaAllowedCidrs,
-    });
+  app.post('/api/v1/billing/tbank/webhook', async (request, reply) => {
+    const credentials = credentialsOf(ctx);
+    const check = verifyNotification({ body: request.body, credentials });
 
     if (!check.ok) {
-      request.log.warn({ event: 'yookassa_webhook_rejected', reason: check.reason }, 'подпись не сошлась');
+      request.log.warn({ event: 'tbank_webhook_rejected', reason: check.reason }, 'подпись не сошлась');
       // not_configured — это наша ошибка конфигурации, а не чужой запрос.
       throw check.reason === 'not_configured'
         ? errors.billingUnavailable()
-        : errors.badRequest(`yookassa_${check.reason}`);
+        : errors.badRequest(`tbank_${check.reason}`);
     }
 
     const notification = parseNotification(request.body);
-    if (notification === null) throw errors.badRequest('yookassa_bad_payload');
+    if (notification === null) throw errors.badRequest('tbank_bad_payload');
 
-    const eventId = `${notification.event}:${notification.objectId}`;
-    const fresh = await recordEvent(ctx, 'yookassa', eventId, notification.event, notification.userId, request.body);
-    if (!fresh) return reply.send({ ok: true, duplicate: true });
+    const eventId = `${notification.status}:${notification.paymentId}`;
+    const fresh = await recordEvent(ctx, eventId, notification.status, null, {
+      orderId: notification.orderId,
+      status: notification.status,
+      amountRub: notification.amountRub,
+      /* RebillId сознательно не пишем в журнал событий: это платёжный секрет
+         (CLAUDE.md §5.4). Он уходит только в поле подписки. */
+    });
+    if (!fresh) return reply.type('text/plain').send('OK');
 
-    if (notification.userId === null || notification.plan === null) {
-      request.log.warn({ event: 'yookassa_webhook_no_metadata' }, 'в уведомлении нет user_id/plan');
-      return reply.send({ ok: true, ignored: true });
+    const init = await findInit(ctx, notification.paymentId);
+    if (init === null) {
+      request.log.warn({ event: 'tbank_webhook_unknown_payment' }, 'платёж не наш или начат не здесь');
+      return reply.type('text/plain').send('OK');
     }
 
     const now = ctx.now();
-    if (notification.event === 'payment.succeeded' && notification.paid) {
+    if (notification.paid && notification.success) {
       await activatePaidPeriod(ctx.db, {
-        userId: notification.userId,
-        plan: notification.plan,
-        provider: 'yookassa',
+        userId: init.userId,
+        plan: init.plan,
+        provider: 'tbank',
         periodStart: now,
-        periodEnd: periodEnd(notification.plan, now),
-        autoRenew: notification.paymentMethodId !== null,
-        providerSubscriptionId: notification.paymentMethodId,
-        providerCustomerId: null,
+        periodEnd: periodEnd(init.plan, now),
+        /* Автопродление обещаем только когда банк дал, чем продлевать. Самого
+           списания пока нет — см. шапку services/tbank.ts. */
+        autoRenew: notification.rebillId !== null,
+        providerSubscriptionId: notification.rebillId,
+        providerCustomerId: init.userId,
         graceDays: ctx.env.GRACE_DAYS,
       });
-      return reply.send({ ok: true, applied: 'activated' });
+      return reply.type('text/plain').send('OK');
     }
 
-    if (notification.event === 'payment.canceled' || notification.event === 'refund.succeeded') {
+    if (notification.refunded || notification.status === 'REJECTED' || notification.status === 'CANCELED') {
       // Данные не трогаем: у пользователя остаётся чтение и льготный период.
-      await markPaymentFailed(ctx.db, notification.userId, ctx.env.GRACE_DAYS, now);
-      return reply.send({ ok: true, applied: 'grace' });
+      await markPaymentFailed(ctx.db, init.userId, ctx.env.GRACE_DAYS, now);
+      return reply.type('text/plain').send('OK');
     }
 
-    return reply.send({ ok: true, ignored: true });
+    return reply.type('text/plain').send('OK');
   });
-
-  // ───────────────────────────────────────────────────────────────────────────
-  // Google Play Billing
-  // ───────────────────────────────────────────────────────────────────────────
-
-  /**
-   * Серверная валидация покупки. Результату проверки на устройстве не
-   * доверяем: сервер сам спрашивает Google Play Developer API.
-   */
-  app.post(
-    '/api/v1/billing/google-play/verify',
-    { preHandler: app.requireAuth },
-    async (request, reply) => {
-      requireBilling();
-      const verifier = ctx.play;
-      if (verifier === null) throw errors.billingUnavailable();
-
-      const parsed = playBody.safeParse(request.body);
-      if (!parsed.success) throw errors.badRequest('bad_purchase_token');
-      const auth = authOf(request);
-
-      let purchase;
-      try {
-        purchase = await verifier.verifySubscription(parsed.data.purchaseToken);
-      } catch (error) {
-        if (error instanceof PlayVerificationError) {
-          request.log.warn(
-            { event: 'play_verify_failed', stage: error.stage },
-            'Google Play не подтвердил покупку',
-          );
-          throw errors.badRequest(`play_${error.stage}_failed`);
-        }
-        throw error;
-      }
-
-      const eventId = purchase.orderId ?? `token:${parsed.data.purchaseToken.slice(0, 64)}`;
-      await recordEvent(ctx, 'google_play', eventId, 'subscription.verified', auth.userId, {
-        productId: purchase.productId,
-        expiryTime: purchase.expiryTime.toISOString(),
-        active: purchase.active,
-      });
-
-      if (!purchase.active) {
-        return reply.code(200).send({
-          verified: true,
-          active: false,
-          ...(await buildStatus(ctx, auth.userId)),
-        });
-      }
-
-      const plan = planOfProduct(purchase.productId);
-      await activatePaidPeriod(ctx.db, {
-        userId: auth.userId,
-        plan,
-        provider: 'google_play',
-        periodStart: purchase.startTime,
-        periodEnd: purchase.expiryTime,
-        autoRenew: purchase.autoRenewing,
-        providerSubscriptionId: parsed.data.purchaseToken,
-        providerCustomerId: null,
-        graceDays: ctx.env.GRACE_DAYS,
-      });
-
-      return reply.send({
-        verified: true,
-        active: true,
-        ...(await buildStatus(ctx, auth.userId)),
-      });
-    },
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+function credentialsOf(ctx: AppContext): TbankCredentials | null {
+  const terminalKey = ctx.env.TINKOFF_TERMINAL_KEY;
+  const password = ctx.env.TINKOFF_PASSWORD;
+  if (!terminalKey || !password) return null;
+  return { terminalKey, password };
+}
 
 async function buildStatus(ctx: AppContext, userId: string): Promise<BillingStatus> {
   await ensureSubscription(ctx.db, userId);
@@ -299,7 +256,6 @@ async function buildStatus(ctx: AppContext, userId: string): Promise<BillingStat
  */
 async function recordEvent(
   ctx: AppContext,
-  provider: 'yookassa' | 'google_play',
   eventId: string,
   eventType: string,
   userId: string | null,
@@ -307,21 +263,32 @@ async function recordEvent(
 ): Promise<boolean> {
   const result = await ctx.db.query(
     `INSERT INTO billing_events (provider, event_id, user_id, event_type, payload)
-     VALUES ($1, $2, $3, $4, $5)
+     VALUES ('tbank', $1, $2, $3, $4)
      ON CONFLICT (provider, event_id) DO NOTHING`,
-    [provider, eventId, userId, eventType, JSON.stringify(payload ?? {})],
+    [eventId, userId, eventType, JSON.stringify(payload ?? {})],
   );
   return (result.rowCount ?? 0) > 0;
 }
 
-/** Годовой тариф опознаётся по идентификатору товара в Play Console. */
-function planOfProduct(productId: string): 'monthly' | 'yearly' {
-  return /year|annual|god|year(ly)?/i.test(productId) ? 'yearly' : 'monthly';
-}
+/** Кто начинал этот платёж и за какой тариф. Пишется до оплаты, читается после. */
+async function findInit(
+  ctx: AppContext,
+  paymentId: string,
+): Promise<{ userId: string; plan: 'monthly' | 'yearly' } | null> {
+  const result = await ctx.db.query(
+    `SELECT user_id, payload FROM billing_events
+      WHERE provider = 'tbank' AND event_id = $1`,
+    [`init:${paymentId}`],
+  );
+  const row = result.rows[0] as { user_id?: string | null; payload?: unknown } | undefined;
+  if (row === undefined || !row.user_id) return null;
 
-function headerOf(request: FastifyRequest, name: string): string | undefined {
-  const value = request.headers[name];
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value[0];
-  return undefined;
+  const payload =
+    typeof row.payload === 'string'
+      ? (JSON.parse(row.payload) as Record<string, unknown>)
+      : ((row.payload ?? {}) as Record<string, unknown>);
+  const plan = payload['plan'];
+  if (plan !== 'monthly' && plan !== 'yearly') return null;
+
+  return { userId: row.user_id, plan };
 }

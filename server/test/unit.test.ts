@@ -1,17 +1,18 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
 import { normalizeEtag, safeEqual, randomSlug } from '../src/lib/crypto.ts';
 import { signJwt, verifyJwt } from '../src/lib/jwt.ts';
 import { escapeHtml, sanitizeHtml } from '../src/lib/sanitizeHtml.ts';
-import { parseSubscriptionV2 } from '../src/services/googlePlay.ts';
 import {
-  ipInCidr,
+  amountRub,
+  computeToken,
+  newOrderId,
   parseNotification,
   periodEnd,
   verifyNotification,
-} from '../src/services/yookassa.ts';
+} from '../src/services/tbank.ts';
 import { compareVersions, selectPlatforms } from '../src/routes/updates.ts';
 import { renderPublicPage } from '../src/views/publicPage.ts';
 
@@ -220,182 +221,121 @@ describe('публичная страница (SCREENS §10b `4j`)', () => {
   });
 });
 
-describe('ЮKassa', () => {
-  const body = Buffer.from(JSON.stringify({ event: 'payment.succeeded' }));
+describe('Т-Касса', () => {
+  const PASSWORD = 'пароль-терминала';
 
-  it('принимает верную подпись в hex и base64', () => {
-    const secret = 'webhook-секрет';
-    for (const encoding of ['hex', 'base64'] as const) {
-      const signature = createHmac('sha256', secret).update(body).digest(encoding);
-      const result = verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '1.2.3.4',
-        secret,
-        allowedCidrs: [],
-      });
-      expect(result.ok, encoding).toBe(true);
-    }
+  const body = (): Record<string, unknown> => ({
+    TerminalKey: 'TERM0001',
+    OrderId: 'order-1',
+    Success: true,
+    Status: 'CONFIRMED',
+    PaymentId: 700_001,
+    Amount: 29900,
   });
 
-  it('отвергает подделанную подпись', () => {
+  it('подпись считается по значениям параметров с паролем, а не по телу', () => {
+    // Контрольный пример протокола: значения по алфавиту ключей + пароль.
+    const params = { TerminalKey: 'T', OrderId: 'o', Amount: 100 };
+    const expected = createHash('sha256')
+      .update(['100', 'o', PASSWORD, 'T'].join(''), 'utf8')
+      .digest('hex');
+    expect(computeToken(params, PASSWORD)).toBe(expected);
+  });
+
+  it('Token, Receipt и DATA в подпись не входят', () => {
+    const base = body();
+    const withExtras = { ...base, Token: 'что угодно', Receipt: { Items: [] }, DATA: { a: 1 } };
+    expect(computeToken(withExtras, PASSWORD)).toBe(computeToken(base, PASSWORD));
+  });
+
+  it('верная подпись принимается', () => {
+    const params = body();
     const result = verifyNotification({
-      rawBody: body,
-      signatureHeader: 'deadbeef',
-      remoteAddress: '1.2.3.4',
-      secret: 'webhook-секрет',
-      allowedCidrs: [],
+      body: { ...params, Token: computeToken(params, PASSWORD) },
+      credentials: { terminalKey: 'TERM0001', password: PASSWORD },
     });
-    expect(result).toEqual({ ok: false, reason: 'bad_signature' });
+    expect(result.ok).toBe(true);
   });
 
-  it('отвергает подпись, посчитанную по другому телу', () => {
-    const secret = 'webhook-секрет';
-    const signature = createHmac('sha256', secret).update(Buffer.from('{}')).digest('hex');
+  it('подделанная подпись отвергается', () => {
+    const params = body();
     const result = verifyNotification({
-      rawBody: body,
-      signatureHeader: signature,
-      remoteAddress: '1.2.3.4',
-      secret,
-      allowedCidrs: [],
+      body: { ...params, Token: 'a'.repeat(64) },
+      credentials: { terminalKey: 'TERM0001', password: PASSWORD },
     });
-    expect(result.ok).toBe(false);
+    expect(result).toEqual({ ok: false, reason: 'bad_token' });
   });
 
-  it('без настроек не пропускает ничего', () => {
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: undefined,
-        remoteAddress: '1.2.3.4',
-        secret: undefined,
-        allowedCidrs: [],
-      }),
-    ).toEqual({ ok: false, reason: 'not_configured' });
-  });
-
-  /**
-   * Регрессия: список сетей — не аутентификация. Адрес приходит из
-   * X-Forwarded-For и подделывается тривиально, поэтому сам по себе он не
-   * пропускает уведомление ни при каких условиях.
-   */
-  it('один лишь список сетей не подтверждает уведомление', () => {
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: undefined,
-        remoteAddress: '185.71.76.5',
-        secret: undefined,
-        allowedCidrs: ['185.71.76.0/27'],
-      }),
-    ).toEqual({ ok: false, reason: 'not_configured' });
-  });
-
-  it('сети сужают проверку поверх подписи, но не заменяют её', () => {
-    const secret = 'webhook-секрет';
-    const signature = createHmac('sha256', secret).update(body).digest('hex');
-    const allowedCidrs = ['185.71.76.0/27'];
-
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '185.71.76.5',
-        secret,
-        allowedCidrs,
-      }),
-    ).toEqual({ ok: true, via: 'hmac+cidr' });
-
-    // Верная подпись, но чужая сеть — отказ.
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '8.8.8.8',
-        secret,
-        allowedCidrs,
-      }),
-    ).toEqual({ ok: false, reason: 'ip_not_allowed' });
-  });
-
-  it('фильтр по сетям работает', () => {
-    expect(ipInCidr('185.71.76.20', '185.71.76.0/27')).toBe(true);
-    expect(ipInCidr('185.71.77.20', '185.71.76.0/27')).toBe(false);
-    expect(ipInCidr('77.75.153.10', '77.75.153.0/25')).toBe(true);
-    expect(ipInCidr('10.0.0.1', '0.0.0.0/0')).toBe(true);
-  });
-
-  it('разбирает уведомление с metadata', () => {
-    const parsed = parseNotification({
-      event: 'payment.succeeded',
-      object: {
-        id: 'pay-1',
-        status: 'succeeded',
-        paid: true,
-        amount: { value: '199.00', currency: 'RUB' },
-        metadata: { user_id: 'u-1', plan: 'monthly' },
-        payment_method: { id: 'pm-1', saved: true },
-      },
+  it('чужой терминал отвергается раньше проверки подписи', () => {
+    const params = { ...body(), TerminalKey: 'ЧУЖОЙ' };
+    const result = verifyNotification({
+      body: { ...params, Token: computeToken(params, PASSWORD) },
+      credentials: { terminalKey: 'TERM0001', password: PASSWORD },
     });
+    expect(result).toEqual({ ok: false, reason: 'foreign_terminal' });
+  });
+
+  it('без ключей терминала уведомление не принимается вовсе', () => {
+    const params = body();
+    const result = verifyNotification({
+      body: { ...params, Token: computeToken(params, PASSWORD) },
+      credentials: null,
+    });
+    expect(result).toEqual({ ok: false, reason: 'not_configured' });
+  });
+
+  it('уведомление без Token отвергается', () => {
+    const result = verifyNotification({
+      body: body(),
+      credentials: { terminalKey: 'TERM0001', password: PASSWORD },
+    });
+    expect(result).toEqual({ ok: false, reason: 'no_token' });
+  });
+
+  it('разбирает уведомление и переводит копейки в рубли', () => {
+    const parsed = parseNotification({ ...body(), RebillId: 42 });
     expect(parsed).toMatchObject({
-      event: 'payment.succeeded',
-      objectId: 'pay-1',
-      userId: 'u-1',
-      plan: 'monthly',
+      paymentId: '700001',
+      orderId: 'order-1',
+      status: 'CONFIRMED',
+      success: true,
       paid: true,
-      amountRub: 199,
-      paymentMethodId: 'pm-1',
+      refunded: false,
+      amountRub: 299,
+      rebillId: '42',
     });
   });
 
-  it('мусор не разбирается', () => {
-    expect(parseNotification(null)).toBeNull();
-    expect(parseNotification({ event: 1 })).toBeNull();
-    expect(parseNotification({ event: 'x' })).toBeNull();
+  it('оплаченным считается только CONFIRMED', () => {
+    expect(parseNotification({ ...body(), Status: 'AUTHORIZED' })?.paid).toBe(false);
+    expect(parseNotification({ ...body(), Status: 'REJECTED' })?.paid).toBe(false);
+    expect(parseNotification({ ...body(), Status: 'REFUNDED' })?.refunded).toBe(true);
   });
 
-  it('период считается по тарифу', () => {
-    const start = new Date('2026-01-31T00:00:00Z');
+  it('битое уведомление не разбирается', () => {
+    expect(parseNotification(null)).toBeNull();
+    expect(parseNotification({ Status: 'CONFIRMED' })).toBeNull();
+    expect(parseNotification({ PaymentId: 1 })).toBeNull();
+  });
+
+  it('номер заказа не содержит ни пользователя, ни тарифа', () => {
+    const orderId = newOrderId();
+    expect(orderId).toMatch(/^z[0-9a-f]{24}$/);
+    expect(newOrderId()).not.toBe(orderId);
+  });
+
+  it('считает сумму по тарифу', () => {
+    const prices = { monthlyRub: 299, yearlyMonthlyRub: 224 };
+    expect(amountRub('monthly', prices)).toBe(299);
+    expect(amountRub('yearly', prices)).toBe(2688);
+  });
+
+  it('считает конец периода', () => {
+    const start = new Date('2026-08-18T10:00:00Z');
     expect(periodEnd('yearly', start).getUTCFullYear()).toBe(2027);
     expect(periodEnd('monthly', new Date('2026-01-15T00:00:00Z')).toISOString()).toBe(
       '2026-02-15T00:00:00.000Z',
     );
-  });
-});
-
-describe('Google Play', () => {
-  it('разбирает активную подписку', () => {
-    const purchase = parseSubscriptionV2({
-      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
-      startTime: '2026-08-01T00:00:00Z',
-      latestOrderId: 'GPA.1',
-      lineItems: [
-        {
-          productId: 'zapiski_plus_monthly',
-          expiryTime: new Date(Date.now() + 86_400_000).toISOString(),
-          autoRenewingPlan: { autoRenewEnabled: true },
-        },
-      ],
-    });
-    expect(purchase.active).toBe(true);
-    expect(purchase.autoRenewing).toBe(true);
-    expect(purchase.orderId).toBe('GPA.1');
-  });
-
-  it('истёкшая подписка не считается активной', () => {
-    const purchase = parseSubscriptionV2({
-      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
-      lineItems: [
-        { productId: 'x', expiryTime: '2020-01-01T00:00:00Z', autoRenewingPlan: {} },
-      ],
-    });
-    expect(purchase.active).toBe(false);
-  });
-
-  it('битый ответ отвергается, а не считается покупкой', () => {
-    expect(() => parseSubscriptionV2(null)).toThrow();
-    expect(() => parseSubscriptionV2({ lineItems: [] })).toThrow();
-    expect(() => parseSubscriptionV2({ lineItems: [{ productId: 'x' }] })).toThrow();
   });
 });
 

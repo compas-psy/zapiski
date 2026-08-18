@@ -10,6 +10,7 @@
  *    закрывается в один тап и возвращает ровно туда, откуда пришли.
  */
 import { useState, type ReactNode } from 'react';
+import { trialDaysFor } from '@zapiski/core';
 import { Button, IconButton, IconCheck, IconClose } from '@zapiski/ui';
 import { useApp, useStrings } from '../state/context.js';
 
@@ -98,7 +99,7 @@ export function PaywallScreen(): ReactNode {
         </table>
 
         <Button fullWidth onClick={() => app.beginSignIn({ name: 'paywall' })}>
-          {copy.trial}
+          {copy.trial(trialDaysFor(Date.now()))}
         </Button>
         <p className="za-muted">{copy.honest}</p>
         <p className="za-tertiary-mono">{copy.bundle}</p>
