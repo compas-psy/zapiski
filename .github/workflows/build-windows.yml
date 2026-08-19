@@ -97,6 +97,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Самопроверка упаковщика — здесь, на Linux, а не на дорогом раннере
+      # Windows. Ловит ровно то, что уже ломалось: версию пакета не по правилам
+      # Microsoft, незаполненную подстановку в манифесте и потерянный каталог
+      # сборки. Всё это иначе всплывает в конце сборки, когда ждать её заново
+      # стоит сорок минут.
+      - name: Самопроверка упаковщика MSIX
+        run: node apps/desktop/msix/build-msix.mjs --self-test
+
       - id: check
         env:
           BEFORE: ${{ github.event.before }}
@@ -421,10 +429,14 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          node apps/desktop/msix/build-msix.mjs
-          out="apps/desktop/src-tauri/target/release/bundle/msix"
-          file="$(ls -1 "${out}"/*.msix 2>/dev/null | head -1 || true)"
-          if [ -z "${file}" ]; then
+          # Путь к пакету берётся ИЗ ВЫВОДА скрипта, а не угадывается шаблоном.
+          # Каталог сборки зависит от триплета: наш `tauri build` идёт под
+          # x86_64-pc-windows-msvc, и release лежит НЕ в target/release. Пока
+          # путь был зашит здесь, шаг искал пакет там, где его быть не могло.
+          node apps/desktop/msix/build-msix.mjs | tee msix-build.log
+          file="$(sed -n 's/^MSIX_FILE=//p' msix-build.log | tail -1)"
+          rm -f msix-build.log
+          if [ -z "${file}" ] || [ ! -f "${file}" ]; then
             echo '::warning::MSIX не собрался — в магазин загружать нечего, установщик не пострадал'
             exit 1
           fi
@@ -440,7 +452,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: zapiski-msix
-          path: apps/desktop/src-tauri/target/release/bundle/msix/*.msix
+          path: ${{ steps.msix.outputs.msix }}
           if-no-files-found: error
           retention-days: 14
 

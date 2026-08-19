@@ -155,6 +155,11 @@ step 'Хром окна: одна строка заголовка' node scripts/
 step 'Права на управление окном' node scripts/check-window-permissions.mjs
 step 'Импорты Kotlin' pnpm --filter @zapiski/mobile android:kotlin:check
 step 'Самопроверка оверлея Android' pnpm --filter @zapiski/mobile android:overlay:selftest
+# Упаковщик MSIX собирается только на Windows, но ошибиться в нём можно и
+# отсюда: версия не по правилам Microsoft, незаполненная подстановка в
+# манифесте, потерянный каталог сборки. Самопроверка ловит всё это без
+# Windows — и без сорока минут ожидания чужого раннера.
+step 'Самопроверка упаковщика MSIX' node apps/desktop/msix/build-msix.mjs --self-test
 # Отладочный ключ подписи должен раскодироваться и содержать нужный алиас: без
 # него debug-сборки снова получат случайную подпись, и каждая следующая
 # перестанет ставиться поверх предыдущей («Приложение не установлено»).
