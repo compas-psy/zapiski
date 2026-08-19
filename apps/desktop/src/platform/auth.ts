@@ -35,7 +35,18 @@ export function onAuthCallback(handler: (callback: AuthCallback) => void): () =>
   void listen<string>(EVENT_AUTH_CALLBACK, (event) => {
     if (disposed) return;
     const callback = parseAuthCallback(event.payload);
-    if (callback !== null) handler(callback);
+    if (callback === null) return;
+    /*
+     * Забрать ссылку из очереди, раз уж она дошла событием.
+     *
+     * Rust кладёт её И в очередь, И в событие — очередь нужна на случай, когда
+     * подписчика ещё нет. Если её не опустошить, тот же токен приедет ещё раз
+     * при следующем запуске: `auth_take` вернёт его на старте, приложение
+     * попробует разменять уже использованный и покажет «Ссылка больше не
+     * действует» человеку, который только что успешно вошёл.
+     */
+    void invoke(COMMAND_TAKE).catch(() => undefined);
+    handler(callback);
   }).then((stop) => {
     if (disposed) stop();
     else unlisten = stop;

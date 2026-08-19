@@ -551,6 +551,34 @@ jobs:
           done
           echo 'Код API доставлен в /var/www/zapiski.'
 
+      # ── Журнал ДО перезапуска ─────────────────────────────────────────────
+      #
+      # `docker compose logs` показывает логи ТЕКУЩЕГО контейнера, а деплой его
+      # пересоздаёт — вместе со всей историей. Шаг диагностики, стоящий после
+      # выкладки, поэтому честно печатал «переходов по ссылке в логах нет» даже
+      # когда переходы были: он смотрел в контейнер, который живёт двадцать
+      # секунд. Всё, что нужно знать о прошлом, читается здесь — до подъёма.
+      - name: Что было до выкладки
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'bash -s' <<'REMOTE'
+          set -uo pipefail
+          dc() { docker compose --project-name zapiski --file /var/www/zapiski/deploy/docker-compose.yml "$@"; }
+
+          echo "── вход по ссылке: что записал API за последние сутки ──"
+          dc logs --since 24h api 2>/dev/null \
+            | grep -E 'magic_link_issued|magic_link_exchanged|magic_link_send_failed|mail_relay' \
+            | tail -20 \
+            || echo "записей о входе по ссылке нет"
+
+          echo "── переходы по ссылке из письма (код ответа) ──"
+          dc logs --since 24h api 2>/dev/null | grep 'magic-link/callback' | tail -10 \
+            || echo "переходов в логах нет"
+          REMOTE
+
       - name: Поднять API-стек на сервере
         env:
           # Секреты приходят из GitHub Secrets, уезжают в окружение удалённой

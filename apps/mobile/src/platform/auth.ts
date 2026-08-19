@@ -30,7 +30,13 @@ export function onAuthCallback(handler: (callback: AuthCallback) => void): () =>
   void on<string>(EVENTS.authCallback, (url) => {
     if (disposed) return;
     const callback = parseAuthCallback(url);
-    if (callback !== null) handler(callback);
+    if (callback === null) return;
+    /* Та же очередь, что и у холодного старта: ссылка кладётся и туда, и в
+       событие. Не опустошить — и тот же токен приедет при следующем запуске,
+       где размен уже невозможен, а человек увидит «Ссылка больше не
+       действует» сразу после успешного входа. */
+    void call<string[]>(COMMANDS.authTake).catch(() => undefined);
+    handler(callback);
   }).then((stop) => {
     if (disposed) stop();
     else unlisten = stop;

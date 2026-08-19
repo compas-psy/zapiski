@@ -189,6 +189,21 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     );
 
     const url = buildMagicLinkUrl(ctx, issued.token, deviceId);
+
+    /*
+     * Платформа — в журнал, и вот почему это не лишняя строка.
+     *
+     * От неё зависит ВСЁ дальнейшее: куда сервер вернёт человека после
+     * перехода по ссылке — в приложение по своей схеме или на сайт. Когда
+     * заказчик говорит «попал на сайт, а не в приложение», первый вопрос
+     * ровно один: что было записано здесь. Ответить на него по коду нельзя —
+     * значение приходит от клиента, и старая сборка может не прислать его
+     * вовсе. Ни почты, ни токена в строке нет: только платформа.
+     */
+    request.log.info(
+      { event: 'magic_link_issued', platform: platform ?? 'не указана' },
+      'ссылка для входа отправлена',
+    );
     try {
       await ctx.mailer.sendMagicLink({
         to: email,
@@ -264,6 +279,19 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       ctx.now(),
     );
     const session = await issueSession(ctx, user.id, deviceKey, result.platform);
+
+    /* Вторая половина той же записи: с чем платформа пришла на обмен и куда
+       человека увели. По паре строк видно, где рвётся путь. */
+    const target = authReturnUrl(ctx.env, result.platform);
+    request.log.info(
+      {
+        event: 'magic_link_exchanged',
+        platform: result.platform ?? 'не указана',
+        target: target !== undefined && isAppScheme(target) ? 'приложение' : 'сайт',
+      },
+      'ссылка из письма разменяна',
+    );
+
     return respondWithSession(ctx, reply, session, parsed.data.format, result.platform);
   }));
 
