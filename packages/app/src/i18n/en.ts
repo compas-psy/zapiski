@@ -741,9 +741,9 @@ export const en: AppCatalog = {
 
   paywall: {
     subtitle: 'You pay for the cloud and the servers. Everything else is free forever',
-    price: '199 ₽/month or 149 ₽ when paid yearly',
-    monthly: 'Monthly · 199 ₽',
-    yearly: 'Yearly · 149 ₽/month',
+    price: '299 ₽/month or 224 ₽ when paid yearly',
+    monthly: 'Monthly · 299 ₽',
+    yearly: 'Yearly · 224 ₽/month',
     yearlyNote: '25% cheaper',
     tableLabel: 'What is included',
     columns: { feature: 'Feature', free: 'Free', plus: 'ZAPISKI+' },
@@ -764,7 +764,7 @@ export const en: AppCatalog = {
     },
     yes: 'yes',
     no: 'no',
-    trial: 'Try it for 14 days',
+    trial: (days: number): string => `Try it for ${days} ${days === 1 ? 'day' : 'days'}`,
     pay: 'Subscribe',
     honest: 'Cancel in one tap. No timers and no “today only” discounts',
     bundle: 'Together with the practice app — +100 ₽ on top of its plan',

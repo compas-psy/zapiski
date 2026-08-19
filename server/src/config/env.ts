@@ -155,8 +155,8 @@ const schema = z.object({
   TRIAL_DAYS: int(14),
   /** Льготный период после неудачного продления. */
   GRACE_DAYS: int(7),
-  PRICE_MONTHLY_RUB: int(199),
-  PRICE_YEARLY_MONTHLY_RUB: int(149),
+  PRICE_MONTHLY_RUB: int(299),
+  PRICE_YEARLY_MONTHLY_RUB: int(224),
 
   /*
    * Т-Банк (эквайринг). Имена переменных повторяют имена секретов, которые

@@ -1523,7 +1523,9 @@ function PlusSection(): ReactNode {
   return (
     <>
       <p className="za-muted">{strings.paywall.subtitle}</p>
-      <Button onClick={() => app.navigate({ name: 'paywall' })}>{strings.paywall.trial}</Button>
+      <Button onClick={() => app.navigate({ name: 'paywall' })}>
+        {strings.paywall.trial(trialDaysFor(Date.now()))}
+      </Button>
     </>
   );
 }
