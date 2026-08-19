@@ -59,6 +59,7 @@ pub fn run() {
             biometrics::biometrics_remove,
             print::pdf_render,
             files::save_file,
+            files::share_stage,
             updater::updater_check,
             updater::updater_download_install,
             widgets::widgets_publish,

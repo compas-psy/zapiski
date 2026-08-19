@@ -16,11 +16,12 @@
 import type {
   SharedPayload,
   ShareOutcome,
+  ShareOutFile,
   ShareOutProvider,
   ShareTargetProvider,
 } from '@zapiski/core';
 
-import { COMMANDS, EVENTS, call, on } from './ipc';
+import { COMMANDS, EVENTS, call, callRaw, encodeHeaderValue, on } from './ipc';
 
 /** То, что присылает Rust. `bytes` — обычный массив чисел из JSON. */
 interface SharedPayloadDto {
@@ -76,12 +77,40 @@ export function createShareTarget(): ShareTargetProvider {
  * чужое, здесь отдаёт своё. Заказчик просил кнопку в шапке заметки — она
  * появляется ровно там, где этот порт есть, то есть только на Android.
  *
- * Наружу уходит markdown как есть. Telegram разбирает разметку сам, и любая
- * наша «подготовка» текста ломала бы её принимающей стороне.
+ * ── Почему картинки едут файлами, а не путями ───────────────────────────────
+ *
+ * Заметка хранится либо в выбранной человеком папке (`content://` SAF), либо в
+ * приватном каталоге приложения. Ни то, ни другое получателю недоступно:
+ * Telegram не имеет права читать наше хранилище. Поэтому байты каждой картинки
+ * едут сюда, ложатся во временный файл в кэше и отдаются наружу как
+ * `content://…/share/…` через наш FileProvider — с правом чтения ровно на этот
+ * файл и ровно на время отправки.
+ *
+ * Байты идут сырым телом запроса, по одному файлу за раз: снимок с телефона
+ * весит мегабайты, и JSON-массив чисел утроил бы и время, и пиковую память
+ * (та же причина, что у `saveFile`).
  */
 export function createShareOut(): ShareOutProvider {
   return {
-    async text(payload: { title?: string; text: string }): Promise<ShareOutcome> {
+    async share(payload: {
+      title?: string;
+      text: string;
+      files?: readonly ShareOutFile[];
+    }): Promise<ShareOutcome> {
+      /*
+        Картинки: не сумели положить в кэш — отправляем заметку без них.
+        Отменить отправку из-за вложения значило бы потерять заметку ради
+        картинки, а человек нажимал «Поделиться» ради заметки.
+      */
+      const staged: string[] = [];
+      const mimes: string[] = [];
+      for (const file of payload.files ?? []) {
+        const path = await stage(file).catch(() => null);
+        if (path === null) continue;
+        staged.push(path);
+        mimes.push(file.mime);
+      }
+
       /*
         Java отвечает словом: `shared`, `copied` или `error: …`. Пересказывать
         его своими словами нельзя — именно так и появился тост «ни одно
@@ -92,6 +121,8 @@ export function createShareOut(): ShareOutProvider {
       const answer = await call<string>(COMMANDS.shareText, {
         title: payload.title ?? '',
         body: payload.text,
+        files: staged,
+        mimes,
       }).catch((error: unknown) => `error: ${error instanceof Error ? error.message : String(error)}`);
 
       if (answer === 'shared') return { kind: 'shared' };
@@ -100,4 +131,11 @@ export function createShareOut(): ShareOutProvider {
       return { kind: 'failed', reason };
     },
   };
+}
+
+/** Положить байты во временный файл и получить его путь. */
+function stage(file: ShareOutFile): Promise<string> {
+  return callRaw<string>(COMMANDS.shareStage, file.bytes, {
+    'x-file-name': encodeHeaderValue(file.name),
+  });
 }

@@ -28,7 +28,8 @@ export function memoryPreferences(seed: Record<string, unknown> = {}): Preferenc
 }
 
 export interface TestHostOptions {
-  files?: Record<string, string>;
+  /** Стартовые файлы: текст заметки строкой, вложение — байтами. */
+  files?: Record<string, string | Uint8Array>;
   platform?: Partial<PlatformCapabilities>;
   prefs?: Record<string, unknown>;
   /**

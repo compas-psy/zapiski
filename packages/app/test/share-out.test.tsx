@@ -26,6 +26,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ThemeProvider, ToastProvider } from '@zapiski/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { ShareOutFile } from '@zapiski/core';
+
 import { AppProvider } from '../src/state/context.js';
 import { AppController } from '../src/state/store.js';
 import { NoteScreen } from '../src/screens/NoteScreen.js';
@@ -39,14 +41,25 @@ afterEach(cleanup);
 const NOTE =
   '# Планы\n\n**жирный** пункт\n\n> цитата\n\n![|258](Images/a.png)\n\n- первый\n- второй\n\n[Мой сайт](https://ilyamartynov.ru)\n';
 
-type Shared = { title?: string; text: string };
+type Shared = { title?: string; text: string; files?: readonly ShareOutFile[] };
 
-async function boot(options: { android: boolean; accepts?: boolean; markdown?: boolean }): Promise<{
+async function boot(options: {
+  android: boolean;
+  accepts?: boolean;
+  markdown?: boolean;
+  /** Картинки в хранилище: путь → размер в байтах. */
+  images?: Record<string, number>;
+}): Promise<{
   app: AppController;
   shared: Shared[];
 }> {
   const host = createTestHost({
-    files: { 'Планы.md': NOTE },
+    files: {
+      'Планы.md': NOTE,
+      ...Object.fromEntries(
+        Object.entries(options.images ?? {}).map(([path, size]) => [path, new Uint8Array(size)]),
+      ),
+    },
     /* Настройка приходит из сохранённых — так она и живёт: человек выбрал
        режим однажды, а отправляет потом. */
     prefs: { onboarded: true, ...(options.markdown === false ? { 'share.markdown': false } : {}) },
@@ -55,7 +68,7 @@ async function boot(options: { android: boolean; accepts?: boolean; markdown?: b
   if (options.android) {
     (host.platform as { kind: string }).kind = 'android';
     (host.platform as unknown as { shareOut: unknown }).shareOut = {
-      text: vi.fn(async (payload: Shared) => {
+      share: vi.fn(async (payload: Shared) => {
         shared.push(payload);
         return options.accepts === false
           ? { kind: 'failed' as const, reason: 'ActivityNotFoundException' }
@@ -138,11 +151,53 @@ describe('кнопка «Поделиться»', () => {
     app.dispose();
   });
 
+  /**
+   * Картинка заметки уезжает файлом.
+   *
+   * На снимке заказчика фотография не уехала вовсе — в Telegram приехала
+   * строка `![|258](Images/…)`. Хранилище получателю недоступно, поэтому
+   * картинка идёт байтами: платформа положит их туда, откуда он прочитает.
+   */
+  it('фотография заметки уходит вложением, а не путём', async () => {
+    const { app, shared } = await boot({ android: true, images: { 'Images/a.png': 4096 } });
+
+    await screen.findByRole('button', { name: ru.note.share });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: ru.note.share }).isConnected).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: ru.note.share }));
+
+    await waitFor(() => expect(shared).toHaveLength(1));
+    const files = (shared[0] as Shared).files ?? [];
+    expect(files, 'картинка заметки осталась дома').toHaveLength(1);
+    expect(files[0]?.name, 'получателю нужен файл, а не путь в нашем хранилище').toBe('a.png');
+    expect(files[0]?.mime).toBe('image/png');
+    expect(files[0]?.bytes.byteLength).toBe(4096);
+    app.dispose();
+  });
+
+  it('нечитаемая картинка не отменяет отправку заметки', async () => {
+    /* Файла в хранилище нет: строка `![|258](Images/a.png)` в заметке есть, а
+       байтов за ней — нет. Заметка обязана уехать всё равно. */
+    const { app, shared } = await boot({ android: true });
+
+    await screen.findByRole('button', { name: ru.note.share });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: ru.note.share }).isConnected).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: ru.note.share }));
+
+    await waitFor(() => expect(shared).toHaveLength(1));
+    expect((shared[0] as Shared).files ?? []).toEqual([]);
+    expect((shared[0] as Shared).text).toContain('**Планы**');
+    app.dispose();
+  });
+
   it('окна не случилось, но текст в буфере — говорим именно это', async () => {
     const host = createTestHost({ files: { 'Планы.md': NOTE }, prefs: { onboarded: true } });
     (host.platform as { kind: string }).kind = 'android';
     (host.platform as unknown as { shareOut: unknown }).shareOut = {
-      text: async () => ({ kind: 'copied' as const }),
+      share: async () => ({ kind: 'copied' as const }),
     };
     const app = new AppController(host);
     await app.boot();

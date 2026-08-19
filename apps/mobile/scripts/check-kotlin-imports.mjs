@@ -44,6 +44,10 @@ const IMPLICIT = new Set([
   'R',
   /* kotlin.text.Charsets — часть автоматически подключённого kotlin.*. */
   'Charsets',
+  /* `kotlin.collections.ArrayList` — псевдоним java.util.ArrayList, входит в
+     автоматические импорты Kotlin. Нужен там, где Android требует именно
+     `ArrayList` (например `putParcelableArrayListExtra`). */
+  'ArrayList',
 ]);
 
 /**

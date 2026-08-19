@@ -620,21 +620,36 @@ mod api {
         saf_action("safRename", tree, from, Some(to))
     }
 
-    /// Отдать текст системному «Поделиться».
+    /// Отдать заметку системному «Поделиться».
     ///
     /// Возвращает то, что ответила Java: `shared`, `copied` либо строку с
     /// ошибкой. Булев ответ здесь был ошибкой: любая беда превращалась в
     /// `false`, а приложение объявляло её «принять некому» — и человек искал
     /// причину не там.
-    pub fn share_text(title: &str, body: &str) -> Result<String, String> {
+    ///
+    /// `files` и `mimes` — пути временных копий вложений и их типы, по строке
+    /// на файл, разделённые переводом строки. Пустая строка — вложений нет.
+    pub fn share_text(
+        title: &str,
+        body: &str,
+        files: &str,
+        mimes: &str,
+    ) -> Result<String, String> {
         with_env(|env| {
             let title = env.new_string(title)?;
             let body = env.new_string(body)?;
+            let files = env.new_string(files)?;
+            let mimes = env.new_string(mimes)?;
             let value = call_bridge(
                 env,
                 "shareText",
-                "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
-                &[JValue::Object(&title), JValue::Object(&body)],
+                "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;",
+                &[
+                    JValue::Object(&title),
+                    JValue::Object(&body),
+                    JValue::Object(&files),
+                    JValue::Object(&mimes),
+                ],
             )?
             .l()?;
             let text: String = env.get_string(&JString::from(value))?.into();
@@ -919,7 +934,12 @@ mod api {
     pub fn saf_rename(_tree: &str, _from: &str, _to: &str) -> Result<(), String> {
         only_android("папка через SAF")
     }
-    pub fn share_text(_title: &str, _body: &str) -> Result<String, String> {
+    pub fn share_text(
+        _title: &str,
+        _body: &str,
+        _files: &str,
+        _mimes: &str,
+    ) -> Result<String, String> {
         Ok(String::from(
             "error: системного «Поделиться» нет на этой платформе",
         ))

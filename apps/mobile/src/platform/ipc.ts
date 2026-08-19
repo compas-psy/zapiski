@@ -29,6 +29,8 @@ export const COMMANDS = {
   secureFlag: 'secure_flag',
   /* Системное «Поделиться» — `platform.rs::share_text`. */
   shareText: 'share_text',
+  /* Байты вложения во временный файл — `files.rs::share_stage`. */
+  shareStage: 'share_stage',
   hapticImpact: 'haptic_impact',
   biometricsAvailable: 'biometrics_available',
   biometricsEnroll: 'biometrics_enroll',

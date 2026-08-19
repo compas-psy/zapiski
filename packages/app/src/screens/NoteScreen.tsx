@@ -15,17 +15,20 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  baseName,
   countWords,
   extractTags,
   isEncryptedPath,
   isImageAttachment,
   isMarkdownFile,
   joinTitle,
+  noteImagePaths,
   splitTitle,
   stemOf,
   toMessengerText,
   type Note,
   type NoteMeta,
+  type ShareOutFile,
   type VaultPath,
 } from '@zapiski/core';
 import {
@@ -69,7 +72,7 @@ import { LockScreen } from './LockScreen.js';
 import { InfoPanel } from './InfoPanel.js';
 import { NoteMenu } from './NoteMenu.js';
 import { formatBytes, relativeTime } from '../lib/format.js';
-import { AttachmentUrls } from '../lib/attachment-urls.js';
+import { AttachmentUrls, attachmentMime } from '../lib/attachment-urls.js';
 import { ImageViewer } from '../components/ImageViewer.js';
 import { FormatPanelSlot } from '../components/FormatPanelSlot.js';
 import { imageWidthOf, setImageWidth } from '@zapiski/editor';
@@ -87,6 +90,16 @@ const ACCEPT: Record<'image' | 'file' | 'audio', string> = {
   audio: 'audio/*',
   file: '*/*',
 };
+
+/**
+ * Сколько байтов картинок уезжает с одной заметкой.
+ *
+ * На время отправки копия каждой ложится в кэш приложения — иначе получатель
+ * не сможет её прочитать (у него нет доступа к нашему хранилищу). Двадцать
+ * пять мегабайт — это уже полтора десятка снимков с телефона; дальше
+ * начинается не «поделиться заметкой», а выгрузка альбома.
+ */
+const SHARE_BYTES_LIMIT = 25 * 1024 * 1024;
 
 export interface NoteScreenProps {
   path: VaultPath;
@@ -824,9 +837,10 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
     if (!provider) return;
     const shown = title === '' ? inheritedTitle : title;
     const outcome = await provider
-      .text({
+      .share({
         ...(shown === '' ? {} : { title: shown }),
         text: toMessengerText(joinTitle(shown, editorBody), { flavour: app.shareFlavour() }),
+        files: await shareFiles(),
       })
       .catch((error: unknown) => ({
         kind: 'failed' as const,
@@ -839,6 +853,38 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       return;
     }
     app.toast({ message: strings.note.shareFailed(outcome.reason) });
+  }
+
+  /**
+   * Картинки заметки — файлами, а не строкой `![](Images/…)`.
+   *
+   * На снимке заказчика фотография из заметки не уехала вовсе: в Telegram
+   * приехал только её путь. Теперь она идёт вложением к тому же сообщению.
+   *
+   * Три ограничения, и каждое — про чужое устройство, а не про нашу
+   * аккуратность:
+   *
+   *  · счёт (`SHARE_IMAGE_LIMIT`) — заметка на сто картинок не превращается
+   *    в сто файлов в чужом чате;
+   *  · объём (`SHARE_BYTES_LIMIT`) — копия каждой картинки на время отправки
+   *    ложится в кэш, и заметка с десятком фотографий заняла бы там сотни
+   *    мегабайт;
+   *  · нечитаемое пропускается молча. Отказ отправить заметку из-за того, что
+   *    одна картинка не прочиталась, — это потеря заметки ради вложения.
+   */
+  async function shareFiles(): Promise<ShareOutFile[]> {
+    const storage = app.vaultRef?.storage;
+    if (!storage) return [];
+    const files: ShareOutFile[] = [];
+    let total = 0;
+    for (const src of noteImagePaths(joinTitle(title, editorBody))) {
+      const bytes = await storage.read(src as VaultPath).catch(() => null);
+      if (!bytes || bytes.byteLength === 0) continue;
+      if (total + bytes.byteLength > SHARE_BYTES_LIMIT) break;
+      total += bytes.byteLength;
+      files.push({ name: baseName(src), mime: attachmentMime(src), bytes });
+    }
+    return files;
   }
 
   /**

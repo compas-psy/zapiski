@@ -300,15 +300,35 @@ pub fn secure_flag(on: bool) -> Result<(), String> {
     crate::android::set_secure(on)
 }
 
-/// Отдать текст заметки системному «Поделиться» (Android).
+/// Отдать заметку системному «Поделиться» (Android).
 ///
-/// Возвращает `false`, когда принять текст оказалось некому: приложение тогда
-/// говорит об этом словами вместо того, чтобы оставить человека с молчащей
-/// кнопкой. Отмена в системном окне сюда не доходит вовсе — она случается
-/// после того, как окно уже открылось, и отказом не является.
+/// Возвращает слово Java: `shared`, `copied` или текст ошибки. Приложение
+/// обязано сказать человеку, что именно случилось, а не выдавать любую беду за
+/// «принять некому». Отмена в системном окне сюда не доходит вовсе — она
+/// случается после того, как окно уже открылось, и отказом не является.
+///
+/// `files` — пути временных копий вложений (см. `files::share_stage`), `mimes`
+/// — их типы, ровно по одному на файл. Через JNI они едут одной строкой каждый:
+/// массивы строк там стоят дороже, а перевод строки в имени невозможен — имена
+/// придумываем мы сами.
 #[tauri::command(async)]
-pub fn share_text(title: Option<String>, body: String) -> Result<String, String> {
-    crate::android::share_text(title.as_deref().unwrap_or(""), &body)
+pub fn share_text(
+    title: Option<String>,
+    body: String,
+    files: Option<Vec<String>>,
+    mimes: Option<Vec<String>>,
+) -> Result<String, String> {
+    let files = files.unwrap_or_default();
+    let mimes = mimes.unwrap_or_default();
+    if files.len() != mimes.len() {
+        return Err("на каждый файл нужен свой тип содержимого".to_owned());
+    }
+    crate::android::share_text(
+        title.as_deref().unwrap_or(""),
+        &body,
+        &files.join("\n"),
+        &mimes.join("\n"),
+    )
 }
 
 /// Хэптика (BEHAVIOR §0). Два значения силы, третьего в контракте нет.

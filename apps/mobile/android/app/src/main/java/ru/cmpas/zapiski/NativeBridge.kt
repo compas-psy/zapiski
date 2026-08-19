@@ -310,16 +310,27 @@ object NativeBridge {
     fun safRename(tree: String, from: String, to: String) = Saf.rename(requireContext(), tree, from, to)
 
     /**
-     * Отдать текст заметки системному «Поделиться».
+     * Отдать заметку системному «Поделиться».
      *
      * Возвращает `shared`, `copied` или строку с текстом ошибки: приложение
      * обязано сказать человеку, что именно случилось, а не выдавать любую
      * беду за «принять некому».
+     *
+     * `files` и `mimes` — пути временных копий вложений и их типы, по строке
+     * на файл через перевод строки. Пустая строка означает «только текст»:
+     * так эта кнопка и работала до появления картинок.
      */
     @JvmStatic
-    fun shareText(title: String?, body: String): String =
+    fun shareText(title: String?, body: String, files: String?, mimes: String?): String =
         try {
-            ShareOut.text(requireContext(), activity?.get(), title, body)
+            ShareOut.text(
+                requireContext(),
+                activity?.get(),
+                title,
+                body,
+                files.orEmpty().split('\n').filter { it.isNotBlank() },
+                mimes.orEmpty().split('\n').filter { it.isNotBlank() },
+            )
         } catch (error: Throwable) {
             /*
              * Наружу — строка, никогда исключение.

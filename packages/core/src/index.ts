@@ -29,6 +29,7 @@ export type {
   SearchQuery,
   SharedPayload,
   ShareOutcome,
+  ShareOutFile,
   ShareOutProvider,
   ShareTargetProvider,
   SyncBackend,
@@ -119,6 +120,7 @@ export {
   type MessengerFlavour,
   type MessengerTextOptions,
 } from './markdown/messenger.js';
+export { noteImagePaths, SHARE_IMAGE_LIMIT } from './markdown/attachments.js';
 
 // ── Vault ──────────────────────────────────────────────────────────────────
 export {

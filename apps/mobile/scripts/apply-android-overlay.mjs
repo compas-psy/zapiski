@@ -241,6 +241,26 @@ const APPLICATION_CHILDREN = `
             android:resource="@xml/file_provider_paths" />
     </provider>
 
+    <!--
+      Второй FileProvider — картинки заметки, которые уезжают вместе с ней
+      через «Поделиться». Область — только cache/share
+      (res/xml/share_file_paths.xml).
+
+      Почему не расширить область первого: у них разные получатели. Первый
+      отдаёт APK системному установщику, второй — вложение чужому мессенджеру,
+      и общий каталог означал бы, что каждый из них видит чужое. Отдельные
+      authorities стоят десяти строк манифеста и снимают вопрос целиком.
+    -->
+    <provider
+        android:name=".ShareFileProvider"
+        android:authorities="\${applicationId}.share"
+        android:exported="false"
+        android:grantUriPermissions="true">
+        <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/share_file_paths" />
+    </provider>
+
     <!-- Виджеты (BEHAVIOR §8). Обновление — по данным, не по таймеру. -->
     <receiver
         android:name=".QuickNoteWidget"
@@ -575,6 +595,9 @@ const EXPECTATIONS = [
   ['FileProvider', '.UpdatesFileProvider'],
   ['FileProvider: authorities', 'android:authorities="${applicationId}.updates"'],
   ['FileProvider: пути', '@xml/file_provider_paths'],
+  ['FileProvider вложений', '.ShareFileProvider'],
+  ['FileProvider вложений: authorities', 'android:authorities="${applicationId}.share"'],
+  ['FileProvider вложений: пути', '@xml/share_file_paths'],
   ['виджет «Записать»', 'android:name=".QuickNoteWidget"'],
   ['виджет «Последние»', 'android:name=".RecentWidget"'],
   ['виджет «Закреплённая»', 'android:name=".PinnedWidget"'],
