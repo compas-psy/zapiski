@@ -32,6 +32,14 @@ export interface TypographySettings {
    */
   listIndent?: 'none' | 'normal' | 'wide';
   listMarkColor?: 'muted' | 'text' | 'accent';
+  /**
+   * Поля по бокам текста (настройка «Поля»).
+   *
+   * `wide` — прежнее значение, `medium` — половина от него, `narrow` —
+   * четверть. Второе слагаемое тех же полей — отступ колонки в приложении, и
+   * множитель у них общий: разъехаться они не могут.
+   */
+  margins?: 'wide' | 'medium' | 'narrow';
 }
 
 export const defaultTypography: TypographySettings = {
@@ -42,6 +50,7 @@ export const defaultTypography: TypographySettings = {
   compact: false,
   listIndent: 'normal',
   listMarkColor: 'muted',
+  margins: 'medium',
 };
 
 /** Сдвиг пунктов списка вправо. `none` — вровень с абзацем. */
@@ -52,6 +61,9 @@ const LIST_MARK_COLOR = {
   text: 'var(--text)',
   accent: 'var(--accent)',
 } as const;
+
+/** Во сколько раз поле у́же прежнего. `wide` — прежнее, то есть единица. */
+const MARGIN_SCALE = { wide: 1, medium: 0.5, narrow: 0.25 } as const;
 
 /** Компактный множитель: 16 → 14.5, 1.65 → 1.5 (DESIGN_TOKENS §2). */
 const COMPACT_SIZE = 0.906;
@@ -65,7 +77,7 @@ export function typographyStyle(settings: TypographySettings): string {
   const family = settings.family === 'serif' ? fontFamily.serif : fontFamily.sans;
   const familyScale = settings.family === 'serif' ? 1.0625 : 1;
   const padY = settings.compact ? 24 : 36;
-  const padX = settings.compact ? 20 : 32;
+  const padX = (settings.compact ? 20 : 32) * MARGIN_SCALE[settings.margins ?? 'medium'];
 
   return [
     `--z-fs: ${(size * familyScale).toFixed(2)}px`,
@@ -73,7 +85,7 @@ export function typographyStyle(settings: TypographySettings): string {
     `--z-col: ${column}`,
     `--z-face: ${family}`,
     `--z-pad-y: ${padY}px`,
-    `--z-pad-x: ${padX}px`,
+    `--z-pad-x: ${Math.round(padX)}px`,
     `--z-block-gap: ${settings.compact ? '0.4em' : '0.6em'}`,
     `--z-list-indent: ${LIST_INDENT[settings.listIndent ?? 'normal']}`,
     `--z-list-mark-color: ${LIST_MARK_COLOR[settings.listMarkColor ?? 'muted']}`,

@@ -340,6 +340,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       compact: theme.editor.compact,
       listIndent: theme.editor.listIndent,
       listMarkColor: theme.editor.listMarkColor,
+      margins: theme.editor.margins,
     }),
     [
       theme.editor.fontSize,
@@ -349,6 +350,7 @@ export function NoteScreen({ path }: NoteScreenProps): ReactNode {
       theme.editor.compact,
       theme.editor.listIndent,
       theme.editor.listMarkColor,
+      theme.editor.margins,
     ],
   );
 

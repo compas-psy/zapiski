@@ -770,16 +770,23 @@
 .za-editor__surface:focus:not(:focus-visible) {
   outline: none;
 }
+/* Поля по бокам текста — настройка «Поля» (три ступени).
+   Множитель `--editor-margin-scale` приходит из темы: 1 — прежние поля,
+   0.5 — умолчание, 0.25 — узкие. Заказчик про Android: «поля по бокам
+   занимают достаточно много места и на текст остаётся немного», и это правда
+   арифметически — отступ платится дважды, здесь и внутри редактора
+   (`--z-pad-x`), а вместе они съедали около трети ширины телефона. */
 .za-editor__column {
   box-sizing: border-box;
   inline-size: 100%;
   max-inline-size: var(--editor-measure);
   margin-inline: auto;
-  padding: var(--sp-16) var(--pad-screen);
+  padding: var(--sp-16) calc(var(--pad-screen) * var(--editor-margin-scale, 0.5));
 }
 @media (min-width: 900px) {
   .za-editor__column {
-    padding: var(--editor-pad-block) var(--editor-pad-inline);
+    padding: var(--editor-pad-block)
+      calc(var(--editor-pad-inline) * var(--editor-margin-scale, 0.5));
   }
 }
 /* Заголовок заметки — отдельное поле, всегда видимое (ITERATION-1 §1).

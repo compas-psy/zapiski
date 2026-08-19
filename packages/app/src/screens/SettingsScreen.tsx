@@ -215,6 +215,25 @@ function AppearanceSection(): ReactNode {
         }))}
       />
 
+      {/*
+        Поля по бокам текста. Стоит рядом с шириной колонки не случайно: это
+        один и тот же вопрос «сколько места отдано тексту», только колонка
+        решает его на широком экране, а поля — на телефоне, где колонка
+        упирается в ширину устройства и не работает вовсе.
+      */}
+      <Section>{copy.margins}</Section>
+      <SegmentedControl<'wide' | 'medium' | 'narrow'>
+        label={copy.margins}
+        value={theme.editor.margins}
+        onChange={(value) => theme.setEditor({ margins: value })}
+        options={[
+          { value: 'wide', label: copy.marginsValues.wide },
+          { value: 'medium', label: copy.marginsValues.medium },
+          { value: 'narrow', label: copy.marginsValues.narrow },
+        ]}
+      />
+      <p className="za-muted">{copy.marginsHint}</p>
+
       <Section>{copy.typeface}</Section>
       <SegmentedControl<'sans' | 'serif'>
         label={copy.typeface}

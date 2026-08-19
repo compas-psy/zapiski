@@ -63,6 +63,32 @@ export type EditorLineHeight = (typeof EDITOR_LINE_HEIGHTS)[number];
 export const EDITOR_COLUMN_WIDTHS = [640, 720, 'full'] as const;
 export type EditorColumnWidth = (typeof EDITOR_COLUMN_WIDTHS)[number];
 
+/**
+ * Поля по бокам текста — три ступени.
+ *
+ * Заказчик про Android: «поля по бокам занимают достаточно много места и на
+ * текст остаётся немного». На телефоне отступ платят дважды — обёртка колонки
+ * и сам редактор, — и вместе они съедали около трети ширины экрана.
+ *
+ * `wide` — ровно то, что было: ничей выбор не меняется молча, если человек
+ *          хочет прежние поля, он их получает одним нажатием;
+ * `medium` — половина от прежних. Умолчание по решению заказчика;
+ * `narrow` — четверть: текст почти во всю ширину, для маленьких экранов.
+ *
+ * Множитель, а не набор чисел: поля живут в двух местах (колонка приложения и
+ * поле редактора), и два независимых набора значений разошлись бы на первой же
+ * правке одного из них.
+ */
+export const EDITOR_MARGINS = ['wide', 'medium', 'narrow'] as const;
+export type EditorMargins = (typeof EDITOR_MARGINS)[number];
+
+/** Во сколько раз поле у́же прежнего. `wide` — прежнее, то есть единица. */
+export const EDITOR_MARGIN_SCALE: Record<EditorMargins, number> = {
+  wide: 1,
+  medium: 0.5,
+  narrow: 0.25,
+};
+
 export type Typeface = 'sans' | 'serif';
 export type Density = 'comfortable' | 'compact';
 
@@ -109,6 +135,8 @@ export interface EditorPreferences {
   fontSize: EditorFontSize;
   lineHeight: EditorLineHeight;
   columnWidth: EditorColumnWidth;
+  /** Поля по бокам текста — три ступени, см. `EDITOR_MARGINS`. */
+  margins: EditorMargins;
   typeface: Typeface;
   /** Компактный режим: плотные строки списка + текст 14.5/1.5. */
   compact: boolean;
@@ -176,6 +204,9 @@ export const DEFAULT_EDITOR_PREFERENCES: EditorPreferences = {
   fontSize: 16,
   lineHeight: 1.65,
   columnWidth: 640,
+  /* Среднее из трёх — решение заказчика. Прежние поля (`wide`) съедали на
+     телефоне около трети ширины экрана, и текст читался лентой. */
+  margins: 'medium',
   typeface: 'sans',
   compact: false,
   typewriter: false,

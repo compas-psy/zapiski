@@ -34,6 +34,10 @@ var cw=e.columnWidth===720?720:(e.columnWidth==="full"?"full":640);
 r.style.setProperty("--editor-font-scale",String(fs/16));
 r.style.setProperty("--editor-line-scale",String(lh/1.65));
 r.style.setProperty("--editor-measure",cw==="full"?"none":(cw/16)+"rem");
+/* Поля по бокам: тот же множитель, что в applyAppearance. Без него первый кадр
+   рисуется прежними широкими полями и текст на глазах перескакивает. */
+var mg={wide:1,medium:0.5,narrow:0.25}[e.margins];
+r.style.setProperty("--editor-margin-scale",String(mg===undefined?0.5:mg));
 }catch(err){}})();`;
 
 /** Тег целиком — для шаблонизаторов, которым удобнее готовая строка. */

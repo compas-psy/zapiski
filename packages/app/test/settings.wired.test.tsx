@@ -39,6 +39,7 @@ async function mountWith(editor: Partial<EditorPreferences>) {
           fontSize: 16,
           lineHeight: 1.65,
           columnWidth: 640,
+          margins: 'medium' as const,
           typeface: 'sans',
           compact: false,
           typewriter: false,
@@ -99,6 +100,31 @@ describe('настройки внешнего вида доезжают до т�
     const root = await mountWith({ typeface: 'serif' });
     expect(cssVar(root, '--z-face')).toContain('Source Serif');
     expect(cssVar(root, '--z-fs')).toBe('17.00px');
+  });
+
+  /**
+   * Поля по бокам текста.
+   *
+   * Заказчик про Android: «поля по бокам занимают достаточно много места и на
+   * текст остаётся немного». Отступ платится дважды — колонкой приложения и
+   * самим редактором, — и проверять надо именно второе слагаемое: первое
+   * видно в CSS, а текст рисует CodeMirror по своей переменной.
+   */
+  it('прежние поля остаются доступными одним нажатием', async () => {
+    expect(cssVar(await mountWith({ margins: 'wide' }), '--z-pad-x')).toBe('32px');
+  });
+
+  it('умолчание — среднее: вдвое у́же прежнего', async () => {
+    expect(cssVar(await mountWith({ margins: 'medium' }), '--z-pad-x')).toBe('16px');
+  });
+
+  it('узкие поля отдают тексту почти всю ширину', async () => {
+    expect(cssVar(await mountWith({ margins: 'narrow' }), '--z-pad-x')).toBe('8px');
+  });
+
+  it('узкие поля не отменяют компактный режим и наоборот', async () => {
+    /* Два независимых множителя над одним числом: 20 (компакт) × 0.25. */
+    expect(cssVar(await mountWith({ margins: 'narrow', compact: true }), '--z-pad-x')).toBe('5px');
   });
 
   it('компактный режим ужимает и текст, и поля', async () => {

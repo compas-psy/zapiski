@@ -7,6 +7,8 @@ import {
   DEFAULT_EDITOR_PREFERENCES,
   DEFAULT_PANE_WIDTHS,
   EDITOR_COLUMN_WIDTHS,
+  EDITOR_MARGINS,
+  EDITOR_MARGIN_SCALE,
   EDITOR_FONT_SIZES,
   EDITOR_LINE_HEIGHTS,
   PANEL_PLACEMENTS,
@@ -50,6 +52,9 @@ export function parseAppearance(raw: unknown): AppearanceState {
       columnWidth: includes(EDITOR_COLUMN_WIDTHS, editorSrc['columnWidth'])
         ? editorSrc['columnWidth']
         : DEFAULT_EDITOR_PREFERENCES.columnWidth,
+      margins: includes(EDITOR_MARGINS, editorSrc['margins'])
+        ? editorSrc['margins']
+        : DEFAULT_EDITOR_PREFERENCES.margins,
       typeface: editorSrc['typeface'] === 'serif' ? 'serif' : 'sans',
       compact: editorSrc['compact'] === true,
       typewriter: editorSrc['typewriter'] === true,
@@ -145,6 +150,10 @@ export function editorCssVariables(state: AppearanceState): Record<string, strin
     '--editor-line-scale': String(round(editor.lineHeight / BASE_LINE_HEIGHT)),
     '--editor-measure':
       editor.columnWidth === 'full' ? 'none' : `${round(editor.columnWidth / BASE_FONT_SIZE)}rem`,
+    /* Поля по бокам текста. Множитель, а не число: одно и то же значение
+       умножает и поле колонки приложения, и поле внутри редактора — иначе они
+       разъехались бы на первой же правке одного из них. */
+    '--editor-margin-scale': String(EDITOR_MARGIN_SCALE[editor.margins]),
   };
 }
 

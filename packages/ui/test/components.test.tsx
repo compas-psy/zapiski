@@ -297,7 +297,29 @@ describe('Настройки редактора как множители', () =
       '--editor-font-scale': '0.875',
       '--editor-line-scale': '0.87879',
       '--editor-measure': '45rem',
+      /* Поля по бокам — тоже множитель, и умолчание у него среднее. */
+      '--editor-margin-scale': '0.5',
     });
+  });
+
+  /**
+   * Поля по бокам текста.
+   *
+   * Заказчик про Android: «поля по бокам занимают достаточно много места и на
+   * текст остаётся немного». Прежние поля остались первой ступенью — чтобы тот,
+   * кому они нравились, вернул их одним нажатием, — а умолчанием стало среднее.
+   */
+  it('поля по бокам: прежние — единица, умолчание — половина', () => {
+    const scale = (margins: 'wide' | 'medium' | 'narrow'): string | undefined =>
+      editorCssVariables({
+        ...DEFAULT_APPEARANCE,
+        editor: { ...DEFAULT_APPEARANCE.editor, margins },
+      })['--editor-margin-scale'];
+
+    expect(scale('wide'), 'прежние поля обязаны остаться доступными').toBe('1');
+    expect(scale('medium')).toBe('0.5');
+    expect(scale('narrow')).toBe('0.25');
+    expect(DEFAULT_APPEARANCE.editor.margins, 'умолчание — среднее из трёх').toBe('medium');
   });
 
   it('вся ширина отключает ограничение колонки', () => {

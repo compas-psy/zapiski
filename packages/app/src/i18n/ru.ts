@@ -721,6 +721,10 @@ export const ru = {
       lineHeightValues: { 1.45: 'Плотный', 1.65: 'Обычный', 1.85: 'Просторный' },
       columnWidth: 'Ширина колонки',
       columnWidthValues: { 640: '640', 720: '720', full: 'Вся ширина' },
+      margins: 'Поля по бокам',
+      marginsValues: { wide: 'Широкие', medium: 'Средние', narrow: 'Узкие' },
+      marginsHint:
+        'Сколько места по краям остаётся пустым. На маленьком экране широкие поля забирают у текста около трети ширины.',
       typeface: 'Шрифт',
       typefaceValues: { sans: 'Geist', serif: 'Serif' },
       compact: 'Компактный режим',

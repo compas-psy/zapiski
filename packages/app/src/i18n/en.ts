@@ -565,6 +565,10 @@ export const en: AppCatalog = {
       lineHeightValues: { 1.45: 'Tight', 1.65: 'Normal', 1.85: 'Airy' },
       columnWidth: 'Column width',
       columnWidthValues: { 640: '640', 720: '720', full: 'Full width' },
+      margins: 'Side margins',
+      marginsValues: { wide: 'Wide', medium: 'Medium', narrow: 'Narrow' },
+      marginsHint:
+        'How much of the edges stays empty. On a small screen, wide margins take about a third of the width away from the text.',
       typeface: 'Typeface',
       typefaceValues: { sans: 'Geist', serif: 'Serif' },
       compact: 'Compact mode',
