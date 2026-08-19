@@ -780,6 +780,23 @@ jobs:
           echo "── подтверждение App Links ──"
           curl -sS -m 10 -o /dev/null -w 'assetlinks.json: %{http_code} %{content_type}\n' \
             https://zapiski.cmpas.ru/.well-known/assetlinks.json || echo "assetlinks.json не ответил"
+
+          echo "── с какой платформы просили ссылку (за 3 суток) ──"
+          # Журнал контейнера переживает не всякую выкладку, а база переживает
+          # любую: платформа записана к самому токену, и именно по ней сервер
+          # выбирает адрес возврата. Если android здесь не появляется вовсе —
+          # значит приложение платформу не прислало, и человека законно уводят
+          # на сайт. Это отличает дефект приложения от дефекта сервера, а по
+          # симптому «попал на сайт» они неразличимы.
+          #
+          # Считаются СТРОКИ, а не адреса: ни почты, ни токенов, ни устройств.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT coalesce(platform, 'не указана') || ': ' || count(*)
+               FROM magic_tokens
+              WHERE created_at > now() - interval '3 days'
+              GROUP BY platform
+              ORDER BY count(*) DESC" \
+            < /dev/null || echo "база не ответила"
           REMOTE
 
       - name: Скачать удалённый лог деплоя
