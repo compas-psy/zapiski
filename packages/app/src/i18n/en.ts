@@ -702,6 +702,10 @@ export const en: AppCatalog = {
       exportAll: 'Export everything as zip',
       exportNote: 'Export the note',
       formats: { md: 'Markdown', pdf: 'PDF', html: 'HTML', docx: 'DOCX', zip: 'ZIP archive' },
+      shareTitle: 'Sharing a note',
+      shareValues: { markdown: 'With formatting', plain: 'Plain text' },
+      shareHint:
+        'Headings, lists and quotes always go out as readable text. “With formatting” adds bold, italic and strikethrough where the recipient understands them — Telegram does. If you see asterisks in the messenger, pick “Plain text”.',
     },
     storage: {
       pathLabel: 'Notes folder',

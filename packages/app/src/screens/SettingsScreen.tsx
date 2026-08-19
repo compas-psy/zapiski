@@ -1032,6 +1032,29 @@ function TransferSection(): ReactNode {
       <Button variant="secondary" loading={busy} onClick={() => void run(() => app.exportAll())}>
         {copy.exportAll}
       </Button>
+
+      {/*
+        «Поделиться» — соседний вид того же вопроса «как заметка уходит
+        наружу», поэтому раздел общий с экспортом.
+
+        Пункта нет там, где нет самой кнопки: системное окно «Поделиться» есть
+        только на Android. Настройка без действия за ней — обман.
+      */}
+      {app.host.platform.shareOut ? (
+        <>
+          <Section>{copy.shareTitle}</Section>
+          <SegmentedControl<'markdown' | 'plain'>
+            label={copy.shareTitle}
+            value={app.shareFlavour() === 'plain' ? 'plain' : 'markdown'}
+            onChange={(value) => void app.setShareMarkdown(value === 'markdown')}
+            options={[
+              { value: 'markdown', label: copy.shareValues.markdown },
+              { value: 'plain', label: copy.shareValues.plain },
+            ]}
+          />
+          <p className="za-muted">{copy.shareHint}</p>
+        </>
+      ) : null}
     </>
   );
 

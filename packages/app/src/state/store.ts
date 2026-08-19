@@ -63,6 +63,7 @@ import {
   type UndoableToast,
   type UnlockGuardRecord,
   type IndexMode,
+  type MessengerFlavour,
   type VaultLocation,
   type VaultLocationInfo,
   type VaultOwner,
@@ -450,6 +451,8 @@ const PREF = {
   subfolderNotes: 'list.subfolderNotes',
   /** Размен «скорость поиска ↔ память» (решение заказчика). */
   searchMode: 'search.mode',
+  /** Отправлять заметку с разметкой мессенджера или голым текстом. */
+  shareMarkdown: 'share.markdown',
   sort: 'list.sort',
   recent: 'search.recent',
   lastOpened: 'search.lastOpened',
@@ -645,6 +648,21 @@ export class AppController {
    */
   private subfolderNotes = false;
   /**
+   * Отправлять ли заметку с разметкой мессенджера.
+   *
+   * Включено: Telegram разбирает `**жирный**`, `__курсив__`, `~~зачёркнутый~~`
+   * и `` `код` `` — это шесть регулярок в его `MediaDataController`. Выключено:
+   * наружу идёт голый текст, где структуру держат обычные символы (`•`, `☐`,
+   * `│`, `———`) и разбирать нечего вовсе.
+   *
+   * Переключатель существует потому, что разбор зависит от ПОЛУЧАТЕЛЯ, а мы о
+   * нём ничего не знаем: системное окно «Поделиться» не сообщает, какое
+   * приложение выбрали. У MAX разметка — параметр Bot API (`format:
+   * "markdown"`), то есть привилегия бота, и присланный человеком текст он
+   * разбирать не обязан.
+   */
+  private shareMarkdown = true;
+  /**
    * Чем платить за поиск: временем запроса или памятью.
    *
    * Умолчание — скорость: так решил заказчик. Экономия памяти нужна на очень
@@ -821,6 +839,7 @@ export class AppController {
       savedFoldersShown,
       savedSubfolderNotes,
       savedSearchMode,
+      savedShareMarkdown,
     ] = await Promise.all([
       this.host.prefs.get<Record<string, SortMode>>(PREF.sort, {}),
       this.host.prefs.get<string[]>(PREF.recent, []),
@@ -838,6 +857,7 @@ export class AppController {
       this.host.prefs.get<boolean>(PREF.attachmentFoldersShown, true),
       this.host.prefs.get<boolean>(PREF.subfolderNotes, false),
       this.host.prefs.get<string>(PREF.searchMode, 'speed'),
+      this.host.prefs.get<boolean>(PREF.shareMarkdown, true),
     ]);
     this.autoLockMinutes = autoLock;
     this.encryptNewNotes = encryptNewNotes;
@@ -857,6 +877,7 @@ export class AppController {
     this.attachmentDownscale = savedDownscale;
     this.attachmentFoldersShown = savedFoldersShown;
     this.subfolderNotes = savedSubfolderNotes;
+    this.shareMarkdown = savedShareMarkdown;
     if (savedSearchMode === 'memory' || savedSearchMode === 'speed') {
       this.searchMode = savedSearchMode;
     }
@@ -2045,6 +2066,17 @@ export class AppController {
   async setSubfolderNotes(value: boolean): Promise<void> {
     this.subfolderNotes = value;
     await this.host.prefs.set(PREF.subfolderNotes, value);
+    this.patch({});
+  }
+
+  /** Каким синтаксисом говорить с мессенджером при «Поделиться». */
+  shareFlavour(): MessengerFlavour {
+    return this.shareMarkdown ? 'telegram' : 'plain';
+  }
+
+  async setShareMarkdown(value: boolean): Promise<void> {
+    this.shareMarkdown = value;
+    await this.host.prefs.set(PREF.shareMarkdown, value);
     this.patch({});
   }
 

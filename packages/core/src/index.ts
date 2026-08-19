@@ -114,6 +114,11 @@ export {
 export { Frontmatter, joinFrontmatter, splitFrontmatter, type SplitDocument } from './markdown/frontmatter.js';
 export { joinTitle, splitTitle, type NoteTitleSplit } from './markdown/title.js';
 export { inlineToText, parseBlocks, parseInline, type Block, type Inline, type ListItem } from './markdown/ast.js';
+export {
+  toMessengerText,
+  type MessengerFlavour,
+  type MessengerTextOptions,
+} from './markdown/messenger.js';
 
 // ── Vault ──────────────────────────────────────────────────────────────────
 export {

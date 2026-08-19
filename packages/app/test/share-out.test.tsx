@@ -6,11 +6,21 @@
  * Telegram рассчитываю, что с новой функцией работы с markdown форматирование
  * там не будет ломаться».
  *
- * Отсюда три требования, и все три проверяются ниже: кнопка есть на Android,
- * её нет в вебе и на Windows (скрытый элемент честнее выключенного —
- * BEHAVIOR §5.1), а наружу уходит markdown КАК ЕСТЬ — с `# Заголовком`,
- * звёздочками и списками. Разбирать разметку — работа принимающей стороны;
- * стоит нам «подготовить» текст, и в Telegram приедет каша.
+ * ── Что здесь было написано раньше и оказалось неправдой ────────────────────
+ *
+ * «Наружу уходит markdown КАК ЕСТЬ… разбирать разметку — работа принимающей
+ * стороны; стоит нам „подготовить“ текст, и в Telegram приедет каша». Тест это
+ * и проверял: сверял отправленное с исходником заметки — то есть с самим
+ * собой, а не с тем, что получатель умеет прочитать.
+ *
+ * Заказчик прислал снимок из Telegram: `# Психологов развелось!`,
+ * `**Слишком много выбора.**` звёздочками, `> цитата` палкой, `![|258](…)` и
+ * `[имя](адрес)` скобками. Каша приехала именно от «как есть».
+ *
+ * Отсюда требования, которые проверяются ниже: кнопка есть на Android и её нет
+ * в вебе и на Windows (скрытый элемент честнее выключенного — BEHAVIOR §5.1),
+ * а наружу уходит текст, переведённый в разметку получателя, — и ни одного
+ * маркера, которого он не понимает.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { ThemeProvider, ToastProvider } from '@zapiski/ui';
@@ -26,15 +36,21 @@ const ru = strings('ru');
 
 afterEach(cleanup);
 
-const NOTE = '# Планы\n\n**жирный** пункт\n\n- первый\n- второй\n';
+const NOTE =
+  '# Планы\n\n**жирный** пункт\n\n> цитата\n\n![|258](Images/a.png)\n\n- первый\n- второй\n\n[Мой сайт](https://ilyamartynov.ru)\n';
 
 type Shared = { title?: string; text: string };
 
-async function boot(options: { android: boolean; accepts?: boolean }): Promise<{
+async function boot(options: { android: boolean; accepts?: boolean; markdown?: boolean }): Promise<{
   app: AppController;
   shared: Shared[];
 }> {
-  const host = createTestHost({ files: { 'Планы.md': NOTE }, prefs: { onboarded: true } });
+  const host = createTestHost({
+    files: { 'Планы.md': NOTE },
+    /* Настройка приходит из сохранённых — так она и живёт: человек выбрал
+       режим однажды, а отправляет потом. */
+    prefs: { onboarded: true, ...(options.markdown === false ? { 'share.markdown': false } : {}) },
+  });
   const shared: Shared[] = [];
   if (options.android) {
     (host.platform as { kind: string }).kind = 'android';
@@ -63,7 +79,7 @@ async function boot(options: { android: boolean; accepts?: boolean }): Promise<{
 }
 
 describe('кнопка «Поделиться»', () => {
-  it('на Android отдаёт системе markdown как есть', async () => {
+  it('на Android отдаёт системе текст, который получатель прочитает', async () => {
     const { app, shared } = await boot({ android: true });
 
     await screen.findByRole('button', { name: ru.note.share });
@@ -79,10 +95,46 @@ describe('кнопка «Поделиться»', () => {
     await waitFor(() => expect(shared).toHaveLength(1));
     const payload = shared[0] as Shared;
     expect(payload.title, 'у письма нет темы — почта покажет пустую строку').toBe('Планы');
-    /* Разметка уходит нетронутой: заголовок строкой `# …`, звёздочки, дефисы. */
-    expect(payload.text).toContain('# Планы');
+    /* Заголовок — жирной строкой: `#` мессенджеру ничего не говорит. */
+    expect(payload.text).toContain('**Планы**');
+    /* Жирный совпадает по синтаксису и остаётся собой. */
     expect(payload.text).toContain('**жирный**');
-    expect(payload.text).toContain('- первый');
+    /* Список — точкой: дефис у получателя списком не станет. */
+    expect(payload.text).toContain('• первый');
+    /* Ссылка — адресом, его мессенджер подсветит сам. */
+    expect(payload.text).toContain('Мой сайт — https://ilyamartynov.ru');
+    /* И ни одного маркера, который получатель покажет сырым. */
+    for (const junk of ['# Планы', '> цитата', '- первый', '![', '](', '|258']) {
+      expect(payload.text, `«${junk}» уедет человеку в глаза`).not.toContain(junk);
+    }
+    app.dispose();
+  });
+
+  /**
+   * Второй режим настройки — на случай получателя, который не разбирает даже
+   * то, что обязан. Именно это заказчик и увидел: на снимке из Telegram
+   * `**Слишком много выбора.**` приехало звёздочками.
+   */
+  it('«простым текстом» отправляет заметку без единого маркера', async () => {
+    const { app, shared } = await boot({ android: true, markdown: false });
+    expect(app.shareFlavour(), 'сохранённый выбор не дожил до отправки').toBe('plain');
+
+    await screen.findByRole('button', { name: ru.note.share });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: ru.note.share }).isConnected).toBe(true),
+    );
+    fireEvent.click(screen.getByRole('button', { name: ru.note.share }));
+
+    await waitFor(() => expect(shared).toHaveLength(1));
+    const payload = shared[0] as Shared;
+    expect(payload.text).toContain('Планы');
+    expect(payload.text).toContain('жирный пункт');
+    /* Структуру держат символы, а не разметка: она видна и без разбора. */
+    expect(payload.text).toContain('• первый');
+    expect(payload.text).toMatch(/^│ цитата$/m);
+    for (const marker of ['**', '__', '~~', '#', '>', '](']) {
+      expect(payload.text, `«${marker}» человеку читать не нужно`).not.toContain(marker);
+    }
     app.dispose();
   });
 
