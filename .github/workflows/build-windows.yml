@@ -398,6 +398,52 @@ jobs:
       # git-bash на Windows heredoc в stdin ноды — лишний способ получить
       # «SyntaxError» на ровном месте. И кладётся он рядом с репозиторием, а не
       # в release/: всё, что лежит в release/, уезжает в артефакт.
+      # ── MSIX для Microsoft Store ──────────────────────────────────────────
+      #
+      # Отдельный формат и отдельная дорога, не замена .exe.
+      #
+      # Причина, по которой он вообще появился: Store НЕ переподписывает MSI и
+      # EXE — их разработчик обязан подписать сам, а сертификат Authenticode
+      # российскому разработчику сейчас не выпускает ни один CA. MSIX магазин
+      # подписывает СВОИМ сертификатом при публикации. Это единственный
+      # бесплатный способ отдать пользователю Windows-приложение без синего
+      # экрана SmartScreen.
+      #
+      # Поэтому пакет здесь НЕ подписывается — и не должен. Неподписанный MSIX
+      # не установится локально двойным щелчком: это ожидаемо, проверять его
+      # надо через магазин, а не с диска.
+      #
+      # Шаг не роняет сборку (continue-on-error): установщик .exe важнее, и
+      # падение упаковки в магазин не должно стоить нам готового установщика.
+      # Но падает он ГРОМКО — в лог уходит ::warning::, а не тишина.
+      - name: Пакет MSIX для магазина
+        id: msix
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          node apps/desktop/msix/build-msix.mjs
+          out="apps/desktop/src-tauri/target/release/bundle/msix"
+          file="$(ls -1 "${out}"/*.msix 2>/dev/null | head -1 || true)"
+          if [ -z "${file}" ]; then
+            echo '::warning::MSIX не собрался — в магазин загружать нечего, установщик не пострадал'
+            exit 1
+          fi
+          echo "msix=${file}" >> "${GITHUB_OUTPUT}"
+          echo "MSIX: ${file}"
+
+      # Отдельный артефакт, а не общий: .msix не должен попасть ни в фид
+      # обновлений, ни в каталог установщиков на сервере. Его канал —
+      # Partner Center, и загружается он туда руками.
+      - name: Сохранить MSIX
+        if: steps.msix.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-msix
+          path: apps/desktop/src-tauri/target/release/bundle/msix/*.msix
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Собрать артефакты релиза
         id: manifest
         env:

@@ -1,0 +1,13 @@
+{
+  "_комментарий": "Идентификация пакета, выданная Microsoft Partner Center 19.08.2026. Не секреты: эти значения лежат открытым текстом внутри каждого установленного MSIX. Хранятся в репозитории, чтобы сборка была воспроизводимой и не зависела от переменных окружения. Store ID продукта 9PF1SKPBC75T.",
+  "identityName": "AEDA9FD1.41075B986833",
+  "publisher": "CN=4B1B7FCB-C9DE-4822-92DC-4FD4E16A45C5",
+  "publisherDisplayName": "СИМПАС",
+  "displayName": "ЗАПИСКИ",
+  "description": "Спокойное приложение для заметок в Markdown",
+  "packageVersion": "1.0.0.0",
+  "executable": "zapiski-desktop.exe",
+  "applicationId": "ZAPISKI",
+  "minVersion": "10.0.17763.0",
+  "maxVersionTested": "10.0.26100.0"
+}

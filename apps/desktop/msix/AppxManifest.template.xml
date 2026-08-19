@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Шаблон манифеста MSIX. Подстановки вида {{ключ}} заполняет build-msix.mjs
+  значениями из identity.json. Руками этот файл не редактируется в части
+  идентификации: она выдана Partner Center и обязана совпадать побайтово,
+  иначе загрузка пакета отклоняется без объяснений.
+
+  Файл обязан быть в UTF-8: PublisherDisplayName написан кириллицей.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="{{identityName}}"
+    Publisher="{{publisher}}"
+    Version="{{packageVersion}}"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>{{displayName}}</DisplayName>
+    <PublisherDisplayName>{{publisherDisplayName}}</PublisherDisplayName>
+    <Description>{{description}}</Description>
+    <Logo>assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="{{minVersion}}" MaxVersionTested="{{maxVersionTested}}" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="ru-RU" />
+  </Resources>
+
+  <Applications>
+    <Application Id="{{applicationId}}" Executable="{{executable}}" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="{{displayName}}"
+        Description="{{description}}"
+        BackgroundColor="transparent"
+        Square150x150Logo="assets\Square150x150Logo.png"
+        Square44x44Logo="assets\Square44x44Logo.png">
+        <uap:DefaultTile
+          Wide310x150Logo="assets\Wide310x150Logo.png"
+          Square310x310Logo="assets\Square310x310Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!--
+      runFullTrust — единственная возможность, которая нам нужна: приложение
+      Win32 внутри MSIX. Это ограниченная возможность (restricted capability),
+      и Partner Center спросит обоснование на экране «Дополнительная информация
+      о тестировании». Обоснование: приложение — настольный редактор на Tauri,
+      работающий с файлами .md в папке, которую пользователь выбирает сам.
+      Ничего сверх этого не объявляем: каждая лишняя строка здесь — вопрос
+      от проверяющего и ещё один шанс получить отказ.
+    -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>
