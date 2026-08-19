@@ -97,7 +97,7 @@ describe('согласия на экране входа', () => {
 
   it('рекламное согласие уезжает отдельным полем, а не в нагрузку', async () => {
     const app = await mount();
-    const sent = vi.spyOn(app, 'sendMagicLink').mockResolvedValue(true);
+    const sent = vi.spyOn(app, 'sendMagicLink').mockResolvedValue('sent');
 
     const email = document.querySelector('input[type="email"]') as HTMLInputElement;
     fireEvent.change(email, { target: { value: 'marina@ya.ru' } });
@@ -109,7 +109,7 @@ describe('согласия на экране входа', () => {
 
   it('поставленное рекламное согласие доезжает как `true`', async () => {
     const app = await mount();
-    const sent = vi.spyOn(app, 'sendMagicLink').mockResolvedValue(true);
+    const sent = vi.spyOn(app, 'sendMagicLink').mockResolvedValue('sent');
 
     const email = document.querySelector('input[type="email"]') as HTMLInputElement;
     fireEvent.change(email, { target: { value: 'marina@ya.ru' } });

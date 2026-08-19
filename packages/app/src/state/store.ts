@@ -1251,16 +1251,26 @@ export class AppController {
     this.navigate({ name: 'signin' });
   }
 
-  /** Письмо со ссылкой (SCREENS §2). Ошибку показывает экран, не модалка. */
-  async sendMagicLink(email: string, consents: Consents): Promise<boolean> {
+  /**
+   * Письмо со ссылкой (SCREENS §2). Ошибку показывает экран, не модалка.
+   *
+   * Три исхода, а не два, и это правка по живому отказу.
+   *
+   * 429 означает «письмо этому адресу уже ушло меньше минуты назад». Раньше
+   * это выдавалось за успех — экран показывал зелёное «Письмо ушло», и на том
+   * же устройстве это было правдой. А между устройствами превращалось в ложь:
+   * человек просил ссылку на компьютере, через полминуты на телефоне — и
+   * телефон обещал письмо, которого сервер не отправлял. Ждать его можно было
+   * бесконечно. Хуже: письмо в ящике лежало от ПЕРВОГО устройства, и вернуться
+   * по нему следовало туда же.
+   */
+  async sendMagicLink(email: string, consents: Consents): Promise<'sent' | 'recent' | false> {
     this.patch({ authError: null });
     try {
       await this.session.requestMagicLink(email, consents);
-      return true;
+      return 'sent';
     } catch (error) {
-      /* 429 — письмо уже ушло меньше минуты назад. Это не отказ: экран
-         показывает то же «письмо ушло» и держит кнопку 60 с (SCREENS §2). */
-      if (error instanceof AuthError && error.code === 'too_soon') return true;
+      if (error instanceof AuthError && error.code === 'too_soon') return 'recent';
       this.patch({ authError: this.authMessage(error) });
       return false;
     }

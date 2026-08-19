@@ -107,6 +107,8 @@ export const en: AppCatalog = {
     promise: 'We send a link by email — one tap and you are in. No password to invent',
     privacy: 'We do not read your notes — technically we cannot',
     sentTitle: (email: string): string => `The email is on its way to ${email} · check your inbox`,
+    recentTitle: (email: string): string =>
+      `An email to ${email} was already sent — open it on the device that asked for it`,
     resend: 'Send again',
     resendIn: (seconds: number): string => `Send again in ${seconds}s`,
     expiredTitle: 'This link no longer works',

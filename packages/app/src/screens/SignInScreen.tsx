@@ -20,7 +20,12 @@ import {
 } from '@zapiski/ui';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 
-type Stage = 'form' | 'sent' | 'expired';
+/**
+ * `recent` — сервер письма не отправлял: этому адресу оно ушло меньше минуты
+ * назад. Отдельное состояние, потому что говорить надо разное: «проверьте
+ * почту» и «письмо уже есть, но открывать его надо на другом устройстве».
+ */
+type Stage = 'form' | 'sent' | 'recent' | 'expired';
 
 /** Кнопка «Отправить снова» неактивна 60 с (SCREENS §2). */
 const RESEND_COOLDOWN_S = 60;
@@ -94,10 +99,10 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
 
   const sendLink = async (): Promise<void> => {
     setBusy(true);
-    const sent = await app.sendMagicLink(email, { marketing });
+    const result = await app.sendMagicLink(email, { marketing });
     setBusy(false);
-    if (!sent) return;
-    setStage('sent');
+    if (result === false) return;
+    setStage(result);
     setCooldown(RESEND_COOLDOWN_S);
   };
 
@@ -118,10 +123,15 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
         <h1 className="za-h1">{gate ? strings.signIn.gateTitle : strings.signIn.title}</h1>
         <p className="za-muted">{gate ? strings.signIn.gateReason : strings.signIn.subtitle}</p>
 
-        {stage === 'sent' ? (
+        {stage === 'sent' || stage === 'recent' ? (
           <>
-            <InfoNote tone="success" icon={<IconCheck size={15} />}>
-              {strings.signIn.sentTitle(email)}
+            <InfoNote
+              tone={stage === 'sent' ? 'success' : 'info'}
+              icon={<IconCheck size={15} />}
+            >
+              {stage === 'sent'
+                ? strings.signIn.sentTitle(email)
+                : strings.signIn.recentTitle(email)}
             </InfoNote>
             <p className="za-muted">{strings.errors.mailNotDelivered(email)}</p>
             <Button
