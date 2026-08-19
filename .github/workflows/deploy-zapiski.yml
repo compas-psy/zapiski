@@ -643,12 +643,17 @@ jobs:
             const net = require("net");
             const host = process.env.SMTP_HOST, port = Number(process.env.SMTP_PORT);
             const sock = net.connect({ host, port, timeout: 8000 });
-            let log = "", greeted = false;
+            let log = "", greeted = false, done = false;
             sock.setEncoding("utf8");
             sock.on("data", (chunk) => {
               log += chunk;
+              if (done) return;
               if (!greeted && /^220[ -]/.test(log)) { greeted = true; sock.write("EHLO zapiski.cmpas.ru\r\n"); return; }
-              if (greeted && /\r\n(250|[45]\d\d) /.test(log)) { sock.write("QUIT\r\n"); sock.end(); }
+              // `done` обязателен: без него добравшая порция данных заставляла
+              // писать QUIT во второй раз, уже в закрытый сокет, и проба
+              // рапортовала ERR_STREAM_WRITE_AFTER_END при полностью живом
+              // релее. Сторож, пугающий на исправном, — тоже неисправный сторож.
+              if (greeted && /\r\n(250|[45]\d\d) /.test(log)) { done = true; sock.write("QUIT\r\n"); sock.end(); }
             });
             sock.on("close", () => {
               console.log(`SMTP ${host}:${port} ответил:`);
