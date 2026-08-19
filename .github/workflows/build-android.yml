@@ -216,11 +216,42 @@ jobs:
       # этих dev-пакетов нет, и без них шаг падает на этапе `build.rs` —
       # с сообщением про pkg-config, по которому не догадаешься, что дело в apt.
       # xmllint нужен самопроверке оверлея и проверке манифеста после патча.
+      # Установка системных библиотек — единственный шаг сборки, который умеет
+      # ВИСЕТЬ, а не падать, и однажды он встал на 74 минуты (run 32216709135:
+      # 04:42 → 05:56, оборвался только вытеснением следующего push'а).
+      #
+      # Причина обычная для runner'ов GitHub: фоновые `apt-daily` и
+      # `unattended-upgrades` держат блокировку dpkg, а `apt-get` ждёт её
+      # БЕЗ ОГРАНИЧЕНИЯ по времени. Со стороны это неотличимо от «сборка
+      # зависла», и заказчик так её и описал.
+      #
+      # Три меры, и каждая нужна:
+      #   1. `timeout-minutes` — шаг не может съесть бюджет всей сборки;
+      #   2. `DPkg::Lock::Timeout` — ждём блокировку минуту, потом падаем с
+      #      внятной причиной вместо молчаливого ожидания;
+      #   3. три попытки — зеркала пакетов иногда отвечают не с первого раза,
+      #      и это не повод терять сборку целиком.
       - name: Системные библиотеки
+        timeout-minutes: 12
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y \
+          # Фоновому обновлению здесь делать нечего: машина живёт минуты.
+          sudo systemctl stop apt-daily.service apt-daily-upgrade.service unattended-upgrades.service 2>/dev/null || true
+          sudo systemctl kill --kill-who=all apt-daily.service 2>/dev/null || true
+
+          apt_try() {
+            for attempt in 1 2 3; do
+              if sudo apt-get -o DPkg::Lock::Timeout=60 "$@"; then return 0; fi
+              echo "::warning::apt-get $1: попытка ${attempt} не удалась, повтор"
+              sleep $((attempt * 15))
+            done
+            return 1
+          }
+
+          apt_try update
+          apt_try install --no-install-recommends -y \
             libwebkit2gtk-4.1-dev \
             libjavascriptcoregtk-4.1-dev \
             libsoup-3.0-dev \
