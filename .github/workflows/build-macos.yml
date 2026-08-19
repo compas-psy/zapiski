@@ -235,3 +235,74 @@ jobs:
           path: ${{ steps.dmg.outputs.path }}
           if-no-files-found: error
           retention-days: 14
+
+      # ── Ассоциация с .md: проверка без Мака ───────────────────────────────
+      #
+      # `fileAssociations` в конфиге — это ОБЕЩАНИЕ. Выполняет его бандлер,
+      # раскладывая `CFBundleDocumentTypes` по Info.plist, и до сих пор мы
+      # верили ему на слово: пункт числился сделанным, а проверить его без
+      # компьютера с macOS было нечем.
+      #
+      # Проверить есть чем. Образ монтируется здесь же, и Info.plist читается
+      # из ТОГО .app, который поедет человеку, — не из каталога сборки. Разница
+      # существенная: подписывали и упаковывали мы разные копии, и «в сборке
+      # было» не означает «в образе есть».
+      #
+      # Шаг стоит ПОСЛЕ выгрузки артефакта намеренно. Если секции не окажется,
+      # сборка станет красной — но .dmg уже будет лежать и его можно будет
+      # скачать и посмотреть глазами.
+      - name: Проверить CFBundleDocumentTypes в готовом .app
+        env:
+          DMG: ${{ steps.dmg.outputs.path }}
+        run: |
+          set -euo pipefail
+          mount="$(mktemp -d)"
+          hdiutil attach "${DMG}" -nobrowse -readonly -mountpoint "${mount}" > /dev/null
+          trap 'hdiutil detach "${mount}" -quiet || true' EXIT
+
+          app="$(find "${mount}" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "${app}" ]; then
+            echo '::error::в образе нет .app — ставить пользователю нечего'
+            exit 1
+          fi
+          plist="${app}/Contents/Info.plist"
+          echo "Info.plist из образа: ${plist}"
+
+          section="$(plutil -extract CFBundleDocumentTypes xml1 -o - "${plist}" 2>/dev/null || true)"
+          if [ -z "${section}" ]; then
+            {
+              echo
+              echo '#### Ассоциация с .md'
+              echo
+              echo 'В Info.plist готового .app **нет секции CFBundleDocumentTypes**.'
+              echo 'Двойной щелчок по файлу .md приложение не откроет: система о нём не знает.'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo '::error title=CFBundleDocumentTypes отсутствует::fileAssociations в конфиге есть, а в собранном Info.plist секции нет — ассоциация с .md не работает.'
+            exit 1
+          fi
+
+          echo '── CFBundleDocumentTypes ─────────────────────────────────────'
+          printf '%s\n' "${section}"
+          echo '──────────────────────────────────────────────────────────────'
+
+          # Секция может быть и пустой болванкой. Смотрим на то, ради чего она
+          # заводилась: расширение md и роль редактора, а не просмотрщика.
+          missing=''
+          printf '%s' "${section}" | grep -q '<string>md</string>' || missing="${missing} расширение md;"
+          printf '%s' "${section}" | grep -q '<string>Editor</string>' || missing="${missing} роль Editor;"
+          if [ -n "${missing}" ]; then
+            echo "::error title=Ассоциация неполна::в CFBundleDocumentTypes не хватает:${missing}"
+            exit 1
+          fi
+
+          {
+            echo
+            echo '#### Ассоциация с .md'
+            echo
+            echo 'В Info.plist готового `.app` есть `CFBundleDocumentTypes` с расширением `md` и ролью `Editor`.'
+            echo 'Читалось из образа `.dmg`, а не из каталога сборки. Полная секция — в логе шага.'
+            echo
+            echo '```xml'
+            printf '%s\n' "${section}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
