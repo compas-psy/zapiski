@@ -21,9 +21,32 @@ export type HostOs = 'windows' | 'macos' | 'linux';
  */
 let cached: HostOs | null = null;
 
+/**
+ * Сколько ждём ответа, прежде чем считать систему привычной.
+ *
+ * Вопрос задаётся ДО первого кадра, и от него зависит вся оболочка целиком.
+ * Отказ IPC мы ловим `catch`, а вот молчание не ловится ничем: обещание,
+ * которое не исполнится, остановит запуск навсегда — окно останется пустым,
+ * и человек не увидит даже экрана входа. Холодный старт по ТЗ §6 обязан
+ * уложиться в 2 с, поэтому предел здесь заведомо меньше.
+ */
+export const HOST_OS_TIMEOUT_MS = 1_500;
+
 export async function hostOs(): Promise<HostOs> {
   if (cached !== null) return cached;
-  const value = await invoke<string>('host_os').catch(() => 'windows');
+  const value = await Promise.race([
+    invoke<string>('host_os'),
+    new Promise<string>((resolve) => {
+      setTimeout(() => resolve('windows'), HOST_OS_TIMEOUT_MS);
+    }),
+  ]).catch(() => 'windows');
+  /*
+   * Незнакомый ответ — это Windows, а не «неизвестно». Значение уезжает
+   * серверу полем `platform` при запросе ссылки для входа, и от него зависит,
+   * куда человека вернут из письма. Выдумать здесь третью платформу значит
+   * получить с сервера https-адрес вместо своей схемы и оставить человека в
+   * браузере — то есть сломать вход ровно тем, чем чинили внешний вид.
+   */
   cached = value === 'macos' || value === 'linux' ? value : 'windows';
   return cached;
 }
@@ -31,4 +54,9 @@ export async function hostOs(): Promise<HostOs> {
 /** Уже известная система. `null` — ещё не спрашивали. */
 export function knownHostOs(): HostOs | null {
   return cached;
+}
+
+/** Только для тестов: забыть ответ, чтобы задать вопрос заново. */
+export function forgetHostOs(): void {
+  cached = null;
 }
