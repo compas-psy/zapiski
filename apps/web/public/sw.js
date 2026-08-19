@@ -7,7 +7,9 @@
  *
  * Стратегии:
  *  • навигация — сеть, при отказе оболочка из кэша (приложение стартует и
- *    работает с локальным vault'ом);
+ *    работает с локальным vault'ом). Оболочку кэширует только сама оболочка:
+ *    на домене есть и обычные страницы, и любая из них, попав под ключ
+ *    оболочки, подменила бы собой приложение;
  *  • `/assets/*` — кэш: имена содержат хеш содержимого, значит неизменяемы;
  *  • остальное с этого источника — сеть с тихой подстраховкой из кэша;
  *  • `/api/*` — только сеть. Кэшировать ответы API нельзя: очередь изменений
@@ -17,12 +19,16 @@
  * JS без сборочных зависимостей и без списка захешированных имён.
  */
 
-const VERSION = 'v1';
+/*
+ * Версия кэша. Поднята с v1 намеренно: на устройствах, где хоть раз открывали
+ * промостраницу, под ключом оболочки лежит ОНА (см. `refreshShell` ниже).
+ * Переименование кэша — единственный способ выбросить это наверняка: `activate`
+ * удаляет всё, чего нет в `keep`.
+ */
+const VERSION = 'v2';
 const SHELL_CACHE = `zapiski-shell-${VERSION}`;
 const ASSET_CACHE = `zapiski-assets-${VERSION}`;
 const SHELL_URL = '/index.html';
-/** Адрес из письма (`server/src/routes/auth.ts`, `buildMagicLinkUrl`). */
-const MAGIC_LINK_CALLBACK = '/api/v1/auth/magic-link/callback';
 /** Куда приходит возврат после входа. Это маршрут приложения, а не файл. */
 const AUTH_ROUTE = '/auth';
 
@@ -55,17 +61,24 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  /* Единственное исключение из «/api/* — только сеть»: переход по ссылке из
-     письма. Сервер ждёт к токену `device_id`, а знает его приложение, а не
-     браузер, поэтому переход уводится в приложение вместе с токеном, и обмен
-     делает оно (`packages/app/src/state/session.ts`). Ответ API при этом не
-     кэшируется — здесь только маршрут, ни байта данных. */
-  if (request.mode === 'navigate' && url.pathname === MAGIC_LINK_CALLBACK) {
-    // Адрес обязан быть абсолютным: относительный `Response.redirect` бросает.
-    const target = new URL(`/auth/callback${url.search}`, self.location.origin);
-    event.respondWith(Response.redirect(target.toString(), 303));
-    return;
-  }
+  /*
+   * Ссылку из письма воркер НЕ ТРОГАЕТ. Раньше трогал, и вот чем это кончалось.
+   *
+   * Правило заводилось, когда сервер ждал `device_id` отдельно, а знал его
+   * только клиент: переход уводился в веб-приложение, и обмен делало оно.
+   * Потом сервер стал класть `device_id` в саму ссылку — всегда, на любой
+   * платформе, — и правило осталось лишним. Не безобидно лишним.
+   *
+   * Воркер живёт на ВЕСЬ домен (`scope: '/'`), а ссылка из письма приходит и
+   * тем, кто просил её из приложения. На телефоне, где хоть раз открывали
+   * zapiski.cmpas.ru, воркер перехватывал переход и уводил человека в
+   * веб-приложение — вместо сервера, который по платформе вернул бы его в
+   * ЗАПИСКИ по `zapiski://`. Вход из приложения на Android не замыкался
+   * никогда, а выглядело это как «сайт вместо приложения».
+   *
+   * Теперь решение принимает сервер — единственный, кто знает платформу,
+   * записанную к токену.
+   */
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
@@ -101,11 +114,39 @@ async function appShell() {
   return response;
 }
 
+/**
+ * Как часто перечитывать оболочку. Раз в пять минут: чаще незачем, реже —
+ * человек будет неделю сидеть на старой сборке.
+ */
+const SHELL_REFRESH_MS = 5 * 60 * 1000;
+let shellRefreshedAt = 0;
+
+/**
+ * Обновление оболочки — ОТДЕЛЬНЫМ запросом за `/index.html`.
+ *
+ * Раньше под ключом оболочки сохранялся ответ на текущий переход, какой бы он
+ * ни был. А на этом домене по обычным адресам лежат обычные страницы: /promo,
+ * /terms, /privacy, /macos-warning. Стоило открыть промостраницу — и она
+ * становилась «оболочкой приложения»: дальше любой переход, отвеченный из
+ * кэша, показывал промо. Заказчик так и описал: после ссылки из письма
+ * открывается промо со ссылками на скачивание.
+ */
+async function refreshShell() {
+  const now = Date.now();
+  if (now - shellRefreshedAt < SHELL_REFRESH_MS) return;
+  shellRefreshedAt = now;
+  const response = await fetch(SHELL_URL, { cache: 'no-store' }).catch(() => null);
+  if (response && response.ok) {
+    const cache = await caches.open(SHELL_CACHE);
+    await cache.put(SHELL_URL, response.clone());
+  }
+}
+
 async function networkFirstShell(request) {
   try {
     const response = await fetch(request);
-    const cache = await caches.open(SHELL_CACHE);
-    cache.put(SHELL_URL, response.clone());
+    /* Ответ на ЭТОТ переход не становится оболочкой ни при каких условиях. */
+    void refreshShell();
     return response;
   } catch {
     const cache = await caches.open(SHELL_CACHE);
