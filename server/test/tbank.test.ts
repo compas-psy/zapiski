@@ -134,6 +134,8 @@ describe('создание платежа', () => {
     failUrl: 'https://zapiski.example/back',
     notificationUrl: 'https://zapiski.example/api/v1/billing/tbank/notification',
     email: 'marina@ya.ru',
+    customerKey: 'cust-0001',
+    recurrent: true,
     taxation: 'usn_income',
     vat: 'none',
   };
@@ -167,6 +169,8 @@ describe('создание платежа', () => {
           NotificationURL: input.notificationUrl,
           SuccessURL: input.successUrl,
           FailURL: input.failUrl,
+          CustomerKey: 'cust-0001',
+          Recurrent: 'Y',
         },
         'pw',
       ),
@@ -181,6 +185,59 @@ describe('создание платежа', () => {
       status: 'NEW',
       paymentUrl: 'https://securepay.tinkoff.ru/x/abc',
     });
+  });
+
+  /**
+   * Без `Recurrent: 'Y'` и `CustomerKey` банк не пришлёт `RebillId`.
+   *
+   * Пропуск этих двух полей ничего не ломает СЕГОДНЯ: платёж проходит, деньги
+   * приходят, подписка включается. Обнаруживается он через месяц — тем, что
+   * продлевать нечем. Поэтому проверяется здесь, а не в проде.
+   */
+  it('Init просит банк запомнить карту и знает плательщика', async () => {
+    let sent: Record<string, unknown> = {};
+    await createPayment(credentials, input, async (_url, init) => {
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ Success: true, PaymentId: '1', Status: 'NEW' }), {
+        status: 200,
+      });
+    });
+    expect(sent['Recurrent']).toBe('Y');
+    expect(sent['CustomerKey']).toBe('cust-0001');
+  });
+
+  it('без рекуррента поле Recurrent не уезжает вовсе', async () => {
+    /* Пустая строка в этом поле банку не годится, а в подпись она попала бы
+       наравне со значением — и подпись разошлась бы с той, что считает банк. */
+    let sent: Record<string, unknown> = {};
+    await createPayment(credentials, { ...input, recurrent: false }, async (_url, init) => {
+      sent = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return new Response(JSON.stringify({ Success: true, PaymentId: '1', Status: 'NEW' }), {
+        status: 200,
+      });
+    });
+    expect('Recurrent' in sent).toBe(false);
+    expect(sent['Token']).toBe(
+      signToken(
+        {
+          TerminalKey: 'TERMINAL',
+          Amount: 19900,
+          OrderId: 'order-1',
+          Description: 'ЗАПИСКИ+ на месяц',
+          NotificationURL: input.notificationUrl,
+          SuccessURL: input.successUrl,
+          FailURL: input.failUrl,
+          CustomerKey: 'cust-0001',
+        },
+        'pw',
+      ),
+    );
+  });
+
+  it('CustomerKey не длиннее того, что принимает банк', () => {
+    /* Ограничение Т-Кассы — 36 знаков. uuid укладывается ровно в них, но
+       правило должно быть проверено, а не удержано в голове. */
+    expect(input.customerKey.length).toBeLessThanOrEqual(36);
   });
 
   /**

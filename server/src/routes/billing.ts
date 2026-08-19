@@ -15,6 +15,7 @@ import {
   cancelAutoRenew,
   ensureSubscription,
   getEntitlement,
+  getSubscriptionRow,
   markPaymentFailed,
   startTrial,
 } from '../services/subscription.ts';
@@ -300,13 +301,35 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
       /* Банк считает в копейках. Округление — до целой копейки и один раз:
          пересчёт «рубли → копейки» в двух местах однажды разойдётся. */
       const amountKop = Math.round(rub * 100);
+      /*
+       * `OrderId` — случайный uuid, и это не лень.
+       *
+       * У Т-Кассы он не длиннее 36 знаков и уезжает на чужую сторону. Ни
+       * идентификатора человека, ни названия тарифа в нём быть не должно:
+       * связь «кто и за что» — наше знание, а не банка. Хранится она у нас
+       * (`payment_orders`) и ПИШЕТСЯ ДО перехода на оплату — уведомление
+       * приносит только номер заказа, и восстановить связь после факта было
+       * бы уже не из чего.
+       */
       const orderId = randomUUID();
       const description = parsed.data.plan === 'yearly' ? 'ЗАПИСКИ+ на год' : 'ЗАПИСКИ+ на месяц';
 
+      /*
+       * Постоянный ключ плательщика для банка.
+       *
+       * Один и тот же на все платежи человека: банк привязывает к нему карту,
+       * и от него зависит `RebillId`. Берём уже выданный, если он есть, —
+       * новый ключ на каждый платёж означал бы нового плательщика при каждой
+       * оплате и потерю привязки. Значение непрозрачно и наших идентификаторов
+       * не несёт.
+       */
+      const known = await getSubscriptionRow(ctx.db, auth.userId);
+      const customerKey = known?.provider_customer_id ?? randomUUID();
+
       await ctx.db.query(
-        `INSERT INTO payment_orders (order_id, provider, user_id, plan, amount_kop)
-         VALUES ($1, 'tbank', $2, $3, $4)`,
-        [orderId, auth.userId, parsed.data.plan, amountKop],
+        `INSERT INTO payment_orders (order_id, provider, user_id, plan, amount_kop, customer_key)
+         VALUES ($1, 'tbank', $2, $3, $4, $5)`,
+        [orderId, auth.userId, parsed.data.plan, amountKop, customerKey],
       );
 
       const email = await emailOf(ctx, auth.userId);
@@ -320,6 +343,10 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
         failUrl: parsed.data.returnUrl,
         notificationUrl: `${ctx.env.PUBLIC_BASE_URL}/api/v1/billing/tbank/notification`,
         email,
+        customerKey,
+        /* Просим банк запомнить карту с первого же платежа: `RebillId`
+           приходит только так, а без него продлевать нечем. */
+        recurrent: true,
         taxation: ctx.env.TINKOFF_TAXATION,
         vat: ctx.env.TINKOFF_VAT,
       });
@@ -363,8 +390,14 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
     if (notification === null) throw errors.badRequest('tbank_bad_payload');
 
     /* Заказ знает, кому включать подписку. Нет заказа — платёж не наш. */
-    const order = await ctx.db.query<{ user_id: string; plan: 'monthly' | 'yearly'; amount_kop: number }>(
-      `SELECT user_id, plan, amount_kop FROM payment_orders WHERE order_id = $1 AND provider = 'tbank'`,
+    const order = await ctx.db.query<{
+      user_id: string;
+      plan: 'monthly' | 'yearly';
+      amount_kop: number;
+      customer_key: string | null;
+    }>(
+      `SELECT user_id, plan, amount_kop, customer_key
+         FROM payment_orders WHERE order_id = $1 AND provider = 'tbank'`,
       [notification.orderId],
     );
     const row = order.rows[0];
@@ -410,7 +443,9 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
            написано, нельзя. */
         autoRenew: false,
         providerSubscriptionId: notification.rebillId,
-        providerCustomerId: null,
+        /* Ключ плательщика тот же, с которым создавали платёж: по нему банк
+           узнаёт человека в следующий раз. */
+        providerCustomerId: row.customer_key,
         graceDays: ctx.env.GRACE_DAYS,
       });
       return reply.type('text/plain').send('OK');

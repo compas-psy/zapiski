@@ -30,9 +30,15 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 /** Что кладём в подпись: только скаляры верхнего уровня. */
 export type TokenParams = Record<string, string | number | boolean | null | undefined>;
 
-/** Значение параметра так, как его видит подпись. */
+/**
+ * Значение параметра так, как его видит подпись.
+ *
+ * Булево едет словами `true`/`false`, число — как есть. Своя нормализация
+ * (единица вместо `true`, обрезание нулей) ломает сверку: банк считает подпись
+ * по тому, что написано в JSON.
+ */
 function asText(value: string | number | boolean): string {
-  return typeof value === 'boolean' ? String(value) : String(value);
+  return String(value);
 }
 
 /**
@@ -83,9 +89,19 @@ export function verifyNotification(input: VerifyInput): NotificationCheck {
   if (typeof input.body !== 'object' || input.body === null) return { ok: false, reason: 'no_token' };
 
   const body = input.body as Record<string, unknown>;
+
+  /*
+   * Терминал — ПЕРВЫМ, до всякой работы с подписью.
+   *
+   * Подпись докажет только, что уведомление подписано нашим паролем. Чужой
+   * терминал — чужой платёж, и разбирать его нам нечего независимо от того,
+   * сошлась подпись или нет. Порядок здесь не косметика: он определяет, какая
+   * причина попадёт в журнал, а по ней и чинят.
+   */
+  if (body['TerminalKey'] !== input.terminalKey) return { ok: false, reason: 'bad_terminal' };
+
   const token = body['Token'];
   if (typeof token !== 'string' || token.length === 0) return { ok: false, reason: 'no_token' };
-  if (body['TerminalKey'] !== input.terminalKey) return { ok: false, reason: 'bad_terminal' };
 
   const params: TokenParams = {};
   for (const [key, value] of Object.entries(body)) {
@@ -141,6 +157,24 @@ export interface CreatePaymentInput {
   notificationUrl: string;
   /** Почта плательщика — для чека 54-ФЗ. */
   email: string;
+  /**
+   * Постоянный ключ плательщика на стороне банка.
+   *
+   * Обязателен для рекуррентного платежа: без него банк не привяжет карту и не
+   * пришлёт `RebillId`. Значение НЕ несёт наших идентификаторов — это
+   * отдельный непрозрачный ключ, который мы храним у себя и сопоставляем
+   * сами. Длина у банка ограничена 36 знаками.
+   */
+  customerKey: string;
+  /**
+   * Просить банк запомнить карту.
+   *
+   * Без `Recurrent: 'Y'` в `Init` `RebillId` не приходит НИКОГДА — и подписка
+   * не продлевается, сколько бы полей под него ни было заведено в схеме. Это
+   * тот случай, когда пропущенный флаг ничего не ломает сегодня и лишает
+   * продукта завтра.
+   */
+  recurrent: boolean;
   /** Система налогообложения и ставка НДС продавца. */
   taxation: string;
   vat: string;
@@ -166,7 +200,7 @@ export async function createPayment(
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response> = globalThis.fetch,
 ): Promise<CreatedPayment> {
   /* В подпись идут только эти поля: `Receipt` и `DATA` — вложенные. */
-  const signed = {
+  const signed: TokenParams = {
     TerminalKey: credentials.terminalKey,
     Amount: input.amountKop,
     OrderId: input.orderId,
@@ -174,6 +208,10 @@ export async function createPayment(
     NotificationURL: input.notificationUrl,
     SuccessURL: input.successUrl,
     FailURL: input.failUrl,
+    CustomerKey: input.customerKey,
+    /* `Recurrent` едет только когда он `Y`: банк не принимает пустое значение,
+       а в подпись попадает всё, что попало в тело. */
+    ...(input.recurrent ? { Recurrent: 'Y' } : {}),
   };
 
   const response = await fetchImpl(`${credentials.apiBase.replace(/\/$/, '')}/Init`, {
