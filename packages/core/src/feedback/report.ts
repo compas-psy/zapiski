@@ -33,7 +33,7 @@ export type FeedbackEntry = 'menu' | 'error' | 'sync_conflict' | 'slow_op';
 export type NotesBucket = '<100' | '100-500' | '500+';
 
 /** Платформа — та же тройка, что у `PlatformCapabilities.kind`. */
-export type FeedbackPlatform = 'web' | 'windows' | 'android';
+export type FeedbackPlatform = 'web' | 'windows' | 'macos' | 'android';
 
 /**
  * Что показывается в блоке «Что будет отправлено» и что уезжает.

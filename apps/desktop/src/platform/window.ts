@@ -9,9 +9,27 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowControls } from '@zapiski/core';
 
-export function createWindowControls(): WindowControls {
+import type { HostOs } from './os';
+
+/**
+ * Ширина «светофора» macOS.
+ *
+ * Три кнопки по 12 pt с шагом 20 pt, начиная от 20 pt от края: правый край
+ * последней приходится на 72 pt. До 78 округляем сознательно — вплотную к
+ * кнопке ставить нечего, а лишние шесть точек читаются как поле.
+ */
+const MACOS_TRAFFIC_LIGHTS = 78;
+
+export function createWindowControls(os: HostOs): WindowControls {
   const win = getCurrentWindow();
+  const native = os === 'macos';
   return {
+    /* На macOS кнопки рисует система (`titleBarStyle: Overlay` в конфиге), и
+       свои рядом были бы вторым комплектом. Убрать системные нельзя:
+       `decorations: false` уносит их вместе с полосой, и окно перестаёт
+       закрываться мышью. */
+    chrome: native ? 'native-overlay' : 'custom',
+    inlineStartInset: native ? MACOS_TRAFFIC_LIGHTS : 0,
     async minimize() {
       await win.minimize();
     },

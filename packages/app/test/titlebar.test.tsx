@@ -21,10 +21,15 @@ import { TitleBar } from '../src/components/TitleBar.js';
 import { AppController } from '../src/state/store.js';
 import { createTestHost } from './host.js';
 
-function fakeControls(maximized = false): WindowControls & { calls: string[] } {
+function fakeControls(
+  maximized = false,
+  chrome: WindowControls['chrome'] = 'custom',
+): WindowControls & { calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
+    chrome,
+    inlineStartInset: chrome === 'native-overlay' ? 78 : 0,
     async minimize() {
       calls.push('minimize');
     },
@@ -126,13 +131,59 @@ describe('кнопки делают то, что написано', () => {
 });
 
 describe('окно оболочки Windows безрамочное', () => {
-  it('decorations выключены в конфиге Tauri', async () => {
-    /* Без этого своя полоса стала бы второй: системная осталась бы сверху. */
+  /**
+   * Рамки окна: один конфиг, две системы.
+   *
+   * В конфиге стоит macOS-случай — `decorations: true` плюс `Overlay`: там
+   * `false` унесло бы вместе с полосой и три системные кнопки, и окно нельзя
+   * было бы закрыть мышью. Windows свою полосу рисует сам, поэтому рамки с
+   * него снимаются в коде, при старте.
+   *
+   * Проверяется ОБА конца связки. Пропадёт первый — на macOS исчезнет
+   * «светофор»; пропадёт второй — на Windows появится вторая полоса
+   * заголовка. Ни то, ни другое не ловится сборкой.
+   */
+  it('окно macOS сохраняет системные кнопки, Windows снимает рамки в коде', async () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
+    const root = resolve(__dirname, '../../..');
+
     const config = JSON.parse(
-      readFileSync(resolve(__dirname, '../../../apps/desktop/src-tauri/tauri.conf.json'), 'utf8'),
-    ) as { app: { windows: Array<{ decorations?: boolean }> } };
-    expect(config.app.windows[0]?.decorations).toBe(false);
+      readFileSync(resolve(root, 'apps/desktop/src-tauri/tauri.conf.json'), 'utf8'),
+    ) as {
+      app: {
+        windows: Array<{ decorations?: boolean; titleBarStyle?: string; hiddenTitle?: boolean }>;
+      };
+    };
+    const window = config.app.windows[0];
+    expect(window?.decorations, 'без рамок на macOS нет и кнопок окна').toBe(true);
+    expect(window?.titleBarStyle, 'без Overlay полоса заголовка останется видимой').toBe('Overlay');
+    expect(window?.hiddenTitle).toBe(true);
+
+    const shell = readFileSync(resolve(root, 'apps/desktop/src-tauri/src/lib.rs'), 'utf8');
+    expect(shell, 'рамки не снимаются — на Windows будет вторая полоса').toContain(
+      'set_decorations(false)',
+    );
+    expect(shell, 'рамки снимаются везде — на macOS пропадут кнопки окна').toContain(
+      '#[cfg(not(target_os = "macos"))]',
+    );
+  });
+
+  it('на macOS своих кнопок окна нет — их рисует система', async () => {
+    /* Два комплекта кнопок в одной полосе — это не «на всякий случай», а
+       интерфейс, в котором человек нажимает не ту. */
+    await mount(fakeControls(false, 'native-overlay'));
+    expect(document.querySelector('.za-titlebar')).not.toBeNull();
+    expect(
+      document.querySelector('.za-titlebar__controls'),
+      'на macOS кнопки окна рисует система — свои были бы вторыми',
+    ).toBeNull();
+  });
+
+  it('под «светофор» macOS оставлено поле', async () => {
+    /* Без отступа содержимое полосы уезжает под три системные кнопки. */
+    await mount(fakeControls(false, 'native-overlay'));
+    const bar = document.querySelector('.za-titlebar') as HTMLElement | null;
+    expect(bar?.style.paddingInlineStart).toBe('78px');
   });
 });

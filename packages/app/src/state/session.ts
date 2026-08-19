@@ -99,7 +99,7 @@ export interface SessionStoreOptions {
   fetch?: FetchLike;
   now?: () => number;
   /** Платформа — сервер записывает её к устройству (`web`/`windows`/`android`). */
-  platform?: 'web' | 'windows' | 'android';
+  platform?: 'web' | 'windows' | 'macos' | 'android';
 }
 
 /**
@@ -111,7 +111,7 @@ const REFRESH_MARGIN_MS = 30_000;
 export class SessionStore {
   private readonly fetchImpl: FetchLike;
   private readonly now: () => number;
-  private readonly platform: 'web' | 'windows' | 'android';
+  private readonly platform: 'web' | 'windows' | 'macos' | 'android';
   private session: CloudSession | null = null;
   private device: string | null = null;
   /** Одно обновление на все параллельные запросы: иначе refresh-токен гонится. */

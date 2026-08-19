@@ -20,9 +20,12 @@ import { SHELL_PREF, type NativePreferences } from './prefs';
 import { rememberVaultPath } from './vault-owner';
 import type { PlatformStrings } from './strings';
 import { openVaultAt } from './vault';
+import type { HostOs } from './os';
 import { createWindowControls } from './window';
 
 export interface CapabilitiesDeps {
+  /** Система под оболочкой — спрашивается у Rust, а не угадывается. */
+  os: HostOs;
   prefs: NativePreferences;
   strings: PlatformStrings;
   biometrics: BiometricProvider | null;
@@ -32,7 +35,12 @@ export interface CapabilitiesDeps {
 
 export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities {
   return {
-    kind: 'windows',
+    /*
+     * Оболочка одна, систем две. Захардкоженное `windows` на Маке — это ложь,
+     * которая уезжает дальше кода: `kind` отправляется серверу при запросе
+     * ссылки для входа, и от него зависит, куда человека вернут.
+     */
+    kind: deps.os === 'macos' ? 'macos' : 'windows',
     version: __ZAPISKI_VERSION__,
 
     biometrics: deps.biometrics,
@@ -103,6 +111,6 @@ export function createCapabilities(deps: CapabilitiesDeps): PlatformCapabilities
     },
 
     /* Своя строка заголовка (ITERATION-1 §6): окно безрамочное, кнопки наши. */
-    window: createWindowControls(),
+    window: createWindowControls(deps.os),
   };
 }

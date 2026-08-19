@@ -23,7 +23,9 @@
         "resizable": true,
         "dragDropEnabled": false,
         "visible": false,
-        "decorations": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "backgroundColor": "#FBFAF7"
       }
     ],
@@ -39,14 +41,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis", "msi", "dmg", "app"],
     "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.icns"
     ],
     "publisher": "СИМПАС",
     "copyright": "СИМПАС",
@@ -62,6 +65,9 @@
         "role": "Editor"
       }
     ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
     "windows": {
       "nsis": {
         "installMode": "currentUser",
@@ -84,7 +90,7 @@
     },
     "updater": {
       "endpoints": [
-        "https://zapiski.cmpas.ru/api/v1/updates/windows/{{current_version}}"
+        "https://zapiski.cmpas.ru/api/v1/updates/{{target}}/{{current_version}}"
       ],
       "pubkey": "ЗАМЕНИТЬ-НА-НАСТОЯЩИЙ-ПУБЛИЧНЫЙ-КЛЮЧ",
       "windows": {

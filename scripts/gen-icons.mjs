@@ -75,6 +75,21 @@ const PLATE_RECT = /<rect[^>]*\/?>(?:<\/rect>)?/;
 
 function variant(kind) {
   if (kind === 'mark') return markup;
+  if (kind === 'template') {
+    /*
+     * Строка меню macOS. Требование системы: ЧЁРНЫЙ силуэт с прозрачностью и
+     * имя файла на `Template` — цвет система подбирает сама, по светлой и
+     * тёмной теме и по подсветке при нажатии. Цветную иконку туда ставить
+     * нельзя: в тёмной теме она превращается в мутное пятно.
+     *
+     * Плитки нет, знак крупнее: на плитке он занимает 0.74 стороны с полями,
+     * а здесь поля рисует сама строка меню, и знак должен заполнять высоту.
+     */
+    return markup
+      .replace(PLATE_RECT, '')
+      .replace('scale(0.74)', 'scale(1.3)')
+      .replace(/fill="#FBF3E3"/g, 'fill="#000000"');
+  }
   if (kind === 'maskable') {
     /* Плитка во весь холст без скругления: маску рисует система. Размер
        дерева НЕ трогаем — 0.74 стороны это 0.43 видимой ширины, а безопасная
@@ -129,6 +144,34 @@ async function rgba(kind, size) {
     { svg: variant(kind), s: size },
   );
   return Uint8Array.from(data);
+}
+
+/**
+ * ICNS для macOS — контейнер из PNG.
+ *
+ * Формат простой: заголовок `icns` с общей длиной, дальше блоки
+ * «четырёхбуквенный тип + длина + данные». Начиная с 10.7 в блоки кладут
+ * PNG как есть, поэтому декодер здесь не нужен — ровно те же картинки, что
+ * идут в остальные форматы.
+ *
+ * Набор типов не произвольный: система выбирает блок по запрошенному размеру
+ * и плотности, и пропуск, например, `ic11` (16 pt @2x) даёт мыло в Dock на
+ * Retina. Проще положить все восемь, чем потом искать, какого не хватило.
+ */
+function icns(blocks) {
+  const chunks = [];
+  let payload = 0;
+  for (const [type, png] of blocks) {
+    const header = Buffer.alloc(8);
+    header.write(type, 0, 'ascii');
+    header.writeUInt32BE(png.length + 8, 4);
+    chunks.push(header, Buffer.from(png));
+    payload += png.length + 8;
+  }
+  const head = Buffer.alloc(8);
+  head.write('icns', 0, 'ascii');
+  head.writeUInt32BE(payload + 8, 4);
+  return Buffer.concat([head, ...chunks]);
 }
 
 /**
@@ -210,6 +253,10 @@ const plan = [
   ['apps/desktop/src-tauri/icons/128x128.png', 'mark', 128],
   ['apps/desktop/src-tauri/icons/128x128@2x.png', 'mark', 256],
   ['apps/desktop/src-tauri/icons/icon.png', 'mark', 512],
+  /* Строка меню macOS: 22 pt и та же иконка для Retina. Имя обязано
+     заканчиваться на `Template` — по нему система понимает, что цвет её. */
+  ['apps/desktop/src-tauri/icons/menubar-Template.png', 'template', 22],
+  ['apps/desktop/src-tauri/icons/menubar-Template@2x.png', 'template', 44],
   ['apps/mobile/src-tauri/icons/32x32.png', 'mark', 32],
   ['apps/mobile/src-tauri/icons/128x128.png', 'mark', 128],
   ['apps/mobile/src-tauri/icons/128x128@2x.png', 'mark', 256],
@@ -249,6 +296,23 @@ const icoSizes = [16, 24, 32, 48, 64, 128, 256];
 const images = [];
 for (const size of icoSizes) images.push({ size, pixels: await rgba('mark', size) });
 await put('apps/desktop/src-tauri/icons/icon.ico', ico(images));
+
+/* macOS: один файл со всеми размерами, которые спрашивает система. */
+const icnsBlocks = [
+  ['icp4', 16],
+  ['icp5', 32],
+  ['ic11', 32],
+  ['ic12', 64],
+  ['ic07', 128],
+  ['ic13', 256],
+  ['ic08', 256],
+  ['ic14', 512],
+  ['ic09', 512],
+  ['ic10', 1024],
+];
+const icnsData = [];
+for (const [type, size] of icnsBlocks) icnsData.push([type, await png('mark', size)]);
+await put('apps/desktop/src-tauri/icons/icon.icns', icns(icnsData));
 
 /* Веб: тот же знак вектором — favicon и `manifest.webmanifest`. */
 await put('apps/web/public/icon.svg', Buffer.from(`${markup}\n`, 'utf8'));

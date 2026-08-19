@@ -15,7 +15,8 @@ import { onAuthCallback, takeInitialAuthCallback } from './auth';
 import { createBiometrics } from './biometrics';
 import { createCapabilities } from './capabilities';
 import { vaultPathOf } from './vault-owner';
-import { DEFAULT_HOTKEY, NativeGlobalHotkey } from './hotkey';
+import { defaultHotkey, NativeGlobalHotkey } from './hotkey';
+import { hostOs } from './os';
 import { WebviewPdfRenderer } from './pdf';
 import { NativePreferences, SHELL_PREF } from './prefs';
 import { platformStrings, resolveShellLocale, type PlatformStrings } from './strings';
@@ -48,12 +49,17 @@ export interface DesktopShell {
 export async function createDesktopShell(): Promise<DesktopShell> {
   const prefs = new NativePreferences();
 
-  /* Три чтения, которые нужны до первого кадра, — параллельно: холодный старт
-     на Windows по ТЗ §6 обязан уложиться в 2 с. */
+  /* Чтения, которые нужны до первого кадра, — параллельно: холодный старт
+     на Windows по ТЗ §6 обязан уложиться в 2 с.
+
+     Система спрашивается первой и отдельно: от неё зависит умолчание
+     хоткея (`Cmd` против `Ctrl`), и подставить сюда чужое значение значило бы
+     занять на macOS сочетание, которого там никто не нажимает. */
+  const os = await hostOs();
   const [biometrics, storedLocale, hotkeyAccelerator] = await Promise.all([
     createBiometrics(),
     prefs.get<string | null>(SHELL_PREF.locale, null),
-    prefs.get<string>(SHELL_PREF.globalHotkey, DEFAULT_HOTKEY),
+    prefs.get<string>(SHELL_PREF.globalHotkey, defaultHotkey(os)),
   ]);
 
   const locale = resolveShellLocale(storedLocale);
@@ -62,7 +68,7 @@ export async function createDesktopShell(): Promise<DesktopShell> {
   const updater = new NativeUpdater();
 
   const host: AppHost = {
-    platform: createCapabilities({ prefs, strings, biometrics, globalHotkey: hotkey, updater }),
+    platform: createCapabilities({ os, prefs, strings, biometrics, globalHotkey: hotkey, updater }),
 
     async restoreVault(owner: string = LOCAL_OWNER): Promise<VaultStorage | null> {
       const stored = await vaultPathOf(prefs, owner);

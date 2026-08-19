@@ -258,6 +258,38 @@ describe('фид обновлений', () => {
     expect(Object.keys(selectPlatforms(manifest, 'windows-x86_64'))).toEqual(['windows-x86_64']);
     expect(Object.keys(selectPlatforms(manifest, 'windows'))).toEqual(['windows-x86_64']);
     expect(Object.keys(selectPlatforms(manifest, 'android'))).toEqual(['android-universal']);
+    /* Сборки под macOS в этом манифесте нет — и молчание честнее пустого
+       манифеста: приложение не должно «обновиться» в никуда. */
     expect(Object.keys(selectPlatforms(manifest, 'darwin'))).toEqual([]);
+  });
+
+  /**
+   * macOS в фиде.
+   *
+   * Апдейтер Tauri зовёт эндпоинт с `{{target}}` — это ИМЯ СИСТЕМЫ (`darwin`),
+   * без архитектуры, — а в ответе ищет ключ `darwin-aarch64`. То есть сервер
+   * обязан отдать по короткому имени полный набор ключей этой системы. Ошибка
+   * здесь беззвучна: обновление просто никогда не приходит.
+   */
+  it('macOS: по `darwin` отдаются обе архитектуры, по точному ключу — одна', () => {
+    const manifest = {
+      version: '1.1.0',
+      notes: '',
+      pub_date: '2026-08-19T00:00:00Z',
+      platforms: {
+        'darwin-aarch64': { signature: 'sig-arm', url: 'https://a/mac-arm.app.tar.gz' },
+        'darwin-x86_64': { signature: 'sig-intel', url: 'https://a/mac-intel.app.tar.gz' },
+        'windows-x86_64': { signature: 'sig', url: 'https://a/win.msi' },
+      },
+    };
+    expect(Object.keys(selectPlatforms(manifest, 'darwin')).sort()).toEqual([
+      'darwin-aarch64',
+      'darwin-x86_64',
+    ]);
+    expect(Object.keys(selectPlatforms(manifest, 'darwin-aarch64'))).toEqual(['darwin-aarch64']);
+    /* Регистр приходит от клиента и значения иметь не должен. */
+    expect(Object.keys(selectPlatforms(manifest, 'Darwin-AArch64'))).toEqual(['darwin-aarch64']);
+    /* Чужая система не подхватывается по общему префиксу. */
+    expect(Object.keys(selectPlatforms(manifest, 'dar'))).toEqual([]);
   });
 });
