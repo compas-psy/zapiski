@@ -132,6 +132,10 @@ prepare_env() {
   fi
   ensure_env EMAIL_SERVER_HOST 'host.docker.internal'
   ensure_env EMAIL_SERVER_PORT '25'
+  # Релей на этой же машине — см. пояснение в deploy/docker-compose.yml.
+  # Зовётся он `host.docker.internal`; сертификата на такое имя не существует,
+  # поэтому строгая проверка превращала живой postfix в `mail: fail`.
+  ensure_env EMAIL_SERVER_LOCAL_RELAY 'true'
   ensure_env EMAIL_FROM 'zapiski@cmpas.ru'
 
   # Секреты внешних сервисов приходят из окружения ssh-сессии (workflow
@@ -180,53 +184,62 @@ container_state() {
   docker inspect -f '{{ .State.Status }}' "$1" 2>/dev/null || echo 'missing'
 }
 
-# Отвечает ли релей, через который уходят письма со ссылкой для входа.
+# Может ли API отправить письмо со ссылкой для входа.
 #
-# Проверяем ИЗ КОНТЕЙНЕРА API, а не с хоста: адрес docker0 у контейнера свой,
+# Проверяем ИЗ КОНТЕЙНЕРА API, а не с хоста: адрес релея у контейнера свой,
 # и «с хоста видно» ничего не доказывает.
 #
-# Стучимся НОДОЙ, а не `/dev/tcp`. Образ — node:22-alpine, оболочка там
-# BusyBox ash, и `/dev/tcp` она не поддерживает вовсе: проверка на нём
-# отвечала бы «релей молчит» при любом живом релее. Такой сторож хуже
-# отсутствующего — он врёт с уверенным видом. Нода в образе есть по
-# определению, `net.connect` работает одинаково везде.
+# Проверяем ТЕМ ЖЕ КОДОМ, которым уходит письмо, — nodemailer'ом и с
+# настройками из окружения самого контейнера. Прежняя проверка читала одно
+# приветствие SMTP и на «220» рапортовала «письма уйдут». Она соврала:
+# приветствие приходило, а `mail` в health держался `fail`, потому что
+# nodemailer обрывался ПОЗЖЕ — на STARTTLS, где сертификата на имя
+# `host.docker.internal` не существует. Сторож, который смотрит не туда,
+# где ломается, хуже отсутствующего: он закрывает вопрос ложным «всё хорошо».
 #
-# Ответ SMTP начинается с «220». Деплой не валим никогда: почта не мешает
-# работать с заметками, а падение выкладки из-за чужого postfix'а было бы
-# хуже самой поломки.
+# Деплой не валим никогда: почта не мешает работать с заметками, а падение
+# выкладки из-за чужого postfix'а было бы хуже самой поломки.
 check_mail_relay() {
-  local host port banner
-  host="$(grep '^EMAIL_SERVER_HOST=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-  port="$(grep '^EMAIL_SERVER_PORT=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)"
-  host="${host:-172.17.0.1}"
-  port="${port:-25}"
+  local verdict
 
-  banner="$(docker exec -e "RELAY_HOST=${host}" -e "RELAY_PORT=${port}" "${API_CONTAINER}" \
-    node -e '
-      const net = require("node:net");
-      const socket = net.connect({
-        host: process.env.RELAY_HOST,
-        port: Number(process.env.RELAY_PORT),
-      });
-      socket.setTimeout(5000);
-      const bail = () => { socket.destroy(); process.exit(1); };
-      socket.on("error", bail);
-      socket.on("timeout", bail);
-      socket.on("data", (chunk) => {
-        process.stdout.write(String(chunk).slice(0, 3));
-        socket.destroy();
-        process.exit(0);
-      });
-    ' 2>/dev/null || true)"
+  verdict="$(docker exec "${API_CONTAINER}" node -e '
+    const nodemailer = require("nodemailer");
+    const host = process.env.SMTP_HOST || "localhost";
+    const port = Number(process.env.SMTP_PORT || 25);
+    const transport = nodemailer.createTransport({
+      host,
+      port,
+      secure: String(process.env.SMTP_SECURE) === "true",
+      ...(String(process.env.SMTP_LOCAL_RELAY) === "true"
+        ? { opportunisticTLS: true, tls: { rejectUnauthorized: false } }
+        : {}),
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 8000,
+    });
+    const say = (line) => console.log(String(line).replace(/\s+/g, " ").slice(0, 300));
+    transport.verify().then(
+      () => { say(`ok ${host}:${port}`); process.exit(0); },
+      (error) => {
+        const code = error && error.code ? error.code : "";
+        const text = error && error.message ? error.message : String(error);
+        say(`fail ${host}:${port} ${code} ${text}`);
+        process.exit(1);
+      },
+    );
+  ' 2>&1 || true)"
 
-  case "${banner}" in
-    220*)
-      log "Почтовый релей ${host}:${port} отвечает — письма со ссылкой для входа уйдут."
+  case "${verdict}" in
+    ok\ *)
+      log "Почта: ${verdict#ok } принимает письма — ссылка для входа уйдёт."
       ;;
-    *)
-      log "ВНИМАНИЕ: почтовый релей ${host}:${port} не ответил."
+    fail\ *)
+      log "ВНИМАНИЕ: почта не работает — ${verdict#fail }"
       log '  Вход по почте не работает: приложение скажет «письмо ушло», а письма не будет.'
       log '  Проверьте postfix и EMAIL_SERVER_HOST/EMAIL_SERVER_PORT в deploy/.env.'
+      ;;
+    *)
+      log "ВНИМАНИЕ: проверка почты не дала ответа: ${verdict:-(молчание)}"
       ;;
   esac
 }

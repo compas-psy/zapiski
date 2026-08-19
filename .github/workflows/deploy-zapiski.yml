@@ -628,33 +628,79 @@ jobs:
           ip -4 addr show docker0 2>/dev/null | awk '/inet /{print "docker0: " $2}' || echo "docker0 не найден"
 
           echo "── разговор с релеем из контейнера API ──"
-          # Не «соединение есть», а НАСТОЯЩИЙ разговор: приветствие сервера и
-          # его ответ на EHLO. Именно там видно «554 Access denied» — отказ
-          # принять письмо от нашей подсети, который с уровня TCP неотличим от
-          # рабочего релея.
+          # Сначала СЫРОЙ разговор, по правилам SMTP: сперва дождаться
+          # приветствия «220», и только потом слать EHLO. Прошлый заход слал
+          # EHLO сразу по установке TCP — postfix честно ответил «554 Error:
+          # SMTP protocol synchronization», и это был отказ МОЕЙ пробе, а не
+          # признак сломанного релея. Проба, нарушающая протокол, обвиняет не
+          # того.
+          #
+          # `< /dev/null` обязателен: `docker compose exec` читает stdin, а
+          # stdin здесь — сам этот скрипт, приехавший в `bash -s`. Без него
+          # exec съедал остаток скрипта, и всё, что ниже, просто не
+          # выполнялось — в прошлом прогоне так пропали и health, и логи.
           dc exec -T api node -e '
             const net = require("net");
             const host = process.env.SMTP_HOST, port = Number(process.env.SMTP_PORT);
             const sock = net.connect({ host, port, timeout: 8000 });
-            let log = "";
+            let log = "", greeted = false;
             sock.setEncoding("utf8");
-            sock.on("connect", () => sock.write("EHLO zapiski.cmpas.ru\r\n"));
             sock.on("data", (chunk) => {
               log += chunk;
-              if (/\r\n(250|5\d\d) /.test(log)) { sock.write("QUIT\r\n"); sock.end(); }
+              if (!greeted && /^220[ -]/.test(log)) { greeted = true; sock.write("EHLO zapiski.cmpas.ru\r\n"); return; }
+              if (greeted && /\r\n(250|[45]\d\d) /.test(log)) { sock.write("QUIT\r\n"); sock.end(); }
             });
             sock.on("close", () => {
               console.log(`SMTP ${host}:${port} ответил:`);
               console.log(log.trim() || "(молчание)");
-              process.exit(log.includes("250") ? 0 : 1);
+              process.exit(/\r\n250 |^250 /m.test(log) ? 0 : 1);
             });
             sock.on("timeout", () => { console.log(`SMTP ${host}:${port} — молчит (таймаут)`); process.exit(1); });
             sock.on("error", (e) => { console.log(`SMTP ${host}:${port} — ${e.code ?? e.message}`); process.exit(1); });
-          ' || echo "релей не принял разговор — смотрите ответ выше"
+          ' < /dev/null || echo "релей не принял разговор — смотрите ответ выше"
+
+          echo "── что об этом релее думает сам nodemailer ──"
+          # Разговор выше может пройти, а письмо всё равно не уйти: письма
+          # отправляет nodemailer, и спотыкается он там, куда сырая проба не
+          # доходит, — на STARTTLS. Спрашиваем ровно тот код, который работает
+          # в продукте, и в трёх настройках сразу, чтобы одним заходом знать
+          # не только «сломано», но и «чем чинится».
+          dc exec -T api node -e '
+            const nodemailer = require("nodemailer");
+            const host = process.env.SMTP_HOST, port = Number(process.env.SMTP_PORT);
+            const local = String(process.env.SMTP_LOCAL_RELAY) === "true";
+            const modes = [
+              ["как настроен сейчас", local ? { opportunisticTLS: true, tls: { rejectUnauthorized: false } } : {}],
+              ["строго, с проверкой сертификата", {}],
+              ["сертификат не проверяем", { opportunisticTLS: true, tls: { rejectUnauthorized: false } }],
+              ["STARTTLS выключен вовсе", { ignoreTLS: true }],
+            ];
+            (async () => {
+              for (const [name, extra] of modes) {
+                const transport = nodemailer.createTransport({
+                  host, port, secure: false,
+                  connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 8000,
+                  ...extra,
+                });
+                try {
+                  await transport.verify();
+                  console.log(`${name}: письма уйдут`);
+                } catch (error) {
+                  const code = error && error.code ? error.code : "";
+                  const text = error && error.message ? error.message : String(error);
+                  console.log(`${name}: ОТКАЗ ${code} ${String(text).replace(/\s+/g, " ").slice(0, 200)}`);
+                }
+              }
+            })();
+          ' < /dev/null || echo "nodemailer не отчитался"
 
           echo "── что говорит о себе сам API ──"
           curl -sS -m 10 http://127.0.0.1:3100/api/v1/health || echo "health не ответил"
           echo
+
+          echo "── почему API считает почту недоступной ──"
+          dc logs --since 72h api 2>/dev/null | grep -i 'mail_relay_unavailable' | tail -3 \
+            || echo "причина в логах не записана"
 
           echo "── последние отказы отправки письма ──"
           dc logs --since 72h api 2>/dev/null | grep -i 'magic_link_send_failed' | tail -5 \

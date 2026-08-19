@@ -7,6 +7,7 @@ import { ApiError, errors } from '../lib/errors.ts';
 import { signJwt, verifyJwt } from '../lib/jwt.ts';
 import { mailSent } from '../lib/messages.ts';
 import { isValidDeviceKey } from '../lib/vaultPath.ts';
+import { describeMailError } from '../services/mailer.ts';
 import { authOf } from '../plugins/auth.ts';
 import {
   consumeMagicToken,
@@ -197,7 +198,14 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     } catch (error) {
       // Почта отдельно от базы: письмо не ушло — токен бесполезен, гасим его,
       // чтобы пользователь мог повторить сразу, а не ждать минуту.
-      request.log.warn({ event: 'magic_link_send_failed' }, 'письмо не ушло');
+      /* Причина — в строке, а не только в комментарии ниже. Без неё «письмо
+         не ушло» одинаково выглядит и когда релея нет, и когда он отверг
+         отправителя, и когда упало рукопожатие TLS. Адрес получателя из
+         текста отказа вычищается (`describeMailError`). */
+      request.log.warn(
+        { event: 'magic_link_send_failed', reason: describeMailError(error) },
+        'письмо не ушло',
+      );
       await ctx.db
         .query('DELETE FROM magic_tokens WHERE token_hash = $1', [hashOf(issued.token)])
         .catch(() => undefined);

@@ -36,6 +36,7 @@ async function main(): Promise<void> {
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,
       secure: env.SMTP_SECURE,
+      localRelayWithoutCertificate: env.SMTP_LOCAL_RELAY,
       user: env.SMTP_USER,
       password: env.SMTP_PASSWORD,
       from: env.MAIL_FROM,

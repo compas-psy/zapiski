@@ -17,6 +17,16 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
   const ctx = app.ctx;
   const startedAt = Date.now();
 
+  /*
+   * Причина отказа почты пишется в журнал — но не на каждую пробу.
+   *
+   * `/health` дёргает HEALTHCHECK контейнера раз в полминуты; если писать
+   * каждый раз, журнал за сутки превращается в две тысячи одинаковых строк, и
+   * настоящая смена состояния в них тонет. Поэтому строка появляется только
+   * когда причина ИЗМЕНИЛАСЬ — включая переход в «почта снова работает».
+   */
+  let reportedMailFailure: string | null = null;
+
   app.get('/health', async (_request, reply) => {
     const checks: Record<string, 'ok' | 'fail'> = {};
 
@@ -48,6 +58,22 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       mail = (await ctx.mailer.verify()) ? 'ok' : 'fail';
     } catch {
       mail = 'fail';
+    }
+
+    /*
+     * Наружу отдаётся только `ok`/`fail`: `/api/v1/health` открыт всему миру,
+     * и адрес внутреннего релея вместе с текстом ошибки транспорта — не то,
+     * что стоит показывать по чужому запросу. Тому, кто чинит, причина видна
+     * в журнале контейнера.
+     */
+    const failure = mail === 'fail' ? (ctx.mailer.lastFailure() ?? 'причина неизвестна') : null;
+    if (failure !== reportedMailFailure) {
+      reportedMailFailure = failure;
+      if (failure === null) {
+        app.log.info('mail_relay_ok');
+      } else {
+        app.log.warn({ reason: failure }, 'mail_relay_unavailable');
+      }
     }
 
     const healthy = Object.values(checks).every((value) => value === 'ok');

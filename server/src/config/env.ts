@@ -84,6 +84,13 @@ const schema = z.object({
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: int(25),
   SMTP_SECURE: bool(false),
+  /**
+   * Релей на этой же машине, личность подтвердить нечем: STARTTLS остаётся,
+   * но сертификат не проверяется. Подробности и обоснование — в
+   * `SmtpOptions.localRelayWithoutCertificate`. Умолчание `false`: для
+   * внешнего релея проверка обязана оставаться строгой.
+   */
+  SMTP_LOCAL_RELAY: bool(false),
   SMTP_USER: z.string().optional(),
   SMTP_PASSWORD: z.string().optional(),
   /** ALLOWED_SENDER_DOMAINS: cmpas.ru. */

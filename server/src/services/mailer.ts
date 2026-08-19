@@ -26,6 +26,19 @@ export interface Mailer {
    * `mail: fail` означает «чинить релей», а не «чинить приложение».
    */
   verify(): Promise<boolean>;
+
+  /**
+   * Почему последняя проверка не прошла; `null` — прошла.
+   *
+   * Заведено по второму витку той же поломки: `mail: fail` показывал, ЧТО
+   * сломано, и молчал о том, ПОЧЕМУ. Причина глоталась в `verify()`, и
+   * отличить «релей не отвечает» от «релей отвечает, но обрывает нас на
+   * STARTTLS» было нечем — а лечатся эти два случая по-разному.
+   *
+   * В строке только код и текст ошибки транспорта: адреса получателей
+   * `verify()` не знает вовсе, потому что письма не отправляет.
+   */
+  lastFailure(): string | null;
 }
 
 export interface SmtpOptions {
@@ -35,18 +48,51 @@ export interface SmtpOptions {
   user?: string | undefined;
   password?: string | undefined;
   from: string;
+  /**
+   * Релей стоит на этой же машине, и его сертификат проверить нечем.
+   *
+   * Нужно ровно для нашего случая. Релей зовётся `host.docker.internal` —
+   * имя, на которое сертификата не существует и выдан быть не может, а сам
+   * postfix предъявляет самоподписанный. На порту 25 nodemailer при
+   * `secure: false` ВСЁ РАВНО поднимает STARTTLS, если сервер его объявляет,
+   * и передаёт сокет в `tls.connect` со строгой проверкой. Она падает — и
+   * живой релей считается недоступным. Снаружи это и выглядело как
+   * `mail: fail` при работающем postfix.
+   *
+   * Что включается флагом:
+   *   • `tls.rejectUnauthorized: false` — рукопожатие проходит, ТРАФИК
+   *     ОСТАЁТСЯ ШИФРОВАННЫМ, не проверяется только личность релея;
+   *   • `opportunisticTLS` — если релей вовсе откажет на STARTTLS, разговор
+   *     продолжится без шифрования, а не оборвётся.
+   *
+   * Второе без первого не помогает: `opportunisticTLS` спасает только от
+   * ОТКАЗА на команду STARTTLS, а провал рукопожатия он не ловит вовсе
+   * (nodemailer, `_actionSTARTTLS`). Именно на этом первая попытка починки
+   * и не сработала бы.
+   *
+   * Умолчание — `false`. Для релея за пределами машины проверка сертификата
+   * обязана оставаться строгой: там подменить собеседника есть кому.
+   */
+  localRelayWithoutCertificate?: boolean | undefined;
 }
 
 export class SmtpMailer implements Mailer {
   readonly #transport: Transporter;
   readonly #from: string;
+  readonly #where: string;
+  #failure: string | null = null;
 
   constructor(options: SmtpOptions) {
     this.#from = options.from;
+    this.#where = `${options.host}:${options.port}`;
     this.#transport = nodemailer.createTransport({
       host: options.host,
       port: options.port,
       secure: options.secure,
+      // См. `SmtpOptions.localRelayWithoutCertificate`.
+      ...(options.localRelayWithoutCertificate === true
+        ? { opportunisticTLS: true, tls: { rejectUnauthorized: false } }
+        : {}),
       // Локальный postfix обычно без аутентификации.
       auth:
         options.user && options.password
@@ -62,9 +108,19 @@ export class SmtpMailer implements Mailer {
   async verify(): Promise<boolean> {
     /* `verify` открывает соединение и здоровается — письма не уходит. */
     return this.#transport.verify().then(
-      () => true,
-      () => false,
+      () => {
+        this.#failure = null;
+        return true;
+      },
+      (error: unknown) => {
+        this.#failure = `${this.#where} — ${describeMailError(error)}`;
+        return false;
+      },
     );
+  }
+
+  lastFailure(): string | null {
+    return this.#failure;
   }
 
   async sendMagicLink(mail: MagicLinkMail): Promise<void> {
@@ -85,6 +141,10 @@ export class MemoryMailer implements Mailer {
 
   async verify(): Promise<boolean> {
     return true;
+  }
+
+  lastFailure(): string | null {
+    return null;
   }
 
   async sendMagicLink(mail: MagicLinkMail): Promise<void> {
@@ -134,6 +194,41 @@ export function renderMagicLink(mail: MagicLinkMail): {
   ].join('');
 
   return { subject, text, html };
+}
+
+/**
+ * Отказ транспорта — одной строкой для журнала.
+ *
+ * Берётся код (`ESOCKET`, `ECONNECTION`, `EAUTH`, `ERR_TLS_CERT_ALTNAME_INVALID`
+ * и подобные) и текст: по ним видно, на каком шаге разговор оборвался.
+ *
+ * Адреса вычищаются. У `verify()` получателя нет вовсе, но эта же строка
+ * пишется при отказе НАСТОЯЩЕЙ отправки, а там релей охотно возвращает
+ * `550 5.1.1 <кто-то@example.com> User unknown` — то есть почту живого
+ * человека. По ТЗ §6 адрес в журнал не попадает: по нему пользователь
+ * опознаётся однозначно.
+ */
+export function describeMailError(error: unknown): string {
+  if (error === null || error === undefined) return 'причина неизвестна';
+
+  const record = error as { code?: unknown; command?: unknown; message?: unknown };
+  const parts: string[] = [];
+  if (typeof record.code === 'string' && record.code !== '') parts.push(record.code);
+  if (typeof record.command === 'string' && record.command !== '') {
+    parts.push(`на команде ${record.command}`);
+  }
+
+  const message =
+    typeof record.message === 'string' && record.message !== '' ? record.message : String(error);
+  parts.push(message);
+
+  /* Длинный стек в журнал не тащим: он не помогает и мешает читать. */
+  return redactAddresses(parts.join(' · ')).slice(0, 400);
+}
+
+/** Любой адрес почты в тексте отказа заменяется меткой. */
+function redactAddresses(value: string): string {
+  return value.replace(/[^\s<>()[\]:;,"]+@[^\s<>()[\]:;,"]+\.[a-z]{2,}/gi, '[адрес скрыт]');
 }
 
 function escapeHtml(value: string): string {
