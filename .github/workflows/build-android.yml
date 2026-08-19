@@ -904,9 +904,21 @@ jobs:
       # Каталог сборок, а не фид обновлений: debug-подпись рядом с latest.json
       # заставила бы клиентов ставить отладочный пакет поверх релизного —
       # Android откажет, а пользователь увидит вечное «доступно обновление».
+      # `timeout-minutes` — не перестраховка, а разбор случившегося.
+      #
+      # Прогон 162 простоял на этом шаге больше получаса: APK был собран,
+      # подписан и приложен к прогону, а выкладка молча висела. Упади она
+      # сразу — следующий шаг («APK должен быть хоть где-то») разобрался бы
+      # сам: на ветке, чьи сборки предлагает промостраница, он валит прогон, на
+      # прочих печатает предупреждение и отпускает. Вместо этого job тянулся к
+      # своему потолку, и человек, ждущий сборку, видел вечное «идёт».
+      #
+      # Пять минут — с большим запасом: APK около сорока мегабайт, обычная
+      # выкладка укладывается в десятки секунд.
       - name: Отдать APK на сервер
         id: ship
         continue-on-error: true
+        timeout-minutes: 5
         if: env.HAS_SERVER == 'true'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -920,7 +932,31 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          # `-T 10`: у самого ssh-keyscan свой таймаут, и без него первым
+          # висел бы он.
+          ssh-keyscan -T 10 -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Настройки задаются файлом, а не флагами у каждой команды: их здесь
+          # четыре — два ssh, один scp и heredoc, — и добавить флаг в три
+          # места из четырёх было бы ровно тем дефектом, который мы чиним.
+          # scp читает тот же ~/.ssh/config.
+          #
+          # BatchMode отменяет любой интерактивный вопрос. Без него ssh, не
+          # приняв ключ, спрашивает пароль — и ждёт ответа, которого на раннере
+          # не будет никогда. Это и есть «висит молча».
+          #
+          # ConnectTimeout закрывает установку связи, ServerAlive* — уже
+          # установленную. Разница существенная: прогон 162 до сервера дошёл
+          # (соседние прогоны выкладывались успешно), а встал посреди разговора,
+          # и один ConnectTimeout его бы не спас.
+          cat >> ~/.ssh/config <<'SSHCFG'
+          Host *
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          SSHCFG
+          chmod 600 ~/.ssh/config
 
           slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
           target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
@@ -1071,15 +1107,28 @@ jobs:
       # ── Выкладка на сервер ────────────────────────────────────────────────
       # Без неё автообновление не заработает: клиент ходит за манифестом на
       # zapiski.cmpas.ru, а сам APK качает оттуда же.
+      # Те же настройки, что и в выкладке сборки, и по той же причине: висящий
+      # ssh не сообщает о себе ничем. Здесь это дороже — молчащий шаг держит
+      # выпуск, а не одну сборку.
       - name: Загрузить SSH-ключ
+        timeout-minutes: 2
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -T 10 -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          cat >> ~/.ssh/config <<'SSHCFG'
+          Host *
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          SSHCFG
+          chmod 600 ~/.ssh/config
 
       - name: Собрать манифест обновления
+        timeout-minutes: 3
         run: |
           set -euo pipefail
           version='${{ needs.build.outputs.version }}'
@@ -1126,6 +1175,7 @@ jobs:
           cat latest.json
 
       - name: Выложить APK и фид
+        timeout-minutes: 5
         run: |
           set -euo pipefail
           apk='${{ needs.build.outputs.apk }}'
