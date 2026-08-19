@@ -100,16 +100,6 @@ const schema = z.object({
   YANDEX_CLIENT_SECRET: z.string().optional(),
   YANDEX_REDIRECT_URI: z.string().optional(),
 
-  /** Проверка подписи вебхука ЮKassa (HMAC-SHA256 по сырому телу). */
-  YOOKASSA_WEBHOOK_SECRET: z.string().optional(),
-  YOOKASSA_SHOP_ID: z.string().optional(),
-  YOOKASSA_SECRET_KEY: z.string().optional(),
-  /** Доп. слой: список сетей уведомлений ЮKassa, CIDR через запятую. */
-  YOOKASSA_ALLOWED_CIDRS: z.string().optional(),
-
-  GOOGLE_PLAY_PACKAGE_NAME: z.string().optional(),
-  GOOGLE_PLAY_SA_EMAIL: z.string().optional(),
-  GOOGLE_PLAY_SA_PRIVATE_KEY: z.string().optional(),
 
   /** ТЗ §7: 10 ГБ на аккаунт. */
   QUOTA_BYTES: int(10 * GIB),
@@ -210,12 +200,8 @@ const schema = z.object({
 
 export type TrustProxySetting = boolean | number | string[];
 
-export type Env = Omit<
-  z.infer<typeof schema>,
-  'CORS_ORIGINS' | 'YOOKASSA_ALLOWED_CIDRS' | 'TRUST_PROXY'
-> & {
+export type Env = Omit<z.infer<typeof schema>, 'CORS_ORIGINS' | 'TRUST_PROXY'> & {
   corsOrigins: string[];
-  yookassaAllowedCidrs: string[];
   trustProxy: TrustProxySetting;
 };
 
@@ -240,11 +226,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     const lines = parsed.error.issues.map((i) => `  ${i.path.join('.')}: ${i.message}`);
     throw new Error(`Конфигурация окружения не прошла проверку:\n${lines.join('\n')}`);
   }
-  const { CORS_ORIGINS, YOOKASSA_ALLOWED_CIDRS, TRUST_PROXY, ...rest } = parsed.data;
+  const { CORS_ORIGINS, TRUST_PROXY, ...rest } = parsed.data;
   return {
     ...rest,
     corsOrigins: splitList(CORS_ORIGINS),
-    yookassaAllowedCidrs: splitList(YOOKASSA_ALLOWED_CIDRS),
     trustProxy: parseTrustProxy(TRUST_PROXY),
   };
 }

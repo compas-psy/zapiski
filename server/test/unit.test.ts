@@ -5,13 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeEtag, safeEqual, randomSlug } from '../src/lib/crypto.ts';
 import { signJwt, verifyJwt } from '../src/lib/jwt.ts';
 import { escapeHtml, sanitizeHtml } from '../src/lib/sanitizeHtml.ts';
-import { parseSubscriptionV2 } from '../src/services/googlePlay.ts';
-import {
-  ipInCidr,
-  parseNotification,
-  periodEnd,
-  verifyNotification,
-} from '../src/services/yookassa.ts';
+import { amountRub, periodEnd } from '../src/services/subscription.ts';
 import { compareVersions, selectPlatforms } from '../src/routes/updates.ts';
 import { renderPublicPage } from '../src/views/publicPage.ts';
 
@@ -220,182 +214,24 @@ describe('публичная страница (SCREENS §10b `4j`)', () => {
   });
 });
 
-describe('ЮKassa', () => {
-  const body = Buffer.from(JSON.stringify({ event: 'payment.succeeded' }));
-
-  it('принимает верную подпись в hex и base64', () => {
-    const secret = 'webhook-секрет';
-    for (const encoding of ['hex', 'base64'] as const) {
-      const signature = createHmac('sha256', secret).update(body).digest(encoding);
-      const result = verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '1.2.3.4',
-        secret,
-        allowedCidrs: [],
-      });
-      expect(result.ok, encoding).toBe(true);
-    }
-  });
-
-  it('отвергает подделанную подпись', () => {
-    const result = verifyNotification({
-      rawBody: body,
-      signatureHeader: 'deadbeef',
-      remoteAddress: '1.2.3.4',
-      secret: 'webhook-секрет',
-      allowedCidrs: [],
-    });
-    expect(result).toEqual({ ok: false, reason: 'bad_signature' });
-  });
-
-  it('отвергает подпись, посчитанную по другому телу', () => {
-    const secret = 'webhook-секрет';
-    const signature = createHmac('sha256', secret).update(Buffer.from('{}')).digest('hex');
-    const result = verifyNotification({
-      rawBody: body,
-      signatureHeader: signature,
-      remoteAddress: '1.2.3.4',
-      secret,
-      allowedCidrs: [],
-    });
-    expect(result.ok).toBe(false);
-  });
-
-  it('без настроек не пропускает ничего', () => {
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: undefined,
-        remoteAddress: '1.2.3.4',
-        secret: undefined,
-        allowedCidrs: [],
-      }),
-    ).toEqual({ ok: false, reason: 'not_configured' });
-  });
-
-  /**
-   * Регрессия: список сетей — не аутентификация. Адрес приходит из
-   * X-Forwarded-For и подделывается тривиально, поэтому сам по себе он не
-   * пропускает уведомление ни при каких условиях.
-   */
-  it('один лишь список сетей не подтверждает уведомление', () => {
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: undefined,
-        remoteAddress: '185.71.76.5',
-        secret: undefined,
-        allowedCidrs: ['185.71.76.0/27'],
-      }),
-    ).toEqual({ ok: false, reason: 'not_configured' });
-  });
-
-  it('сети сужают проверку поверх подписи, но не заменяют её', () => {
-    const secret = 'webhook-секрет';
-    const signature = createHmac('sha256', secret).update(body).digest('hex');
-    const allowedCidrs = ['185.71.76.0/27'];
-
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '185.71.76.5',
-        secret,
-        allowedCidrs,
-      }),
-    ).toEqual({ ok: true, via: 'hmac+cidr' });
-
-    // Верная подпись, но чужая сеть — отказ.
-    expect(
-      verifyNotification({
-        rawBody: body,
-        signatureHeader: signature,
-        remoteAddress: '8.8.8.8',
-        secret,
-        allowedCidrs,
-      }),
-    ).toEqual({ ok: false, reason: 'ip_not_allowed' });
-  });
-
-  it('фильтр по сетям работает', () => {
-    expect(ipInCidr('185.71.76.20', '185.71.76.0/27')).toBe(true);
-    expect(ipInCidr('185.71.77.20', '185.71.76.0/27')).toBe(false);
-    expect(ipInCidr('77.75.153.10', '77.75.153.0/25')).toBe(true);
-    expect(ipInCidr('10.0.0.1', '0.0.0.0/0')).toBe(true);
-  });
-
-  it('разбирает уведомление с metadata', () => {
-    const parsed = parseNotification({
-      event: 'payment.succeeded',
-      object: {
-        id: 'pay-1',
-        status: 'succeeded',
-        paid: true,
-        amount: { value: '199.00', currency: 'RUB' },
-        metadata: { user_id: 'u-1', plan: 'monthly' },
-        payment_method: { id: 'pm-1', saved: true },
-      },
-    });
-    expect(parsed).toMatchObject({
-      event: 'payment.succeeded',
-      objectId: 'pay-1',
-      userId: 'u-1',
-      plan: 'monthly',
-      paid: true,
-      amountRub: 199,
-      paymentMethodId: 'pm-1',
-    });
-  });
-
-  it('мусор не разбирается', () => {
-    expect(parseNotification(null)).toBeNull();
-    expect(parseNotification({ event: 1 })).toBeNull();
-    expect(parseNotification({ event: 'x' })).toBeNull();
-  });
-
-  it('период считается по тарифу', () => {
+/**
+ * Период подписки.
+ *
+ * Жил в наборе ЮKassa и остался после её удаления: к провайдеру это отношения
+ * не имеет — правило продукта одно на любой эквайринг.
+ */
+describe('период подписки', () => {
+  it('считается по тарифу', () => {
     const start = new Date('2026-01-31T00:00:00Z');
     expect(periodEnd('yearly', start).getUTCFullYear()).toBe(2027);
     expect(periodEnd('monthly', new Date('2026-01-15T00:00:00Z')).toISOString()).toBe(
       '2026-02-15T00:00:00.000Z',
     );
   });
-});
 
-describe('Google Play', () => {
-  it('разбирает активную подписку', () => {
-    const purchase = parseSubscriptionV2({
-      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
-      startTime: '2026-08-01T00:00:00Z',
-      latestOrderId: 'GPA.1',
-      lineItems: [
-        {
-          productId: 'zapiski_plus_monthly',
-          expiryTime: new Date(Date.now() + 86_400_000).toISOString(),
-          autoRenewingPlan: { autoRenewEnabled: true },
-        },
-      ],
-    });
-    expect(purchase.active).toBe(true);
-    expect(purchase.autoRenewing).toBe(true);
-    expect(purchase.orderId).toBe('GPA.1');
-  });
-
-  it('истёкшая подписка не считается активной', () => {
-    const purchase = parseSubscriptionV2({
-      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
-      lineItems: [
-        { productId: 'x', expiryTime: '2020-01-01T00:00:00Z', autoRenewingPlan: {} },
-      ],
-    });
-    expect(purchase.active).toBe(false);
-  });
-
-  it('битый ответ отвергается, а не считается покупкой', () => {
-    expect(() => parseSubscriptionV2(null)).toThrow();
-    expect(() => parseSubscriptionV2({ lineItems: [] })).toThrow();
-    expect(() => parseSubscriptionV2({ lineItems: [{ productId: 'x' }] })).toThrow();
+  it('годовой тариф — это двенадцать месячных цен, а не месячная', () => {
+    expect(amountRub('yearly', { monthlyRub: 299, yearlyMonthlyRub: 224 })).toBe(2688);
+    expect(amountRub('monthly', { monthlyRub: 299, yearlyMonthlyRub: 224 })).toBe(299);
   });
 });
 

@@ -607,7 +607,7 @@ Microsoft Trusted Root Program: репутация теперь набирает
 
 Секреты, которые живут **только на сервере**, в `/var/www/zapiski/deploy/.env`
 (в git его нет): пароль БД и `AUTH_SECRET` — генерируются скриптом деплоя при
-первом запуске; `YOOKASSA_*`, `GOOGLE_PLAY_*` — дописываются руками. Образец —
+первом запуске; `TINKOFF_TERMINAL_KEY` и `TINKOFF_PASSWORD` — дописываются руками. Образец —
 [`../../deploy/.env.example`](../../deploy/.env.example).
 
 Один раз руками, вне автоматики (подробно — в

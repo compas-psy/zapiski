@@ -5,7 +5,6 @@ import { createPool } from './db/pool.ts';
 import { runMigrations } from './db/migrate.ts';
 import { pruneMagicTokens } from './services/accounts.ts';
 import { BlobStore } from './services/blobStore.ts';
-import { GooglePlayVerifier } from './services/googlePlay.ts';
 import { LiveBus } from './services/liveBus.ts';
 import { SmtpMailer } from './services/mailer.ts';
 import { YandexOAuth } from './services/yandex.ts';
@@ -52,14 +51,6 @@ async function main(): Promise<void> {
               `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}/api/v1/auth/yandex/callback`,
           })
         : null,
-    play:
-      env.GOOGLE_PLAY_PACKAGE_NAME && env.GOOGLE_PLAY_SA_EMAIL && env.GOOGLE_PLAY_SA_PRIVATE_KEY
-        ? new GooglePlayVerifier({
-            packageName: env.GOOGLE_PLAY_PACKAGE_NAME,
-            serviceAccountEmail: env.GOOGLE_PLAY_SA_EMAIL,
-            privateKey: env.GOOGLE_PLAY_SA_PRIVATE_KEY,
-          })
-        : null,
     retention: {
       trialDays: env.VERSION_RETENTION_TRIAL_DAYS,
       paidDays: env.VERSION_RETENTION_PAID_DAYS,
@@ -71,9 +62,6 @@ async function main(): Promise<void> {
 
   if (ctx.yandex === null) {
     app.log.warn('YANDEX_CLIENT_ID/SECRET не заданы — вход через Яндекс ID выключен');
-  }
-  if (ctx.play === null) {
-    app.log.warn('сервисный аккаунт Google Play не задан — проверка покупок выключена');
   }
 
   // Уборка: просроченные версии (ТЗ §4.2) и отработавшие magic-токены.

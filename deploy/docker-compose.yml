@@ -49,7 +49,7 @@ services:
       - .env
 
     # Имена переменных — контракт server/src/config/env.ts. Секреты
-    # (AUTH_SECRET, YANDEX_*, YOOKASSA_*, TINKOFF_*) сюда не пишутся: они
+    # (AUTH_SECRET, YANDEX_*, TINKOFF_*) сюда не пишутся: они
     # приходят из deploy/.env выше.
     environment:
       NODE_ENV: production
@@ -94,9 +94,8 @@ services:
       # `X-Forwarded-For $proxy_add_x_forwarded_for`, то есть ДОПИСЫВАЕТ свой
       # адрес к тому, что прислал клиент. При "true" Fastify доверяет всей
       # цепочке и берёт самый левый элемент — назначенный клиентом. Тогда
-      # `request.ip` подделывается одним заголовком, а на нём держатся
-      # ограничитель запросов и проверка сети отправителя вебхука ЮKassa
-      # (YOOKASSA_ALLOWED_CIDRS). Разбор значения — parseTrustProxy в
+      # `request.ip` подделывается одним заголовком, а на нём держится
+      # ограничитель запросов. Разбор значения — parseTrustProxy в
       # server/src/config/env.ts, разбор дефекта — docs/dev/security/AUDIT.md, SEC-002.
       TRUST_PROXY: "1"
 

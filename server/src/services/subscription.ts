@@ -12,6 +12,29 @@ import type { Db, DbClient } from '../db/pool.ts';
  * умеет запрещать, и ни один read-хендлер его не спрашивает.
  */
 
+/**
+ * Провайдер платежа, каким он МОЖЕТ ЛЕЖАТЬ В БАЗЕ.
+ *
+ * Шире того, чем мы принимаем деньги сегодня, и это не забытая строка.
+ * Эквайринг с 18.08.2026 один — Т-Касса; ЮKassa и Google Play удалены из
+ * кода. Но их платежи ОСТАЛИСЬ в `subscriptions`, `billing_events` и
+ * `payment_orders` — это история, включая непроведённые. Сузить тип (и тем
+ * более CHECK в схеме) значило бы сделать старые строки нечитаемыми: подписка
+ * человека, оплатившего через ЮKassa, перестала бы разбираться, а миграция
+ * упала бы на живой базе.
+ *
+ * Правило простое: ЧИТАЕМ все три, ПИШЕМ только `ActiveProvider`.
+ */
+export type PaymentProvider = 'yookassa' | 'google_play' | 'tbank';
+
+/**
+ * Чем можно принять деньги сейчас.
+ *
+ * Отдельный тип, а не комментарий: пока он такой, ни одна ветка кода не может
+ * записать платёж от провайдера, которого у нас больше нет.
+ */
+export type ActiveProvider = 'tbank';
+
 export interface SubscriptionRow {
   user_id: string;
   plan: SubscriptionPlan;
@@ -21,7 +44,7 @@ export interface SubscriptionRow {
   current_period_start: Date | null;
   current_period_end: Date | null;
   grace_ends_at: Date | null;
-  provider: 'yookassa' | 'google_play' | 'tbank' | null;
+  provider: PaymentProvider | null;
   provider_customer_id: string | null;
   provider_subscription_id: string | null;
   auto_renew: boolean;
@@ -227,10 +250,31 @@ export async function startTrial(
   };
 }
 
+/**
+ * Конец периода по тарифу: месяц или год от начала.
+ *
+ * Жил в модуле ЮKassa и переехал сюда вместе с её удалением: к провайдеру это
+ * отношения не имеет — это правило продукта, и им пользуется любой эквайринг.
+ */
+export function periodEnd(plan: 'monthly' | 'yearly', start: Date): Date {
+  const end = new Date(start.getTime());
+  if (plan === 'yearly') end.setUTCFullYear(end.getUTCFullYear() + 1);
+  else end.setUTCMonth(end.getUTCMonth() + 1);
+  return end;
+}
+
+/** Сумма к списанию в рублях. ТЗ §5.5: 299 ₽/мес, 224 ₽/мес при годовой. */
+export function amountRub(
+  plan: 'monthly' | 'yearly',
+  prices: { monthlyRub: number; yearlyMonthlyRub: number },
+): number {
+  return plan === 'yearly' ? prices.yearlyMonthlyRub * 12 : prices.monthlyRub;
+}
+
 export interface ActivationInput {
   userId: string;
   plan: 'monthly' | 'yearly';
-  provider: 'yookassa' | 'google_play' | 'tbank';
+  provider: ActiveProvider;
   periodStart: Date;
   periodEnd: Date;
   autoRenew: boolean;

@@ -583,130 +583,16 @@ describe.skipIf(noDatabase())('периметр: публикация по сс�
   });
 });
 
-describe.skipIf(noDatabase())('периметр: адрес клиента и вебхук ЮKassa', () => {
-  const SECRET = 'секрет-вебхука-для-теста-периметра';
-  let harness: Harness;
-
-  const signed = (id: string, userId: string): { payload: string; signature: string } => {
-    const payload = JSON.stringify({
-      event: 'payment.succeeded',
-      object: {
-        id,
-        status: 'succeeded',
-        paid: true,
-        metadata: { user_id: userId, plan: 'yearly' },
-      },
-    });
-    const signature = createHmac('sha256', SECRET).update(Buffer.from(payload, 'utf8')).digest('hex');
-    return { payload, signature };
-  };
-
-  beforeAll(async () => {
-    harness = await createHarness({
-      env: {
-        YOOKASSA_WEBHOOK_SECRET: SECRET,
-        YOOKASSA_ALLOWED_CIDRS: '185.71.76.0/27',
-        TRUST_PROXY: '1',
-        /* Проверка «подделанный вебхук не включил подписку» смотрит на
-           canWrite: при выключенной оплате оно истинно у всех, и подделку
-           было бы не отличить от честного состояния. */
-        BILLING_ENABLED: '1',
-      },
-    });
-  });
-
-  afterAll(async () => {
-    await harness.close();
-  });
-
-  /**
-   * SEC-002. nginx ставит `X-Forwarded-For $proxy_add_x_forwarded_for`, то
-   * есть ДОПИСЫВАЕТ адрес клиента к тому, что клиент прислал сам. При
-   * `TRUST_PROXY=true` Fastify доверяет всей цепочке и берёт самый левый
-   * элемент — назначенный злоумышленником. Тогда список сетей ЮKassa
-   * обходится одним заголовком.
-   *
-   * Здесь закреплено обратное: доверяем ровно последнему переходу, поэтому
-   * подставленный слева «адрес ЮKassa» ничего не даёт.
-   */
-  it('подставленный слева адрес ЮKassa не проходит проверку сети', async () => {
-    const user = await createUser(harness, { subscribed: false });
-    const { payload, signature } = signed('forged-1', user.userId);
-
-    const forged = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        // Слева — то, что прислал злоумышленник; справа — то, что дописал nginx.
-        'x-forwarded-for': '185.71.76.5, 203.0.113.9',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(forged.statusCode).toBe(400);
-    expect(forged.json()).toMatchObject({ error: { code: 'yookassa_ip_not_allowed' } });
-
-    const status = await harness.app.inject({
-      method: 'GET',
-      url: '/api/v1/billing/status',
-      headers: user.authHeader,
-    });
-    const body = status.json() as { plan: string; canWrite: boolean };
-    expect(body.plan).not.toBe('yearly');
-    expect(body.canWrite).toBe(false);
-  });
-
-  it('честное уведомление из сети ЮKassa с верной подписью применяется', async () => {
-    const user = await createUser(harness, { subscribed: false });
-    const { payload, signature } = signed('honest-1', user.userId);
-
-    const accepted = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(accepted.statusCode).toBe(200);
-    expect(accepted.json()).toMatchObject({ applied: 'activated' });
-
-    // Повтор того же уведомления идемпотентен — защита от воспроизведения.
-    const replay = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': signature,
-      },
-      payload,
-    });
-    expect(replay.json()).toMatchObject({ duplicate: true });
-  });
-
-  it('верная сеть, но чужая подпись — отказ', async () => {
-    const user = await createUser(harness, { subscribed: false });
-    const { payload } = signed('bad-sig-1', user.userId);
-    const wrong = createHmac('sha256', 'не тот секрет').update(Buffer.from(payload, 'utf8')).digest('hex');
-
-    const response = await harness.app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/yookassa/webhook',
-      headers: {
-        'content-type': 'application/json',
-        'x-forwarded-for': '185.71.76.5',
-        'x-yookassa-signature': wrong,
-      },
-      payload,
-    });
-    expect(response.statusCode).toBe(400);
-    expect(response.json()).toMatchObject({ error: { code: 'yookassa_bad_signature' } });
-  });
-
+/**
+ * Доверие к заголовку с адресом клиента.
+ *
+ * Проверка сетей отправителя уехала вместе с ЮKassa: у Т-Кассы подпись лежит
+ * в теле и никакого списка адресов не требует. Само правило «сколько прокси
+ * впереди» осталось — от него зависит адрес в журнале и ограничитель частоты,
+ * и ошибиться в нём значит либо доверять подделанному заголовку, либо считать
+ * всех одним клиентом.
+ */
+describe('периметр: адрес клиента', () => {
   it('разбор TRUST_PROXY по умолчанию доверяет ровно одному переходу', () => {
     expect(parseTrustProxy(undefined)).toBe(1);
     expect(parseTrustProxy('1')).toBe(1);
