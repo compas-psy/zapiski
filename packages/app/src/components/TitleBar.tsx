@@ -32,6 +32,20 @@ export function TitleBar(): ReactNode {
 
   if (!controls) return null;
 
+  /*
+   * macOS рисует кнопки окна сам.
+   *
+   * Там полосы заголовка нет (`titleBarStyle: Overlay`), но три системные
+   * кнопки слева остались — убрать их нельзя, иначе окно не закрыть мышью.
+   * Свои рядом были бы вторым комплектом, поэтому здесь остаётся только то,
+   * за что окно тянут, и поле под «светофор», чтобы содержимое не уезжало
+   * под него.
+   *
+   * Признак приходит из порта окна, а не выводится из системы: это свойство
+   * ОКНА и меняется вместе с его конфигурацией.
+   */
+  const native = controls.chrome === 'native-overlay';
+
   return (
     <div
       className="za-titlebar"
@@ -39,8 +53,14 @@ export function TitleBar(): ReactNode {
          нажатие на «закрыть» начинало бы перетаскивание. */
       data-tauri-drag-region="true"
       onDoubleClick={() => void controls.toggleMaximize()}
+      style={
+        controls.inlineStartInset > 0
+          ? { paddingInlineStart: `${controls.inlineStartInset}px` }
+          : undefined
+      }
     >
       <span className="za-titlebar__space" data-tauri-drag-region="true" />
+      {native ? null : (
       <div className="za-titlebar__controls">
         <button
           type="button"
@@ -67,6 +87,7 @@ export function TitleBar(): ReactNode {
           <CloseGlyph />
         </button>
       </div>
+      )}
     </div>
   );
 }

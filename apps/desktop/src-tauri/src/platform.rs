@@ -122,6 +122,56 @@ pub fn forward_file_arguments<R: Runtime>(app: &AppHandle<R>, argv: &[String]) {
     let _ = app.emit(EVENT_OPEN_FILE, files);
 }
 
+/// Файлы, которые ОС попросила открыть НЕ аргументами командной строки.
+///
+/// Так делает macOS: двойной щелчок по `.md` не перезапускает приложение с
+/// путём в argv, а шлёт Apple Event уже работающему процессу. Tauri отдаёт
+/// его как `RunEvent::Opened` со списком адресов — почти всегда `file://`.
+///
+/// Без этой дороги ассоциация файлов на macOS ЧИСЛИТСЯ и не работает: система
+/// показывает ЗАПИСКИ в «Открыть с помощью», приложение поднимается и ничего
+/// не открывает.
+pub fn forward_opened_urls<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) {
+    let mut files: Vec<String> = Vec::new();
+    for url in urls {
+        if url.scheme() == "file" {
+            if let Ok(path) = url.to_file_path() {
+                if path.is_file() {
+                    files.push(path.to_string_lossy().into_owned());
+                }
+            }
+            continue;
+        }
+        /* Своя схема приходит той же дорогой — это возврат после входа. */
+        if url.scheme() == "zapiski" {
+            crate::auth::deliver(app, vec![url.to_string()]);
+        }
+    }
+
+    if files.is_empty() {
+        return;
+    }
+    show_main_window(app);
+    let _ = app.emit(EVENT_OPEN_FILE, files);
+}
+
+/// Какая система под приложением.
+///
+/// Оболочка одна на Windows и macOS, а различий между ними хватает: своя
+/// строка заголовка против системного «светофора», `Ctrl` против `Cmd`,
+/// реестр против login item. Фронтенду это нужно знать НАВЕРНЯКА, а не
+/// угадывать по `navigator.userAgent`, поэтому платформу называет оболочка.
+#[tauri::command]
+pub fn host_os() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else {
+        "linux"
+    }
+}
+
 /// Запущено ли приложение из автозапуска (то есть должно остаться в трее).
 pub fn started_in_tray(argv: &[String]) -> bool {
     argv.iter().any(|argument| argument == TRAY_ARG)

@@ -1,0 +1,312 @@
+name: Сборка macOS
+
+# ЗАПИСКИ под macOS: .app и .dmg.
+#
+# ── Что это и чем отличается от Windows ─────────────────────────────────────
+#
+# Сборка РУЧНАЯ. На сервер и в фид обновлений ничего не уезжает: пока это
+# отдельная ветка и отдельная задача, а не канал доставки. Артефакт живёт две
+# недели в прогоне — этого хватает, чтобы скачать, поставить и проверить.
+#
+# ── Подписи не будет, и это сказано вслух ───────────────────────────────────
+#
+# Apple Developer Program (99 $/год) у нас нет, значит нет ни сертификата
+# Developer ID, ни нотаризации. Gatekeeper на такое приложение скажет «не
+# удалось проверить разработчика» — это ожидаемо, и объясняется человеку на
+# странице /macos-warning, а не замалчивается.
+#
+# Ad-hoc подпись (`codesign -s -`) сертификата не заменяет и Gatekeeper не
+# успокаивает. Она нужна для другого: на Apple Silicon бинарь БЕЗ ЛЮБОЙ
+# подписи не запускается вовсе — ядро отказывает в исполнении. То есть без
+# ad-hoc сборка была бы не «с предупреждением», а мёртвой.
+
+# Триггер по путям, а не по каждому пушу. Минута раннера macOS стоит десять
+# обычных, и гонять сборку на правку сервера — трата без ответа на вопрос.
+# Зато когда меняется общий код, сборка обязана пройти: обещание «один код на
+# все платформы» проверяется только тем, что все платформы собираются.
+on:
+  push:
+    branches:
+      - claude/cloud-deployment-cross-platform-9nenw7
+    paths:
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-macos.yml'
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/build-macos.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Приложение macOS
+    # macos-14 — Apple Silicon. Собирать universal удобнее именно на нём:
+    # Rosetta для второй половины не нужна, оба таргета ставятся штатно.
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Версия НЕ задаётся: она объявлена в package.json (`packageManager`),
+      # и второе объявление здесь action отвергает как расхождение. Ровно так
+      # же сделано в сборке Windows.
+      - name: Установить pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Установить Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Обе архитектуры: universal-apple-darwin — это не отдельный таргет
+      # компилятора, а склейка двух готовых бинарей через `lipo`. Не хватит
+      # одной — сборка упадёт на самом последнем шаге, после всей компиляции.
+      - name: Установить Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Кэш cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          shared-key: zapiski-desktop-macos
+          cache-on-failure: true
+
+      - name: Версии инструментов
+        run: |
+          set -euo pipefail
+          node --version
+          pnpm --version
+          rustc --version
+          rustup target list --installed
+          sw_vers
+
+      - name: Установка зависимостей
+        run: |
+          set -euo pipefail
+          if pnpm install --frozen-lockfile; then
+            echo 'Лок-файл актуален.'
+          else
+            echo "::warning title=Лок-файл устарел::pnpm-lock.yaml разошёлся с package.json. Выполните «pnpm install» и закоммитьте pnpm-lock.yaml."
+            pnpm install --no-frozen-lockfile
+          fi
+
+      - name: Сборка пакетов
+        run: pnpm -r --filter "./packages/**" run build
+
+      - name: Проверка типов оболочки
+        run: pnpm --filter @zapiski/desktop typecheck
+
+      - name: Сборка фронтенда
+        run: pnpm --filter @zapiski/desktop run build:vite
+
+      # Иконка macOS живёт в репозитории и собирается тем же скриптом, что и
+      # остальные. Проверяем, что она на месте: без .icns бандлер молча кладёт
+      # в .app иконку по умолчанию, и приложение выглядит чужим.
+      - name: Иконка .icns на месте
+        run: |
+          set -euo pipefail
+          file apps/desktop/src-tauri/icons/icon.icns
+          head -c 4 apps/desktop/src-tauri/icons/icon.icns | grep -q 'icns'
+          echo 'icns на месте.'
+
+      - name: Определить режим подписи обновлений
+        id: signing
+        env:
+          SIGNING_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SIGNING_KEY:-}" ]; then
+            echo '::warning::Секрет TAURI_SIGNING_PRIVATE_KEY не задан — собираем БЕЗ подписи манифеста обновлений. Это НАША подпись фида, к Apple отношения не имеет. Артефакты .app.tar.gz и .sig не создаются.'
+            echo 'signed=false' >> "${GITHUB_OUTPUT}"
+          else
+            echo 'Ключ подписи обновлений на месте.'
+            echo 'signed=true' >> "${GITHUB_OUTPUT}"
+          fi
+
+      # `createUpdaterArtifacts: true` без приватного ключа роняет бандлер.
+      # Файл пишется на раннере и в репозиторий не попадает.
+      - name: Отключить артефакты апдейтера (сборка без подписи)
+        if: steps.signing.outputs.signed != 'true'
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          cat > tauri.ci-unsigned.conf.json <<'JSON'
+          {
+            "bundle": {
+              "createUpdaterArtifacts": false
+            }
+          }
+          JSON
+          cat tauri.ci-unsigned.conf.json
+
+      # ── Сборка ────────────────────────────────────────────────────────────
+      #
+      # Сначала universal. Не вышло — не молчим и не выдаём aarch64 за
+      # universal: печатаем предупреждение и говорим, что именно собрано.
+      # Молча суженная сборка — это Intel-Мак, на котором приложение просто
+      # не запустится, и никто не будет знать почему.
+      #
+      # APPLE_SIGNING_IDENTITY="-" — та самая ad-hoc подпись. Tauri передаёт
+      # значение в `codesign -s`, и прочерк означает «подписать без
+      # сертификата». Делать это ПОСЛЕ сборки .dmg поздно: подписывать надо
+      # .app, который внутрь образа уже уложен.
+      - name: Сборка .app и .dmg
+        id: build
+        working-directory: apps/desktop
+        env:
+          SIGNED: ${{ steps.signing.outputs.signed }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: '-'
+        run: |
+          set -euo pipefail
+          common=()
+          if [ "${SIGNED}" != 'true' ]; then
+            common+=(--config tauri.ci-unsigned.conf.json)
+          fi
+
+          if pnpm exec tauri build --target universal-apple-darwin "${common[@]}"; then
+            echo 'target=universal-apple-darwin' >> "${GITHUB_OUTPUT}"
+            echo 'Собрано universal: работает и на Apple Silicon, и на Intel.'
+          else
+            echo '::warning title=universal не собрался::Собираем только aarch64 (Apple Silicon). На компьютерах с процессором Intel эта сборка НЕ запустится. Причина — в логе шага выше.'
+            pnpm exec tauri build --target aarch64-apple-darwin "${common[@]}"
+            echo 'target=aarch64-apple-darwin' >> "${GITHUB_OUTPUT}"
+          fi
+
+      # Подпись проверяется, а не подразумевается: без неё .app на Apple
+      # Silicon не запускается, и узнать об этом на чужом компьютере — самый
+      # дорогой способ.
+      - name: Проверить ad-hoc подпись
+        env:
+          TARGET: ${{ steps.build.outputs.target }}
+        run: |
+          set -euo pipefail
+          app="$(find "apps/desktop/src-tauri/target/${TARGET}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "${app}" ]; then
+            echo '::error::.app не найден — собирать .dmg было не из чего'
+            exit 1
+          fi
+          echo "Приложение: ${app}"
+          codesign -dv --verbose=2 "${app}" 2>&1 | sed -n '1,12p'
+          codesign --verify --deep --strict "${app}"
+          echo 'Подпись на месте (ad-hoc). Нотаризации нет и не будет: у нас нет Apple Developer Program.'
+
+      - name: Найти .dmg и посчитать отпечаток
+        id: dmg
+        env:
+          TARGET: ${{ steps.build.outputs.target }}
+        run: |
+          set -euo pipefail
+          file="$(find "apps/desktop/src-tauri/target/${TARGET}/release/bundle/dmg" -maxdepth 1 -name '*.dmg' | head -1)"
+          if [ -z "${file}" ]; then
+            echo '::error::.dmg не собрался — ставить пользователю нечего'
+            exit 1
+          fi
+          size="$(du -h "${file}" | cut -f1)"
+          sha="$(shasum -a 256 "${file}" | cut -d' ' -f1)"
+          echo "path=${file}" >> "${GITHUB_OUTPUT}"
+          echo "Файл: ${file} (${size})"
+          echo "SHA-256: ${sha}"
+          {
+            echo '### Сборка macOS'
+            echo
+            echo "* архитектура: \`${TARGET}\`"
+            echo "* файл: \`$(basename "${file}")\`, ${size}"
+            echo "* SHA-256: \`${sha}\`"
+            echo
+            echo 'Подпись ad-hoc, нотаризации нет. Первый запуск — правым щелчком по приложению → «Открыть».'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      # Отдельный артефакт и НИКАКОЙ выкладки на сервер: пока это ручная
+      # сборка, и в фид обновлений она не попадает.
+      - name: Сохранить .dmg
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapiski-macos-dmg
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+          retention-days: 14
+
+      # ── Ассоциация с .md: проверка без Мака ───────────────────────────────
+      #
+      # `fileAssociations` в конфиге — это ОБЕЩАНИЕ. Выполняет его бандлер,
+      # раскладывая `CFBundleDocumentTypes` по Info.plist, и до сих пор мы
+      # верили ему на слово: пункт числился сделанным, а проверить его без
+      # компьютера с macOS было нечем.
+      #
+      # Проверить есть чем. Образ монтируется здесь же, и Info.plist читается
+      # из ТОГО .app, который поедет человеку, — не из каталога сборки. Разница
+      # существенная: подписывали и упаковывали мы разные копии, и «в сборке
+      # было» не означает «в образе есть».
+      #
+      # Шаг стоит ПОСЛЕ выгрузки артефакта намеренно. Если секции не окажется,
+      # сборка станет красной — но .dmg уже будет лежать и его можно будет
+      # скачать и посмотреть глазами.
+      - name: Проверить CFBundleDocumentTypes в готовом .app
+        env:
+          DMG: ${{ steps.dmg.outputs.path }}
+        run: |
+          set -euo pipefail
+          mount="$(mktemp -d)"
+          hdiutil attach "${DMG}" -nobrowse -readonly -mountpoint "${mount}" > /dev/null
+          trap 'hdiutil detach "${mount}" -quiet || true' EXIT
+
+          app="$(find "${mount}" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "${app}" ]; then
+            echo '::error::в образе нет .app — ставить пользователю нечего'
+            exit 1
+          fi
+          plist="${app}/Contents/Info.plist"
+          echo "Info.plist из образа: ${plist}"
+
+          section="$(plutil -extract CFBundleDocumentTypes xml1 -o - "${plist}" 2>/dev/null || true)"
+          if [ -z "${section}" ]; then
+            {
+              echo
+              echo '#### Ассоциация с .md'
+              echo
+              echo 'В Info.plist готового .app **нет секции CFBundleDocumentTypes**.'
+              echo 'Двойной щелчок по файлу .md приложение не откроет: система о нём не знает.'
+            } >> "${GITHUB_STEP_SUMMARY}"
+            echo '::error title=CFBundleDocumentTypes отсутствует::fileAssociations в конфиге есть, а в собранном Info.plist секции нет — ассоциация с .md не работает.'
+            exit 1
+          fi
+
+          echo '── CFBundleDocumentTypes ─────────────────────────────────────'
+          printf '%s\n' "${section}"
+          echo '──────────────────────────────────────────────────────────────'
+
+          # Секция может быть и пустой болванкой. Смотрим на то, ради чего она
+          # заводилась: расширение md и роль редактора, а не просмотрщика.
+          missing=''
+          printf '%s' "${section}" | grep -q '<string>md</string>' || missing="${missing} расширение md;"
+          printf '%s' "${section}" | grep -q '<string>Editor</string>' || missing="${missing} роль Editor;"
+          if [ -n "${missing}" ]; then
+            echo "::error title=Ассоциация неполна::в CFBundleDocumentTypes не хватает:${missing}"
+            exit 1
+          fi
+
+          {
+            echo
+            echo '#### Ассоциация с .md'
+            echo
+            echo 'В Info.plist готового `.app` есть `CFBundleDocumentTypes` с расширением `md` и ролью `Editor`.'
+            echo 'Читалось из образа `.dmg`, а не из каталога сборки. Полная секция — в логе шага.'
+            echo
+            echo '```xml'
+            printf '%s\n' "${section}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

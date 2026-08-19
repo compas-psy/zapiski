@@ -122,6 +122,28 @@ pub fn tray_init<R: Runtime>(app: AppHandle<R>, labels: TrayLabels) -> Result<()
             }
         });
 
+    /*
+     * Иконка строки меню на macOS — МОНОХРОМНАЯ.
+     *
+     * Система сама красит такой значок под тему и подсветку, поэтому от нас
+     * нужен чёрный силуэт с прозрачностью и включённый `icon_as_template`.
+     * Цветная иконка приложения там смотрится чужеродно, а в тёмной теме
+     * превращается в тёмное пятно на тёмном фоне.
+     *
+     * Файл вшит в бинарь, а не читается из ресурсов: путь к ресурсам внутри
+     * `.app` зависит от способа сборки, и промах по нему оставил бы трей
+     * вообще без иконки — с пустым местом, по которому не догадаешься кликнуть.
+     */
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(icon) = tauri::image::Image::from_bytes(include_bytes!(
+            "../icons/menubar-Template.png"
+        )) {
+            builder = builder.icon(icon).icon_as_template(true);
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
     if let Some(icon) = app.default_window_icon() {
         builder = builder.icon(icon.clone());
     }

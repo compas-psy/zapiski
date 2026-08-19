@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>ЗАПИСКИ для macOS — почему система предупреждает</title>
+<style>
+:root {
+  --bg:#FBFAF7; --surface:#F3F1EA; --line:#EAE6DB;
+  --text:#38342E; --text-secondary:#8A8375; --accent:#B5503C;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#232120; --surface:#2C2A28; --line:#393630;
+    --text:#E9E5DC; --text-secondary:#9B948A; --accent:#C56A55;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  padding: 48px 20px 80px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+}
+main { max-width: 680px; margin: 0 auto; }
+h1 { font-size: clamp(28px, 5vw, 38px); line-height: 1.2; font-weight: 650; margin: 0 0 8px; }
+h2 { font-size: 21px; line-height: 1.3; font-weight: 600; margin: 40px 0 12px; }
+p { margin: 0 0 18px; }
+.lead { color: var(--text-secondary); margin-bottom: 36px; }
+ol { margin: 0 0 18px; padding-inline-start: 22px; }
+li { margin-bottom: 10px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px 24px;
+  margin: 0 0 22px;
+}
+code, .hash {
+  font-family: var(--mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.hash { display: block; color: var(--text-secondary); margin-top: 6px; }
+.note { color: var(--text-secondary); font-size: 15px; }
+.mark {
+  margin-top: 56px;
+  font-size: 12px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Система скажет, что не может проверить разработчика</h1>
+  <p class="lead">Это ожидаемо. Ниже — почему так и что нажать.</p>
+
+  <h2>Почему</h2>
+  <p>
+    macOS доверяет приложениям, подписанным сертификатом Apple Developer
+    Program и прошедшим нотаризацию. Программа стоит 99 $ в год и оформляется
+    на разработчика — у нас её нет, и покупать её ради одной сборки мы пока не
+    стали.
+  </p>
+  <p>
+    Поэтому Gatekeeper при первом запуске говорит, что не может проверить
+    разработчика, и предлагает единственную кнопку — «В корзину». Это не
+    сообщение о вирусе: система просто не знает, кто собрал приложение.
+  </p>
+
+  <h2>Что нажать</h2>
+  <div class="card">
+    <ol>
+      <li>Откройте скачанный <code>.dmg</code> и перетащите ЗАПИСКИ в «Программы».</li>
+      <li>Откройте «Программы» в Finder и найдите ЗАПИСКИ.</li>
+      <li><strong>Щёлкните по значку правой кнопкой</strong> (или Control + щелчок) и выберите «Открыть».</li>
+      <li>В диалоге нажмите «Открыть» ещё раз.</li>
+    </ol>
+    <p class="note">
+      Разница только в этом: при обычном двойном щелчке система предлагает
+      отправить приложение в корзину, а при открытии из контекстного меню —
+      запустить. Дальше ЗАПИСКИ открываются как любое другое приложение, и
+      повторять это не нужно.
+    </p>
+  </div>
+
+  <h2>Как убедиться, что файл не подменили</h2>
+  <p>
+    Отпечаток SHA-256 публикуется рядом со сборкой. Сверьте его: откройте
+    Терминал и выполните команду, подставив путь к скачанному файлу.
+  </p>
+  <div class="card">
+    <code>shasum -a 256 ~/Downloads/ЗАПИСКИ_0.1.0_universal.dmg</code>
+    <span class="hash">Ожидаемое значение публикуется вместе со сборкой — сверьте посимвольно.</span>
+  </div>
+  <p class="note">
+    Совпало — файл тот самый. Не совпало — не открывайте его и напишите нам.
+  </p>
+
+  <h2>Чего мы не советуем</h2>
+  <p>
+    В интернете на такой случай советуют снять с файла «карантин» одной
+    командой в Терминале. Мы этого не пишем сознательно: команда снимает
+    защиту вслепую, с любого файла, и привычка выполнять её по инструкции из
+    сети опаснее любого предупреждения Gatekeeper. Открытия из контекстного
+    меню достаточно.
+  </p>
+
+  <p class="mark">Записки</p>
+</main>
+</body>
+</html>

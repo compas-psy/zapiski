@@ -96,8 +96,28 @@ pub fn run() {
             tray::tray_init,
             platform::shell_ready,
             auth::auth_take,
+            platform::host_os,
         ])
         .setup(move |app| {
+            /*
+             * Рамки окна: своя строка заголовка на Windows, системный
+             * «светофор» на macOS.
+             *
+             * В конфиге стоит `decorations: true` — и это macOS-случай. Там
+             * `titleBarStyle: Overlay` прячет полосу заголовка, оставляя три
+             * кнопки слева; `decorations: false` убрало бы и их, и окно стало
+             * бы невозможно закрыть мышью.
+             *
+             * Windows своей строкой заголовка рисует всё сам, поэтому рамки
+             * снимаются здесь, в коде: один конфиг двух значений держать не
+             * может. Вспышки не будет — окно объявлено скрытым и показывается
+             * только по сигналу фронтенда.
+             */
+            #[cfg(not(target_os = "macos"))]
+            if let Some(window) = app.get_webview_window(platform::MAIN_WINDOW) {
+                let _ = window.set_decorations(false);
+            }
+
             // Окно объявлено скрытым в конфиге и показывается по сигналу
             // фронтенда (`shell_ready`): так плагин состояния успевает вернуть
             // ему прошлые размеры, тема применяется до первого кадра, и
@@ -154,6 +174,21 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("не удалось запустить ЗАПИСКИ");
+        .build(tauri::generate_context!())
+        .expect("не удалось запустить ЗАПИСКИ")
+        .run(|_app, _event| {
+            /*
+             * Двойной щелчок по `.md` на macOS.
+             *
+             * Windows перезапускает приложение с путём в аргументах — это
+             * ловит `forward_file_arguments`. macOS так НЕ делает: она шлёт
+             * уже работающему процессу Apple Event, и Tauri отдаёт его здесь.
+             * Без этой ветки ассоциация файлов на macOS числится и не
+             * работает: приложение поднимается и ничего не открывает.
+             */
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Opened { urls } = &_event {
+                platform::forward_opened_urls(_app, urls);
+            }
+        });
 }

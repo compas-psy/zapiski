@@ -3,15 +3,33 @@
   "compilerOptions": {
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": [
+      "vite/client",
+      "vitest/globals"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@zapiski/core": ["../../packages/core/src/index.ts"],
-      "@zapiski/core/contract": ["../../packages/core/src/contract.ts"],
-      "@zapiski/editor": ["../../packages/editor/src/index.ts"],
-      "@zapiski/ui": ["../../packages/ui/src/index.ts"],
-      "@zapiski/app": ["../../packages/app/src/index.ts"]
+      "@zapiski/core": [
+        "../../packages/core/src/index.ts"
+      ],
+      "@zapiski/core/contract": [
+        "../../packages/core/src/contract.ts"
+      ],
+      "@zapiski/editor": [
+        "../../packages/editor/src/index.ts"
+      ],
+      "@zapiski/ui": [
+        "../../packages/ui/src/index.ts"
+      ],
+      "@zapiski/app": [
+        "../../packages/app/src/index.ts"
+      ]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": [
+    "src",
+    "test",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

@@ -13,11 +13,22 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { GlobalHotkeyProvider } from '@zapiski/core';
 
+import type { HostOs } from './os';
+
 /** Событие из `src-tauri/src/platform.rs`. Полезная нагрузка — акселератор. */
 const EVENT_HOTKEY = 'zapiski://global-hotkey';
 
-/** BEHAVIOR §7. Оболочка Windows, поэтому `Ctrl`, а не `CommandOrControl`. */
-export const DEFAULT_HOTKEY = 'Ctrl+Alt+N';
+/**
+ * Умолчание по BEHAVIOR §7 — своё на каждой системе.
+ *
+ * `CommandOrControl` тут не годится: акселератор показывается человеку в
+ * настройках, и «CommandOrControl+Alt+N» — не то, что он ищет глазами на
+ * своей клавиатуре. На macOS модификатор называется `Cmd` и стоит первым по
+ * тамошней привычке, на Windows — `Ctrl`.
+ */
+export function defaultHotkey(os: HostOs): string {
+  return os === 'macos' ? 'Cmd+Alt+N' : 'Ctrl+Alt+N';
+}
 
 export class NativeGlobalHotkey implements GlobalHotkeyProvider {
   private readonly handlers = new Map<string, () => void>();

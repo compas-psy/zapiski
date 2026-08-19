@@ -36,7 +36,7 @@ import { renderAuthPage } from '../views/authPage.ts';
  * SMS нет нигде: ни эндпоинта, ни поля, ни зависимости.
  */
 
-const PLATFORMS = ['web', 'windows', 'android'] as const;
+const PLATFORMS = ['web', 'windows', 'macos', 'android'] as const;
 
 /**
  * Ручка, которую открывает БРАУЗЕР, а не приложение.
@@ -643,7 +643,7 @@ function respondWithSession(
  * называет собственную схему адресом возврата для установленного приложения.
  * Веб остаётся на https — там браузер и есть приложение.
  */
-const APP_SCHEME_PLATFORMS = new Set<string>(['windows', 'android']);
+const APP_SCHEME_PLATFORMS = new Set<string>(['windows', 'macos', 'android']);
 
 /**
  * Адрес возврата ведёт в приложение по его схеме, а не в браузер.
