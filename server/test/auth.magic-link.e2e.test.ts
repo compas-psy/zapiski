@@ -81,6 +81,17 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
   let base: string;
   let SessionStore: ClientCtor;
 
+  /*
+   * Адрес и устройство запоминаются, потому что по ним и спрашивается база.
+   *
+   * Postgres в прогоне ОДИН на все наборы (см. `test/globalSetup.ts`), и файлы
+   * идут параллельно. Первая редакция читала «последнюю строку в magic_tokens»
+   * — и в одиночку была зелёной, а в общем прогоне ловила чужой токен из
+   * соседнего набора. Уронил preflight, и поделом: набор, зелёный только в
+   * одиночестве, не стережёт ничего.
+   */
+  const windowsEmail = `e2e.win.${process.pid}@example.test`;
+
   beforeAll(async () => {
     SessionStore = await loadClient();
     const port = await freePort();
@@ -133,9 +144,7 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
     const store = new SessionStore(hostWith('windows'), { fetch: watchedFetch });
 
     note('── Windows ─────────────────────────────────────────────');
-    await expect(
-      store.requestMagicLink(`e2e.win.${process.pid}@example.test`, { marketing: false }),
-    ).resolves.toBeUndefined();
+    await expect(store.requestMagicLink(windowsEmail, { marketing: false })).resolves.toBeUndefined();
 
     /*
      * Платформа записана сервером к ВЫДАННОМУ ТОКЕНУ, а не к устройству:
@@ -147,7 +156,8 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
      * и письмо не ушло бы вовсе.
      */
     const token = await harness.db.query<{ platform: string | null }>(
-      `SELECT platform FROM magic_tokens ORDER BY created_at DESC LIMIT 1`,
+      `SELECT platform FROM magic_tokens WHERE lower(email) = lower($1) ORDER BY created_at DESC LIMIT 1`,
+      [windowsEmail],
     );
     note(`  сервер записал токену platform=${token.rows[0]?.platform ?? '—'}`);
     expect(token.rows[0]?.platform).toBe('windows');
@@ -209,7 +219,13 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
 
     /* Устройство заведено — теперь и у него записана платформа. */
     const device = await harness.db.query<{ platform: string | null }>(
-      `SELECT platform FROM devices ORDER BY created_at DESC LIMIT 1`,
+      `SELECT d.platform
+         FROM devices d
+         JOIN users u ON u.id = d.user_id
+        WHERE lower(u.email) = lower($1)
+        ORDER BY d.created_at DESC
+        LIMIT 1`,
+      [windowsEmail],
     );
     note(`  сервер завёл устройство с platform=${device.rows[0]?.platform ?? '—'}`);
     expect(device.rows[0]?.platform).toBe('windows');
