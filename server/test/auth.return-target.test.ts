@@ -28,7 +28,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { authReturnUrl } from '../src/routes/auth.ts';
+import { authReturnUrl, isAppScheme, magicLinkUrl } from '../src/routes/auth.ts';
 
 const HTTPS = 'https://zapiski.cmpas.ru/auth/callback';
 const APP = 'zapiski://auth/callback';
@@ -84,5 +84,53 @@ describe('окружение выкладки', () => {
       .find((row) => /^\s*AUTH_SUCCESS_REDIRECT_(APP|DESKTOP):/.test(row));
     expect(line, 'адрес возврата для приложений не задан вовсе').toBeDefined();
     expect(line, 'приложениям задан https — Android снова уедет в браузер').toContain('zapiski://');
+  });
+});
+
+describe('ссылка из письма', () => {
+  const BASE = 'https://zapiski.cmpas.ru';
+
+  it('несёт device_id на любой платформе', () => {
+    /* Заказчик: «после перехода из письма по кнопке попадаешь на сайт, а не в
+       приложение» — и на Windows, и на Android, при запросе из установленных
+       приложений.
+
+       Обмен требует device_id. Взять его неоткуда, кроме самой ссылки: письмо
+       открывает браузер, а `x-device-id` ставит своим запросом приложение.
+       Прежняя редакция клала device_id только для Windows — на Android и вебе
+       ссылка была неразменной в принципе. */
+    const url = new URL(magicLinkUrl(BASE, 'tok', 'dev-1234567890'));
+    expect(url.searchParams.get('token')).toBe('tok');
+    expect(url.searchParams.get('device_id')).toBe('dev-1234567890');
+  });
+
+  it('ведёт в ручку API, а не в SPA', () => {
+    /* Адрес завязан на `intent-filter` Android: фильтр объявляет ровно этот
+       путь, и разъехаться им нельзя. */
+    expect(new URL(magicLinkUrl(BASE, 't', 'dev-12345678')).pathname).toBe(
+      '/api/v1/auth/magic-link/callback',
+    );
+  });
+
+  it('не удваивает косую черту, если база с ней', () => {
+    expect(magicLinkUrl(`${BASE}/`, 't', 'dev-12345678')).toContain(`${BASE}/api/v1/`);
+  });
+});
+
+describe('адрес возврата: браузер или приложение', () => {
+  it('своя схема опознаётся как приложение', () => {
+    expect(isAppScheme('zapiski://auth/callback')).toBe(true);
+  });
+
+  it('https и http остаются браузером', () => {
+    expect(isAppScheme('https://zapiski.cmpas.ru/auth/callback')).toBe(false);
+    expect(isAppScheme('http://localhost:5173/auth/callback')).toBe(false);
+    /* Регистр схемы значения не имеет: браузер её нормализует. */
+    expect(isAppScheme('HTTPS://zapiski.cmpas.ru/auth/callback')).toBe(false);
+  });
+
+  it('путь без схемы приложением не считается', () => {
+    expect(isAppScheme('/auth/callback')).toBe(false);
+    expect(isAppScheme('')).toBe(false);
   });
 });

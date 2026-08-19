@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "ru.cmpas.zapiski",
+      "sha256_cert_fingerprints": [
+        "F6:26:1A:5A:6A:61:3E:08:FA:C0:9F:E6:65:82:AB:21:E0:86:90:AA:F4:56:DE:B8:A7:DC:E8:09:DA:31:97:10"
+      ]
+    }
+  }
+]

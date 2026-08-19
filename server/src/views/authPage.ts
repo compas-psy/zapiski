@@ -35,6 +35,21 @@ export interface AuthPage {
   body: string;
   /** Куда вернуться. `null` — некуда, и тогда кнопки нет вовсе. */
   action?: { href: string; label: string } | null;
+  /**
+   * Адрес, на который страница уходит сама.
+   *
+   * Нужен для возврата в родное приложение по его схеме (`zapiski://…`).
+   * Раньше туда уводил обычный 302 — и это молчаливый шаг: если браузер
+   * схему не отдаёт приложению (спросил и не дождался ответа, заблокировал
+   * переход из письма, приложение не установлено), человек остаётся ни с чем
+   * и не понимает, что произошло. Страница показывает, что вход состоялся, и
+   * оставляет кнопку, которую можно нажать руками.
+   *
+   * `meta refresh`, а не скрипт: политика безопасности этих страниц —
+   * `default-src 'none'` без `script-src` вовсе, и скрипт здесь не выполнится
+   * ни при каких условиях (`app.ts`).
+   */
+  refreshTo?: string | null;
 }
 
 /* Токены `paper` и `graphite` из DESIGN_TOKENS.md — те же, что у публичной
@@ -103,6 +118,7 @@ export function renderAuthPage(page: AuthPage): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <meta name="robots" content="noindex">
+${page.refreshTo ? `<meta http-equiv="refresh" content="0; url=${escapeHtml(page.refreshTo)}">` : ''}
 <title>${escapeHtml(page.title)}</title>
 <style>${STYLE}</style>
 </head>

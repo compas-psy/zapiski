@@ -243,7 +243,7 @@ describe.skipIf(noDatabase())('magic-link: возврат по платформ�
     return new URL(sent!.url);
   }
 
-  it('ссылка для Windows несёт device_id и замыкает вход без подсказок клиента', async () => {
+  it('ссылка для Windows замыкает вход СТРАНИЦЕЙ с переходом в приложение', async () => {
     const email = `magicwin.${process.pid}@example.test`;
     const url = await linkFor(email, 'device-magic-win', 'windows');
     expect(url.searchParams.get('device_id')).toBe('device-magic-win');
@@ -254,37 +254,80 @@ describe.skipIf(noDatabase())('magic-link: возврат по платформ�
       method: 'GET',
       url: `${url.pathname}${url.search}`,
     });
-    expect(callback.statusCode).toBe(302);
-    const location = callback.headers['location'] as string;
-    expect(location.startsWith('zapiski://auth/callback#')).toBe(true);
-    expect(location).toContain('access_token=');
-    // Токены едут во фрагменте: он не уходит на сервер и не оседает в логах.
-    expect(location.split('#')[0]).not.toContain('access_token');
+
+    /*
+     * Не 302, а страница — и это ответ на жалобу «после перехода из письма
+     * попадаешь на сайт, а не в приложение». Переход на `zapiski://` браузер
+     * выполняет не всегда и молчит, когда не выполнил: после 302 не
+     * происходит ровно ничего. Страница показывает, что вход состоялся, уходит
+     * в приложение сама и оставляет кнопку на случай, если не ушла.
+     */
+    expect(callback.statusCode).toBe(200);
+    expect(callback.headers['content-type']).toContain('text/html');
+    /* Сессия в адресе — в кэш такой ответ класть нельзя. */
+    expect(callback.headers['cache-control']).toContain('no-store');
+
+    const body = callback.body;
+    expect(body).toContain('http-equiv="refresh"');
+    expect(body).toContain('zapiski://auth/callback#');
+    expect(body).toContain('access_token=');
+    /* Токены едут во фрагменте: он не уходит на сервер и не оседает в логах. */
+    expect(body).not.toContain('callback?access_token');
   });
 
-  it('ссылка для веба device_id не несёт — привязка к устройству цела', async () => {
+  it('ссылка для веба разменивается из браузера и ведёт на https', async () => {
     const email = `magicweb.${process.pid}@example.test`;
     const url = await linkFor(email, 'device-magic-web', 'web');
-    expect(url.searchParams.get('device_id')).toBeNull();
 
-    const blind = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
-    expect(blind.statusCode).toBe(400);
+    /*
+     * device_id теперь в ссылке на всех платформах — иначе вход по почте не
+     * замыкается вовсе. Письмо открывает БРАУЗЕР, а `x-device-id` ставит
+     * своим запросом приложение; при переходе из почты запрос делает браузер,
+     * и заголовка в нём нет ни на одной платформе. Прежняя редакция клала
+     * device_id только для Windows — и веб с Android упирались в
+     * «Ссылка не сработала».
+     */
+    expect(url.searchParams.get('device_id')).toBe('device-magic-web');
 
-    const withDevice = await harness.app.inject({
-      method: 'GET',
-      url: `${url.pathname}${url.search}&device_id=device-magic-web`,
-    });
-    expect(withDevice.statusCode).toBe(302);
-    expect((withDevice.headers['location'] as string).startsWith('https://zapiski.test/auth/callback#')).toBe(true);
+    const opened = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(opened.statusCode).toBe(302);
+    expect((opened.headers['location'] as string).startsWith('https://zapiski.test/auth/callback#')).toBe(
+      true,
+    );
   });
 
-  it('ссылка для Android device_id не несёт: App Links доставляют его сами', async () => {
+  it('ссылка для Android разменивается из браузера и уводит в приложение', async () => {
     const email = `magicdroid.${process.pid}@example.test`;
     const url = await linkFor(email, 'device-magic-droid', 'android');
-    expect(url.searchParams.get('device_id')).toBeNull();
+    expect(url.searchParams.get('device_id')).toBe('device-magic-droid');
+
+    /*
+     * Ровно тот путь, который был у заказчика: App Links не подтверждены,
+     * ссылку открывает Chrome, заголовка у него нет. Раньше здесь был отказ.
+     */
+    const opened = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(opened.statusCode).toBe(200);
+    expect(opened.body).toContain('zapiski://auth/callback#');
   });
 
-  it('чужое устройство по ссылке Windows не входит: токен привязан к своему', async () => {
+  it('ссылка одноразовая: второй переход уже не входит', async () => {
+    /* Привязка к устройству инициации ушла вместе с device_id в ссылке, и это
+       названо вслух. Значит одноразовость — то, что осталось охранять, и она
+       обязана быть проверена, а не подразумеваться. */
+    const email = `magiconce.${process.pid}@example.test`;
+    const url = await linkFor(email, 'device-magic-once', 'web');
+
+    const first = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(first.statusCode).toBe(302);
+
+    const second = await harness.app.inject({ method: 'GET', url: `${url.pathname}${url.search}` });
+    expect(second.statusCode).toBe(410);
+  });
+
+  it('подменённый device_id не входит: токен привязан к своему', async () => {
+    /* Ссылку с ПОДМЕНЁННЫМ идентификатором сервер по-прежнему отвергает.
+       Ослабление ровно одно и названо: device_id уехал в саму ссылку. Всё
+       остальное осталось на месте — и вот это «остальное» здесь и стережётся. */
     const email = `magicwin2.${process.pid}@example.test`;
     const url = await linkFor(email, 'device-magic-win-2', 'windows');
     url.searchParams.set('device_id', 'device-someone-else');

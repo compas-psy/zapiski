@@ -449,6 +449,29 @@ verify_documents() {
     esac
   done
 
+  # Подтверждение владения доменом для Android App Links.
+  #
+  # Без этого файла система не отдаёт ссылку установленному приложению, и
+  # ссылка из письма приводит человека в браузер вместо ЗАПИСОК. Файл лежит
+  # вне общей выкладки статики: `.well-known/` исключён из rsync, потому что
+  # там же живут ответы certbot, а `--delete` их бы стирал. Значит его доставку
+  # надо проверять отдельно — иначе он тихо не доедет, и никто не заметит.
+  code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+    "${PUBLIC_URL}/.well-known/assetlinks.json" 2>/dev/null || true)"
+  ctype="$(curl -sS -o /dev/null -w '%{content_type}' --max-time 10 \
+    "${PUBLIC_URL}/.well-known/assetlinks.json" 2>/dev/null || true)"
+  case "${code}:${ctype}" in
+    2*:application/json*)
+      log 'App Links: assetlinks.json на месте — Android отдаст ссылку из письма приложению.' ;;
+    2*:*)
+      log "assetlinks.json отдаётся с типом «${ctype}» вместо application/json."
+      log '  Android такой файл игнорирует: ссылка из письма откроет браузер, а не приложение.'
+      log '  Лечение: прогнать workflow «Провижн zapiski.cmpas.ru (nginx + TLS)».' ;;
+    *)
+      log "assetlinks.json отвечает ${code} — подтверждения владения доменом нет."
+      log '  Вход по ссылке из письма на Android откроет браузер, а не приложение.' ;;
+  esac
+
   # Опубликованная заметка. Ключа для пробы у нас нет и быть не должно, зато
   # есть надёжный признак: на НЕсуществующий ключ API отвечает 404, а SPA-
   # фолбэк — двумястами с index.html. То есть 200 здесь означает ровно одно:

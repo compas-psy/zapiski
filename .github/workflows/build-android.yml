@@ -699,8 +699,25 @@ jobs:
           echo "EXPECTED_SIGNER_SHA256=${expected}" >> "$GITHUB_ENV"
           echo "expected_signer_sha256=${expected}" >> "$GITHUB_OUTPUT"
           echo 'signed=true' >> "$GITHUB_OUTPUT"
+          # Тот же отпечаток лежит в репозитории и уезжает на сайт файлом
+          # подтверждения App Links (`apps/web/public/.well-known/assetlinks.json`).
+          # Если ключ подписи сменится, а файл останется прежним, Android
+          # перестанет отдавать приложению ссылку из письма — и сломается это
+          # МОЛЧА: сборка зелёная, APK ставится, а вход по почте уводит в
+          # браузер. Поэтому расхождение — отказ сборки, а не предупреждение.
+          repo_fp="$(tr -d '[:space:]' < apps/mobile/EXPECTED_SIGNER.txt)"
+          if [ "${repo_fp}" != "${expected}" ]; then
+            echo "::error::Отпечаток ключа подписи разошёлся с apps/mobile/EXPECTED_SIGNER.txt"
+            echo "  keystore:                        ${expected}"
+            echo "  apps/mobile/EXPECTED_SIGNER.txt: ${repo_fp}"
+            echo '  Пока они не совпадут, вход по ссылке из письма на Android будет открывать браузер.'
+            echo '  Лечение: если ключ сменён сознательно — обновить EXPECTED_SIGNER.txt и assetlinks.json.'
+            exit 1
+          fi
+
           echo 'Ключ подписи на месте, алиас найден, пароль ключа подходит.'
           echo "Expected signer SHA-256: ${expected}"
+          echo 'Отпечаток совпал с apps/mobile/EXPECTED_SIGNER.txt — App Links подтверждаются тем же ключом.'
 
       # ── Сборка ────────────────────────────────────────────────────────────
       - name: tauri android build

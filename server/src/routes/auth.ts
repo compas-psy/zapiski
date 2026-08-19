@@ -188,7 +188,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       now,
     );
 
-    const url = buildMagicLinkUrl(ctx, issued.token, deviceId, platform ?? null);
+    const url = buildMagicLinkUrl(ctx, issued.token, deviceId);
     try {
       await ctx.mailer.sendMagicLink({
         to: email,
@@ -539,7 +539,42 @@ function respondWithSession(
       refresh_token: session.refreshToken,
       expires_in: String(session.expiresIn),
     });
-    return reply.redirect(`${redirect}#${fragment.toString()}`, 302);
+    const target = `${redirect}#${fragment.toString()}`;
+
+    /*
+     * Возврат в родное приложение — СТРАНИЦЕЙ, а не голым 302.
+     *
+     * Переход на `zapiski://…` браузер выполняет не всегда и по причинам, о
+     * которых он человеку не сообщает: спросил разрешение и не дождался
+     * ответа, отказал переходу, начатому из письма, не нашёл приложения.
+     * Тогда после 302 не происходит ВООБЩЕ НИЧЕГО — ни приложения, ни
+     * сообщения, ни кнопки. Заказчик описал это как «попадаешь на сайт, а не
+     * в приложение».
+     *
+     * Страница переходит сама (`meta refresh`), а если переход не случился —
+     * остаётся на экране с кнопкой, которую можно нажать руками. Вход к этому
+     * моменту уже состоялся: токены в адресе, второй раз ничего не
+     * запрашивается.
+     *
+     * `no-store`: в адресе кнопки едет сессия, и в кэше браузера ей не место.
+     * Для https-возврата (веб) ничего не меняется — там 302 работает всегда.
+     */
+    if (isAppScheme(redirect)) {
+      return reply
+        .code(200)
+        .header('cache-control', 'no-store')
+        .type('text/html; charset=utf-8')
+        .send(
+          renderAuthPage({
+            title: 'Вы вошли',
+            body: 'Открываем ЗАПИСКИ. Если приложение не открылось само — нажмите кнопку.',
+            action: { href: target, label: 'Открыть ЗАПИСКИ' },
+            refreshTo: target,
+          }),
+        );
+    }
+
+    return reply.redirect(target, 302);
   }
   /*
    * Адреса возврата нет, а спрашивал БРАУЗЕР — значит, `reply.send(session)`
@@ -583,6 +618,16 @@ function respondWithSession(
 const APP_SCHEME_PLATFORMS = new Set<string>(['windows', 'android']);
 
 /**
+ * Адрес возврата ведёт в приложение по его схеме, а не в браузер.
+ *
+ * Различие важно ровно одним: по https браузер переходит сам и всегда, а по
+ * чужой схеме — когда сочтёт нужным. Второй случай нельзя оставлять молчащим.
+ */
+export function isAppScheme(url: string): boolean {
+  return /^[a-z][a-z0-9+.-]*:/i.test(url) && !/^https?:/i.test(url);
+}
+
+/**
  * Куда увести браузер после успешного входа.
  *
  * Вынесено отдельной функцией, потому что это единственное решение, в котором
@@ -608,45 +653,41 @@ export function authReturnUrl(
 }
 
 /**
- * Платформы, которые не могут перехватить ссылку ИЗ ПИСЬМА.
- *
- * Отдельно от списка выше и намеренно: там речь о возврате, который делает наш
- * сервер, а здесь — о письме, которое человек открывает где угодно, хоть на
- * другом устройстве. Windows не перехватывает https ни при каких условиях,
- * поэтому ссылке для него нужен `device_id` (размен объяснён ниже).
- */
-const CANNOT_CATCH_HTTPS = new Set<string>(['windows']);
-
-/**
  * Ссылка из письма.
  *
- * `device_id` кладётся в ссылку **только для настольного приложения** — и это
- * осознанный размен, а не недосмотр. Обмен требует device_id, а браузер, в
- * котором открылось письмо, идентификатор настольного приложения знать не
- * может: приложение ему ничего не передавало. Без этого параметра вход на
- * Windows не замыкается вообще.
+ * `device_id` кладётся в ссылку ВСЕГДА. Это осознанный размен, и вот почему
+ * он неизбежен.
  *
- * Что при этом теряется: на Windows ссылка становится обычным magic-link'ом —
- * кто ею завладел, тот и войдёт. На вебе и Android привязка к устройству
- * инициации сохраняется полностью: там device_id подставляет приложение, и
- * письмо, открытое на чужом устройстве, даёт `device_mismatch`.
+ * Обмен токена требует device_id. Взять его неоткуда, кроме самой ссылки:
+ * письмо открывает БРАУЗЕР, а `x-device-id` — заголовок, который ставит
+ * приложение своим запросом. При переходе по ссылке из почты запрос делает
+ * браузер, и никакого заголовка в нём нет ни на одной платформе.
  *
- * Сам device_id секретом не является (его придумывает клиент и шлёт открытым
- * запросом), так что добавление его в ссылку не раскрывает ничего сверх того,
- * что уже несёт сам токен.
+ * Прежняя редакция клала device_id только для Windows, полагая, что на вебе и
+ * Android идентификатор подставит приложение. На вебе подставить его некому:
+ * ссылка ведёт в API, а не в SPA, и переход по ней — обычная навигация. На
+ * Android приложение перехватило бы ссылку только по подтверждённым App Links,
+ * а подтверждения (`assetlinks.json` на домене) не было выложено — Chrome
+ * открывал ссылку сам. Итог: вход по почте не замыкался нигде, кроме Windows,
+ * и человек упирался в «Ссылка не сработала» либо оставался на сайте.
+ *
+ * Что теряется: привязка к устройству, с которого запросили вход. Ссылка
+ * становится обычным magic-link'ом — кто ею завладел, тот и войдёт. Это
+ * поведение magic-link'а по определению: доступ к почте и есть фактор. Что
+ * остаётся: одноразовость (второй переход уже не работает) и короткий срок
+ * жизни.
+ *
+ * Сам device_id секретом не является — его придумывает клиент и шлёт открытым
+ * запросом, — так что в ссылке он не раскрывает ничего сверх токена.
  */
-function buildMagicLinkUrl(
-  ctx: AppContext,
-  token: string,
-  deviceKey: string,
-  platform: string | null,
-): string {
-  const base = ctx.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
-  const query = new URLSearchParams({ token });
-  if (platform !== null && CANNOT_CATCH_HTTPS.has(platform)) {
-    query.set('device_id', deviceKey);
-  }
+export function magicLinkUrl(baseUrl: string, token: string, deviceKey: string): string {
+  const base = baseUrl.replace(/\/+$/, '');
+  const query = new URLSearchParams({ token, device_id: deviceKey });
   return `${base}/api/v1/auth/magic-link/callback?${query.toString()}`;
+}
+
+function buildMagicLinkUrl(ctx: AppContext, token: string, deviceKey: string): string {
+  return magicLinkUrl(ctx.env.PUBLIC_BASE_URL, token, deviceKey);
 }
 
 function headerDeviceId(request: FastifyRequest): string | undefined {

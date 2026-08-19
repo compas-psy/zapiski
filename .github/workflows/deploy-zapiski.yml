@@ -506,6 +506,27 @@ jobs:
             echo "::notice::apps/web/dist пуст или отсутствует — статика не выкладывается, docroot не изменён"
           fi
 
+      # `.well-known/` исключён из выкладки выше НАМЕРЕННО: там же лежат ответы
+      # certbot на проверку домена, и `--delete` стирал бы их при каждой
+      # выкладке, ломая продление сертификата. Поэтому файл подтверждения для
+      # Android App Links едет отдельно и без удаления — рядом с чужими
+      # файлами, ничего не трогая.
+      - name: Выложить подтверждение App Links
+        run: |
+          set -euo pipefail
+          file=apps/web/dist/.well-known/assetlinks.json
+          if [ ! -s "${file}" ]; then
+            echo '::error::apps/web/dist/.well-known/assetlinks.json не собран — вход по ссылке на Android откроет браузер'
+            exit 1
+          fi
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'mkdir -p /var/www/zapiski.cmpas.ru/.well-known'
+          rsync -az -e "ssh -i ~/.ssh/deploy_key" \
+            "${file}" \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/var/www/zapiski.cmpas.ru/.well-known/assetlinks.json"
+          echo 'assetlinks.json выложен.'
+
       - name: Доставить код API на сервер
         # Вместо git pull на сервере. Репозиторий приватный, и клонирование
         # потребовало бы постоянного deploy key на машине; rsync с раннера
@@ -610,7 +631,7 @@ jobs:
       # `docker compose`, получала «no configuration file provided» и
       # рапортовала «контейнер API до релея не достучался»: жалоба на сеть
       # вместо жалобы на команду. Ошибка того же класса, что ловит этот шаг.
-      - name: Проверить почту на сервере
+      - name: Проверить почту и возврат после входа
         if: always()
         continue-on-error: true
         run: |
@@ -710,6 +731,27 @@ jobs:
           echo "── последние отказы отправки письма ──"
           dc logs --since 72h api 2>/dev/null | grep -i 'magic_link_send_failed' | tail -5 \
             || echo "отказов отправки в логах нет"
+
+          echo "── куда API возвращает после входа ──"
+          # Не секреты: это адреса возврата, они и так видны каждому, кто
+          # проходит вход. Смотрим их в ЖИВОМ контейнере, а не в compose-файле:
+          # заказчик сообщил, что после ссылки из письма попадает на сайт, а по
+          # коду для установленных приложений полагается своя схема. Разойтись
+          # эти две картины могут ровно в одном месте — в окружении, с которым
+          # контейнер поднялся.
+          dc exec -T api sh -lc 'echo "AUTH_SUCCESS_REDIRECT=$AUTH_SUCCESS_REDIRECT"; echo "AUTH_SUCCESS_REDIRECT_APP=$AUTH_SUCCESS_REDIRECT_APP"' \
+            < /dev/null || echo "окружение прочитать не удалось"
+
+          echo "── чем кончались переходы по ссылке из письма ──"
+          # Токен в журнале уже скрыт (`sanitizeUrl`), а нужен здесь только код
+          # ответа: 302 — увели в приложение, 400 — ссылка не разменялась,
+          # 200 — показали страницу. По нему и видно, где обрывается путь.
+          dc logs --since 72h api 2>/dev/null | grep -i 'magic-link/callback' | tail -8 \
+            || echo "переходов по ссылке в логах нет"
+
+          echo "── подтверждение App Links ──"
+          curl -sS -m 10 -o /dev/null -w 'assetlinks.json: %{http_code} %{content_type}\n' \
+            https://zapiski.cmpas.ru/.well-known/assetlinks.json || echo "assetlinks.json не ответил"
           REMOTE
 
       - name: Скачать удалённый лог деплоя
