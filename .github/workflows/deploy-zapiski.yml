@@ -538,6 +538,9 @@ jobs:
           # ключа, но не значение.
           YANDEX_CLIENT_ID: ${{ secrets.YANDEX_CLIENT_ID }}
           YANDEX_CLIENT_SECRET: ${{ secrets.YANDEX_CLIENT_SECRET }}
+          # Т-Банк: имена ровно те, что заказчик завёл в секретах репозитория.
+          TINKOFF_TERMINAL_KEY: ${{ secrets.TINKOFF_TERMINAL_KEY }}
+          TINKOFF_PASSWORD: ${{ secrets.TINKOFF_PASSWORD }}
         run: |
           set -euo pipefail
           # Секреты уезжают одним base64-блобом, а не отдельными аргументами.
@@ -548,8 +551,9 @@ jobs:
           #   2) пустой аргумент схлопывается при склейке ssh-команды, и
           #      незаданный ID сдвинул бы SECRET на его место. Один блоб
           #      непустой всегда, поэтому позиции не разъезжаются.
-          payload_b64="$(printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\n' \
-            "${YANDEX_CLIENT_ID}" "${YANDEX_CLIENT_SECRET}" | base64 -w0)"
+          payload_b64="$(printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\nTINKOFF_TERMINAL_KEY=%s\nTINKOFF_PASSWORD=%s\n' \
+            "${YANDEX_CLIENT_ID}" "${YANDEX_CLIENT_SECRET}" \
+            "${TINKOFF_TERMINAL_KEY}" "${TINKOFF_PASSWORD}" | base64 -w0)"
 
           ssh -i ~/.ssh/deploy_key \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \

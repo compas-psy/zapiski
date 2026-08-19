@@ -11,6 +11,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { Button, IconButton, IconCheck, IconClose } from '@zapiski/ui';
+import { BILLING_ENABLED } from '@zapiski/core';
 import { useApp, useStrings } from '../state/context.js';
 
 type Plan = 'monthly' | 'yearly';
@@ -97,9 +98,21 @@ export function PaywallScreen(): ReactNode {
           </tbody>
         </table>
 
-        <Button fullWidth onClick={() => app.beginSignIn({ name: 'paywall' })}>
-          {copy.trial}
-        </Button>
+        {/*
+          Пока продукт бесплатный, кнопка ведёт ко входу и пробному периоду —
+          платить не за что. Оплата включается тем же выключателем, что и весь
+          раздел тарифов (`BILLING_ENABLED`): один флаг на обеих сторонах,
+          чтобы не получилось «кнопка есть, а сервер отвечает 402».
+        */}
+        {BILLING_ENABLED ? (
+          <Button fullWidth onClick={() => void app.startPayment(plan)}>
+            {copy.pay}
+          </Button>
+        ) : (
+          <Button fullWidth onClick={() => app.beginSignIn({ name: 'paywall' })}>
+            {copy.trial}
+          </Button>
+        )}
         <p className="za-muted">{copy.honest}</p>
         <p className="za-tertiary-mono">{copy.bundle}</p>
       </div>

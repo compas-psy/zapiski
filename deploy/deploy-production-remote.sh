@@ -127,7 +127,7 @@ prepare_env() {
   # передаёт их из GitHub Secrets). Пустые не записываем, чтобы не затирать
   # уже проставленное руками.
   local key value
-  for key in YANDEX_CLIENT_ID YANDEX_CLIENT_SECRET; do
+  for key in YANDEX_CLIENT_ID YANDEX_CLIENT_SECRET TINKOFF_TERMINAL_KEY TINKOFF_PASSWORD; do
     value="${!key:-}"
     if [ -n "${value}" ]; then
       upsert_env "${key}" "${value}"

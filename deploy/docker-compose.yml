@@ -49,8 +49,8 @@ services:
       - .env
 
     # Имена переменных — контракт server/src/config/env.ts. Секреты
-    # (AUTH_SECRET, YANDEX_*, YOOKASSA_*) сюда не пишутся: они приходят
-    # из deploy/.env выше.
+    # (AUTH_SECRET, YANDEX_*, YOOKASSA_*, TINKOFF_*) сюда не пишутся: они
+    # приходят из deploy/.env выше.
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -121,6 +121,14 @@ services:
       # ALLOWED_SENDER_DOMAINS у postfix — cmpas.ru, поэтому отправитель
       # обязан быть в этом домене, иначе письмо будет отклонено релеем.
       MAIL_FROM: "${EMAIL_FROM:-ЗАПИСКИ <zapiski@cmpas.ru>}"
+
+      # Т-Банк: адрес API и свойства чека по 54-ФЗ. Ключ терминала и пароль
+      # сюда не попадают — они секреты и живут в deploy/.env. Система
+      # налогообложения и ставка НДС — свойства продавца, а не кода, поэтому
+      # правятся в deploy/.env без пересборки образа.
+      TINKOFF_API_BASE: ${TINKOFF_API_BASE:-https://securepay.tinkoff.ru/v2}
+      TINKOFF_TAXATION: ${TINKOFF_TAXATION:-usn_income}
+      TINKOFF_VAT: ${TINKOFF_VAT:-none}
 
       # Зашифрованные блобы (ТЗ §2.1.5 — zero-knowledge, сервер не понимает
       # содержимого) лежат в своём томе, а не на хостовой ФС.

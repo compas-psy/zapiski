@@ -252,6 +252,33 @@ export class SessionStore {
   }
 
   /**
+   * Начать оплату подписки через Т-Банк.
+   *
+   * Возвращает адрес платёжной формы банка. Открывает его оболочка —
+   * системным браузером, а не внутри окна: форма оплаты чужая, и показывать
+   * её в своём WebView значит просить у человека номер карты «внутри
+   * приложения».
+   *
+   * Отказ здесь — это отказ СОЗДАТЬ платёж, а не отказ оплаты: денег ещё
+   * никто не трогал, и человеку надо сказать именно это.
+   */
+  async startPayment(plan: 'monthly' | 'yearly', returnUrl: string): Promise<string> {
+    const token = await this.accessToken();
+    if (token === null) throw new AuthError('server');
+    const response = await this.send(`${this.base}/billing/tbank/payment`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ plan, returnUrl }),
+    });
+    if (!response.ok) throw new AuthError('server');
+    const body = (await response.json()) as { confirmationUrl?: unknown };
+    if (typeof body.confirmationUrl !== 'string' || body.confirmationUrl === '') {
+      throw new AuthError('server');
+    }
+    return body.confirmationUrl;
+  }
+
+  /**
    * Отправка партии аналитических событий (O-260817-05). Возвращает `false`
    * молча на любой сетевой отказ — очередь на диске остаётся нетронутой,
    * `AnalyticsQueue` попробует снова при следующем выходе в сеть.

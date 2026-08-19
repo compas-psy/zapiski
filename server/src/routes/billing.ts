@@ -25,6 +25,13 @@ import {
   periodEnd,
   verifyNotification,
 } from '../services/yookassa.ts';
+import {
+  createPayment as createTbankPayment,
+  parseNotification as parseTbankNotification,
+  verifyNotification as verifyTbankNotification,
+  type TbankCredentials,
+} from '../services/tbank.ts';
+import { findUserById } from '../services/accounts.ts';
 
 /**
  * Подписка (ТЗ §5.5). 199 ₽/мес, 149 ₽/мес при годовой оплате.
@@ -37,6 +44,7 @@ import {
 
 const planSchema = z.enum(['monthly', 'yearly']);
 const paymentBody = z.object({ plan: planSchema, returnUrl: z.string().url() });
+const tbankPaymentBody = paymentBody;
 const playBody = z.object({
   purchaseToken: z.string().min(8).max(4096),
   productId: z.string().min(1).max(200).optional(),
@@ -260,6 +268,162 @@ export async function registerBillingRoutes(app: FastifyInstance): Promise<void>
       });
     },
   );
+  // ───────────────────────────────────────────────────────────────────────────
+  // Т-Банк (эквайринг)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Создать платёж и вернуть ссылку на платёжную форму банка.
+   *
+   * Заказ живёт в своей таблице, а не в метаданных платежа: `OrderId` у
+   * Т-Банка не длиннее 36 знаков — туда не помещается даже один uuid с
+   * тарифом, — а уведомление приносит именно его. Без записи «заказ → кто и за
+   * что платит» успешная оплата не знала бы, кому включать подписку.
+   */
+  app.post(
+    '/api/v1/billing/tbank/payment',
+    { preHandler: app.requireAuth },
+    async (request, reply) => {
+      requireBilling();
+      const credentials = tbankCredentialsOf(ctx.env);
+      if (credentials === null) throw errors.billingUnavailable();
+
+      const parsed = tbankPaymentBody.safeParse(request.body);
+      if (!parsed.success) throw errors.badRequest('bad_plan');
+      const auth = authOf(request);
+      await ensureSubscription(ctx.db, auth.userId);
+
+      const rub = amountRub(parsed.data.plan, {
+        monthlyRub: ctx.env.PRICE_MONTHLY_RUB,
+        yearlyMonthlyRub: ctx.env.PRICE_YEARLY_MONTHLY_RUB,
+      });
+      /* Банк считает в копейках. Округление — до целой копейки и один раз:
+         пересчёт «рубли → копейки» в двух местах однажды разойдётся. */
+      const amountKop = Math.round(rub * 100);
+      const orderId = randomUUID();
+      const description = parsed.data.plan === 'yearly' ? 'ЗАПИСКИ+ на год' : 'ЗАПИСКИ+ на месяц';
+
+      await ctx.db.query(
+        `INSERT INTO payment_orders (order_id, provider, user_id, plan, amount_kop)
+         VALUES ($1, 'tbank', $2, $3, $4)`,
+        [orderId, auth.userId, parsed.data.plan, amountKop],
+      );
+
+      const email = await emailOf(ctx, auth.userId);
+      if (email === null) throw errors.badRequest('email_required');
+
+      const payment = await createTbankPayment(credentials, {
+        orderId,
+        amountKop,
+        description,
+        successUrl: parsed.data.returnUrl,
+        failUrl: parsed.data.returnUrl,
+        notificationUrl: `${ctx.env.PUBLIC_BASE_URL}/api/v1/billing/tbank/notification`,
+        email,
+        taxation: ctx.env.TINKOFF_TAXATION,
+        vat: ctx.env.TINKOFF_VAT,
+      });
+
+      await ctx.db.query(
+        `UPDATE payment_orders SET payment_id = $2, status = $3, updated_at = now()
+         WHERE order_id = $1`,
+        [orderId, payment.paymentId, payment.status],
+      );
+
+      return reply.send({
+        orderId,
+        paymentId: payment.paymentId,
+        status: payment.status,
+        confirmationUrl: payment.paymentUrl,
+      });
+    },
+  );
+
+  /**
+   * Уведомление о судьбе платежа.
+   *
+   * Подлинность доказывает только `Token` — заголовка с подписью у Т-Банка
+   * нет. Ответ обязан быть строкой `OK` с кодом 200: иначе банк будет слать
+   * повторы месяц.
+   */
+  app.post('/api/v1/billing/tbank/notification', async (request, reply) => {
+    const check = verifyTbankNotification({
+      body: request.body,
+      password: ctx.env.TINKOFF_PASSWORD,
+      terminalKey: ctx.env.TINKOFF_TERMINAL_KEY,
+    });
+    if (!check.ok) {
+      request.log.warn({ event: 'tbank_webhook_rejected', reason: check.reason }, 'подпись не сошлась');
+      throw check.reason === 'not_configured'
+        ? errors.billingUnavailable()
+        : errors.badRequest(`tbank_${check.reason}`);
+    }
+
+    const notification = parseTbankNotification(request.body);
+    if (notification === null) throw errors.badRequest('tbank_bad_payload');
+
+    /* Заказ знает, кому включать подписку. Нет заказа — платёж не наш. */
+    const order = await ctx.db.query<{ user_id: string; plan: 'monthly' | 'yearly'; amount_kop: number }>(
+      `SELECT user_id, plan, amount_kop FROM payment_orders WHERE order_id = $1 AND provider = 'tbank'`,
+      [notification.orderId],
+    );
+    const row = order.rows[0];
+    if (row === undefined) {
+      request.log.warn({ event: 'tbank_webhook_unknown_order' }, 'заказ не найден');
+      return reply.type('text/plain').send('OK');
+    }
+
+    const eventId = `${notification.paymentId}:${notification.status}`;
+    const fresh = await recordEvent(ctx, 'tbank', eventId, notification.status, row.user_id, request.body);
+    if (!fresh) return reply.type('text/plain').send('OK');
+
+    await ctx.db.query(
+      `UPDATE payment_orders SET status = $2, payment_id = $3, updated_at = now() WHERE order_id = $1`,
+      [notification.orderId, notification.status, notification.paymentId],
+    );
+
+    const now = ctx.now();
+    /*
+     * Деньги списаны — это `CONFIRMED`. `AUTHORIZED` означает только холд:
+     * включать по нему подписку значило бы отдать платный период за деньги,
+     * которых у нас ещё нет.
+     */
+    if (notification.success && notification.status === 'CONFIRMED') {
+      /* Сумма сверяется с заказом: уведомление приходит извне, и «оплачено
+         10 копеек вместо 1990 рублей» обязано остаться без подписки. */
+      if (notification.amountKop !== row.amount_kop) {
+        request.log.warn(
+          { event: 'tbank_amount_mismatch', expected: row.amount_kop, got: notification.amountKop },
+          'сумма платежа не совпала с заказом',
+        );
+        return reply.type('text/plain').send('OK');
+      }
+      await activatePaidPeriod(ctx.db, {
+        userId: row.user_id,
+        plan: row.plan,
+        provider: 'tbank',
+        periodStart: now,
+        periodEnd: periodEnd(row.plan, now),
+        /* Автопродления пока нет: разовый платёж и есть разовый платёж.
+           `RebillId` сохраняем — с ним рекуррент включается без новой оплаты
+           со стороны человека, но обещать продление до того, как оно
+           написано, нельзя. */
+        autoRenew: false,
+        providerSubscriptionId: notification.rebillId,
+        providerCustomerId: null,
+        graceDays: ctx.env.GRACE_DAYS,
+      });
+      return reply.type('text/plain').send('OK');
+    }
+
+    if (notification.status === 'REJECTED' || notification.status === 'REFUNDED' || notification.status === 'REVERSED') {
+      // Данные не трогаем: остаётся чтение и льготный период.
+      await markPaymentFailed(ctx.db, row.user_id, ctx.env.GRACE_DAYS, now);
+      return reply.type('text/plain').send('OK');
+    }
+
+    return reply.type('text/plain').send('OK');
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -291,15 +455,39 @@ async function buildStatus(ctx: AppContext, userId: string): Promise<BillingStat
       yearlyMonthlyRub: ctx.env.PRICE_YEARLY_MONTHLY_RUB,
     },
   };
+
 }
 
 /**
  * Записывает событие провайдера. Возвращает false, если такое уже было —
  * повторные уведомления норма, а не сбой.
  */
+/**
+ * Настройки терминала Т-Банка, если они заданы.
+ *
+ * `null` — приём оплаты через банк просто не настроен. Это не отказ и не
+ * поломка: ЮKassa и Google Play при этом работают как работали.
+ */
+function tbankCredentialsOf(env: {
+  TINKOFF_TERMINAL_KEY?: string | undefined;
+  TINKOFF_PASSWORD?: string | undefined;
+  TINKOFF_API_BASE: string;
+}): TbankCredentials | null {
+  const terminalKey = env.TINKOFF_TERMINAL_KEY;
+  const password = env.TINKOFF_PASSWORD;
+  if (!terminalKey || !password) return null;
+  return { terminalKey, password, apiBase: env.TINKOFF_API_BASE };
+}
+
+/** Почта плательщика — обязательное поле чека по 54-ФЗ. */
+async function emailOf(ctx: AppContext, userId: string): Promise<string | null> {
+  const user = await findUserById(ctx.db, userId);
+  return user?.email ?? null;
+}
+
 async function recordEvent(
   ctx: AppContext,
-  provider: 'yookassa' | 'google_play',
+  provider: 'yookassa' | 'google_play' | 'tbank',
   eventId: string,
   eventType: string,
   userId: string | null,

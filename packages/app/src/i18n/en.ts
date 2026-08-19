@@ -765,6 +765,7 @@ export const en: AppCatalog = {
     yes: 'yes',
     no: 'no',
     trial: 'Try it for 14 days',
+    pay: 'Subscribe',
     honest: 'Cancel in one tap. No timers and no “today only” discounts',
     bundle: 'Together with the practice app — +100 ₽ on top of its plan',
   },

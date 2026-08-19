@@ -1274,6 +1274,28 @@ export class AppController {
     return this.session.yandexAvailable();
   }
 
+  /**
+   * Оплатить подписку: получить ссылку на форму банка и открыть её.
+   *
+   * Форма открывается СИСТЕМНЫМ браузером, а не внутри окна: она чужая, и
+   * показывать чужую платёжную страницу в своём WebView — значит просить
+   * номер карты «внутри приложения», где человеку неоткуда узнать, кому он
+   * его отдаёт.
+   *
+   * Возвращает `false`, если создать платёж не вышло. Это отказ СОЗДАНИЯ, а
+   * не оплаты: денег ещё никто не трогал.
+   */
+  async startPayment(plan: 'monthly' | 'yearly'): Promise<boolean> {
+    try {
+      const url = await this.session.startPayment(plan, `${this.host.cloudBaseUrl}/billing/return`);
+      await this.host.openExternal(url);
+      return true;
+    } catch (error) {
+      this.patch({ authError: this.authMessage(error) });
+      return false;
+    }
+  }
+
   /** Яндекс ID — основной путь входа. Открывается системным браузером. */
   async startYandexSignIn(consents: Consents): Promise<void> {
     this.patch({ authError: null });
