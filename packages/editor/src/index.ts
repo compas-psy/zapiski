@@ -86,6 +86,7 @@ export {
 } from './theme/tokens.js';
 
 export { autoformat, checkboxShortcut, completeFencedCode, completeDivider } from './input/autoformat.js';
+export { emphasisExit } from './input/emphasis-exit.js';
 export { caretAtTail, enterAtBlockStart, tailClick } from './input/block-start.js';
 export {
   indentListItem,

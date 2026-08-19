@@ -22,6 +22,8 @@ import type { Command } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 
+import { emphasisExit } from './emphasis-exit.js';
+
 /** `[]` в начале строки (возможно, уже после маркера списка). */
 const CHECKBOX_SHORTCUT = /^([\t ]*)((?:[-*+]|\d+[.)])[\t ]+)?\[\]$/;
 /** Открывающая линия код-блока. */
@@ -122,4 +124,4 @@ export const completeDivider: Command = (view) => {
   return true;
 };
 
-export const autoformat: Extension = [checkboxShortcut];
+export const autoformat: Extension = [checkboxShortcut, emphasisExit];
