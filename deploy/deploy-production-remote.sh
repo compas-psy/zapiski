@@ -119,7 +119,18 @@ prepare_env() {
 
   # ADR-0003 §7: почта — через существующий postfix Дневника по адресу
   # docker0. Значения переопределяемы вручную в deploy/.env.
-  ensure_env EMAIL_SERVER_HOST '172.17.0.1'
+  # Адрес релея. `host.docker.internal` — шлюз ТОЙ сети, в которой стоит
+  # контейнер (см. `extra_hosts` в compose).
+  #
+  # Прежнее значение `172.17.0.1` — шлюз docker0, то есть ЧУЖОЙ сети: API
+  # работает в `zapiski_net`, оттуда этот адрес не маршрутизируется, и почта
+  # молча не работала. Это было НАШЕ умолчание, а не выбор человека, поэтому
+  # оно переписывается; всё остальное, что стоит в deploy/.env, не трогаем.
+  if [ "$(grep '^EMAIL_SERVER_HOST=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)" = '172.17.0.1' ]; then
+    upsert_env EMAIL_SERVER_HOST 'host.docker.internal'
+    log 'deploy/.env: EMAIL_SERVER_HOST переведён с шлюза docker0 на host.docker.internal.'
+  fi
+  ensure_env EMAIL_SERVER_HOST 'host.docker.internal'
   ensure_env EMAIL_SERVER_PORT '25'
   ensure_env EMAIL_FROM 'zapiski@cmpas.ru'
 
