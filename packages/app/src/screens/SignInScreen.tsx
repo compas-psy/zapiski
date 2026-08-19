@@ -229,9 +229,16 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
               {strings.signIn.sendLink}
             </Button>
 
-            <InfoNote tone="success" icon={<IconCheck size={15} />}>
-              {strings.signIn.promise}
-            </InfoNote>
+            {/*
+              Подсказка, а не «успех».
+
+              Стояла зелёной плашкой с галочкой — до того, как что-либо
+              произошло. Заказчик прочитал её как тост о результате: «внизу
+              зелёный тост, где упоминается смс, который мы не отправляем».
+              Зелёное с галочкой обязано означать случившееся; обещание — это
+              обычная строка под кнопкой.
+            */}
+            <p className="za-muted">{strings.signIn.promise}</p>
             {state.authError !== null ? <p className="za-muted">{state.authError}</p> : null}
           </>
         )}

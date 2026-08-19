@@ -31,6 +31,8 @@ export const COMMANDS = {
   shareText: 'share_text',
   /* Байты вложения во временный файл — `files.rs::share_stage`. */
   shareStage: 'share_stage',
+  /* Цвет значков системных панелей — `platform.rs::system_bar_icons`. */
+  systemBarIcons: 'system_bar_icons',
   hapticImpact: 'haptic_impact',
   biometricsAvailable: 'biometrics_available',
   biometricsEnroll: 'biometrics_enroll',

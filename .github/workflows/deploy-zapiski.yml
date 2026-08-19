@@ -583,6 +583,51 @@ jobs:
           exit "${status}"
           REMOTE
 
+      # ── Почта: жива ли она на самом деле ───────────────────────────────
+      #
+      # Заказчик: «вход через почту не работает». Проверить это можно только с
+      # сервера: релей слушает 25 на хосте, снаружи туда не достучаться, а
+      # приложение видит лишь «письмо отправить не удалось».
+      #
+      # Шаг НЕ роняет выкладку: почта живёт в чужом compose-проекте
+      # (/var/www/cmpas.ru), и класть из-за неё релиз API нельзя. Он называет
+      # причину — этого не хватало ровно всё время, пока «не работает вход».
+      - name: Проверить почту на сервере
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            'bash -s' <<'REMOTE'
+          set -uo pipefail
+          echo "── что слушает 25-й порт ──"
+          (ss -lntp 2>/dev/null || netstat -lntp 2>/dev/null) | grep -E '[:.]25\s' || echo "на 25 никто не слушает"
+
+          echo "── адрес шлюза docker0 ──"
+          gw="$(ip -4 addr show docker0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1)"
+          echo "docker0: ${gw:-не найден}"
+
+          echo "── доходит ли релей из контейнера API ──"
+          cd /var/www/zapiski 2>/dev/null && docker compose exec -T api \
+            node -e '
+              const net = require("net");
+              const host = process.env.SMTP_HOST, port = Number(process.env.SMTP_PORT);
+              const sock = net.connect({ host, port, timeout: 5000 });
+              sock.on("connect", () => { console.log(`SMTP ${host}:${port} — соединение есть`); sock.end(); });
+              sock.on("timeout", () => { console.log(`SMTP ${host}:${port} — молчит (таймаут)`); process.exit(1); });
+              sock.on("error", (e) => { console.log(`SMTP ${host}:${port} — ${e.code ?? e.message}`); process.exit(1); });
+            ' || echo "контейнер API до релея не достучался"
+
+          echo "── что говорит о себе сам API ──"
+          curl -sS -m 10 http://127.0.0.1:3100/api/v1/health || echo "health не ответил"
+          echo
+
+          echo "── последние отказы отправки письма ──"
+          docker compose logs --since 72h api 2>/dev/null | grep -i 'magic_link_send_failed' | tail -5 \
+            || echo "отказов отправки в логах нет"
+          REMOTE
+
       - name: Скачать удалённый лог деплоя
         if: failure()
         continue-on-error: true

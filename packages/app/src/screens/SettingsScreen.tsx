@@ -32,6 +32,7 @@ import {
 import {
   BILLING_ENABLED,
   LocalFolderBackend,
+  OWN_STORAGE_ENABLED,
   trialDaysFor,
   WebDAVBackend,
   type AttachmentNaming,
@@ -742,6 +743,16 @@ function SyncSection(): ReactNode {
         onChoose={() => connect('local')}
       />
 
+      {/*
+        Яндекс.Диск и WebDAV — решение заказчика «пока скрыть: они по сути
+        конкуренты облаку, за которое мы просим оплату».
+
+        Прячется ВЫБОР, а не уже сделанный выбор: у кого хранилище стоит на них
+        сейчас, карточка остаётся. Иначе человек не увидел бы, где лежат его
+        заметки, и не смог бы оттуда уйти, — а «приложение само сменило место
+        хранения» мы уже проходили.
+      */}
+      {OWN_STORAGE_ENABLED || choiceOrBackend === 'yandex' ? (
       <ModeCard
         id="yandex"
         title={copy.yandex}
@@ -765,7 +776,9 @@ function SyncSection(): ReactNode {
           {copy.connect}
         </Button>
       </ModeCard>
+      ) : null}
 
+      {OWN_STORAGE_ENABLED || choiceOrBackend === 'webdav' ? (
       <ModeCard
         id="webdav"
         title={copy.webdavCard}
@@ -795,6 +808,7 @@ function SyncSection(): ReactNode {
           {copy.connect}
         </Button>
       </ModeCard>
+      ) : null}
 
       <ModeCard
         id="zapiski"

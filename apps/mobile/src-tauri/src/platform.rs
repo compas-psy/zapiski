@@ -331,6 +331,16 @@ pub fn share_text(
     )
 }
 
+/// Тёмные значки системной панели — когда под ней светлый фон.
+///
+/// Заказчик: «из-за белого фона приложения сливаются системные иконки». Фон
+/// панели при этом не трогается: меняется только цвет значков, которые рисует
+/// система. Решение принимает фронтенд — тема живёт там.
+#[tauri::command(async)]
+pub fn system_bar_icons(dark: bool) -> Result<(), String> {
+    crate::android::set_system_bar_icons(dark)
+}
+
 /// Хэптика (BEHAVIOR §0). Два значения силы, третьего в контракте нет.
 #[tauri::command(async)]
 pub fn haptic_impact(strength: String) -> Result<(), String> {

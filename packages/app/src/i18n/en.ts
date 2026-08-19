@@ -104,7 +104,7 @@ export const en: AppCatalog = {
     emailLabel: 'Email',
     emailPlaceholder: 'marina@ya.ru',
     sendLink: 'Send me a sign-in link',
-    promise: 'No passwords and no text messages: one tap in the email and you are in',
+    promise: 'We send a link by email — one tap and you are in. No password to invent',
     privacy: 'We do not read your notes — technically we cannot',
     sentTitle: (email: string): string => `The email is on its way to ${email} · check your inbox`,
     resend: 'Send again',

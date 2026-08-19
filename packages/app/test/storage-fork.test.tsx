@@ -14,7 +14,12 @@
  * ничего не обрывало.
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { LocalFolderBackend, MemoryVaultStorage, type SyncBackend } from '@zapiski/core';
+import {
+  LocalFolderBackend,
+  MemoryVaultStorage,
+  OWN_STORAGE_ENABLED,
+  type SyncBackend,
+} from '@zapiski/core';
 import { ThemeProvider, ToastProvider } from '@zapiski/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -66,11 +71,35 @@ describe('место хранения — один список', () => {
   it('режимы взаимоисключающие: отмечен ровно один', async () => {
     await mount();
     const modes = screen.getAllByRole('radio');
-    expect(modes.length, 'списка режимов нет').toBeGreaterThan(3);
+    expect(modes.length, 'списка режимов нет').toBeGreaterThan(1);
     const chosen = modes.filter((node) => node.getAttribute('aria-checked') === 'true');
     expect(chosen, 'отмечено не одно место хранения').toHaveLength(1);
     /* По умолчанию — только на этом устройстве: синхронизации нет. */
     expect(chosen[0]?.textContent).toContain(ru.settings.sync.modeLocalOnly);
+  });
+
+  /**
+   * Решение заказчика: «пока в настройках скрой Яндекс.Диск и WebDav — они по
+   * сути конкуренты облаку, за которое мы просим оплату».
+   *
+   * Проверяется предложение, а не код backend'ов: сами они на месте и вернутся
+   * одной строкой (`OWN_STORAGE_ENABLED`).
+   */
+  it('чужие хранилища не предлагаются, пока выключены', async () => {
+    await mount();
+    /* Ищем поля подключения, а не слова: «WebDAV» и «Яндекс.Диск» встречаются
+       в подсказках соседних карточек («копия в папке клиента Яндекс.Диска»),
+       и проверка по тексту поймала бы их, а не саму карточку. */
+    expect(screen.queryByLabelText(ru.settings.sync.webdavUrl) !== null).toBe(
+      OWN_STORAGE_ENABLED,
+    );
+    expect(screen.queryByLabelText(ru.settings.sync.yandexToken) !== null).toBe(
+      OWN_STORAGE_ENABLED,
+    );
+    /* Облако и локальный режим при этом на месте: прячем конкурента, а не выбор. */
+    const titles = screen.getAllByRole('radio').map((node) => node.textContent ?? '');
+    expect(titles.some((text) => text.includes(ru.settings.sync.cloud))).toBe(true);
+    expect(titles.some((text) => text.includes(ru.settings.sync.modeLocalOnly))).toBe(true);
   });
 
   it('выбор другого режима снимает прежний', async () => {

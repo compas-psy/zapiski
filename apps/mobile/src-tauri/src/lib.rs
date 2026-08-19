@@ -49,6 +49,7 @@ pub fn run() {
             saf::saf_remove,
             saf::saf_rename,
             platform::secure_flag,
+            platform::system_bar_icons,
             platform::haptic_impact,
             platform::share_text,
             platform::share_take,

@@ -217,6 +217,19 @@ mod api {
         })
     }
 
+    /// Тёмные значки системной панели — когда под ней светлый фон.
+    pub fn set_system_bar_icons(dark: bool) -> Result<(), String> {
+        with_env(|env| {
+            call_bridge(
+                env,
+                "setSystemBarIcons",
+                "(Z)V",
+                &[JValue::Bool(u8::from(dark))],
+            )?;
+            Ok(())
+        })
+    }
+
     pub fn haptic(strength: i32) -> Result<(), String> {
         with_env(|env| {
             call_bridge(env, "haptic", "(I)V", &[JValue::Int(strength)])?;
@@ -836,6 +849,10 @@ mod api {
         Err(format!("{what} доступно только на Android"))
     }
 
+    pub fn set_system_bar_icons(_dark: bool) -> Result<(), String> {
+        Ok(())
+    }
+
     pub fn set_secure(_on: bool) -> Result<(), String> {
         only_android("FLAG_SECURE")
     }
@@ -951,7 +968,8 @@ pub use api::{
     download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
     render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_open, saf_persisted_trees,
     saf_pick_folder, saf_read, saf_release_trees, saf_remove, saf_rename, saf_stat,
-    saf_supports_rename, saf_write, save_to_downloads, set_secure, share_text,
+    saf_supports_rename, saf_write, save_to_downloads, set_secure, set_system_bar_icons,
+    share_text,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -9,6 +9,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
+import androidx.core.view.WindowCompat
 import java.lang.ref.WeakReference
 
 /**
@@ -96,6 +97,33 @@ object NativeBridge {
             } else {
                 current.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
             }
+        }
+    }
+
+    /**
+     * Цвет системных значков сверху: часы, батарея, сигнал.
+     *
+     * Заказчик: «на системной панели в Андроид, которая сверху, из-за белого
+     * фона приложения сливаются системные иконки». Так и есть: по умолчанию
+     * Android рисует их СВЕТЛЫМИ — расчёт на тёмное приложение, — и на нашей
+     * «Бумаге» они исчезают.
+     *
+     * Фон панели мы не трогаем (заказчик просил именно это): меняется только
+     * `isAppearanceLightStatusBars` — признак «под панелью светло, рисуй
+     * значки тёмными». Тот же признак ставится и нижней панели навигации,
+     * иначе полоска жеста пропадает ровно так же.
+     *
+     * Решение принимает фронтенд: тема живёт там, у неё три значения и режим
+     * «как в системе», и дублировать этот разбор в Kotlin значило бы завести
+     * второй источник истины.
+     */
+    @JvmStatic
+    fun setSystemBarIcons(dark: Boolean) {
+        val current = activity?.get() ?: return
+        current.runOnUiThread {
+            val controller = WindowCompat.getInsetsController(current.window, current.window.decorView)
+            controller.isAppearanceLightStatusBars = dark
+            controller.isAppearanceLightNavigationBars = dark
         }
     }
 

@@ -18,6 +18,7 @@ import './shell.css';
 import '@zapiski/app/styles.css';
 
 import { createHost } from './host';
+import { watchSystemBars } from './platform/system-bars';
 
 /**
  * Тема применяется до первого рендера: иначе тёмная тема мигает светлым на
@@ -34,6 +35,10 @@ const container = document.getElementById('root');
 if (container === null) throw new Error('в index.html нет #root');
 
 applyThemeEarly();
+
+/* Значки системных панелей — вслед за темой, один раз на окно. Экраны об этом
+   не знают и знать не должны: признак ставится окну целиком. */
+watchSystemBars();
 
 /*
  * Сборка хоста асинхронна из-за одного поля — биометрии: доступность нужно
