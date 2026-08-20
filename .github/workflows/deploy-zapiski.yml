@@ -477,8 +477,12 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          # Не `-e`: шаг обязан договорить до конца, а не оборваться на первой
-          # неудачной проверке. Отказ объявляется явным `exit 1`.
+          # `set +e` ЯВНО. GitHub запускает шаг как `bash -e {0}`, и одного
+          # `set -uo pipefail` мало: errexit остаётся включённым, скрипт
+          # обрывается на первой же неудаче и не успевает договорить. Я на
+          # этом попался в предыдущей редакции — причина отказа напечаталась,
+          # а проверка портов до вывода не дошла.
+          set +e
           set -uo pipefail
           mkdir -p ~/.ssh
           printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
@@ -489,13 +493,40 @@ jobs:
           }
 
           if ! getent hosts "${SERVER_HOST}" >/dev/null 2>&1; then
-            echo '::error title=Сервер недостижим::Имя сервера не разрешается в адрес — дальше идти некуда. Проверяйте DNS, а не выкладку.'
+            echo '::error title=Сервер недостижим::Имя сервера не разрешается в адрес — дальше идти некуда. Вопрос к DNS, а не к выкладке.'
             exit 1
           fi
           echo 'имя сервера разрешается'
 
+          # Порты проверяются ПЕРВЫМИ и намеренно. Это самая дешёвая проверка
+          # и самая полезная: она отвечает на вопрос «машина вообще жива»
+          # раньше, чем что-либо успеет оборваться. `ssh-keyscan` умеет
+          # ждать две минуты — столько ждать ответа на этот вопрос незачем.
+          echo '── какие порты отвечают ──'
+          alive=''
+          for port in 22 80 443; do
+            if timeout 6 bash -c "exec 3<>/dev/tcp/${SERVER_HOST}/${port}" 2>/dev/null; then
+              echo "порт ${port}: отвечает"
+              alive="${alive} ${port}"
+            else
+              echo "порт ${port}: молчит"
+            fi
+          done
+
+          case "${alive}" in
+            *22*) ;;
+            '')
+              echo '::error title=Машина не поднята::Молчат все три порта — 22, 80 и 443. Это не выкладка и не код: сервер не отвечает по сети. Вопрос к хостингу.'
+              exit 1
+              ;;
+            *)
+              echo "::error title=SSH лёг, веб жив::Отвечают порты${alive}, но не 22. Сайт при этом может работать. Выложить нечего, пока не поднимется SSH."
+              exit 1
+              ;;
+          esac
+
           scan="$(ssh-keyscan -T 15 -H "${SERVER_HOST}" 2>&1)"
-          keys="$(printf '%s\n' "${scan}" | grep -cv '^#' || true)"
+          keys="$(printf '%s\n' "${scan}" | grep -cv '^#')"
 
           if [ "${keys}" -gt 0 ]; then
             printf '%s\n' "${scan}" | grep -v '^#' >> ~/.ssh/known_hosts
@@ -503,18 +534,8 @@ jobs:
             exit 0
           fi
 
-          echo '::error title=Сервер недостижим::ssh-keyscan не получил ключа за 15 секунд.'
-          echo '── что ответил ssh-keyscan ──'
+          echo '::error title=Порт 22 отвечает, а ключ не отдаёт::Соединение установилось, но ssh-keyscan ключа не получил.'
           printf '%s\n' "${scan}" | hide | tail -5
-          echo '── какие порты вообще отвечают ──'
-          for port in 22 80 443; do
-            if timeout 5 bash -c "exec 3<>/dev/tcp/${SERVER_HOST}/${port}" 2>/dev/null; then
-              echo "порт ${port}: отвечает"
-            else
-              echo "порт ${port}: молчит"
-            fi
-          done
-          echo 'Молчат все три — машина не поднята. Отвечает 443, молчит 22 — жив веб, лёг SSH.'
           exit 1
 
       - name: Проверить, что провижн уже выполнен
