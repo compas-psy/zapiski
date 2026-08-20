@@ -458,13 +458,64 @@ jobs:
           # packages/* уже собраны, а в чистом чекауте это не так.
           pnpm --filter "@zapiski/web..." build
 
+      # ── Первое обращение к серверу, и оно обязано объяснять отказ ──────────
+      #
+      # Прежняя редакция звала `ssh-keyscan … 2>/dev/null` под `set -e`: если
+      # сервер не отвечал, объяснение выбрасывалось, а шаг падал. Выкладка
+      # вставала с сообщением «Загрузить SSH-ключ: failure» и ни словом о том,
+      # что случилось, — и разбираться приходилось гаданием. Ровно это и
+      # произошло: две выкладки подряд упали здесь, а причина не была названа
+      # ни разу.
+      #
+      # Имя и адрес сервера в вывод НЕ попадают: имя — секрет, адрес выдал бы
+      # его не хуже. Печатаются только классы отказа, и их достаточно, чтобы
+      # понять, куда идти: не разрешается имя — вопрос к DNS; молчат все порты
+      # — машина не поднята; отвечает 443, но не 22 — жив веб, лёг SSH.
       - name: Загрузить SSH-ключ
+        timeout-minutes: 3
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
         run: |
-          set -euo pipefail
+          # Не `-e`: шаг обязан договорить до конца, а не оборваться на первой
+          # неудачной проверке. Отказ объявляется явным `exit 1`.
+          set -uo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          hide() {
+            sed -E "s/${SERVER_HOST}/<хост скрыт>/g; s/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<адрес скрыт>/g"
+          }
+
+          if ! getent hosts "${SERVER_HOST}" >/dev/null 2>&1; then
+            echo '::error title=Сервер недостижим::Имя сервера не разрешается в адрес — дальше идти некуда. Проверяйте DNS, а не выкладку.'
+            exit 1
+          fi
+          echo 'имя сервера разрешается'
+
+          scan="$(ssh-keyscan -T 15 -H "${SERVER_HOST}" 2>&1)"
+          keys="$(printf '%s\n' "${scan}" | grep -cv '^#' || true)"
+
+          if [ "${keys}" -gt 0 ]; then
+            printf '%s\n' "${scan}" | grep -v '^#' >> ~/.ssh/known_hosts
+            echo "ключей хоста получено: ${keys}"
+            exit 0
+          fi
+
+          echo '::error title=Сервер недостижим::ssh-keyscan не получил ключа за 15 секунд.'
+          echo '── что ответил ssh-keyscan ──'
+          printf '%s\n' "${scan}" | hide | tail -5
+          echo '── какие порты вообще отвечают ──'
+          for port in 22 80 443; do
+            if timeout 5 bash -c "exec 3<>/dev/tcp/${SERVER_HOST}/${port}" 2>/dev/null; then
+              echo "порт ${port}: отвечает"
+            else
+              echo "порт ${port}: молчит"
+            fi
+          done
+          echo 'Молчат все три — машина не поднята. Отвечает 443, молчит 22 — жив веб, лёг SSH.'
+          exit 1
 
       - name: Проверить, что провижн уже выполнен
         run: |
