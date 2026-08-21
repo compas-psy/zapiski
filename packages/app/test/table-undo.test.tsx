@@ -110,7 +110,7 @@ describe('панель видит живой редактор', () => {
        не открывался вовсе. Первое же нажатие клавиши всё чинило, поэтому
        дефект и выглядел мистикой. */
     await mountTable();
-    press(screen.getByRole('button', { name: copy.table }));
+    press(screen.getByRole('button', { name: copy.tableEdit }));
     expect(rowDrop(1)).toBeTruthy();
   });
 
@@ -125,7 +125,7 @@ describe('панель видит живой редактор', () => {
 describe('удаление строки таблицы отменяется', () => {
   it('тост появляется и говорит, что именно удалено', async () => {
     await mountTable();
-    press(screen.getByRole('button', { name: copy.table }));
+    press(screen.getByRole('button', { name: copy.tableEdit }));
     tap(rowDrop(1));
 
     expect(await screen.findByText(copy.tableMenu.rowRemoved)).toBeTruthy();
@@ -134,7 +134,7 @@ describe('удаление строки таблицы отменяется', ()
 
   it('«Отменить» возвращает строку в текст', async () => {
     await mountTable();
-    press(screen.getByRole('button', { name: copy.table }));
+    press(screen.getByRole('button', { name: copy.tableEdit }));
     tap(rowDrop(1));
 
     const text = (): string => activeEditor()?.view?.state.doc.toString() ?? '';
