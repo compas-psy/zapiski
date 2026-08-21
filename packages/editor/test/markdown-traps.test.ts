@@ -136,3 +136,61 @@ describe('команда делает то, что обещает кнопкой
     });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Тот же дефис, но набранный руками
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('дефис, набранный пальцем, тоже не делает заголовка', () => {
+  /*
+   * Заказчик пожаловался ДВАЖДЫ. Первый раз — на кнопку, и это починилось.
+   * Второй раз — «ошибка не исчезла», и он был прав: кнопка не единственный
+   * способ поставить дефис. Ещё в первом письме стояло прямо: «пришлось ещё
+   * раз нажать Enter, чтобы при наборе "-" текст не укрупнялся».
+   *
+   * Проверка идёт через настоящий ввод (`inputHandler`), а не через команду:
+   * иначе она проверяла бы уже починенный путь и молчала о втором.
+   */
+  function typeChar(doc: string, at: number, char: string): EditorView {
+    view = makeView(doc, { selection: { anchor: at } });
+    /* Так же, как это делает CodeMirror при наборе: сперва спрашиваем
+       обработчики ввода, и только если никто не взял — вставляем сами. */
+    const handled = view.state.facet(EditorView.inputHandler).some(
+      (handler) => handler(view as EditorView, at, at, char, () => null as never) === true,
+    );
+    if (!handled) view.dispatch({ changes: { from: at, insert: char } });
+    return view;
+  }
+
+  it('под абзацем ставит пустую строку сам', () => {
+    const v = typeChar('Слишком много выбора:\n', 22, '-');
+    expect(v.state.doc.toString()).toBe('Слишком много выбора:\n\n-');
+  });
+
+  it('и парсер заголовка больше не видит', () => {
+    const v = typeChar('Слишком много выбора:\n', 22, '-');
+    const names: string[] = [];
+    syntaxTree(v.state).iterate({ enter: (node) => void names.push(node.name) });
+    expect(names.filter((n) => /Heading/.test(n)), 'абзац снова стал заголовком').toEqual([]);
+  });
+
+  it('внутри списка не вмешивается', () => {
+    const v = typeChar('- первый\n', 9, '-');
+    expect(v.state.doc.toString()).toBe('- первый\n-');
+  });
+
+  it('после пустой строки не вмешивается', () => {
+    const v = typeChar('Абзац\n\n', 7, '-');
+    expect(v.state.doc.toString()).toBe('Абзац\n\n-');
+  });
+
+  it('дефис внутри слова не трогает', () => {
+    const v = typeChar('Абзац\nкто', 9, '-');
+    expect(v.state.doc.toString()).toBe('Абзац\nкто-');
+  });
+
+  it('курсор остаётся за набранным символом', () => {
+    const v = typeChar('Слишком много выбора:\n', 22, '-');
+    expect(v.state.selection.main.head).toBe(v.state.doc.length);
+  });
+});

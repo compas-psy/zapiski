@@ -23,6 +23,7 @@ import type { Extension } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
 
 import { emphasisExit } from './emphasis-exit.js';
+import { setextGuard } from './setext-guard.js';
 
 /** `[]` в начале строки (возможно, уже после маркера списка). */
 const CHECKBOX_SHORTCUT = /^([\t ]*)((?:[-*+]|\d+[.)])[\t ]+)?\[\]$/;
@@ -124,4 +125,4 @@ export const completeDivider: Command = (view) => {
   return true;
 };
 
-export const autoformat: Extension = [checkboxShortcut, emphasisExit];
+export const autoformat: Extension = [checkboxShortcut, emphasisExit, setextGuard];

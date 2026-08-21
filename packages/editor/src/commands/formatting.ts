@@ -218,7 +218,11 @@ const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
  * Принадлежность списку выясняется у того же дерева разбора, которым рисуется
  * живой показ, — гадать по виду строки здесь нечем.
  */
-function needsBlankLineBefore(state: EditorState, lineNumber: number, nextText: string): boolean {
+export function needsBlankLineBefore(
+  state: EditorState,
+  lineNumber: number,
+  nextText: string,
+): boolean {
   if (lineNumber <= 1) return false;
   if (!EMPTY_LIST_ITEM.test(nextText)) return false;
 
