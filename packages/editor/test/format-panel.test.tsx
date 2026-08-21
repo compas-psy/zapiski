@@ -559,16 +559,25 @@ describe('таблица правится редактором', () => {
     expect(document.querySelector('.zp-table')).toBeNull();
   });
 
-  it('внутри таблицы та же кнопка открывает редактор', () => {
+  it('внутри таблицы кнопка называется иначе и открывает редактор', () => {
+    /*
+     * Подпись — половина дела. Заказчик не нашёл мастер именно потому, что
+     * кнопка в двух разных состояниях называлась одинаково: «Таблица». Тест
+     * ищет её по НОВОЙ подписи, то есть заодно стережёт и переименование.
+     */
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    expect(
+      container.querySelector(`[aria-label="${copy.table}"]`),
+      'внутри таблицы кнопка всё ещё называется «Таблица» — мастер не найти',
+    ).toBeNull();
+    press(button(container, copy.tableEdit));
     /* Вся таблица видна целиком: четыре ячейки — по одной на каждую. */
     expect(cells().map((cell) => cell.value)).toEqual(['Дело', 'Срок', 'созвон', 'пн']);
   });
 
   it('ячейка правится прямо в редакторе', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     type(cells()[2] as HTMLInputElement, 'встреча');
     expect(view?.state.doc.toString()).toContain('встреча');
     expect(view?.state.doc.toString()).not.toContain('созвон');
@@ -579,14 +588,14 @@ describe('таблица правится редактором', () => {
        возвращённое из документа значение стирало бы каждый последний пробел
        ровно в тот момент, когда его набрали. */
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     type(cells()[2] as HTMLInputElement, 'Бумага ');
     expect((cells()[2] as HTMLInputElement).value).toBe('Бумага ');
   });
 
   it('палка внутри ячейки не рвёт таблицу на лишний столбец', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     type(cells()[2] as HTMLInputElement, 'до | после');
     expect(view?.state.doc.toString()).toContain('\\|');
     expect(cells()).toHaveLength(4);
@@ -597,7 +606,7 @@ describe('таблица правится редактором', () => {
        Две кнопки «в конец» заставляли добавлять строку последней и тащить её
        ручкой на место. */
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     tap(addButton(copy.tableMenu.insertBelow));
     expect(view?.state.doc.toString().split('\n')).toHaveLength(4);
     tap(addButton(copy.tableMenu.insertRight));
@@ -606,7 +615,7 @@ describe('таблица правится редактором', () => {
 
   it('строка вставляется ВЫШЕ текущей, а не в конец', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     tap(addButton(copy.tableMenu.insertAbove));
 
     const body = view?.state.doc.toString().split('\n') ?? [];
@@ -619,7 +628,7 @@ describe('таблица правится редактором', () => {
 
   it('удаление столбца', () => {
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     tap(byLabel(copy.tableMenu.removeColumn));
     expect(view?.state.doc.toString()).not.toContain('Срок');
     expect(view?.state.doc.toString()).toContain('созвон');
@@ -640,7 +649,7 @@ describe('таблица правится редактором', () => {
       const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
-      press(button(container, copy.table));
+      press(button(container, copy.tableEdit));
       tap(rowDrop(1));
 
       expect(box.calls.map(([message]) => message)).toEqual([copy.tableMenu.rowRemoved]);
@@ -651,7 +660,7 @@ describe('таблица правится редактором', () => {
       const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
-      press(button(container, copy.table));
+      press(button(container, copy.tableEdit));
       tap(rowDrop(1));
       expect(view?.state.doc.toString()).not.toContain('созвон');
 
@@ -666,7 +675,7 @@ describe('таблица правится редактором', () => {
       const container = mount(TABLE.replace('Срок', 'Ср¦ок'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
-      press(button(container, copy.table));
+      press(button(container, copy.tableEdit));
       tap(byLabel(copy.tableMenu.removeColumn));
       expect(box.calls[0]?.[0]).toBe(copy.tableMenu.columnRemoved);
     });
@@ -679,7 +688,7 @@ describe('таблица правится редактором', () => {
       const container = mount(TABLE.replace('Дело', 'Де¦ло'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
-      press(button(container, copy.table));
+      press(button(container, copy.tableEdit));
       tap(rowDrop(0));
       expect(box.calls).toEqual([]);
       expect(view?.state.doc.toString()).toContain('Дело');
@@ -691,7 +700,7 @@ describe('таблица правится редактором', () => {
       const container = mount(TABLE.replace('созвон', 'соз¦вон'), {
         onUndoable: (message, undoAction) => box.calls.push([message, undoAction]),
       });
-      press(button(container, copy.table));
+      press(button(container, copy.tableEdit));
       tap(addButton(copy.tableMenu.insertBelow));
       expect(box.calls).toEqual([]);
     });
@@ -699,7 +708,7 @@ describe('таблица правится редактором', () => {
 
   it('выравнивание помечено и применяется', () => {
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     tap(byLabel(copy.tableMenu.aligns.center));
     expect(view?.state.doc.toString().split('\n')[1]).toMatch(/:-+:/);
     expect(byLabel(copy.tableMenu.aligns.center).getAttribute('aria-pressed')).toBe('true');
@@ -709,7 +718,7 @@ describe('таблица правится редактором', () => {
     /* Заказчик просил его наравне с горизонтальным, но markdown кодирует
        только левое, правое и центр. Мёртвых кнопок не рисуем. */
     const container = mount(TABLE.replace('Срок', 'Ср¦ок'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     expect(document.querySelector('.zp-table__note')?.textContent).toBe(
       copy.tableMenu.noVertical,
     );
@@ -717,7 +726,7 @@ describe('таблица правится редактором', () => {
 
   it('строка заголовка отмечена галочкой', () => {
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     const check = document.querySelector<HTMLInputElement>('.zp-table__check input');
     expect(check?.checked).toBe(true);
   });
@@ -725,7 +734,7 @@ describe('таблица правится редактором', () => {
   it('шапку не тащат: её ручка выключена', () => {
     /* Перестановка сделала бы заголовком чужие данные. */
     const container = mount(TABLE.replace('созвон', 'соз¦вон'));
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     expect(rowHandle(0).hasAttribute('disabled')).toBe(true);
     expect(rowHandle(1).hasAttribute('disabled')).toBe(false);
   });
@@ -734,7 +743,7 @@ describe('таблица правится редактором', () => {
     const container = mount(
       '| Дело   | Срок |\n| ------ | ---- |\n| созвон | пн   |\n| отчёт¦ | ср   |',
     );
-    press(button(container, copy.table));
+    press(button(container, copy.tableEdit));
     /* Прямоугольники в happy-dom нулевые, поэтому строкам раздаются
        настоящие: перетаскивание считает попадание именно по ним. */
     [0, 1, 2].forEach((index) => {

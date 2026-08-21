@@ -231,6 +231,69 @@ for (const viewport of VIEWPORTS) {
     `${where}: после тычка текст таблицы пропал из документа`,
   );
 
+  // ── Мастер таблицы: он есть только если его ВИДНО ─────────────────────────
+  //
+  // Заказчик: «проверь мастер таблиц — у меня его нигде нет, он нигде не
+  // появляется». Модульные тесты его находили: в дереве он был. На экране
+  // никто не смотрел — ровно та же беда, что была со Справкой, и ровно
+  // поэтому проверка здесь, в живом браузере.
+  //
+  // Каретка после тычка выше стоит внутри таблицы, а значит кнопка «Таблица»
+  // в панели обязана открывать редактор, а не вставлять вторую таблицу.
+  /* Каретка внутри таблицы — значит подпись обязана быть «Изменить таблицу».
+     Кнопка, называющаяся одинаково в двух разных состояниях, и есть причина,
+     по которой мастер «нигде не появляется». */
+  const tableButton = page.locator('[aria-label="Изменить таблицу"]').first();
+  const buttonVisible = await tableButton.isVisible().catch(() => false);
+  check(
+    buttonVisible,
+    `${where}: кнопки «Изменить таблицу» нет на экране — либо её нет, либо она ` +
+      'не поменяла подпись, встав внутрь таблицы, и мастер не найти',
+  );
+
+  if (buttonVisible) {
+    const box = await tableButton.boundingBox();
+    check(
+      box !== null && box.width > 0 && box.height > 0,
+      `${where}: кнопка «Изменить таблицу» есть в разметке, но нулевого размера`,
+    );
+    const view = page.viewportSize();
+    check(
+      box === null || view === null || (box.x >= 0 && box.x + box.width <= view.width + 1),
+      `${where}: кнопка «Изменить таблицу» вылезла за край экрана — до неё не дотянуться`,
+    );
+
+    await tableButton.click();
+    await page.waitForTimeout(400);
+
+    const dialog = page.locator('.zp-table').first();
+    const dialogVisible = await dialog.isVisible().catch(() => false);
+    check(dialogVisible, `${where}: мастер таблицы не открылся по нажатию кнопки`);
+
+    if (dialogVisible) {
+      const dialogBox = await dialog.boundingBox();
+      check(
+        dialogBox !== null && dialogBox.width > 0 && dialogBox.height > 0,
+        `${where}: мастер таблицы в разметке есть, а на экране нулевой`,
+      );
+      const view2 = page.viewportSize();
+      if (dialogBox !== null && view2 !== null) {
+        check(
+          dialogBox.y >= 0 && dialogBox.y + dialogBox.height <= view2.height + 1,
+          `${where}: мастер таблицы не помещается по высоте: y=${Math.round(dialogBox.y)}, ` +
+            `высота ${Math.round(dialogBox.height)} при экране ${view2.height}`,
+        );
+        check(
+          dialogBox.x >= 0 && dialogBox.x + dialogBox.width <= view2.width + 1,
+          `${where}: мастер таблицы вылез за край экрана по горизонтали`,
+        );
+      }
+      /* Ручки строк и столбцов — то, ради чего мастер и заводился (§4). */
+      const adds = await page.locator('.zp-table__add').count();
+      check(adds >= 2, `${where}: в мастере нет ручек добавления строки и столбца (${adds})`);
+    }
+  }
+
   await context.close();
 }
 

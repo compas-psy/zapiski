@@ -80,6 +80,8 @@ export interface EditorStrings {
     lists: string;
     listKinds: Record<'none' | 'bullet' | 'ordered' | 'task' | 'details', string>;
     table: string;
+    /** Та же кнопка, когда каретка ВНУТРИ таблицы: она открывает редактор. */
+    tableEdit: string;
     link: string;
     linkText: string;
     linkUrl: string;
@@ -202,6 +204,7 @@ export const ru: EditorStrings = {
       details: 'Сворачиваемый блок',
     },
     table: 'Таблица',
+    tableEdit: 'Изменить таблицу',
     link: 'Ссылка',
     linkText: 'Текст',
     linkUrl: 'Адрес',
@@ -320,6 +323,7 @@ export const en: EditorStrings = {
       details: 'Collapsible block',
     },
     table: 'Table',
+    tableEdit: 'Edit table',
     link: 'Link',
     linkText: 'Text',
     linkUrl: 'Address',
