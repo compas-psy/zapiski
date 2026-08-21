@@ -165,6 +165,73 @@ export const toggleUnderline: StateCommand = toggleWrap('<u>', '</u>');
 
 type MarkerFor = (parts: LineParts, indexInSelection: number) => string;
 
+/**
+ * Пустой пункт списка не может прервать абзац — и это стоит двух дефектов.
+ *
+ * ── Что прислал заказчик ────────────────────────────────────────────────────
+ *
+ * «Набрал текст, потом ":", потом нажал Enter, потом выбрал маркированный
+ * список — и весь текст выше стал заголовком. При этом # нигде в тексте нет».
+ *
+ * ── Одно правило, три разных беды ───────────────────────────────────────────
+ *
+ * CommonMark разрешает списку прервать абзац только непустым пунктом. Пункт,
+ * который вставляет кнопка, пуст по определению — человек ещё не печатал. И
+ * дальше исход зависит от маркера, причём ни один не тот, которого ждали:
+ *
+ *   `абзац\n- `   → SetextHeading2. Строка из дефисов под абзацем — это
+ *                   подчёркивание заголовка. Абзац становится заголовком.
+ *   `абзац\n1. `  → OrderedList не появляется вовсе: «1.» молча прилипает к
+ *                   абзацу текстом. Кнопка нажата, списка нет.
+ *   `абзац\n* `   → то же молчание, что и у «1.».
+ *
+ * Пустая строка снимает все три разом: `абзац\n\n- ` → BulletList.
+ *
+ * Проверено настоящим парсером — тем же, которым рисуется живой показ и
+ * которым файл прочтёт Obsidian. Матрица «команда × окружение» лежит в
+ * `test/markdown-traps.test.ts`; двух ловушек из трёх я сам не предвидел, их
+ * нашла она.
+ *
+ * ── Почему чиним в тексте, а не в показе ────────────────────────────────────
+ *
+ * Заголовок там ЕСТЬ. Подкрасить его обратно в абзац значило бы врать: файл
+ * лежит на диске обычным markdown, и любой другой редактор покажет заголовок.
+ * Поэтому команда ставит пустую строку — ровно то, что поставил бы человек,
+ * знающий это правило.
+ */
+const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
+
+/**
+ * Нужна ли пустая строка перед вставляемым маркером.
+ *
+ * Безопасен ровно один сосед — пункт списка: там `- ` начинает соседний
+ * пункт, и пустая строка только разредила бы список. Во всех остальных
+ * случаях непустой соседней строки пустая строка ставится.
+ *
+ * Первая редакция проверяла узко — «абзац ли это» — и пропустила строку
+ * таблицы: она не абзац, а заголовок из неё получался такой же. Ловить
+ * перечислением видов блока значит однажды снова не угадать вид; поэтому
+ * правило перевёрнуто на разрешительное. Лишняя пустая строка после
+ * заголовка или цитаты — обычный стиль markdown и ничего не меняет в разборе;
+ * пропущенная ловушка меняет чужой абзац.
+ *
+ * Принадлежность списку выясняется у того же дерева разбора, которым рисуется
+ * живой показ, — гадать по виду строки здесь нечем.
+ */
+function needsBlankLineBefore(state: EditorState, lineNumber: number, nextText: string): boolean {
+  if (lineNumber <= 1) return false;
+  if (!EMPTY_LIST_ITEM.test(nextText)) return false;
+
+  const previous = state.doc.line(lineNumber - 1);
+  if (previous.text.trim().length === 0) return false;
+
+  const node = syntaxTree(state).resolveInner(Math.min(previous.from + 1, previous.to), 1);
+  for (let cursor: typeof node | null = node; cursor !== null; cursor = cursor.parent) {
+    if (cursor.name === 'ListItem') return false;
+  }
+  return true;
+}
+
 /** Применить блочный маркер к строкам выделения; повторный вызов снимает его. */
 function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boolean): StateCommand {
   return ({ state, dispatch }) => {
@@ -202,6 +269,15 @@ function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boo
       const marker = allMarked ? '' : markerFor(part, i);
       if (marker === part.marker) return;
       const at = line.from + part.indent.length;
+      /* Пустая строка — только у САМОЙ ВЕРХНЕЙ строки правки и только когда
+         иначе получится подчёркивание заголовка (см. `needsBlankLineBefore`). */
+      if (
+        i === 0 &&
+        !allMarked &&
+        needsBlankLineBefore(state, n, `${part.indent}${marker}${part.rest}`)
+      ) {
+        changes.push({ from: line.from, to: line.from, insert: '\n' });
+      }
       changes.push({ from: at, to: at + part.marker.length, insert: marker });
     });
     if (!changes.length) return false;

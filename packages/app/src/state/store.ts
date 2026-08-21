@@ -2355,6 +2355,26 @@ export class AppController {
     const next = this.owner();
     if (next === this.openedFor) return this.vault !== null;
 
+    /*
+     * Куда человек смотрел, когда всё началось.
+     *
+     * Заказчик: «Настройки → Аккаунт → Вышел. Заново нажимаю Войти, и меня
+     * берёт не на экран авторизации, а в полный список. Но со второго раза
+     * экран входа появляется и работает».
+     *
+     * Это гонка, и вот её ход. Выход запускает смену владельца, а она
+     * заканчивается тем, что маршрут БЕЗУСЛОВНО переводится на список.
+     * Открытие хранилища на телефоне занимает заметное время, и человек
+     * успевает за него нажать «Войти»: экран входа открывается, а следом
+     * приезжает опоздавший `list` и затирает его. Со второго раза затирать
+     * уже нечему — смена владельца давно закончилась.
+     *
+     * Поэтому маршрут запоминается на входе и меняется только если человек
+     * никуда не ушёл сам. Его выбор старше нашего.
+     */
+    const routeAtStart = this.state.route;
+    const keptRoute = (): boolean => this.state.route === routeAtStart;
+
     /* Досылаем и отцепляем ДО открытия чужого хранилища. */
     if (this.engine) await this.syncNow().catch(() => undefined);
     this.attachBackend(null);
@@ -2371,14 +2391,22 @@ export class AppController {
     if (!storage) {
       /* Места у этого владельца ещё нет. Онбординг здесь уместен: он и есть
          экран выбора места, а данные прежнего владельца остались на диске. */
-      this.patch({ ready: true, booting: false, route: { name: 'onboarding', step: 2 } });
+      this.patch({
+        ready: true,
+        booting: false,
+        ...(keptRoute() ? { route: { name: 'onboarding' as const, step: 2 } } : {}),
+      });
       return false;
     }
     /* Место есть, но прочитать его не вышло — это не «места нет», и путать
        нельзя: человеку надо предложить повторить, а не выбирать заново. */
     const opened = await this.openVault(storage);
     await this.refresh();
-    this.patch({ ready: true, booting: false, route: { name: 'list' } });
+    this.patch({
+      ready: true,
+      booting: false,
+      ...(keptRoute() ? { route: { name: 'list' as const } } : {}),
+    });
     return opened === 'ok';
   }
 
