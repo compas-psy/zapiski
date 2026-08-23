@@ -919,6 +919,66 @@ jobs:
           # перехода, и разбираться надо на устройстве, а не в API.
           REMOTE
 
+      # ── Аналитика и мост в ПРАКТИКУ ───────────────────────────────────────
+      #
+      # Отдельным шагом, потому что вопрос отдельный: замкнулась ли цепочка
+      # клиент → сервер ЗАПИСОК → приёмник ПРАКТИКИ. По коду на неё ответить
+      # нельзя — она либо везёт события, либо нет.
+      #
+      # Считаются СТРОКИ и признаки, а не содержимое: ни одного свойства
+      # события, ни одного адреса, ни одного идентификатора человека. Секрет
+      # моста не печатается никогда — только «задан» или «не задан».
+      - name: Проверить аналитику и мост в ПРАКТИКУ
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 4
+        run: |
+          set -uo pipefail
+          ssh -i ~/.ssh/deploy_key "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            bash -s <<'REMOTE'
+          set -uo pipefail
+          cd /var/www/zapiski || exit 0
+          dc() { docker compose -p zapiski "$@"; }
+
+          echo "── чем гейтуется приём ──"
+          # ANALYTICS_ENABLED — общий рубильник, без него приём отвергает всё.
+          dc exec -T api sh -lc '
+            echo "ANALYTICS_ENABLED=${ANALYTICS_ENABLED:-<не задан>}"
+            echo "PRACTICE_INGEST_URL=${PRACTICE_INGEST_URL:-<не задан>}"
+            if [ -n "${PRACTICE_INGEST_SECRET:-}" ]; then
+              echo "PRACTICE_INGEST_SECRET: задан (${#PRACTICE_INGEST_SECRET} символов)"
+            else
+              echo "PRACTICE_INGEST_SECRET: НЕ ЗАДАН — мост выключен"
+            fi
+          ' < /dev/null || echo "окружение прочитать не удалось"
+
+          echo "── согласие на аналитику у людей ──"
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT 'analytics_opt_in=' || coalesce(analytics_opt_in::text, 'null')
+                    || ': ' || count(*)
+               FROM users GROUP BY analytics_opt_in ORDER BY count(*) DESC" \
+            < /dev/null || echo "база не ответила"
+
+          echo "── события: сколько всего и сколько ушло в ПРАКТИКУ ──"
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT 'всего ' || count(*)
+                    || ', за сутки ' || count(*) FILTER (WHERE created_at > now() - interval '1 day')
+                    || ', переслано ' || count(practice_forwarded_at)
+                    || ', отвергнуто ' || count(practice_reject_reason)
+                    || ', ждёт ' || count(*) FILTER (
+                         WHERE practice_forwarded_at IS NULL AND practice_reject_reason IS NULL)
+               FROM analytics_events" \
+            < /dev/null || echo "таблицы analytics_events нет или база не ответила"
+
+          echo "── причины отказов ПРАКТИКИ ──"
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT practice_reject_reason || ': ' || count(*)
+               FROM analytics_events
+              WHERE practice_reject_reason IS NOT NULL
+              GROUP BY practice_reject_reason ORDER BY count(*) DESC LIMIT 10" \
+            < /dev/null || echo "отказов нет"
+          REMOTE
+
       - name: Скачать удалённый лог деплоя
         if: failure()
         continue-on-error: true
