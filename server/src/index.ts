@@ -10,6 +10,7 @@ import { SmtpMailer } from './services/mailer.ts';
 import { YandexOAuth } from './services/yandex.ts';
 import { createPracticeBridge, retryPracticeForwarding } from './services/practiceBridge.ts';
 import { pruneExpiredVersions } from './routes/versions.ts';
+import { startSweeper } from './services/sweep.ts';
 
 /**
  * Точка входа ZapiskiCloud.
@@ -18,7 +19,6 @@ import { pruneExpiredVersions } from './routes/versions.ts';
  * этом хосте не трогаются — ни здесь, ни в конфигурации.
  */
 
-const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -75,28 +75,25 @@ async function main(): Promise<void> {
   // повтор пересылки в ПРАКТИКУ для событий, не дошедших с первой попытки
   // (C4) — тот же цикл, не отдельный таймер: пересылка не настолько
   // срочная, чтобы заводить под неё собственную инфраструктуру.
-  const sweeper = setInterval(() => {
-    void (async () => {
-      try {
-        const versions = await pruneExpiredVersions(ctx, ctx.now());
-        const tokens = await pruneMagicTokens(db, ctx.now());
-        const bridge = await retryPracticeForwarding(ctx);
-        if (versions > 0 || tokens > 0 || bridge.attempted > 0) {
-          app.log.info(
-            { event: 'sweep', versions, tokens, practiceForwarded: bridge.forwarded, practiceAttempted: bridge.attempted },
-            'уборка завершена',
-          );
-        }
-      } catch (error) {
-        app.log.error({ err: error, event: 'sweep_failed' }, 'уборка не прошла');
+  const stopSweeper = startSweeper(async () => {
+    try {
+      const versions = await pruneExpiredVersions(ctx, ctx.now());
+      const tokens = await pruneMagicTokens(db, ctx.now());
+      const bridge = await retryPracticeForwarding(ctx);
+      if (versions > 0 || tokens > 0 || bridge.attempted > 0) {
+        app.log.info(
+          { event: 'sweep', versions, tokens, practiceForwarded: bridge.forwarded, practiceAttempted: bridge.attempted },
+          'уборка завершена',
+        );
       }
-    })();
-  }, SWEEP_INTERVAL_MS);
-  sweeper.unref();
+    } catch (error) {
+      app.log.error({ err: error, event: 'sweep_failed' }, 'уборка не прошла');
+    }
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ event: 'shutdown', signal }, 'останавливаемся');
-    clearInterval(sweeper);
+    stopSweeper();
     try {
       await app.close();
       await db.end();
