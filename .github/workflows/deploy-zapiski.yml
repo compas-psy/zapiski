@@ -1031,6 +1031,20 @@ jobs:
               ORDER BY date_trunc('hour', received_at)" \
             < /dev/null || echo "РАСКЛАДКА ПО ЧАСАМ НЕ ПОЛУЧЕНА — причину смотри в строке ERROR выше"
 
+          # Когда события ПРОИЗОШЛИ, а не когда доехали. Разница принципиальна:
+          # очередь на клиенте офлайновая и вмещает 500 событий
+          # (MAX_QUEUE_SIZE, packages/core/src/analytics/queue.ts), после чего
+          # начинает терять СТАРЫЕ. Если received_at кучкуется в один час, а
+          # client_ts размазан по дням — это был разовый слив накопленного, и
+          # часть событий до нас не доехала вовсе. По received_at эти два
+          # случая неразличимы.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT 'по client_ts: ' || to_char(min(client_ts), 'DD HH24:MI')
+                    || ' … ' || to_char(max(client_ts), 'DD HH24:MI')
+                    || ', различных часов ' || count(DISTINCT date_trunc('hour', client_ts))
+               FROM analytics_events" \
+            < /dev/null || echo "РАЗМАХ client_ts НЕ ПОЛУЧЕН — причину смотри в строке ERROR выше"
+
           # Тестовые адреса в боевом контуре: серверные тесты заводят людей
           # вида user{N}.{pid}@example.test. В бою таких быть не должно ни
           # одного; если есть — их события считаются наравне с настоящими и

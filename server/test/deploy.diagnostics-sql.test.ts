@@ -135,7 +135,7 @@ describe('диагностика выкладки: SQL против настоя
         'select', 'from', 'where', 'group', 'by', 'order', 'limit', 'count', 'filter',
         'coalesce', 'is', 'not', 'null', 'and', 'or', 'desc', 'asc', 'text', 'now',
         'interval', 'day', 'hours', 'as', 'case', 'when', 'then', 'else', 'end',
-        'distinct', 'in', 'like', 'to_char', 'date_trunc', 'join', 'on',
+        'distinct', 'in', 'like', 'to_char', 'date_trunc', 'join', 'on', 'min', 'max',
       ]);
       for (const word of withoutLiterals.matchAll(/[a-z_][a-z0-9_]*/gi)) {
         const name = word[0].toLowerCase();
