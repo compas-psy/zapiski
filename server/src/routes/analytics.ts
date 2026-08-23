@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FastifyInstance } from 'fastify';
 
 import type { AppContext } from '../context.ts';
@@ -34,10 +36,12 @@ import { markPracticeForwardResults } from '../services/practiceForwardMarks.ts'
  *
  * Все реально вставленные строки этого запроса пересылаются ОДНИМ вызовом
  * `forwardBatch` (не по одному HTTP-запросу на событие в цикле, как было
- * раньше): входящий батч уже ограничен `MAX_EVENTS_PER_REQUEST` (200) тем же
- * числом, что и предел приёмника (`PracticeBridge.MAX_INGEST_BATCH_SIZE`), так
- * что здесь всегда укладывается в один сетевой запрос — цикл по одному был бы
- * до 200 синхронных HTTP-запросов на одну обработку входящего батча.
+ * раньше). Раньше здесь стояло, что входящий батч всегда укладывается в один
+ * сетевой запрос к ПРАКТИКЕ, потому что оба предела равны 200. Это перестало
+ * быть правдой: приём согласен взять до `MAX_EVENTS_ACCEPTED_PER_REQUEST`
+ * (500) ради уже установленных сборок, чья очередь режет по 500. На
+ * поведение это не влияет — `forwardBatch` сам режет пересылку по пределу
+ * приёмника, — но утверждение «всегда один запрос» больше не действует.
  */
 export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<void> {
   const ctx: AppContext = app.ctx;
@@ -56,12 +60,23 @@ export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<voi
     const insertedEnvelopes: PracticeEnvelope[] = [];
 
     for (const event of parsed.data.events) {
+      // `eventId` необязателен на приёме ради уже установленных сборок
+      // (Windows, macOS, Android), собранных до появления этого поля —
+      // подробное объяснение в analytics-schema.ts. Колонка в базе NOT NULL,
+      // значит значение всё равно нужно: выдаём своё. Идемпотентности оно не
+      // даёт (при повторной доставке родится другое, и событие задвоится —
+      // ровно как задваивалось до введения ключа), но событие ПРИНИМАЕТСЯ, а
+      // не отвергается. Тот же самый id уходит и в конверт для ПРАКТИКИ ниже:
+      // иначе её дедупликация работала бы по одному значению, а наша — по
+      // другому, и повтор пересылки задвоил бы строку уже у неё.
+      const effectiveEventId = event.eventId ?? randomUUID();
+
       const inserted = await ctx.db.query<{ id: number }>(
         `INSERT INTO analytics_events (user_id, event, props, client_ts, event_id, schema_version)
          VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (event_id) DO NOTHING
          RETURNING id`,
-        [auth.userId, event.event, JSON.stringify(event.props), event.ts, event.eventId, event.schemaVersion],
+        [auth.userId, event.event, JSON.stringify(event.props), event.ts, effectiveEventId, event.schemaVersion],
       );
       const row = inserted.rows[0];
       if (row === undefined) continue;
@@ -74,7 +89,7 @@ export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<voi
         device_id: null,
         props: event.props,
         schema_version: event.schemaVersion,
-        event_id: event.eventId,
+        event_id: effectiveEventId,
       });
     }
 
