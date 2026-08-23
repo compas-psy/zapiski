@@ -77,17 +77,26 @@ function stepsOf(source: string): Step[] {
 }
 
 /**
- * Вызов ssh/scp в начале строки, с необязательным потолком перед ним.
+ * Вызов ssh/scp ГДЕ УГОДНО в строке, а не только в её начале.
  *
- * Префикс `timeout` в шаблоне обязателен: без него, как только команды
- * обзаведутся потолками, `usesSsh` перестал бы их узнавать — и весь набор
- * ниже стал бы зелёным, ПРОСТО ПЕРЕСТАВ СМОТРЕТЬ. Сторож, зеленеющий от
- * починки, не отличим от сторожа, зеленеющего от исчезновения предмета.
+ * Сначала здесь стоял якорь `^\s*`, и это была дыра ровно под ту правку,
+ * которую он должен стеречь: команда, переехавшая в конвейер
+ * (`dd … | ssh …`) или за `&&`, переставала опознаваться — и сторож молча
+ * переставал на неё смотреть. Сторож, зеленеющий от исчезновения предмета,
+ * не отличим от сторожа, зеленеющего от починки.
+ *
+ * Строка-комментарий исключается: в этом файле их больше, чем команд, и
+ * почти каждая упоминает ssh.
  */
-const SSH_CALL = /^\s*(?<cap>timeout(?:\s+-\S+)*\s+\d+\s+)?(?:ssh|scp|ssh-keyscan)\s/;
+const SSH_CALL = /(?:^|[|;&]\s*|\s)(?:ssh|scp|ssh-keyscan)\s+[-\w~"'$]/;
+
+/** Потолок в любом месте строки — перед командой он или в начале конвейера. */
+const CAPPED = /\btimeout\s+(?:-\S+\s+)*\d+\s/;
+
+const isComment = (line: string): boolean => /^\s*#/.test(line);
 
 const sshCalls = (body: string): string[] =>
-  body.split('\n').filter((line) => SSH_CALL.test(line));
+  body.split('\n').filter((line) => !isComment(line) && SSH_CALL.test(line));
 
 const usesSsh = (body: string): boolean => sshCalls(body).length > 0;
 
@@ -145,7 +154,7 @@ describe('выкладка по ssh не может висеть молча', ()
     it(`${label}: у каждой команды ssh свой потолок, а не только у шага`, () => {
       const naked = ssh.flatMap((step) =>
         sshCalls(step.body)
-          .filter((line) => SSH_CALL.exec(line)?.groups?.cap === undefined)
+          .filter((line) => !CAPPED.test(line))
           .map((line) => `${step.name}: ${line.trim()}`),
       );
       expect(naked, `команды ssh без своего timeout в ${file}`).toEqual([]);

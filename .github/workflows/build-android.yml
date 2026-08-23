@@ -963,10 +963,11 @@ jobs:
       - name: Отдать APK на сервер
         id: ship
         continue-on-error: true
-        # 10, а не 5. Потолок шага теперь ПОСЛЕДНИЙ рубеж, а не первый:
+        # 15, а не 5. Потолок шага теперь ПОСЛЕДНИЙ рубеж, а не первый:
         # у каждой команды ниже свой, и сработать обязан он — потому что он
-        # успевает сказать, на чём встал. Сумма потолков команд ~8 минут.
-        timeout-minutes: 10
+        # успевает сказать, на чём встал. Три попытки передачи по 240 с плюс
+        # сверка и переименование — до ~14 минут в худшем случае.
+        timeout-minutes: 15
         if: env.HAS_SERVER == 'true'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -1040,9 +1041,49 @@ jobs:
           echo "→ ${phase}"
           timeout 60 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
 
-          phase="передача APK ($(du -h artifacts/*.apk | cut -f1 | tr '\n' ' '))"
+          # ── Передача с дозагрузкой ─────────────────────────────────────
+          #
+          # Прогоны 188 и 189 встали ЗДЕСЬ и только здесь. Разрешение имени,
+          # приём ключа хоста и `ssh mkdir` прошли за секунды — сервер жив и
+          # разговаривает; стоит ровно перекачка 27 МБ. Так выглядит либо
+          # чёрная дыра MTU (мелкие пакеты доходят, полноразмерные — нет),
+          # либо обрыв посреди потока. `scp` в обоих случаях начинает заново
+          # и не оставляет в логе ни одной цифры.
+          #
+          # Поэтому каждая попытка ПРОДОЛЖАЕТ предыдущую с того байта, до
+          # которого дошла, и число прошедших байт печатается. Даже полный
+          # отказ оставляет теперь то, чего не оставили 188 и 189, — данные
+          # для разбора.
+          src="$(ls artifacts/*.apk | head -1)"
+          bytes="$(stat -c%s "${src}")"
+          apk_sha="$(sha256sum "${src}" | cut -d' ' -f1)"
+          # Имя недокачанного куска — по хешу СОДЕРЖИМОГО, а не по имени
+          # файла. Версия от сборки к сборке не меняется, значит не меняется
+          # и имя; продолжить чужой обрывок с тем же именем означало бы
+          # склеить два разных пакета в один и оправдать это сходством имён.
+          part="${target}/.${apk_sha}.part"
+          phase="передача APK ($((bytes / 1024 / 1024)) МБ)"
           echo "→ ${phase}"
-          timeout 300 scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
+
+          for attempt in 1 2 3; do
+            sent="$(timeout 30 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "wc -c < '${part}' 2>/dev/null || echo 0" | tr -dc '0-9')"
+            sent="${sent:-0}"
+            echo "  попытка ${attempt}: на сервере ${sent} из ${bytes} байт"
+            if [ "${sent}" -ge "${bytes}" ]; then break; fi
+            dd if="${src}" bs=1M iflag=skip_bytes skip="${sent}" status=none | timeout 240 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "cat >> '${part}'" || echo "::warning::поток оборвался на попытке ${attempt} из 3"
+          done
+
+          phase='сверка переданного'
+          served_sha="$(timeout 120 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "sha256sum '${part}' 2>/dev/null | cut -d' ' -f1" | tr -dc '0-9a-f')"
+          if [ "${served_sha}" != "${apk_sha}" ]; then
+            # Обрывок не удаляем: следующий прогон продолжит его с того же
+            # места. Он назван по хешу и чужим стать не может.
+            echo "::error::APK передан не полностью: на сервере sha256 ${served_sha:-(файла нет)}, ожидалось ${apk_sha}"
+            exit 1
+          fi
+
+          phase='переименование на месте'
+          timeout 60 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mv '${part}' '${target}/$(basename "${src}")'"
           echo "APK лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
           # ── Ворота пользовательского канала ─────────────────────────────
