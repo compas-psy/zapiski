@@ -952,6 +952,24 @@ jobs:
             fi
           ' < /dev/null || echo "окружение прочитать не удалось"
 
+          echo "── откуда берётся секрет моста ──"
+          # Только НАЛИЧИЕ и ПРАВА, никогда содержимое. Файл пишет выкладка
+          # ПРАКТИКИ (ANALYTICS_INGEST_SECRET), мы его только читаем —
+          # соседний продукт этим шагом не трогается никак (ADR-0003 §2).
+          #
+          # Без этой строки «секрет не задан» не отличить: файла ещё нет
+          # (ПРАКТИКА не выкладывалась) или он есть, но не читается нашим
+          # ssh-пользователем. Лечения у этих двух случаев разные.
+          for f in /etc/simpas/ingest-secret /var/www/zapiski/.ingest-secret; do
+            if [ -r "$f" ]; then
+              echo "$f: читается ($(stat -c '%U:%G %a' "$f" 2>/dev/null || echo '?'))"
+            elif [ -e "$f" ]; then
+              echo "$f: СУЩЕСТВУЕТ, но нам не читается ($(stat -c '%U:%G %a' "$f" 2>/dev/null || echo '?'); мы — $(id -un))"
+            else
+              echo "$f: файла нет"
+            fi
+          done
+
           echo "── согласие на аналитику у людей ──"
           dc exec -T postgres psql -U zapiski -d zapiski -At -c \
             "SELECT 'analytics_opt_in=' || coalesce(analytics_opt_in::text, 'null')
@@ -962,13 +980,13 @@ jobs:
           echo "── события: сколько всего и сколько ушло в ПРАКТИКУ ──"
           dc exec -T postgres psql -U zapiski -d zapiski -At -c \
             "SELECT 'всего ' || count(*)
-                    || ', за сутки ' || count(*) FILTER (WHERE created_at > now() - interval '1 day')
+                    || ', за сутки ' || count(*) FILTER (WHERE received_at > now() - interval '1 day')
                     || ', переслано ' || count(practice_forwarded_at)
                     || ', отвергнуто ' || count(practice_reject_reason)
                     || ', ждёт ' || count(*) FILTER (
                          WHERE practice_forwarded_at IS NULL AND practice_reject_reason IS NULL)
                FROM analytics_events" \
-            < /dev/null || echo "таблицы analytics_events нет или база не ответила"
+            < /dev/null || echo "СЧЁТ СОБЫТИЙ НЕ ПОЛУЧЕН — причину смотри в строке ERROR выше (это отказ запроса, а не утверждение, что событий нет)"
 
           echo "── причины отказов ПРАКТИКИ ──"
           dc exec -T postgres psql -U zapiski -d zapiski -At -c \
