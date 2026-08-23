@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 
@@ -25,6 +27,8 @@ import {
 } from '../services/accounts.ts';
 import { ensureSubscription } from '../services/subscription.ts';
 import { ensureQuotaRow } from '../services/quota.ts';
+import type { PracticeEnvelope } from '../services/practiceBridge.ts';
+import { markPracticeForwardResults } from '../services/practiceForwardMarks.ts';
 import { YandexOAuthError } from '../services/yandex.ts';
 import { renderAuthPage } from '../views/authPage.ts';
 
@@ -488,7 +492,47 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  /** ТЗ §6: аналитика opt-in. Выключена, пока пользователь не согласился. */
+  /**
+   * ТЗ §6: аналитика opt-in. Выключена, пока пользователь не согласился.
+   *
+   * E-Z3 (контракт контура v2 §5): согласие субъекта — юридический факт, а
+   * не только настройка ЗАПИСОК. ПРАКТИКА держит его на файле по субъекту
+   * `product:account_id` и без него отвергает ВСЕ остальные события этого
+   * субъекта; отзыв обязан доехать так же надёжно, как выдача — это не
+   * аналитика, это закон. Клиент никогда не говорит с ПРАКТИКОЙ напрямую —
+   * эта ручка единственное место в ЗАПИСКАХ, где `analytics_opt_in` вообще
+   * меняется, так что событие `consent_updated` уходит отсюда же.
+   *
+   * Тот же путь, что и у обычных событий (Д-4/C4), не отдельная система
+   * доставки ради одного типа события: строка в `analytics_events` (заодно
+   * локальный аудит смены согласия у самих ЗАПИСОК, которого раньше не было
+   * вовсе), попытка форварда синхронно в ЭТОМ запросе, sweep как страховка
+   * на неудачу.
+   *
+   * Порядок «согласие — до или вместе с первым содержательным событием»
+   * (контракт §5) получается почти бесплатно: `id` растёт монотонно, а эта
+   * строка вставляется РАНЬШЕ любого последующего события того же аккаунта —
+   * клиент не может протолкнуть новое событие в очередь раньше, чем этот
+   * запрос вернёт ответ (`AppController.setAnalyticsConsent`,
+   * `packages/app/src/state/store.ts`, ждёт его перед тем, как разрешить
+   * `track()` дальше). Единственный неприкрытый край: если форвард ИМЕННО
+   * ЭТОГО события временно не удался (ПРАКТИКА была недоступна) и следующее
+   * событие того же аккаунта успело уйти через свой горячий путь раньше, чем
+   * sweep повторил `consent_updated` — то событие будет честно отвергнуто
+   * приёмником (не потеряно молча — `practice_reject_reason`), и тот же
+   * sweep рано или поздно доставит оба, `ORDER BY id` восстановит порядок.
+   * Самовосстанавливается, не бьёт по данным — но это best-effort гарантия
+   * порядка, а не жёсткая распределённая транзакция, и это стоит называть
+   * честно, а не молчать об этом крае.
+   *
+   * Не гейтуется на `ANALYTICS_ENABLED`: этот флаг закрывает СБОР обычных
+   * событий (`/api/v1/analytics/events`), а не право на существование самого
+   * согласия — отзыв обязан долетать до ПРАКТИКИ независимо от того,
+   * включена ли у ЗАПИСОК прямо сейчас продуктовая аналитика как таковая.
+   * Гейтуется только на `ctx.practiceBridge !== null` — как и любая другая
+   * пересылка в контур: нет настройки моста, нет и попытки поговорить с
+   * ПРАКТИКОЙ, но `users.analytics_opt_in` меняется в любом случае.
+   */
   app.post(
     '/api/v1/auth/analytics-consent',
     { preHandler: app.requireAuth },
@@ -500,6 +544,38 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         auth.userId,
         parsed.data.optIn,
       ]);
+
+      if (ctx.practiceBridge !== null) {
+        const eventId = randomUUID();
+        const now = ctx.now();
+        const inserted = await ctx.db.query<{ id: number }>(
+          `INSERT INTO analytics_events (user_id, event, props, client_ts, event_id, schema_version)
+           VALUES ($1, 'consent_updated', $2, $3, $4, 1)
+           ON CONFLICT (event_id) DO NOTHING
+           RETURNING id`,
+          [auth.userId, JSON.stringify({ granted: parsed.data.optIn }), now, eventId],
+        );
+        const row = inserted.rows[0];
+        if (row !== undefined) {
+          const envelope: PracticeEnvelope = {
+            event: 'consent_updated',
+            ts: now.toISOString(),
+            product: 'zapiski',
+            account_id: auth.userId,
+            device_id: null,
+            props: { granted: parsed.data.optIn },
+            schema_version: 1,
+            event_id: eventId,
+          };
+          const [result] = await ctx.practiceBridge
+            .forwardBatch([envelope])
+            .catch(() => [{ outcome: 'error' as const }]);
+          await markPracticeForwardResults(ctx.db, [row.id], [result ?? { outcome: 'error' as const }]).catch(
+            () => undefined,
+          );
+        }
+      }
+
       return reply.send({ analyticsOptIn: parsed.data.optIn });
     },
   );
