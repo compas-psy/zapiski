@@ -64,6 +64,13 @@ interface RunOptions {
   envFileContent?: string;
   /** Содержимое общего файла секрета. Пропущено => файла нет вовсе. */
   sharedFileContent?: string;
+  /**
+   * Содержимое запасной копии, которую выкладка ПРАКТИКИ кладёт внутрь
+   * /var/www/zapiski и отдаёт владельцу ЭТОГО каталога. Нужна ровно на
+   * случай, когда выкладка ЗАПИСОК идёт не от root и канонический файл
+   * (600, root) ей не читается. Пропущено => копии нет.
+   */
+  localFileContent?: string;
   /** PRACTICE_INGEST_SECRET в окружении ssh-сессии, если задан. */
   envVar?: string;
 }
@@ -88,14 +95,22 @@ function run(opts: RunOptions): RunResult {
   }
   // Иначе sharedFile просто не существует — ровно случай «общего файла нет».
 
+  const localFile = path.join(dir, 'local-ingest-secret');
+  if (opts.localFileContent !== undefined) {
+    writeFileSync(localFile, opts.localFileContent, { mode: 0o600 });
+  }
+
   const harness = [
     'set -Eeuo pipefail',
     `source '${SCRIPT}'`,
     // Подмена ПОСЛЕ source: сам скрипт компьютерует эти пути от
     // BASH_SOURCE[0] на настоящий репозиторий, и трогать его /var/www или
-    // deploy/.env из теста нельзя.
+    // deploy/.env из теста нельзя. LOCAL_INGEST_SECRET_FILE подменяется по
+    // той же причине и обязательно: без подмены тест читал бы настоящий
+    // /var/www/zapiski/.ingest-secret машины, на которой его запустили.
     `ENV_FILE='${envFile}'`,
     `SHARED_INGEST_SECRET_FILE='${sharedFile}'`,
+    `LOCAL_INGEST_SECRET_FILE='${localFile}'`,
     'resolve_practice_ingest',
   ].join('\n');
 
@@ -207,5 +222,51 @@ describe('комментарий о межпродуктовой границе 
 
   it('путь общего файла закреплён в комментарии, а не только в коде', () => {
     expect(source).toContain('/etc/simpas/ingest-secret');
+  });
+});
+
+/**
+ * Запасная копия секрета внутри каталога ЗАПИСОК.
+ *
+ * Канонический файл принадлежит root с правами 600. У двух продуктов разные
+ * репозитории и разные секреты SERVER_USER — знать наверняка, от кого ходит
+ * эта выкладка, нельзя. Если она идёт не от root, `[ -r ]` на каноническом
+ * пути честно вернёт «нет», и без этой копии мост остался бы выключен, а
+ * человеку пришлось бы руками разбираться с правами на чужой файл. Выкладка
+ * ПРАКТИКИ поэтому кладёт то же значение и в /var/www/zapiski/.ingest-secret,
+ * отдавая его владельцу этого каталога.
+ */
+describe('запасная копия секрета в каталоге ЗАПИСОК', () => {
+  it('берётся, когда канонического файла не видно', () => {
+    const { stdout, envContent } = run({ localFileContent: 'secret-from-local\n' });
+    expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBe('secret-from-local');
+    expect(stdout).toContain('local-ingest-secret');
+  });
+
+  it('канонический файл имеет приоритет: он всегда свежее', () => {
+    const { envContent } = run({
+      sharedFileContent: 'secret-canonical\n',
+      localFileContent: 'secret-stale\n',
+    });
+    expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBe('secret-canonical');
+  });
+
+  it('заданное человеком не перебивается и запасной копией тоже', () => {
+    const { envContent } = run({
+      envFileContent: 'PRACTICE_INGEST_SECRET=set-by-hand\n',
+      localFileContent: 'secret-from-local\n',
+    });
+    expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBe('set-by-hand');
+  });
+
+  it('нет ни одной копии — мост выключен, и это сказано в лог', () => {
+    const { stdout, envContent } = run({});
+    expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBeUndefined();
+    expect(stdout).toMatch(/ВНИМАНИЕ|выключен/i);
+  });
+
+  it('пустой канонический файл не считается значением — падаем на запасную копию', () => {
+    const { envContent } = run({ sharedFileContent: '\n', localFileContent: 'secret-from-local\n' });
+    expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBe('secret-from-local');
   });
 });

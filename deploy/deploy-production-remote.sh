@@ -218,6 +218,11 @@ prepare_env() {
 # литерал уже используют server/src/config/env.ts и
 # server/test/practice-bridge.test.ts для действующего адреса ПРАКТИКИ.
 SHARED_INGEST_SECRET_FILE='/etc/simpas/ingest-secret'
+# Запасной путь: копия того же значения, которую выкладка ПРАКТИКИ кладёт
+# внутрь нашего каталога и отдаёт его владельцу. Нужна ровно на случай, когда
+# эта выкладка идёт не от root и канонический файл ей не читается (см.
+# «Правило 2» ниже). Значение то же самое, пишется в тот же момент.
+LOCAL_INGEST_SECRET_FILE='/var/www/zapiski/.ingest-secret'
 DEFAULT_PRACTICE_INGEST_URL='https://cmpas.ru/api/ingest'
 
 resolve_practice_ingest() {
@@ -242,12 +247,28 @@ resolve_practice_ingest() {
     return 0
   fi
 
-  # Правило 2: общий файл ПРАКТИКИ.
+  # Правило 2: общий файл ПРАКТИКИ. Кандидатов два, и второй — не дубль.
+  #
+  # Канонический путь принадлежит root с правами 600. Если эта выкладка ходит
+  # на сервер под другим ssh-пользователем (у двух репозиториев разные секреты
+  # SERVER_USER — знать наверняка нельзя), `[ -r ]` честно вернёт «нет», мост
+  # останется выключен, и человеку пришлось бы руками разбираться с правами.
+  # Чтобы этого вопроса не существовало, выкладка ПРАКТИКИ кладёт вторую
+  # копию прямо в наш каталог и отдаёт её владельцу ЭТОГО каталога — то есть
+  # тому, кто здесь и так пишет. Читаем канонический путь первым (он всегда
+  # свежий), локальную копию — как запасной.
   local shared=''
-  if [ -r "${SHARED_INGEST_SECRET_FILE}" ]; then
-    shared="$(cat "${SHARED_INGEST_SECRET_FILE}" 2>/dev/null || true)"
-    shared="${shared//[$'\n\r']/}"
-  fi
+  local candidate
+  for candidate in "${SHARED_INGEST_SECRET_FILE}" "${LOCAL_INGEST_SECRET_FILE}"; do
+    if [ -r "${candidate}" ]; then
+      shared="$(cat "${candidate}" 2>/dev/null || true)"
+      shared="${shared//[$'\n\r']/}"
+      if [ -n "${shared}" ]; then
+        log "deploy/.env: секрет приёмника найден в ${candidate}."
+        break
+      fi
+    fi
+  done
 
   if [ -n "${shared}" ]; then
     upsert_env PRACTICE_INGEST_SECRET "${shared}"
