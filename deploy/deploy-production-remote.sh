@@ -159,6 +159,104 @@ prepare_env() {
     upsert_env AUTH_SECRET "$(openssl rand -hex 32)"
     log 'AUTH_SECRET сгенерирован.'
   fi
+
+  resolve_practice_ingest
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Мост в приёмник ПРАКТИКИ (G-Z1; сам мост — server/src/services/
+# practiceBridge.ts, C4, `createPracticeBridge`). Без ОБОИХ значений ниже
+# мост честно выключен, а не отправляет без аутентификации: приём аналитики
+# у ЗАПИСОК работает как раньше, просто без копии событий в общем контуре
+# ПРАКТИКИ — пересылка ДОПОЛНЯЕТ приём, а не является условием его работы.
+#
+# ── Межпродуктовая граница (G-Z2) ─────────────────────────────────────────
+#
+# ПИШЕТ ${SHARED_INGEST_SECRET_FILE}:
+#   выкладка ПРАКТИКИ (`/var/www/cmpas.ru` — СОСЕДНИЙ продукт на этой же
+#   машине, свой compose-проект, свой репозиторий). Она сама генерирует
+#   ANALYTICS_INGEST_SECRET — тот самый секрет, который `verifyIngestSecret`
+#   в её `src/app/api/ingest/route.ts` сверяет с заголовком
+#   `Authorization: Bearer <секрет>` — и при КАЖДОМ своём деплое кладёт
+#   ДЕЙСТВУЮЩЕЕ значение в этот файл (права 600, владелец root).
+#
+# ЧИТАЕТ:
+#   эта выкладка, функция resolve_practice_ingest() ниже.
+#
+# ПОЧЕМУ ФАЙЛ НА ДИСКЕ, А НЕ ПЕРЕМЕННАЯ ОКРУЖЕНИЯ CI:
+#   у продуктов разные репозитории (compas-psy/zapiski и compas-psy/cmpas.ru),
+#   разные хранилища секретов GitHub и разные deploy/.env — ни один пайплайн
+#   не видит секрет соседнего напрямую. Общий файл на ОБЩЕЙ машине —
+#   единственная точка, где значение может совпасть САМО, без человека,
+#   который переписывал бы секрет ПРАКТИКИ в секреты ЗАПИСОК руками (и
+#   повторял бы это на каждую ротацию).
+#
+#   Если ты читаешь обращение к /etc ниже без этого комментария рядом —
+#   это НЕ самодеятельность: писатель назван здесь же, его код не в этом
+#   репозитории, а контракт значения — server/src/services/practiceBridge.ts
+#   и charter/12_ANALYTICS.md §3.
+#
+# ── Правила разрешения (в этом порядке) ───────────────────────────────────
+#
+#   1. PRACTICE_INGEST_SECRET уже задан — в окружении ssh-сессии или прямо
+#      в deploy/.env — уважаем заданное. Общий файл в этом случае вообще не
+#      читаем: тот же принцип, что у ZAPISKI_DB_PASSWORD/AUTH_SECRET выше —
+#      то, что уже стоит, автоматика не перебивает.
+#   2. Иначе, если общий файл существует И читается (`[ -r ]` — тот же тест,
+#      что честно вернёт «нет» и на отсутствующий файл, и на файл с чужими
+#      правами, если выкладка ЗАПИСОК когда-нибудь пойдёт не от root) —
+#      берём значение оттуда.
+#   3. Иначе секрета взять неоткуда — мост остаётся ВЫКЛЮЧЕН, и это явно
+#      сказано в логе выкладки, а не молча: без этой строки недоступность
+#      файла заметил бы только тот, кто отдельно сверил бы events общего
+#      контура и не нашёл там своих.
+#
+# PRACTICE_INGEST_URL получает умолчание НЕЗАВИСИМО от судьбы секрета —
+# адрес маршрута не секрет. Значение подтверждено ПО КОДУ приёмника
+# (`src/app/api/ingest/route.ts` в дереве ПРАКТИКИ: App Router, файл лежит
+# по `app/api/ingest/`, `next.config.ts` не задаёт `basePath`) — тот же
+# литерал уже используют server/src/config/env.ts и
+# server/test/practice-bridge.test.ts для действующего адреса ПРАКТИКИ.
+SHARED_INGEST_SECRET_FILE='/etc/simpas/ingest-secret'
+DEFAULT_PRACTICE_INGEST_URL='https://cmpas.ru/api/ingest'
+
+resolve_practice_ingest() {
+  # Умолчание URL — правило 3, но применяется в любом случае (см. выше):
+  # ensure_env не тронет то, что уже стоит.
+  ensure_env PRACTICE_INGEST_URL "${DEFAULT_PRACTICE_INGEST_URL}"
+
+  local current
+  current=$(grep '^PRACTICE_INGEST_SECRET=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)
+
+  # Правило 1: окружение ssh-сессии.
+  if [ -n "${PRACTICE_INGEST_SECRET:-}" ]; then
+    upsert_env PRACTICE_INGEST_SECRET "${PRACTICE_INGEST_SECRET}"
+    log 'deploy/.env: PRACTICE_INGEST_SECRET взят из окружения ssh-сессии.'
+    return 0
+  fi
+
+  # Правило 1: уже стоит в deploy/.env (в том числе — записан этой же
+  # функцией на прошлой выкладке).
+  if [ -n "${current}" ]; then
+    log 'deploy/.env: PRACTICE_INGEST_SECRET уже задан — общий файл не читаем.'
+    return 0
+  fi
+
+  # Правило 2: общий файл ПРАКТИКИ.
+  local shared=''
+  if [ -r "${SHARED_INGEST_SECRET_FILE}" ]; then
+    shared="$(cat "${SHARED_INGEST_SECRET_FILE}" 2>/dev/null || true)"
+    shared="${shared//[$'\n\r']/}"
+  fi
+
+  if [ -n "${shared}" ]; then
+    upsert_env PRACTICE_INGEST_SECRET "${shared}"
+    log "deploy/.env: PRACTICE_INGEST_SECRET взят из ${SHARED_INGEST_SECRET_FILE} (секрет выкладки ПРАКТИКИ на этой же машине)."
+    return 0
+  fi
+
+  # Правило 3: взять неоткуда — не молчим.
+  log "ВНИМАНИЕ: PRACTICE_INGEST_SECRET не задан, и ${SHARED_INGEST_SECRET_FILE} недоступен (нет файла, нет прав на чтение или он пуст) — мост в приёмник ПРАКТИКИ остаётся ВЫКЛЮЧЕН (createPracticeBridge вернёт null, события ЗАПИСОК останутся только у неё самой). Это не сбой выкладки: пересылка — дополнение к приёму, а не условие работы ЗАПИСОК."
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -546,4 +644,12 @@ main() {
   log "Контроль изоляции — контейнер Дневника cmpas-app: $(container_state cmpas-app) (мы его не трогали)"
 }
 
-main "$@"
+# Guard, а не голый вызов: server/test/deploy.practice-ingest.test.ts делает
+# `source` этого файла, чтобы прогнать resolve_practice_ingest() настоящим
+# bash, не поднимая docker и не трогая настоящий deploy/.env. При `source`
+# BASH_SOURCE[0] (этот файл) и $0 (интерпретатор/родительский скрипт) не
+# совпадают — main не запускается. При обычном запуске (`bash script.sh`,
+# `./script.sh`) они совпадают, и поведение не меняется ничем.
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+  main "$@"
+fi
