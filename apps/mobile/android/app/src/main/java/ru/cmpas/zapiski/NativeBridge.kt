@@ -388,6 +388,14 @@ object NativeBridge {
 
     private external fun nativeAuthCallback()
 
+    /**
+     * Результат асинхронной операции. `ok = true` с пустыми данными — это не
+     * ошибка, а отмена пользователем (BEHAVIOR §5.2).
+     */
+    fun result(requestId: Long, ok: Boolean, text: String?, data: ByteArray?) {
+        if (!attached) return
+        nativeResult(requestId, ok, text, data)
+    }
 
     /** В очереди share-target появился контент. */
     fun pokeShare() {
