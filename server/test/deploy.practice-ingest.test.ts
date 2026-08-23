@@ -270,3 +270,66 @@ describe('запасная копия секрета в каталоге ЗАП�
     expect(envValue(envContent, 'PRACTICE_INGEST_SECRET')).toBe('secret-from-local');
   });
 });
+
+/**
+ * Рубильник приёма (`ANALYTICS_ENABLED`) — первый из четырёх замков маршрута
+ * `/api/v1/analytics/events` (`server/src/routes/analytics.ts`, шапка).
+ *
+ * Найдено чтением при сквозной проверке цепочки: `bool(false)` в
+ * `server/src/config/env.ts:177` — умолчание ВЫКЛЮЧЕНО, и до этой правки
+ * значение не проставлялось нигде: ни в `deploy/docker-compose.yml`
+ * (`environment:` его не перечисляет), ни в `prepare_env`, ни в
+ * `.env.example`. То есть на выложенном сервере он мог быть задан только
+ * рукой человека.
+ *
+ * Последствие важнее самого флага: при закрытом первом замке события НЕ
+ * попадают даже в `analytics_events` ЗАПИСОК — маршрут отвечает
+ * `analyticsDisabled()` ДО вставки. Значит и пересылать в ПРАКТИКУ нечего:
+ * исправно поднятый мост (`PRACTICE_INGEST_URL` + секрет) всё равно не увидел
+ * бы ни одного события. Мост чинить бессмысленно, пока закрыт приём.
+ *
+ * Согласие человека этим НЕ ослабляется: `users.analytics_opt_in` —
+ * независимый второй замок, он проверяется на каждый запрос (ТЗ §6,
+ * аналитика opt-in). Рубильник отвечает на вопрос «умеет ли эта выкладка
+ * принимать вообще», согласие — на вопрос «от этого ли человека».
+ */
+describe('рубильник приёма аналитики на выкладке', () => {
+  /** Выполняет resolve_analytics_gate() из настоящего скрипта в изоляции. */
+  function runGate(envFileContent = ''): RunResult {
+    const dir = mkdtempSync(path.join(tmpdir(), 'zapiski-deploy-gate-'));
+    cleanupDirs.push(dir);
+    const envFile = path.join(dir, '.env');
+    writeFileSync(envFile, envFileContent, { mode: 0o600 });
+
+    const harness = [
+      'set -Eeuo pipefail',
+      `source '${SCRIPT}'`,
+      `ENV_FILE='${envFile}'`,
+      'resolve_analytics_gate',
+    ].join('\n');
+
+    const stdout = execFileSync('bash', ['-c', harness], {
+      env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin' },
+      encoding: 'utf8',
+    });
+    return { stdout, envContent: readFileSync(envFile, 'utf8') };
+  }
+
+  it('выкладка проставляет ANALYTICS_ENABLED — иначе приём отвергает всё', () => {
+    const { envContent } = runGate();
+    expect(envValue(envContent, 'ANALYTICS_ENABLED')).toBe('true');
+  });
+
+  it('выбор человека не перебивается: выключил — значит выключено', () => {
+    const { envContent } = runGate('ANALYTICS_ENABLED=false\n');
+    expect(envValue(envContent, 'ANALYTICS_ENABLED')).toBe('false');
+  });
+
+  it('рубильник проставляется на КАЖДОЙ выкладке, а не только там, где есть секрет моста', () => {
+    // Иначе получилась бы связка «приём работает, только если доступен
+    // соседний продукт» — приём ЗАПИСОК от ПРАКТИКИ не зависит.
+    expect(source).toMatch(/resolve_analytics_gate\b/);
+    const prepare = source.slice(source.indexOf('prepare_env() {'));
+    expect(prepare.slice(0, prepare.indexOf('\n}\n'))).toContain('resolve_analytics_gate');
+  });
+});
