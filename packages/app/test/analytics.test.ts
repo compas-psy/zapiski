@@ -9,7 +9,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import { buildAnalyticsEvent } from '@zapiski/core';
-import { AppController } from '../src/state/store.js';
+import { AppController, NOTE_SAVED_QUIET_MS } from '../src/state/store.js';
 import { createTestHost } from './host.js';
 
 const NOTE_SECRET =
@@ -57,8 +57,15 @@ describe('с согласием — события копятся в очере�
 
     await app.save('Заметки/Первая.md', '# Первая\n\nдописали\n');
 
-    await waitFor(() => expect(app.analyticsPendingCount()).toBeGreaterThan(0));
+    /*
+     * Событие созревает после затишья, а не мгновенно: `note_saved` схлопывает
+     * серию автосохранений в одно (см. `AppController.noteSaved`). Здесь
+     * созревание форсируется `dispose()` — он досылает несозревшее; ждать
+     * минуту в тесте незачем, а ослаблять проверку до «когда-нибудь потом»
+     * нельзя. Сама проверка та же: событие в очереди есть.
+     */
     app.dispose();
+    await waitFor(() => expect(app.analyticsPendingCount()).toBeGreaterThan(0));
   });
 
   it('поиск ставит note_searched в очередь', async () => {
@@ -96,9 +103,13 @@ describe('с согласием — события копятся в очере�
       return jsonOk({ entries: [], quota: { usedBytes: 0, limitBytes: 1 } });
     });
 
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const app = await boot();
     await app.completeSignIn({ magicToken: 'ottt' });
     await app.save('Заметки/Первая.md', '# Первая\n\nдописали\n');
+    // Схлопывание note_saved: событие созревает после затишья. Ждём его
+    // фальшивыми часами, а не ослабляем проверку.
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 100);
     await waitFor(() => expect(app.analyticsPendingCount()).toBeGreaterThan(0));
 
     const applied = await app.setAnalyticsConsent(false);
@@ -131,23 +142,36 @@ describe('отправка: тело запроса никогда не несё
       return jsonOk({ entries: [], quota: { usedBytes: 0, limitBytes: 1 } });
     });
 
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const app = await boot();
     await app.completeSignIn({ magicToken: 'ottt' });
     expect(app.getState().account?.analyticsOptIn).toBe(true);
 
     await app.save('Заметки/Первая.md', NOTE_SECRET);
-    await waitFor(() => expect(app.analyticsPendingCount()).toBeGreaterThan(0));
 
-    await waitFor(() => expect(captured.length).toBeGreaterThan(0), { timeout: 4000 });
-    await waitFor(() => expect(app.analyticsPendingCount()).toBe(0), { timeout: 4000 });
+    /*
+     * Ждём фальшивыми часами, а не четырьмя секундами реального времени:
+     * `note_saved` теперь созревает после затишья (схлопывание серии
+     * автосохранений в одно событие), и до него на провод успевает уйти
+     * `sync_completed` — синхронизация дебаунсится пятью секундами.
+     * Раньше здесь стояло `captured[0]`, и после правки эта строка стала бы
+     * читать чужое событие. Ищем по имени, а не по позиции.
+     */
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 5_000);
+    await waitFor(() => expect(app.analyticsPendingCount()).toBe(0));
 
+    /* Главное: ни в одном теле нет ни байта содержимого заметки. */
     for (const body of captured) {
       expect(String(body)).not.toContain(NOTE_SECRET);
     }
+
     /* И положительная проверка — событие реально ушло, просто без текста. */
-    const events = JSON.parse(String(captured[0])).events;
-    expect(events[0].event).toBe('note_saved');
-    expect(Object.keys(events[0].props).sort()).toEqual(['encrypted', 'length_bucket']);
+    const sent = captured.flatMap(
+      (body) => (JSON.parse(String(body)) as { events: { event: string; props: object }[] }).events,
+    );
+    const saved = sent.find((event) => event.event === 'note_saved');
+    expect(saved).toBeDefined();
+    expect(Object.keys(saved?.props ?? {}).sort()).toEqual(['encrypted', 'length_bucket']);
     app.dispose();
   });
 });
@@ -236,5 +260,96 @@ describe('доставка большой офлайн-очереди (Д-5): о
     expect(calls).toBe(3); // 200 + 200 + 50
     expect(app.analyticsPendingCount()).toBe(0);
     app.dispose();
+  });
+});
+
+/**
+ * `note_saved` означает «человек сохранил заметку», а не «редактор дёрнулся».
+ *
+ * ── Как нашлось ──────────────────────────────────────────────────────────────
+ *
+ * На бою за сутки при ОДНОМ человеке с включённым согласием набралось 268
+ * note_saved. Цифра выглядела доказательством живого пути, но проверка
+ * происхождения показала другое: кнопки «Сохранить» в продукте нет вовсе
+ * (инвариант 7), сохранение — автоматическое, debounce 500 мс плюс blur
+ * (`packages/editor/src/save/autosave.ts`, `NoteScreen.tsx:366,466,495`).
+ * `track('note_saved')` стоял прямо в `save()`, то есть срабатывал на КАЖДЫЙ
+ * сброс автосохранения.
+ *
+ * Значит «268 сохранений» — это 268 пауз в наборе текста. На панели такая
+ * величина не отвечает на вопрос реестра «Люди действительно сохраняют
+ * заметки — и как часто пишут длинные?»: она измеряет ритм печати, а не
+ * работу с заметкой. Плюс 152-ФЗ: собирать на два порядка больше строк, чем
+ * нужно для ответа, — это сбор сверх необходимого.
+ *
+ * ── Что теперь ───────────────────────────────────────────────────────────────
+ *
+ * Событие схлопывается по пути заметки: серия автосохранений подряд даёт одно
+ * событие, и уходит оно ПОСЛЕ затишья — с итоговой длиной, а не промежуточной.
+ * Иначе `length_bucket` описывал бы первый сброс, а вопрос реестра про длину
+ * заметки, а не про её длину в середине набора.
+ */
+describe('note_saved: сессия работы с заметкой, а не сброс автосохранения', () => {
+  it('серия автосохранений одной заметки даёт одно событие, а не по одному на сброс', async () => {
+    vi.useFakeTimers();
+    const app = await boot();
+    app.setAccount({ email: 'a@ya.ru', plan: 'free', analyticsOptIn: true });
+
+    // Десять сбросов подряд — ровно так ведёт себя автосохранение, когда
+    // человек печатает с паузами по полсекунды.
+    for (let i = 0; i < 10; i += 1) {
+      await app.save('Заметки/Первая.md', `# Первая\n\n${'слово '.repeat(i + 1)}\n`);
+      await vi.advanceTimersByTimeAsync(600);
+    }
+
+    // До затишья не ушло ничего: событие ещё складывается.
+    expect(app.analyticsPendingCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 100);
+    expect(app.analyticsPendingCount()).toBe(1);
+
+    app.dispose();
+  });
+
+  it('две разные заметки — два события: схлопывание по пути, а не общее', async () => {
+    vi.useFakeTimers();
+    const app = await boot();
+    app.setAccount({ email: 'a@ya.ru', plan: 'free', analyticsOptIn: true });
+
+    await app.save('Заметки/Первая.md', '# Первая\n\nраз\n');
+    await app.save('Заметки/Вторая.md', '# Вторая\n\nдва\n');
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 100);
+
+    expect(app.analyticsPendingCount()).toBe(2);
+    app.dispose();
+  });
+
+  it('возврат к заметке после затишья — новое событие, а не вечное молчание', async () => {
+    vi.useFakeTimers();
+    const app = await boot();
+    app.setAccount({ email: 'a@ya.ru', plan: 'free', analyticsOptIn: true });
+
+    await app.save('Заметки/Первая.md', '# Первая\n\nутром\n');
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 100);
+    expect(app.analyticsPendingCount()).toBe(1);
+
+    await app.save('Заметки/Первая.md', '# Первая\n\nвечером\n');
+    await vi.advanceTimersByTimeAsync(NOTE_SAVED_QUIET_MS + 100);
+    expect(app.analyticsPendingCount()).toBe(2);
+
+    app.dispose();
+  });
+
+  it('dispose() досылает несозревшее: закрытие приложения не съедает событие', async () => {
+    vi.useFakeTimers();
+    const app = await boot();
+    app.setAccount({ email: 'a@ya.ru', plan: 'free', analyticsOptIn: true });
+
+    await app.save('Заметки/Первая.md', '# Первая\n\nнедописанное\n');
+    expect(app.analyticsPendingCount()).toBe(0);
+
+    app.dispose();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.analyticsPendingCount()).toBe(1);
   });
 });

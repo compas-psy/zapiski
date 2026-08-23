@@ -114,28 +114,43 @@ describe('диагностика выкладки: SQL против настоя
     const unknown: string[] = [];
 
     for (const query of diagnosticQueries()) {
-      const table = WATCHED_TABLES.find((name) => new RegExp(`FROM\\s+${name}\\b`, 'i').test(query));
-      if (table === undefined) continue;
-      const columns = known.get(table);
-      if (columns === undefined) continue;
+      /*
+       * Разрешаем имена по ТЕМ таблицам, что названы в САМОМ запросе, а не по
+       * объединению всех известных. Это принципиально: `users` содержит
+       * `created_at`, и объединение сделало бы сторожа слепым ровно к той
+       * опечатке, ради которой он заведён (`created_at` в запросе к
+       * `analytics_events`). Запрос, который трогает обе таблицы, проверяется
+       * по обеим — этого достаточно и не ослабляет однотабличный случай.
+       */
+      const mentioned = WATCHED_TABLES.filter((name) =>
+        new RegExp(`(?:FROM|JOIN)\\s+${name}\\b`, 'i').test(query),
+      );
+      if (mentioned.length === 0) continue;
 
-      // Слова-кандидаты: всё, что похоже на идентификатор и не является
-      // ключевым словом SQL, литералом в кавычках или именем таблицы.
+      const columns = new Set(mentioned.flatMap((table) => [...(known.get(table) ?? [])]));
+      const label = mentioned.join('+');
+
       const withoutLiterals = query.replace(/'[^']*'/g, "''");
       const RESERVED = new Set([
         'select', 'from', 'where', 'group', 'by', 'order', 'limit', 'count', 'filter',
         'coalesce', 'is', 'not', 'null', 'and', 'or', 'desc', 'asc', 'text', 'now',
-        'interval', 'day', 'as', 'case', 'when', 'then', 'else', 'end', 'distinct',
+        'interval', 'day', 'hours', 'as', 'case', 'when', 'then', 'else', 'end',
+        'distinct', 'in', 'like', 'to_char', 'date_trunc', 'join', 'on',
       ]);
       for (const word of withoutLiterals.matchAll(/[a-z_][a-z0-9_]*/gi)) {
         const name = word[0].toLowerCase();
         if (RESERVED.has(name)) continue;
         if ((WATCHED_TABLES as readonly string[]).includes(name)) continue;
-        if (!columns.has(name)) unknown.push(`${table}.${name}`);
+        if (!columns.has(name)) unknown.push(`${label}.${name}`);
       }
     }
 
-    expect(unknown).toEqual([]);
+    expect(
+      unknown,
+      unknown.length === 0
+        ? ''
+        : `Диагностика спрашивает колонки, которых нет в миграциях:\n  ${unknown.join('\n  ')}`,
+    ).toEqual([]);
   });
 
   it('фолбэк не выдаёт отказ запроса за отсутствие таблицы или событий', () => {

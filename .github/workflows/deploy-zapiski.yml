@@ -1013,6 +1013,34 @@ jobs:
                FROM analytics_events" \
             < /dev/null || echo "СЧЁТ СОБЫТИЙ НЕ ПОЛУЧЕН — причину смотри в строке ERROR выше (это отказ запроса, а не утверждение, что событий нет)"
 
+          echo "── от скольких людей и как легли во времени ──"
+          # Происхождение объёма: один активный человек или много. Считаем
+          # только количество различных субъектов — ни одного адреса и ни
+          # одного идентификатора в вывод не попадает.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT 'различных людей: ' || count(DISTINCT user_id) FROM analytics_events" \
+            < /dev/null || echo "ЧИСЛО ЛЮДЕЙ НЕ ПОЛУЧЕНО — причину смотри в строке ERROR выше"
+
+          # Раскладка по часам отличает живую работу от всплеска: ровный поток
+          # весь день — человек, тысяча строк в одну минуту — прогон или цикл.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT to_char(date_trunc('hour', received_at), 'DD HH24') || ' ч: ' || count(*)
+               FROM analytics_events
+              WHERE received_at > now() - interval '24 hours'
+              GROUP BY date_trunc('hour', received_at)
+              ORDER BY date_trunc('hour', received_at)" \
+            < /dev/null || echo "РАСКЛАДКА ПО ЧАСАМ НЕ ПОЛУЧЕНА — причину смотри в строке ERROR выше"
+
+          # Тестовые адреса в боевом контуре: серверные тесты заводят людей
+          # вида user{N}.{pid}@example.test. В бою таких быть не должно ни
+          # одного; если есть — их события считаются наравне с настоящими и
+          # врут панели.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT 'событий от тестовых адресов: ' || count(*)
+               FROM analytics_events
+              WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%@example.test')" \
+            < /dev/null || echo "ПРОВЕРКА ТЕСТОВЫХ АДРЕСОВ НЕ ПОЛУЧЕНА — причину смотри в строке ERROR выше"
+
           echo "── какие события и сколько из них дошло ──"
           # Имена событий структурны: они из реестра analytics/schema/events.yaml
           # и содержания заметок не несут (правило 2, charter/12_ANALYTICS.md §1).

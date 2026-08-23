@@ -583,6 +583,17 @@ const VAULT_RETRY_MS = [500, 1500, 4000, 10_000, 30_000];
  */
 export type VaultOpenOutcome = 'ok' | 'unreadable';
 
+/**
+ * Затишье, после которого серия автосохранений одной заметки превращается в
+ * одно событие `note_saved` (см. `AppController.noteSaved`).
+ *
+ * Минута — не догадка: автосохранение срабатывает через 500 мс после
+ * последнего нажатия (`packages/editor/src/save/autosave.ts`), синхронизация
+ * — через 5 с (`scheduleSync`). Минута без единой записи означает, что человек
+ * с этой заметкой закончил, а не задумался посреди фразы.
+ */
+export const NOTE_SAVED_QUIET_MS = 60_000;
+
 export class AppController {
   private state: AppState;
   private readonly listeners = new Set<Listener>();
@@ -607,6 +618,11 @@ export class AppController {
   /** Очередь аналитики (O-260817-05) — живёт с хранилищем, как и `changes`. */
   private analytics: AnalyticsQueue | null = null;
   private analyticsFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Несозревшие `note_saved` по пути заметки — см. `noteSaved()`. */
+  private readonly noteSavedPending = new Map<
+    VaultPath,
+    { props: Record<string, unknown>; timer: ReturnType<typeof setTimeout> }
+  >();
   /** История версий доступна и без бэкенда: снапшоты лежат в `.zapiski/`. */
   private versions: VersionHistory | null = null;
   private backend: SyncBackend | null = null;
@@ -1067,6 +1083,7 @@ export class AppController {
   }
 
   dispose(): void {
+    this.flushNoteSaved();
     if (this.lockTimer) clearInterval(this.lockTimer);
     if (this.renameTimer) clearInterval(this.renameTimer);
     if (this.searchTimer) clearTimeout(this.searchTimer);
@@ -2969,7 +2986,7 @@ export class AppController {
         return;
       }
       this.touchLock(path);
-      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
+      this.noteSaved(path, { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -3006,7 +3023,7 @@ export class AppController {
         this.reportError(diskErrorMessage(error, this.strings));
         return;
       }
-      this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: true });
+      this.noteSaved(path, { length_bucket: lengthBucket(body.length), encrypted: true });
       return;
     }
 
@@ -3018,7 +3035,7 @@ export class AppController {
       return;
     }
     this.scheduleSync(path);
-    this.track('note_saved', { length_bucket: lengthBucket(body.length), encrypted: false });
+    this.noteSaved(path, { length_bucket: lengthBucket(body.length), encrypted: false });
   }
 
   /**
@@ -4182,6 +4199,63 @@ export class AppController {
    * считается, не пишется на диск и не отправляется (до `analyticsOptIn` нет
    * даже очереди на диске).
    */
+  /**
+   * Схлопывание `note_saved`: одно событие на заметку за сессию работы.
+   *
+   * ── Почему это вообще понадобилось ─────────────────────────────────────────
+   *
+   * Кнопки «Сохранить» в продукте нет (инвариант 7): сохранение автоматическое,
+   * debounce 500 мс плюс blur. `track('note_saved')` стоял прямо в `save()`, то
+   * есть считал не сохранения, а ПАУЗЫ В НАБОРЕ. На бою за сутки один человек
+   * дал 268 таких событий; на панели это выглядит как 268 сохранений, а на деле
+   * измеряет ритм печати.
+   *
+   * Вопрос реестра — «Люди действительно сохраняют заметки — и как часто пишут
+   * длинные?». На него отвечает единица «человек поработал с заметкой», а не
+   * «редактор дёрнулся». Плюс 152-ФЗ: собирать на два порядка больше строк, чем
+   * нужно для ответа, — сбор сверх необходимого.
+   *
+   * ── Почему хвостом, а не головой ───────────────────────────────────────────
+   *
+   * Событие уходит ПОСЛЕ затишья и несёт ИТОГОВУЮ длину. Отправлять по первому
+   * сохранению было бы надёжнее (ничего не теряется при внезапном закрытии), но
+   * `length_bucket` описывал бы длину в середине набора — а спрашивают про
+   * длину заметки. Потерю при внезапном закрытии закрывает `dispose()`: он
+   * досылает несозревшее.
+   *
+   * ── Почему по пути, а не одним таймером на всё ─────────────────────────────
+   *
+   * Иначе работа над второй заметкой откладывала бы событие первой, а
+   * чередование двух заметок могло бы откладывать оба сколь угодно долго.
+   *
+   * Минута выбрана так: автосохранение — 500 мс, синхронизация — 5 с. Минута
+   * без единой записи означает, что человек с этой заметкой закончил, а не
+   * задумался посреди фразы.
+   */
+  private noteSaved(path: VaultPath, props: Record<string, unknown>): void {
+    if (this.state.account?.analyticsOptIn !== true) return;
+
+    const existing = this.noteSavedPending.get(path);
+    if (existing) clearTimeout(existing.timer);
+
+    const timer = setTimeout(() => {
+      const pending = this.noteSavedPending.get(path);
+      this.noteSavedPending.delete(path);
+      if (pending) this.track('note_saved', pending.props);
+    }, NOTE_SAVED_QUIET_MS);
+
+    this.noteSavedPending.set(path, { props, timer });
+  }
+
+  /** Досылает всё несозревшее — при закрытии приложения событие не пропадает. */
+  private flushNoteSaved(): void {
+    for (const [path, pending] of this.noteSavedPending) {
+      clearTimeout(pending.timer);
+      this.noteSavedPending.delete(path);
+      this.track('note_saved', pending.props);
+    }
+  }
+
   private track(name: AnalyticsEventName, props: Record<string, unknown>): void {
     if (this.state.account?.analyticsOptIn !== true) return;
     const queue = this.analytics;
