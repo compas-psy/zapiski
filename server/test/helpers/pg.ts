@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -25,13 +25,51 @@ export interface EphemeralCluster {
   stop: () => Promise<void>;
 }
 
-const PG_BIN_CANDIDATES = [
-  '/usr/lib/postgresql/16/bin',
-  '/usr/lib/postgresql/15/bin',
-  '/usr/lib/postgresql/14/bin',
+/**
+ * Куда смотреть, если готовой базы не подсунули.
+ *
+ * Версии НЕ перечисляются: раньше здесь стоял жёсткий список 14/15/16, и в
+ * день, когда раннер переехал бы на 17, поиск перестал бы находить Postgres.
+ * Отказ при этом выглядел бы не как упавшая сборка, а как «тестов стало вдвое
+ * меньше» — то есть никак. Поэтому версии вычитываются из каталога, новая
+ * пробуется раньше старой, а фиксированными остаются только пути вне
+ * `/usr/lib/postgresql` (RHEL, homebrew), где такого каталога нет.
+ */
+const PG_LIB_DIR = '/usr/lib/postgresql';
+
+const PG_FALLBACK_CANDIDATES = [
+  '/usr/pgsql-17/bin',
   '/usr/pgsql-16/bin',
+  '/opt/homebrew/opt/postgresql@17/bin',
   '/opt/homebrew/opt/postgresql@16/bin',
 ];
+
+/** Чистая часть поиска — её и проверяет `test/pg-discovery.test.ts`. */
+export function orderedBinCandidates(installedVersions: readonly string[]): string[] {
+  const versions = installedVersions
+    .filter((name) => /^\d+$/.test(name))
+    .map(Number)
+    .sort((a, b) => b - a)
+    .map((version) => `${PG_LIB_DIR}/${version}/bin`);
+  return [...versions, ...PG_FALLBACK_CANDIDATES];
+}
+
+/**
+ * Обязана ли база быть. На машине разработчика Postgres может отсутствовать
+ * законно — тесты, которым он нужен, помечаются пропущенными, остальные идут.
+ * В CI это недопустимо: 22 файла ушли бы в пропуск при зелёном прогоне.
+ *
+ * Снять требование можно, но только руками и явно — переменной, которую
+ * нельзя выставить случайно.
+ */
+export function requireDatabase(env: Record<string, string | undefined>): boolean {
+  if (env['ZAPISKI_ALLOW_NO_DATABASE'] !== undefined && env['ZAPISKI_ALLOW_NO_DATABASE'] !== '') {
+    return false;
+  }
+  const truthy = (value: string | undefined): boolean =>
+    value !== undefined && value !== '' && value !== 'false' && value !== '0';
+  return truthy(env['CI']) || truthy(env['GITHUB_ACTIONS']);
+}
 
 export async function startEphemeralPostgres(): Promise<EphemeralCluster | null> {
   const bin = await findBinDir();
@@ -100,7 +138,14 @@ export async function startEphemeralPostgres(): Promise<EphemeralCluster | null>
 }
 
 async function findBinDir(): Promise<string | null> {
-  for (const dir of PG_BIN_CANDIDATES) {
+  let installed: string[] = [];
+  try {
+    installed = await readdir(PG_LIB_DIR);
+  } catch {
+    installed = [];
+  }
+
+  for (const dir of orderedBinCandidates(installed)) {
     try {
       await run(path.join(dir, 'initdb'), ['--version']);
       return dir;
