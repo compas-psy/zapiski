@@ -56,12 +56,42 @@ export interface AnalyticsEvent {
   ts: string;
   props: Record<string, number | boolean | string>;
   schemaVersion: number;
+  /**
+   * Ключ идемпотентности приёма (Д-6, C3). Генерируется ЗДЕСЬ — в момент
+   * постановки события в очередь, — а не при отправке: `AnalyticsQueue`
+   * хранит уже построенный объект и при повторной попытке шлёт его как есть,
+   * так что id не меняется между попытками одного и того же события. Сервер
+   * держит на нём уникальный индекс и делает `ON CONFLICT DO NOTHING» —
+   * повтор пачки (ретрай, потерянный ответ, перезапуск до `ack`) превращается
+   * в бесплатный дубль на приёме, а не в задвоенный счётчик на панели.
+   */
+  eventId: string;
 }
 
 function matchesType(spec: PropSpec, value: unknown): boolean {
   if (spec.type === 'number') return typeof value === 'number' && Number.isFinite(value);
   if (spec.type === 'boolean') return typeof value === 'boolean';
   return typeof value === 'string' && (spec.values as readonly string[]).includes(value);
+}
+
+/**
+ * Случайный id события. Тот же приём, что и `newFeedbackId`
+ * (`packages/app/src/state/feedback.ts`) — здесь не может напрямую
+ * переиспользовать ЕГО код (`core` не зависит от `app`), поэтому та же
+ * логика продублирована на своём уровне. Криптостойкость не нужна: задача —
+ * не совпасть с другим событием, а не быть непредсказуемым.
+ */
+function randomEventId(): string {
+  const source = globalThis.crypto;
+  if (source !== undefined && typeof source.randomUUID === 'function') return source.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (source !== undefined && typeof source.getRandomValues === 'function') {
+    source.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 /**
@@ -74,6 +104,7 @@ export function buildAnalyticsEvent(
   name: string,
   props: Record<string, unknown>,
   now: () => number = () => Date.now(),
+  newId: () => string = randomEventId,
 ): AnalyticsEvent | null {
   if (!Object.prototype.hasOwnProperty.call(ANALYTICS_EVENT_SCHEMA, name)) return null;
   const eventName = name as AnalyticsEventName;
@@ -88,5 +119,6 @@ export function buildAnalyticsEvent(
     ts: new Date(now()).toISOString(),
     props: safeProps,
     schemaVersion: ANALYTICS_SCHEMA_VERSION,
+    eventId: newId(),
   };
 }

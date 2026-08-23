@@ -208,7 +208,7 @@ export {
   type AnalyticsEventName,
   type LengthBucket,
 } from './analytics/schema.js';
-export { AnalyticsQueue } from './analytics/queue.js';
+export { AnalyticsQueue, ANALYTICS_MAX_BATCH_SIZE } from './analytics/queue.js';
 export { MAX_SNAPSHOTS, VersionHistory } from './sync/versions.js';
 export { diff3, type Diff3Result } from './sync/diff3.js';
 export { etagOf, LocalFolderBackend, PreconditionFailed, type LocalFolderOptions } from './sync/local-folder.js';
