@@ -333,3 +333,88 @@ describe('рубильник приёма аналитики на выкладк
     expect(prepare.slice(0, prepare.indexOf('\n}\n'))).toContain('resolve_analytics_gate');
   });
 });
+
+/**
+ * Второй конец шва: значение, записанное в `deploy/.env`, обязано доезжать до
+ * контейнера.
+ *
+ * `resolve_analytics_gate` пишет `ANALYTICS_ENABLED` в `deploy/.env`, но само
+ * по себе это ничего не значит — до процесса значение доходит только потому,
+ * что у сервиса `api` стоит `env_file: .env`. Ловушка тут в том, что явная
+ * запись в `environment:` ПЕРЕБИВАЕТ `env_file` (docker compose: `environment`
+ * старше). То есть добавленная кем-нибудь позже строка вида
+ * `ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-false}` молча вернула бы приём в
+ * выключенное состояние, а выкладка продолжала бы честно писать `true` в файл,
+ * который больше ни на что не влияет.
+ *
+ * Ровно этот класс отказа мы и разбирали: рубильник выключен, никто не знает.
+ */
+describe('рубильник доезжает до контейнера, а не только до файла', () => {
+  const compose = parseCompose();
+
+  it('сервис api читает deploy/.env', () => {
+    expect(compose.api?.env_file ?? []).toContain('.env');
+  });
+
+  it('ANALYTICS_ENABLED не продублирован в environment: там он перебил бы файл', () => {
+    expect(Object.keys(compose.api?.environment ?? {})).not.toContain('ANALYTICS_ENABLED');
+  });
+
+  it('то же и для обоих значений моста', () => {
+    const explicit = Object.keys(compose.api?.environment ?? {});
+    expect(explicit).not.toContain('PRACTICE_INGEST_URL');
+    expect(explicit).not.toContain('PRACTICE_INGEST_SECRET');
+  });
+});
+
+interface ComposeService {
+  env_file?: string[];
+  environment?: Record<string, unknown>;
+}
+
+/**
+ * Минимальный разбор нужных полей `deploy/docker-compose.yml` без зависимости
+ * от YAML-парсера: берём блок сервиса `api` и читаем из него `env_file` и
+ * ключи `environment`. Файл наш, форма стабильная, а лишняя зависимость в
+ * серверном пакете ради двух полей не нужна.
+ */
+function parseCompose(): Record<string, ComposeService> {
+  const text = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../deploy/docker-compose.yml'), 'utf8');
+  const lines = text.split('\n');
+
+  const services: Record<string, ComposeService> = {};
+  let service: string | null = null;
+  let section: 'env_file' | 'environment' | null = null;
+
+  for (const line of lines) {
+    const serviceHead = /^ {2}([a-z][a-z0-9_-]*):\s*$/i.exec(line);
+    if (serviceHead !== null && serviceHead[1] !== undefined) {
+      service = serviceHead[1];
+      services[service] = {};
+      section = null;
+      continue;
+    }
+    if (service === null) continue;
+
+    if (/^ {4}env_file:\s*$/.test(line)) { section = 'env_file'; continue; }
+    if (/^ {4}environment:\s*$/.test(line)) { section = 'environment'; continue; }
+    if (/^ {4}[a-z_]+:/i.test(line)) { section = null; continue; }
+
+    if (section === 'env_file') {
+      const item = /^ {6}- {1}(.+?)\s*$/.exec(line);
+      const target = services[service];
+      if (item !== null && item[1] !== undefined && target !== undefined) {
+        target.env_file = [...(target.env_file ?? []), item[1]];
+      }
+      continue;
+    }
+    if (section === 'environment') {
+      const pair = /^ {6}([A-Z_][A-Z0-9_]*):/.exec(line);
+      const target = services[service];
+      if (pair !== null && pair[1] !== undefined && target !== undefined) {
+        target.environment = { ...(target.environment ?? {}), [pair[1]]: true };
+      }
+    }
+  }
+  return services;
+}
