@@ -6,6 +6,7 @@
  * работает в вебе, на Windows и на Android (ARCHITECTURE §1).
  */
 import {
+  ANALYTICS_MAX_BATCH_SIZE,
   AnalyticsQueue,
   buildAnalyticsEvent,
   lengthBucket,
@@ -4201,15 +4202,31 @@ export class AppController {
     }, 3000);
   }
 
+  /**
+   * Окно за окном — `ANALYTICS_MAX_BATCH_SIZE` (совпадает с серверным
+   * лимитом, см. константу), а не вся очередь одним запросом (Д-5).
+   *
+   * Накопив офлайн больше одного окна — обычное дело для ЗАПИСОК, — прежняя
+   * версия слала `queue.list()` целиком: сервер отбивал батч `400` полностью,
+   * очередь не пустела НИКОГДА, только росла до `MAX_QUEUE_SIZE` и теряла
+   * хвост молча. Здесь после каждого успешного окна остаток отправляется
+   * следующим — пока очередь не опустеет или отправка не откажет (сеть,
+   * сервер недоступен): тогда цикл останавливается, а неотправленное ждёт
+   * следующего триггера `flushAnalytics`, ничего не теряя.
+   */
   private async doFlushAnalytics(): Promise<void> {
     const queue = this.analytics;
-    if (!queue || queue.size === 0 || !this.state.online) return;
+    if (!queue) return;
     if (this.state.account?.analyticsOptIn !== true) return;
-    const queued = queue.list();
-    const ok = await this.session
-      .sendAnalyticsEvents(queued.map((item) => item.event))
-      .catch(() => false);
-    if (ok) await queue.ack(queued.map((item) => item.id));
+    while (queue.size > 0 && this.state.online) {
+      const window = queue.take(ANALYTICS_MAX_BATCH_SIZE);
+      if (window.length === 0) break;
+      const ok = await this.session
+        .sendAnalyticsEvents(window.map((item) => item.event))
+        .catch(() => false);
+      if (!ok) break;
+      await queue.ack(window.map((item) => item.id));
+    }
   }
 
   /** Ошибка живёт в статусе. Ввод текста она не трогает (приёмочный критерий №5). */
