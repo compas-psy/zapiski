@@ -34,7 +34,6 @@ import { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, createUser, noDatabase, type Harness, type TestUser } from './helpers/app.ts';
-import { retryPracticeForwarding } from '../src/services/practiceBridge.ts';
 
 // Клиент — исходником и по неразбираемому пути: обычный import втянул бы
 // packages/core в программу tsc сервера, где нет DOM. Тот же приём, что в
@@ -301,8 +300,30 @@ describe.skipIf(noDatabase())('живой путь: очередь клиент�
     expect(envelopes().filter((item) => item['event'] === 'note_saved')).toHaveLength(1);
   });
 
-  it('sweep не находит непереслáнного: строчный путь уже всё отдал', async () => {
-    const result = await retryPracticeForwarding(harness.ctx);
-    expect(result.attempted).toBe(0);
+  it('у этого человека не осталось непереслáнного', async () => {
+    /*
+     * Спрашиваем ТОЛЬКО про своего пользователя, и вот почему.
+     *
+     * База в прогоне ОДНА на все файлы (test/globalSetup.ts: «тесты
+     * изолируются друг от друга собственными пользователями, а не
+     * собственными базами»). Первая версия этой проверки звала
+     * `retryPracticeForwarding(harness.ctx)` и требовала `attempted === 0` —
+     * локально проходило, в CI дало 13: уборка глобальная, она подобрала
+     * чужие строки из соседних файлов.
+     *
+     * Это тот же капкан общей базы, на котором уже спотыкался
+     * auth.magic-link.e2e.test.ts, и лечится он так же — областью запроса, а
+     * не «запустим уборку и посмотрим». Заодно исчезает и обратный вред:
+     * глобальная уборка из теста утащила бы чужие события в ЭТОТ приёмник.
+     */
+    const pending = await harness.db.query<{ count: string }>(
+      `SELECT count(*)::text AS count
+         FROM analytics_events
+        WHERE user_id = $1
+          AND practice_forwarded_at IS NULL
+          AND practice_reject_reason IS NULL`,
+      [user.userId],
+    );
+    expect(pending.rows[0]?.count).toBe('0');
   });
 });
