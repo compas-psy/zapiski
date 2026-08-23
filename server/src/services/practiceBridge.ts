@@ -6,33 +6,49 @@
  * ВСЕГДА: пересылка — это ДОПОЛНЕНИЕ к приёму, а не замена, и её отказ не
  * должен ронять и не должен терять принятое.
  *
- * ── Честность про то, что на другой стороне ─────────────────────────────────
+ * ── Контракт контура v2 (решение оркестратора, O-260823-E) ──────────────────
  *
- * Конверт здесь собран по `charter/12_ANALYTICS.md §3` — так, как его
- * описывает документ. Но прочитанный код самого `/ingest` ПРАКТИКИ
- * (`/tmp/work/cmpas.ru/src/app/api/ingest/route.ts` и
- * `src/lib/analytics/{ingest,schema}.ts`, читано 23.08.2026) на сегодня:
- *  - принимает ОДНО событие за запрос, не батч — `forward()` поэтому шлёт
- *    по одному, а не оборачивает в `{events:[...]}`;
- *  - НЕ проверяет вообще никакой заголовок аутентификации — секрет здесь
- *    форвард-совместим на будущее (Д-10 в `06_ANALYTICS.md`), а не защита
- *    сегодня;
- *  - ищет `account_id` как `User.id` В СВОЕЙ БД и отвергает
- *    `unknown account_id`, если такого там нет. У ЗАПИСОК свой, отдельный
- *    аккаунт (`B-260813-14`) — общего `sub` ещё нет, поэтому `account_id`,
- *    который шлёт этот мост, ПРАКТИКА сегодня не узнает почти никогда.
+ * Поток C построил этот мост, читая старую копию репозитория ПРАКТИКИ — до
+ * того, как приёмник переписали. Три утверждения о другой стороне, зафикси-
+ * рованные тогда в этом файле, были на день его написания правдой и
+ * перестали быть правдой к сегодняшнему прочтению актуального кода приёмника
+ * (`src/app/api/ingest/route.ts`, `src/lib/analytics/{ingest,schema,rate-
+ * limit}.ts`, `analytics/schema/events.yaml` — читано 23.08.2026, в отдельном
+ * дереве, не тронуто):
  *
- * Это не повод не строить мост: он готов к моменту, когда общая
- * идентичность появится, и работает уже сейчас как факт пересылки (тест
- * проверяет именно это — что уходит правильный конверт, а не что ПРАКТИКА
- * его обязательно проглотит). Подробности — в отчёте задачи C4, не здесь.
+ *  - приёмник фактически требует `Authorization: Bearer <секрет>` и
+ *    fail-closed отдаёт 401 на всё остальное (raw заголовок `authorization`,
+ *    ожидается `Bearer <ANALYTICS_INGEST_SECRET>`, `timingSafeEqual`).
+ *    Заголовка `x-simpas-ingest-secret`, который слал этот мост, приёмник не
+ *    знает вовсе — каждый форвард получал бы 401, то есть отдавался бы этим
+ *    же кодом как неудача, но по ошибочной причине (не "мост не нужен",
+ *    а "мост стучится не туда, куда слушают");
+ *  - приёмник принимает не только одно событие, но и МАССИВ до 200 штук за
+ *    запрос, отвечая `{results:[...]}` в том же порядке, поэлементно;
+ *  - `account_id`, который шлёт ЗАПИСКИ, ПРАКТИКА для `product: 'zapiski'`
+ *    больше не ищет в своей таблице `User` — это исправлено на её стороне
+ *    ПРИ УСЛОВИИ, что согласие субъекта `zapiski:<account_id>` у неё на файле
+ *    (ставится событием `consent_updated`, см. ниже).
+ *
+ * Этот файл доведён до контракта контура v2, а не до прочитанного 23.08.2026
+ * кода приёмника напрямую — контракт оркестратора старше кода и обязателен
+ * для всех трёх репозиториев контура; расхождения между ним и тем, что
+ * фактически лежит в дереве приёмника на день чтения (в частности: реестр
+ * `events.yaml` там ещё не разрешает `consent_updated`/`identity_linked`
+ * продукту `zapiski` — это правится параллельно другим потоком; а обработчик
+ * `account_id` там пока СОВПАДАЕТ со старым поведением — ищет `User.id`
+ * буквально, независимо от продукта, без схемы `product:account_id` из
+ * контракта) — не повод не строить мост по контракту: контракт описывает,
+ * куда приёмник придёт, а не только то, где он есть сегодня. Подробности —
+ * в отчёте задачи E (поток «контракт-E»), не здесь.
  */
 
 import type { Db } from '../db/pool.ts';
+import { markPracticeForwardResults } from './practiceForwardMarks.ts';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-/** Единый конверт контура (`12_ANALYTICS.md §3`). */
+/** Единый конверт контура (`12_ANALYTICS.md §3`, контракт контура v2 §4). */
 export interface PracticeEnvelope {
   event: string;
   ts: string;
@@ -42,22 +58,92 @@ export interface PracticeEnvelope {
    * Всегда `null`: `analytics_events` ЗАПИСОК не хранит `device_id` события
    * (только `user_id`) — персистентность его добавила бы отдельную колонку
    * и решение, из чьего именно устройства слать при ретрае с sweep'а, а не
-   * из запроса. У ПРАКТИКИ это поле опционально и на решение «принять/
-   * отвергнуть» не влияет, пока `account_id` присутствует (см. шапку файла,
-   * `writeAccountEvent`), так что упрощение не меняет исход сегодня.
+   * из запроса. У ПРАКТИКИ это поле опционально и не мешает решению
+   * «принять/отвергнуть», пока `account_id` присутствует, так что упрощение
+   * не меняет исход.
    */
   device_id: string | null;
   props: Record<string, unknown>;
   schema_version: number;
+  /**
+   * Ключ идемпотентности НА СТОРОНЕ ПРАКТИКИ (контракт контура v2 §4).
+   * Всегда тот же `event_id`, что уже применяется для собственной
+   * идемпотентности ЗАПИСОК (Д-6, C3, уникальный индекс на
+   * `analytics_events.event_id`) — эта колонка стабильна с момента
+   * постановки в очередь, а не пересобирается при отправке, и годится для
+   * ОБЕИХ систем сразу без второго генератора.
+   *
+   * До этой правки конверт его не нёс вовсе: таймаут ответа (мост трактует
+   * его как неудачу, `PracticeBridge.forward` — см. ниже) при фактически
+   * доставленном на приёме запросе привёл бы sweep к повторной отправке БЕЗ
+   * ключа, на который приёмник мог бы опереться, — задвоенная строка в
+   * `events` ПРАКТИКИ на каждый такой пограничный случай.
+   */
+  event_id: string;
+}
+
+/**
+ * Итог одной строки после попытки пересылки (E-Z1: `response.ok` — не
+ * критерий успеха, критерий — явное `{accepted:true}` в разобранном теле).
+ *
+ *  - `accepted`   — приёмник подтвердил приём этой строки;
+ *  - `rejected`   — приёмник ОТВЕТИЛ (обычно 200) и явно отказал
+ *    (`{accepted:false, reason}`). Это НЕ потеря и НЕ ошибка транспорта: у
+ *    приёмника есть мнение о конверте, и чаще всего это мнение — «согласия
+ *    субъекта нет на файле» (контракт контура v2 §5). Повторять ровно тот же
+ *    конверт бессмысленно, пока причина не снята (согласие получено), но мы
+ *    и не удаляем его из очереди непереслaнных — `consent_updated`,
+ *    отправленный позже, сам расчистит путь для честного повтора sweep'ом.
+ *    `reason` — сырая строка приёмника, для лога и `practice_reject_reason`
+ *    (см. `retryPracticeForwarding`), не для программного ветвления по
+ *    конкретным словам: формулировки — контроль другой команды.
+ *  - `error`      — транспортный сбой (сеть, таймаут, не-2xx) ИЛИ ответ,
+ *    который не удалось разобрать по контракту (не то тело, не тот размер
+ *    `results`). Здесь мы буквально не знаем, что случилось на той стороне —
+ *    в отличие от `rejected`, где приёмник произнёс мнение вслух.
+ */
+export type ForwardOutcome = 'accepted' | 'rejected' | 'error';
+
+export interface ForwardResult {
+  outcome: ForwardOutcome;
+  /** Только при `outcome === 'rejected'` — причина отказа из тела ответа приёмника. */
+  reason?: string;
+}
+
+const ACCEPTED: ForwardResult = { outcome: 'accepted' };
+const ERROR: ForwardResult = { outcome: 'error' };
+
+function rejectedResult(reason: unknown): ForwardResult {
+  return { outcome: 'rejected', reason: typeof reason === 'string' && reason.length > 0 ? reason : 'rejected (no reason given)' };
+}
+
+/** Один элемент разобранного `results` → `ForwardResult`. Не доверяем форме, которой не просили. */
+function classify(item: unknown): ForwardResult {
+  if (item !== null && typeof item === 'object') {
+    const record = item as Record<string, unknown>;
+    if (record['accepted'] === true) return ACCEPTED;
+    if (record['accepted'] === false) return rejectedResult(record['reason']);
+  }
+  return ERROR;
 }
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
- * Один POST на одно событие. Никогда не бросает: сетевой отказ, таймаут,
- * не-2xx — всё превращается в `false`, а не в исключение, потому что вызывающая
- * сторона (маршрут приёма) обязана в любом случае продолжить отвечать
- * своему клиенту, а не заваливать приём ЗАПИСОК из-за недоступности ПРАКТИКИ.
+ * Наибольшая пачка, которую примет `POST /ingest` ПРАКТИКИ за один запрос
+ * (контракт контура v2 §2). Единственное место, где это число живёт на
+ * стороне ЗАПИСОК: и горячая пересылка (`routes/analytics.ts`), и sweep
+ * (`retryPracticeForwarding`) режут на HTTP-запросы через
+ * `PracticeBridge.forwardBatch`, а не переопределяют константу заново.
+ */
+export const MAX_INGEST_BATCH_SIZE = 200;
+
+/**
+ * Мост в `POST /ingest` ПРАКТИКИ. Никогда не бросает: сетевой отказ, таймаут,
+ * не-2xx, неожиданная форма ответа — всё превращается в `ForwardResult`
+ * (`outcome: 'error'`), а не в исключение, потому что вызывающая сторона
+ * (маршрут приёма, sweep) обязана в любом случае продолжить свою работу, а
+ * не заваливаться из-за недоступности или недопонятности ПРАКТИКИ.
  */
 export class PracticeBridge {
   readonly #url: string;
@@ -72,7 +158,15 @@ export class PracticeBridge {
     this.#timeoutMs = timeoutMs;
   }
 
-  async forward(envelope: PracticeEnvelope): Promise<boolean> {
+  /**
+   * Один HTTP-запрос на массив ≤ `MAX_INGEST_BATCH_SIZE` конвертов. Тело
+   * ВСЕГДА массив — даже из одного элемента: единая точка разбора `results`,
+   * без двух разных форм ответа на разные формы запроса. `forward()` и
+   * `forwardBatch()` — оба тонкие обёртки вокруг этого метода.
+   */
+  async #postChunk(envelopes: readonly PracticeEnvelope[]): Promise<ForwardResult[]> {
+    if (envelopes.length === 0) return [];
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.#timeoutMs);
     try {
@@ -80,20 +174,66 @@ export class PracticeBridge {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          // Форвард-совместимо: сегодня /ingest ПРАКТИКИ этот заголовок не
-          // читает (см. шапку файла) — заведён здесь, чтобы включение
-          // проверки на той стороне не потребовало правки этого репозитория.
-          'x-simpas-ingest-secret': this.#secret,
+          // Контракт контура v2 §1: единственный формат — Bearer. Заголовок
+          // `x-simpas-ingest-secret`, который был здесь раньше, приёмник не
+          // читает вовсе (см. шапку файла) — 401 на каждый форвард.
+          authorization: `Bearer ${this.#secret}`,
         },
-        body: JSON.stringify(envelope),
+        body: JSON.stringify(envelopes),
         signal: controller.signal,
       });
-      return response.ok;
+
+      const body: unknown = await response.json().catch(() => null);
+
+      // Не-2xx — транспортная неудача целиком, вне зависимости от тела
+      // (контракт контура v2 §3: отказ по существу приходит НА 200, а не на
+      // 401/500 — те не несут содержательного results).
+      if (!response.ok || body === null || typeof body !== 'object') {
+        return envelopes.map(() => ERROR);
+      }
+
+      const results = (body as Record<string, unknown>)['results'];
+      if (!Array.isArray(results) || results.length !== envelopes.length) {
+        // 2xx, но не тем контрактом (нет `results` нужной длины). Считать
+        // это успехом значило бы поверить голому `response.ok`, а не явному
+        // `{accepted:true}` — ровно то, от чего предостерегает контракт §1.
+        return envelopes.map(() => ERROR);
+      }
+
+      return results.map(classify);
     } catch {
-      return false;
+      return envelopes.map(() => ERROR);
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /**
+   * Пересылка МАССИВОМ (контракт контура v2 §2), с чанкованием по
+   * `MAX_INGEST_BATCH_SIZE` внутри — вызывающая сторона может передать
+   * сколько угодно конвертов, мост сам режет на допустимые HTTP-запросы и
+   * склеивает результаты в исходном порядке. Один неудачный чанк не топит
+   * остальные — каждый чанк независим.
+   */
+  async forwardBatch(envelopes: readonly PracticeEnvelope[]): Promise<ForwardResult[]> {
+    const results: ForwardResult[] = [];
+    for (let i = 0; i < envelopes.length; i += MAX_INGEST_BATCH_SIZE) {
+      const chunk = envelopes.slice(i, i + MAX_INGEST_BATCH_SIZE);
+      results.push(...(await this.#postChunk(chunk)));
+    }
+    return results;
+  }
+
+  /**
+   * Один конверт. «Горячий путь» одного события — по-прежнему по одному
+   * HTTP-запросу на вызов (не накапливается с другими вызовами в этом же
+   * процессе), но тело этого запроса — массив из одного элемента, тем же
+   * кодом, что и `forwardBatch`: не два разных парсера ответа на два разных
+   * формата тела, один.
+   */
+  async forward(envelope: PracticeEnvelope): Promise<ForwardResult> {
+    const [result] = await this.#postChunk([envelope]);
+    return result ?? ERROR;
   }
 }
 
@@ -120,6 +260,7 @@ export interface ForwardableRow {
   props: Record<string, unknown>;
   client_ts: Date;
   schema_version: number;
+  event_id: string;
 }
 
 export function envelopeFor(row: ForwardableRow): PracticeEnvelope {
@@ -131,30 +272,49 @@ export function envelopeFor(row: ForwardableRow): PracticeEnvelope {
     device_id: null,
     props: row.props,
     schema_version: row.schema_version,
+    event_id: row.event_id,
   };
 }
 
-const RETRY_BATCH_LIMIT = 200;
+/**
+ * Сколько непереслaнных строк рассматривать за ОДИН вызов sweep'а (SQL
+ * `LIMIT`) — не путать с `MAX_INGEST_BATCH_SIZE` (сколько уместится в ОДИН
+ * HTTP-запрос): это разные пределы разных ресурсов. Задан заметно больше
+ * сетевого предела, чтобы один часовой тик мог вычерпать здоровый бэклог
+ * (например, после временной недоступности ПРАКТИКИ) за несколько
+ * HTTP-запросов внутри одного вызова, а не по 200 строк в час до
+ * бесконечности — `forwardBatch` сам порежет эту выборку по 200 на запрос.
+ */
+const SWEEP_ROW_LIMIT = 1_000;
 
 /**
  * Sweep для того, что не переслалось с первой попытки (ПРАКТИКА была
- * недоступна, ответила не-2xx, поймала таймаут). Запускается тем же часовым
- * циклом, что чистка версий и magic-токенов (`index.ts`) — раз в час
- * достаточно: пересылка — это дополнение к приёму, а не путь, от которого
- * зависит сам приём (тот отвечает клиенту сразу, независимо от исхода
- * немедленной попытки пересылки в маршруте).
+ * недоступна, ответила не-2xx, отвергла, поймала таймаут). Запускается тем
+ * же часовым циклом, что чистка версий и magic-токенов (`index.ts`) — раз в
+ * час достаточно: пересылка — это дополнение к приёму, а не путь, от
+ * которого зависит сам приём.
  *
  * Отсутствие моста (`practiceBridge === null`) — не ошибка sweep'а: значит,
  * пересылка выключена настройкой, а не то, что она сейчас недоступна.
+ *
+ * Порядок выборки — `ORDER BY id` (глобальный, по возрастанию) — важен не
+ * только для повторяемости: `id` монотонно растёт со временем вставки, а
+ * `consent_updated` для аккаунта всегда вставляется РАНЬШЕ последующих
+ * событий этого же аккаунта (это отдельная строка, вставленная в момент
+ * согласия — см. `routes/auth.ts`). Раз `forwardBatch` шлёт срез в том же
+ * порядке, в каком получил, а приёмник обрабатывает массив по порядку
+ * (контракт контура v2 §5), это единственное, что нужно для правила «согласие
+ * — до или вместе с первым содержательным событием»: ничего специально
+ * группировать по аккаунту не требуется.
  */
 export async function retryPracticeForwarding(
   ctx: { db: Pick<Db, 'query'>; practiceBridge: PracticeBridge | null },
-  limit: number = RETRY_BATCH_LIMIT,
+  limit: number = SWEEP_ROW_LIMIT,
 ): Promise<{ attempted: number; forwarded: number }> {
   if (ctx.practiceBridge === null) return { attempted: 0, forwarded: 0 };
 
   const { rows } = await ctx.db.query<ForwardableRow>(
-    `SELECT id, user_id, event, props, client_ts, schema_version
+    `SELECT id, user_id, event, props, client_ts, schema_version, event_id
        FROM analytics_events
       WHERE practice_forwarded_at IS NULL
       ORDER BY id
@@ -162,16 +322,11 @@ export async function retryPracticeForwarding(
     [limit],
   );
 
-  // По одному, последовательно: /ingest ПРАКТИКИ сегодня не батч (см. шапку
-  // файла), и посылать сотни параллельных запросов на недоступный сервис —
-  // не ускорение, а лишняя нагрузка на обе стороны.
-  let forwarded = 0;
-  for (const row of rows) {
-    const ok = await ctx.practiceBridge.forward(envelopeFor(row));
-    if (ok) {
-      await ctx.db.query('UPDATE analytics_events SET practice_forwarded_at = now() WHERE id = $1', [row.id]);
-      forwarded += 1;
-    }
-  }
+  if (rows.length === 0) return { attempted: 0, forwarded: 0 };
+
+  const results = await ctx.practiceBridge.forwardBatch(rows.map(envelopeFor));
+  await markPracticeForwardResults(ctx.db, rows.map((row) => row.id), results);
+  const forwarded = results.filter((r) => r.outcome === 'accepted').length;
+
   return { attempted: rows.length, forwarded };
 }

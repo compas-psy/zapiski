@@ -425,12 +425,14 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
 });
 
 /**
- * Мост в приёмник ПРАКТИКИ (C4, `charter/12_ANALYTICS.md §3`).
+ * Мост в приёмник ПРАКТИКИ (C4, `charter/12_ANALYTICS.md §3`, доведён
+ * контрактом контура v2 — E-Z1/E-Z2).
  *
  * Приём ЗАПИСОК уже проверен выше независимо от моста (харнесс по умолчанию
  * создаёт `practiceBridge: null`, как в проде без PRACTICE_INGEST_URL/SECRET
  * — см. helpers/app.ts). Здесь — только то, что добавляет мост: конверт,
- * который уходит наружу, и что его отказ не трогает приём.
+ * который уходит наружу (массивом, с Bearer-заголовком), поэлементный разбор
+ * ответа, и что отказ моста не трогает приём.
  */
 describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в ПРАКТИКУ (C4)', () => {
   let harness: Harness;
@@ -459,11 +461,21 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в П�
     return result.rows.map((r) => r.practice_forwarded_at);
   }
 
-  it('принятое событие уходит в /ingest ПРАКТИКИ в её конверте, с правильными product и schema_version', async () => {
-    const captured: PracticeEnvelope[] = [];
+  /** Фиктивный приёмник: 2xx, `{results:[...]}` того же порядка/длины, что и присланный массив. */
+  function acceptingIngest(captured: PracticeEnvelope[][]): (url: string, init?: RequestInit) => Promise<Response> {
+    return async (_url, init) => {
+      const sent = JSON.parse(String(init?.body)) as PracticeEnvelope[];
+      captured.push(sent);
+      return new Response(JSON.stringify({ results: sent.map(() => ({ accepted: true })) }), { status: 200 });
+    };
+  }
+
+  it('принятое событие уходит в /ingest ПРАКТИКИ массивом, с Authorization: Bearer и правильными product/schema_version/event_id', async () => {
+    const captured: PracticeEnvelope[][] = [];
     harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async (_url, init) => {
-      captured.push(JSON.parse(String(init?.body)) as PracticeEnvelope);
-      return new Response('{}', { status: 200 });
+      const headers = init?.headers as Record<string, string>;
+      expect(headers['authorization']).toBe('Bearer shh');
+      return acceptingIngest(captured)(_url, init);
     });
 
     const user = await createUser(harness);
@@ -478,16 +490,43 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в П�
     });
 
     expect(response.statusCode).toBe(200);
-    expect(captured).toHaveLength(1);
-    expect(captured[0]?.product).toBe('zapiski');
-    expect(captured[0]?.schema_version).toBe(event.schemaVersion);
-    expect(captured[0]?.event).toBe('note_saved');
-    expect(captured[0]?.account_id).toBe(user.userId);
-    expect(captured[0]?.props).toEqual(event.props);
-    // Не батч — /ingest ПРАКТИКИ сегодня принимает одно событие за раз.
-    expect(captured[0]).not.toHaveProperty('events');
+    expect(captured).toHaveLength(1); // один HTTP-запрос
+    expect(captured[0]).toHaveLength(1); // массив из одного конверта
+    const sent = captured[0]?.[0];
+    expect(sent?.product).toBe('zapiski');
+    expect(sent?.schema_version).toBe(event.schemaVersion);
+    expect(sent?.event).toBe('note_saved');
+    expect(sent?.account_id).toBe(user.userId);
+    expect(sent?.props).toEqual(event.props);
+    expect(sent?.event_id).toBe(event.eventId);
 
     expect((await forwardedAt(user.userId))[0]).not.toBeNull();
+    harness.ctx.practiceBridge = null;
+  });
+
+  it('несколько событий одного входящего запроса пересылаются ОДНИМ HTTP-вызовом (не по одному в цикле) — E-Z2', async () => {
+    const captured: PracticeEnvelope[][] = [];
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', acceptingIngest(captured));
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const events = [
+      buildAnalyticsEvent('note_saved', { length_bucket: 's', encrypted: false })!,
+      buildAnalyticsEvent('note_searched', { query_length_bucket: 'xs', results_count: 1 })!,
+      buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!,
+    ];
+
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(captured).toHaveLength(1); // один запрос на все три события, не три
+    expect(captured[0]).toHaveLength(3);
+    expect((await forwardedAt(user.userId)).every((d) => d !== null)).toBe(true);
     harness.ctx.practiceBridge = null;
   });
 
@@ -515,11 +554,42 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в П�
     harness.ctx.practiceBridge = null;
   });
 
+  it('ПРАКТИКА явно отвергает (согласия субъекта ещё нет) — не переслaно, но не "потеряно молча": причина в practice_reject_reason', async () => {
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async (_url, init) => {
+      const sent = JSON.parse(String(init?.body)) as PracticeEnvelope[];
+      return new Response(
+        JSON.stringify({ results: sent.map(() => ({ accepted: false, reason: 'consent required for subject' })) }),
+        { status: 200 },
+      );
+    });
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const event = buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!;
+
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] },
+    });
+
+    expect(response.statusCode).toBe(200); // приём не зависит от исхода пересылки
+    expect((await forwardedAt(user.userId))[0]).toBeNull();
+    const reason = await harness.db.query<{ practice_reject_reason: string | null }>(
+      'SELECT practice_reject_reason FROM analytics_events WHERE user_id = $1',
+      [user.userId],
+    );
+    expect(reason.rows[0]?.practice_reject_reason).toBe('consent required for subject');
+    harness.ctx.practiceBridge = null;
+  });
+
   it('повторная отправка той же (уже принятой) пачки не пересылает дубликат в ПРАКТИКУ второй раз', async () => {
     let calls = 0;
-    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async () => {
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async (_url, init) => {
       calls += 1;
-      return new Response('{}', { status: 200 });
+      const sent = JSON.parse(String(init?.body)) as PracticeEnvelope[];
+      return new Response(JSON.stringify({ results: sent.map(() => ({ accepted: true })) }), { status: 200 });
     });
 
     const user = await createUser(harness);
@@ -539,7 +609,7 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в П�
       payload: { events: [event] }, // тот же eventId — ON CONFLICT DO NOTHING на приёме
     });
 
-    expect(calls).toBe(1); // не 2 — иначе у ПРАКТИКИ (своей идемпотентности не имеющей) была бы задвоенная строка
+    expect(calls).toBe(1); // не 2 — иначе у ПРАКТИКИ была бы задвоенная строка
     expect(await eventsFor(user.userId)).toHaveLength(1);
     harness.ctx.practiceBridge = null;
   });
