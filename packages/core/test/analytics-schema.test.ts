@@ -41,13 +41,26 @@ describe('buildAnalyticsEvent', () => {
       'note_saved',
       { length_bucket: 'm', encrypted: true },
       () => 0,
+      () => 'fixed-id',
     );
     expect(built).toEqual({
       event: 'note_saved',
       ts: new Date(0).toISOString(),
       props: { length_bucket: 'm', encrypted: true },
       schemaVersion: 1,
+      eventId: 'fixed-id',
     });
+  });
+
+  it('eventId стабилен на постановке в очередь: не своя генерация при каждом чтении, разные события — разные id по умолчанию (C3, идемпотентность на приёме)', () => {
+    // Без инъекции: реальный генератор — не должен ни разу вернуть пустую
+    // строку и не должен повторяться на соседних вызовах (иначе уникальный
+    // индекс на сервере схлопнул бы РАЗНЫЕ события в одну строку).
+    const a = buildAnalyticsEvent('note_saved', { length_bucket: 'xs', encrypted: false }, () => 0);
+    const b = buildAnalyticsEvent('note_saved', { length_bucket: 'xs', encrypted: false }, () => 0);
+    expect(a?.eventId).toBeTruthy();
+    expect(b?.eventId).toBeTruthy();
+    expect(a?.eventId).not.toBe(b?.eventId);
   });
 
   it('неизвестное имя события — null, не «событие без полей»', () => {

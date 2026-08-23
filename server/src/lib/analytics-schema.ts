@@ -29,12 +29,26 @@ const nonNegativeInt = z.number().int().nonnegative();
  */
 const schemaVersion = z.number().int().positive();
 
+/**
+ * Ключ идемпотентности приёма (Д-6, C3, `12_ANALYTICS.md §3` — `event_id`
+ * единого конверта контура).
+ *
+ * `buildAnalyticsEvent` кладёт его в КАЖДЫЙ конверт, стабильным при
+ * повторной отправке (генерируется один раз — при постановке в очередь, а
+ * не при отправке). `.uuid()`, а не просто непустая строка: колонка в базе
+ * — `uuid`, и уникальный индекс на ней это использует; сам генератор
+ * (`randomEventId` в schema.ts клиента) всегда отдаёт валидный UUID, включая
+ * запасной путь без `crypto.randomUUID`.
+ */
+const eventId = z.string().uuid();
+
 const noteSaved = z
   .object({
     event: z.literal('note_saved'),
     ts: z.string().datetime(),
     props: z.object({ length_bucket: lengthBucket, encrypted: z.boolean() }).strict(),
     schemaVersion,
+    eventId,
   })
   .strict();
 
@@ -44,6 +58,7 @@ const noteSearched = z
     ts: z.string().datetime(),
     props: z.object({ query_length_bucket: lengthBucket, results_count: nonNegativeInt }).strict(),
     schemaVersion,
+    eventId,
   })
   .strict();
 
@@ -55,6 +70,7 @@ const syncCompleted = z
       .object({ pushed: nonNegativeInt, pulled: nonNegativeInt, conflicts: nonNegativeInt })
       .strict(),
     schemaVersion,
+    eventId,
   })
   .strict();
 
@@ -66,6 +82,7 @@ const exportRequested = z
       .object({ format: z.enum(['md', 'html', 'docx', 'pdf', 'zip']), notes_count: nonNegativeInt })
       .strict(),
     schemaVersion,
+    eventId,
   })
   .strict();
 

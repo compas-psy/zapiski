@@ -9,7 +9,7 @@ import { findUserById } from '../services/accounts.ts';
 /**
  * Приём событий продуктовой аналитики (ТЗ §6, O-260817-05).
  *
- * Три независимых замка, каждый обязателен сам по себе:
+ * Четыре независимых замка, каждый обязателен сам по себе:
  *  1. `ANALYTICS_ENABLED` — фича-флаг, выключен по умолчанию (docs/dev/modules/server.md).
  *  2. `users.analytics_opt_in` — согласие конкретного человека, проверяется
  *     на КАЖДЫЙ запрос, а не один раз при выдаче токена: отозвал — сервер
@@ -17,6 +17,10 @@ import { findUserById } from '../services/accounts.ts';
  *  3. `analyticsBatchBody` — `.strict()`-схема на каждое поле события: лишнее
  *     поле, которым можно было бы протащить текст заметки, роняет весь
  *     батч `400`, а не откладывается в сторону молча.
+ *  4. `ON CONFLICT (event_id) DO NOTHING` — идемпотентность (Д-6, C3): та же
+ *     пачка, отправленная повторно после ретрая или потерянного ответа, не
+ *     задваивает счётчики. `event_id` стабилен на клиенте (генерируется при
+ *     постановке в очередь, не при отправке), уникальный индекс — на приёме.
  */
 export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<void> {
   const ctx: AppContext = app.ctx;
@@ -33,8 +37,8 @@ export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<voi
 
     for (const event of parsed.data.events) {
       await ctx.db.query(
-        'INSERT INTO analytics_events (user_id, event, props, client_ts) VALUES ($1, $2, $3, $4)',
-        [auth.userId, event.event, JSON.stringify(event.props), event.ts],
+        'INSERT INTO analytics_events (user_id, event, props, client_ts, event_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (event_id) DO NOTHING',
+        [auth.userId, event.event, JSON.stringify(event.props), event.ts, event.eventId],
       );
     }
 

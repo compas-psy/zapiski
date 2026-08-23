@@ -102,6 +102,7 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
               ts: new Date().toISOString(),
               props: { length_bucket: 's', encrypted: false },
               schemaVersion: 1,
+              eventId: crypto.randomUUID(),
             },
           ],
         },
@@ -124,6 +125,7 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
               ts: new Date().toISOString(),
               props: { length_bucket: 's', encrypted: false },
               schemaVersion: 1,
+              eventId: crypto.randomUUID(),
             },
           ],
         },
@@ -147,6 +149,7 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
               ts: new Date().toISOString(),
               props: { length_bucket: 's', encrypted: false },
               schemaVersion: 1,
+              eventId: crypto.randomUUID(),
             },
           ],
         },
@@ -166,15 +169,34 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         headers: user.authHeader,
         payload: {
           events: [
-            { event: 'note_saved', ts, props: { length_bucket: 'm', encrypted: true }, schemaVersion: 1 },
+            {
+              event: 'note_saved',
+              ts,
+              props: { length_bucket: 'm', encrypted: true },
+              schemaVersion: 1,
+              eventId: crypto.randomUUID(),
+            },
             {
               event: 'note_searched',
               ts,
               props: { query_length_bucket: 'xs', results_count: 3 },
               schemaVersion: 1,
+              eventId: crypto.randomUUID(),
             },
-            { event: 'sync_completed', ts, props: { pushed: 2, pulled: 1, conflicts: 0 }, schemaVersion: 1 },
-            { event: 'export_requested', ts, props: { format: 'zip', notes_count: 12 }, schemaVersion: 1 },
+            {
+              event: 'sync_completed',
+              ts,
+              props: { pushed: 2, pulled: 1, conflicts: 0 },
+              schemaVersion: 1,
+              eventId: crypto.randomUUID(),
+            },
+            {
+              event: 'export_requested',
+              ts,
+              props: { format: 'zip', notes_count: 12 },
+              schemaVersion: 1,
+              eventId: crypto.randomUUID(),
+            },
           ],
         },
       });
@@ -214,6 +236,74 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
       const stored = await eventsFor(harness, user.userId);
       expect(stored).toHaveLength(1);
       expect(stored[0]?.['event']).toBe('sync_completed');
+    });
+
+    it('повторная отправка той же пачки не увеличивает счётчики (C3, Д-6)', async () => {
+      // Ретрай — штатный сценарий для офлайн-очереди ЗАПИСОК: сервер мог
+      // записать батч и ответить, а ответ потерялся по дороге — клиент не
+      // получил `ok`, `ack` не выполнен, и при следующем выходе в сеть та же
+      // пачка уходит снова. Без ключа события это задваивает счётчики на
+      // панели; здесь — сама пачка, отправленная дважды.
+      const user = await createUser(harness);
+      await optIn(harness, user.userId);
+
+      const events = [
+        buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 }),
+        buildAnalyticsEvent('note_saved', { length_bucket: 's', encrypted: false }),
+      ];
+
+      const first = await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/analytics/events',
+        headers: user.authHeader,
+        payload: { events },
+      });
+      expect(first.statusCode).toBe(200);
+      expect(await eventsFor(harness, user.userId)).toHaveLength(2);
+
+      // Та же самая пачка — те же eventId, потому что это тот же уже
+      // построенный объект, не пересобранный заново (см. schema.ts: eventId
+      // генерируется в buildAnalyticsEvent, не при отправке).
+      const second = await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/analytics/events',
+        headers: user.authHeader,
+        payload: { events },
+      });
+      expect(second.statusCode).toBe(200);
+      expect(await eventsFor(harness, user.userId)).toHaveLength(2); // не 4
+    });
+
+    it('два РАЗНЫХ события с чужим совпавшим eventId — не задваивание, а конфликт: второе теряется на приёме, а не тихо перезаписывает', async () => {
+      // Не тест на «желаемое поведение подмены» — тест на факт: уникальный
+      // индекс по event_id глобальный (не в паре с user_id), поэтому
+      // ON CONFLICT DO NOTHING относится к событию целиком. Это документирует
+      // границу применимости C3: id обязан быть по-настоящему случайным
+      // (buildAnalyticsEvent так и делает, см. analytics-schema.test.ts).
+      const user = await createUser(harness);
+      await optIn(harness, user.userId);
+      const shared = buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!;
+      const different = {
+        ...buildAnalyticsEvent('sync_completed', { pushed: 99, pulled: 0, conflicts: 0 })!,
+        eventId: shared.eventId,
+      };
+
+      await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/analytics/events',
+        headers: user.authHeader,
+        payload: { events: [shared] },
+      });
+      await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/analytics/events',
+        headers: user.authHeader,
+        payload: { events: [different] },
+      });
+
+      const stored = await eventsFor(harness, user.userId);
+      expect(stored).toHaveLength(1);
+      expect((stored[0]?.['props'] as { pushed: number }).pushed).toBe(1); // первый, не второй
     });
 
     it('неизвестное имя события — весь батч отклонён, ничего не сохранено', async () => {
