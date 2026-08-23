@@ -184,8 +184,6 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       signed: ${{ steps.keystore.outputs.signed }}
-      apk: ${{ steps.collect.outputs.name }}
-      artifact: ${{ steps.collect.outputs.artifact }}
       channel: ${{ steps.channel.outputs.channel }}
       promoted: ${{ steps.channel.outputs.promoted }}
       # Единственный флаг, от которого зависит публикация. `signed` означает
@@ -857,15 +855,31 @@ jobs:
           version='${{ steps.version.outputs.version }}'
           mkdir -p artifacts
 
-          if [ "${{ steps.keystore.outputs.build_type }}" = 'release' ]; then
-            name="simpas-zapiski-${version}.apk"
-            artifact="simpas-zapiski-android-${version}"
+          # `-debug` и в имени файла, и в имени связки: тот, кто скачает её
+          # из вкладки Actions, обязан понимать, что это не релиз.
+          debug="$([ "${{ steps.keystore.outputs.build_type }}" = 'release' ] && echo false || echo true)"
+
+          # Имя НЕ пишется буквами — ни здесь, ни в релизном job.
+          #
+          # Оба считают его одним расчётом по версии (правило СИМПАС живёт в
+          # `android-release-gate.mjs`). Раньше здесь стоял литерал, а скрипт
+          # его проверял; проверка литерала ловит опечатку, но не спасает от
+          # ВТОРОГО литерала в релизном job — а он там был, и разъехаться они
+          # могли молча. Теперь расходиться нечему: запись одна.
+          #
+          # `--print` кладёт apk/bundle/tag/latest и в лог, и в GITHUB_OUTPUT.
+          names="$(node apps/mobile/scripts/android-release-gate.mjs names \
+            --version "${version}" --debug "${debug}" --print)"
+          name="$(printf '%s\n' "${names}" | sed -n 's/^apk=//p')"
+          artifact="$(printf '%s\n' "${names}" | sed -n 's/^bundle=//p')"
+          [ -n "${name}" ] && [ -n "${artifact}" ] || {
+            echo 'расчёт имён ничего не дал' >&2
+            exit 1
+          }
+
+          if [ "${debug}" = 'false' ]; then
             cp "${RUNNER_TEMP}/signed.apk" "artifacts/${name}"
           else
-            # `-debug` и в имени файла, и в имени артефакта: тот, кто скачает
-            # его из вкладки Actions, обязан понимать, что это не релиз.
-            name="simpas-zapiski-${version}-debug.apk"
-            artifact="simpas-zapiski-android-${version}-debug"
             mapfile -t found < <(find 'apps/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/debug' -name '*.apk' -type f | sort)
             [ "${#found[@]}" -gt 0 ] || { echo 'debug-APK не найден после сборки' >&2; exit 1; }
             cp "${found[0]}" "artifacts/${name}"
@@ -873,17 +887,16 @@ jobs:
 
           size="$(stat -c%s "artifacts/${name}")"
           apk_sha256="$(sha256sum "artifacts/${name}" | cut -d' ' -f1)"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
           echo "apk_sha256=${apk_sha256}" >> "$GITHUB_OUTPUT"
           echo "Артефакт: ${artifact} → ${name}, размер: $((size / 1024 / 1024)) МБ"
 
-          # Имя по правилу СИМПАС — падаем здесь, а не после публикации.
-          node apps/mobile/scripts/android-release-gate.mjs names \
-            --artifact "${name}" \
-            --version "${version}" \
-            --debug "$([ "${{ steps.keystore.outputs.build_type }}" = 'release' ] && echo false || echo true)" \
-            --tag "$([ "${GITHUB_REF_TYPE}" = 'tag' ] && echo "${GITHUB_REF_NAME}" || echo '')"
+          # Тег — единственное, что ещё можно написать мимо правила: его задаёт
+          # человек, а не расчёт. Его и проверяем.
+          if [ "${GITHUB_REF_TYPE}" = 'tag' ]; then
+            node apps/mobile/scripts/android-release-gate.mjs names \
+              --artifact "${name}" --version "${version}" \
+              --debug "${debug}" --tag "${GITHUB_REF_NAME}"
+          fi
           echo "APK SHA-256: ${apk_sha256}"
 
           # Паспорт сборки: чем подписано и из чего собрано.
@@ -926,7 +939,7 @@ jobs:
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.collect.outputs.artifact }}
+          name: ${{ steps.collect.outputs.bundle }}
           path: |
             artifacts/*.apk
             artifacts/*.json
@@ -950,7 +963,10 @@ jobs:
       - name: Отдать APK на сервер
         id: ship
         continue-on-error: true
-        timeout-minutes: 5
+        # 10, а не 5. Потолок шага теперь ПОСЛЕДНИЙ рубеж, а не первый:
+        # у каждой команды ниже свой, и сработать обязан он — потому что он
+        # успевает сказать, на чём встал. Сумма потолков команд ~8 минут.
+        timeout-minutes: 10
         if: env.HAS_SERVER == 'true'
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -961,12 +977,39 @@ jobs:
           VERIFIED: ${{ steps.verify.outputs.verified_release }}
         run: |
           set -euo pipefail
+
+          # ── Урок прогона 188 ───────────────────────────────────────────
+          #
+          # Шаг простоял пять минут и не напечатал НИ ОДНОЙ строки, после чего
+          # раннер убил его по `timeout-minutes`. Потолок шага молчание
+          # заканчивает, но не объясняет: в логе было пусто, а команд шаг звал
+          # четыре подряд, и любая могла оказаться той самой.
+          #
+          # Теперь потолок у каждой команды, а ловушка называет фазу вслух.
+          phase='подготовка ключа'
+          trap 'echo "::error::Выкладка встала на: ${phase}"' ERR
+
           mkdir -p ~/.ssh
           printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+
+          # Разрешение имени — отдельно и до всякого ssh.
+          #
+          # `ConnectTimeout` его НЕ покрывает: ssh блокируется в getaddrinfo,
+          # и ни один из ssh-таймаутов к этому месту не относится. Это ровно
+          # то, что выглядит как «висит, ничего не печатая». Проверка
+          # диагностическая: своего отказа не добавляет, но если следующий шаг
+          # встанет — причина уже названа. Адрес не печатаем, он секрет.
+          phase='разрешение имени сервера в адрес'
+          echo "→ ${phase}"
+          timeout 20 getent hosts "${SERVER_HOST}" > /dev/null \
+            || echo '::warning::имя сервера не разрешилось — если дальше повиснет, причина здесь'
+
           # `-T 10`: у самого ssh-keyscan свой таймаут, и без него первым
           # висел бы он.
-          ssh-keyscan -T 10 -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+          phase='приём ключа хоста (ssh-keyscan)'
+          echo "→ ${phase}"
+          timeout 30 ssh-keyscan -T 10 -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 
           # Настройки задаются файлом, а не флагами у каждой команды: их здесь
           # четыре — два ssh, один scp и heredoc, — и добавить флаг в три
@@ -993,8 +1036,13 @@ jobs:
           slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
           target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
 
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
-          scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
+          phase='создание каталога сборки на сервере'
+          echo "→ ${phase}"
+          timeout 60 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
+
+          phase="передача APK ($(du -h artifacts/*.apk | cut -f1 | tr '\n' ' '))"
+          echo "→ ${phase}"
+          timeout 300 scp -i ~/.ssh/deploy_key artifacts/*.apk "${SERVER_USER}@${SERVER_HOST}:${target}/"
           echo "APK лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
           # ── Ворота пользовательского канала ─────────────────────────────
@@ -1029,7 +1077,9 @@ jobs:
           # хуже отсутствующего: человек скачивает вчерашнюю сборку, находит в
           # ней починенный дефект и пишет, что мы ничего не сделали. Поэтому
           # после копирования сравниваются суммы, и расхождение валит шаг.
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" sh -s -- "${target}" "${latest}" <<'REMOTE'
+          phase='обновление постоянной ссылки на сервере'
+          echo "→ ${phase}"
+          timeout 120 ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" sh -s -- "${target}" "${latest}" <<'REMOTE'
           set -eu
           target="$1"
           latest="$2"
@@ -1116,10 +1166,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Имена считаются здесь заново ─────────────────────────────────────
+      #
+      # Через outputs job они не ездят, и это не стилистика. Значение одного
+      # из секретов репозитория — само слово «zapiski»; GitHub вычёркивает его
+      # из логов подстрокой и по тому же правилу ОТКАЗЫВАЕТСЯ пропускать через
+      # outputs job любое значение, где оно встретилось. В прогоне 188 это
+      # видно дословно:
+      #
+      #     Skip output 'apk' since it may contain secret.
+      #     Skip output 'artifact' since it may contain secret.
+      #
+      # В имени файла сборки это слово есть всегда — и по правилу СИМПАС, и до
+      # него. Пришло бы сюда не ошибкой, а ПУСТОЙ СТРОКОЙ: download-artifact с
+      # пустым `name` скачал бы все артефакты прогона, а в манифест обновления
+      # уехал бы адрес `…/updates/` — ссылка на каталог вместо пакета.
+      #
+      # Расчёт тот же самый, что в сборочном job, поэтому разъехаться им нечем.
+      - name: Посчитать имена по правилу СИМПАС
+        id: names
+        run: |
+          set -euo pipefail
+          node apps/mobile/scripts/android-release-gate.mjs names \
+            --version '${{ needs.build.outputs.version }}' --print
+
       - name: Забрать APK
         uses: actions/download-artifact@v4
         with:
-          name: ${{ needs.build.outputs.artifact }}
+          name: ${{ steps.names.outputs.bundle }}
           path: artifacts
 
       - name: Опубликовать в GitHub Release
@@ -1146,10 +1220,19 @@ jobs:
         timeout-minutes: 2
         run: |
           set -euo pipefail
+          phase='подготовка ключа'
+          trap 'echo "::error::Выкладка релиза встала на: ${phase}"' ERR
+
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -T 10 -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          phase='разрешение имени сервера в адрес'
+          timeout 20 getent hosts "${{ secrets.SERVER_HOST }}" > /dev/null \
+            || echo '::warning::имя сервера не разрешилось — если дальше повиснет, причина здесь'
+
+          phase='приём ключа хоста (ssh-keyscan)'
+          timeout 30 ssh-keyscan -T 10 -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           cat >> ~/.ssh/config <<'SSHCFG'
           Host *
             BatchMode yes
@@ -1163,12 +1246,16 @@ jobs:
         timeout-minutes: 3
         run: |
           set -euo pipefail
+          phase='подготовка'
+          trap 'echo "::error::Сборка манифеста встала на: ${phase}"' ERR
+
           version='${{ needs.build.outputs.version }}'
-          apk='${{ needs.build.outputs.apk }}'
+          apk='${{ steps.names.outputs.apk }}'
 
           # Текущий манифест с сервера: в нём может лежать релиз Windows той же
           # версии, и затирать его нельзя.
-          ssh -i ~/.ssh/deploy_key \
+          phase='чтение текущего манифеста с сервера'
+          timeout 60 ssh -i ~/.ssh/deploy_key \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
             'cat /var/www/zapiski.cmpas.ru/updates/latest.json 2>/dev/null || echo "{}"' > current.json
 
@@ -1210,19 +1297,26 @@ jobs:
         timeout-minutes: 5
         run: |
           set -euo pipefail
-          apk='${{ needs.build.outputs.apk }}'
+          phase='подготовка'
+          trap 'echo "::error::Выкладка релиза встала на: ${phase}"' ERR
+
+          apk='${{ steps.names.outputs.apk }}'
           target="${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}"
 
-          ssh -i ~/.ssh/deploy_key "${target}" 'mkdir -p /var/www/zapiski.cmpas.ru/updates'
+          phase='создание каталога обновлений'
+          timeout 60 ssh -i ~/.ssh/deploy_key "${target}" 'mkdir -p /var/www/zapiski.cmpas.ru/updates'
 
           # APK кладём под временным именем и переименовываем: клиент,
           # скачавший половину файла, получил бы битый пакет.
-          scp -i ~/.ssh/deploy_key "artifacts/${apk}" \
+          phase="передача APK ($(du -h "artifacts/${apk}" | cut -f1))"
+          timeout 300 scp -i ~/.ssh/deploy_key "artifacts/${apk}" \
             "${target}:/var/www/zapiski.cmpas.ru/updates/${apk}.part"
-          scp -i ~/.ssh/deploy_key latest.json \
+          phase='передача манифеста'
+          timeout 60 scp -i ~/.ssh/deploy_key latest.json \
             "${target}:/var/www/zapiski.cmpas.ru/updates/latest.json.part"
 
-          ssh -i ~/.ssh/deploy_key "${target}" "bash -s" <<REMOTE
+          phase='переименование на месте'
+          timeout 60 ssh -i ~/.ssh/deploy_key "${target}" "bash -s" <<REMOTE
           set -Eeuo pipefail
           cd /var/www/zapiski.cmpas.ru/updates
           mv "${apk}.part" "${apk}"

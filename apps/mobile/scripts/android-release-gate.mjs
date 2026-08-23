@@ -236,6 +236,16 @@ export function releaseTag({ product = PRODUCT, version = '' } = {}) {
   return `${product}-v${version}`;
 }
 
+/**
+ * Имя связки артефактов прогона.
+ *
+ * Отличается от имени файла осознанно: в связку едет не только APK, но и
+ * паспорт сборки, и расширение `.apk` в её имени было бы неправдой.
+ */
+export function bundleName({ product = PRODUCT, version = '', debug = false } = {}) {
+  return `${SYSTEM}-${product}-android-${version}${debug ? '-debug' : ''}`;
+}
+
 /** Постоянная ссылка не зависит от версии — на неё смотрит кнопка «Скачать». */
 export function latestPath({ product = PRODUCT } = {}) {
   return `/updates/latest/${product}.apk`;
@@ -389,6 +399,7 @@ if (isMain) {
     const at = rest.indexOf(`--${name}`);
     return at === -1 ? fallback : (rest[at + 1] ?? fallback);
   };
+  const has = (name) => rest.includes(`--${name}`);
   const emit = (line) => {
     console.log(line);
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${line}\n`);
@@ -460,14 +471,30 @@ if (isMain) {
     // Имена артефакта и тега — по правилу СИМПАС. Стережём сборкой, а не
     // памятью: записанное правило забывается, падающая сборка — нет.
     const version = flag('version', '');
-    const problems = [
-      ...checkArtifactName(flag('artifact', ''), { version, debug: flag('debug', '') === 'true' })
-        .problems,
-    ];
-    const tag = flag('tag', '');
-    if (tag !== '') problems.push(...checkReleaseTag(tag, { version }).problems);
-    if (problems.length > 0) fail(problems.join('; '));
-    console.log(`Имена по правилу СИМПАС: ${flag('artifact', '')}${tag === '' ? '' : ` / ${tag}`}`);
+
+    // `--print`: посчитать имена по версии и отдать их для GITHUB_OUTPUT.
+    //
+    // Между job имена не ездят. Значение одного из секретов репозитория —
+    // само слово «zapiski», и GitHub выбрасывает любой output, где оно
+    // встретилось: «Skip output 'apk' since it may contain secret». В имени
+    // файла оно есть всегда. Поэтому релизный job считает имена заново — тем
+    // же расчётом, что и сборочный, а не вторым списанным.
+    const debug = flag('debug', '') === 'true';
+    if (has('print')) {
+      if (version === '') fail('--print без --version: печатать нечего');
+      /* `emit` кладёт строку и в лог, и в GITHUB_OUTPUT — тот же способ,
+         каким скрипт отдаёт остальные свои значения. */
+      emit(`apk=${artifactName({ version, debug })}`);
+      emit(`bundle=${bundleName({ version, debug })}`);
+      emit(`tag=${releaseTag({ version })}`);
+      emit(`latest=${latestPath()}`);
+    } else {
+      const problems = [...checkArtifactName(flag('artifact', ''), { version, debug }).problems];
+      const tag = flag('tag', '');
+      if (tag !== '') problems.push(...checkReleaseTag(tag, { version }).problems);
+      if (problems.length > 0) fail(problems.join('; '));
+      console.log(`Имена по правилу СИМПАС: ${flag('artifact', '')}${tag === '' ? '' : ` / ${tag}`}`);
+    }
   } else if (command === 'permissions') {
     // Разрешения ГОТОВОГО пакета против списка в репозитории. Шаблон манифеста
     // и итоговый APK — разные вещи: Tauri генерирует манифест сам, и

@@ -76,7 +76,20 @@ function stepsOf(source: string): Step[] {
   return steps;
 }
 
-const usesSsh = (body: string): boolean => /^\s*(ssh|scp|ssh-keyscan)\s/m.test(body);
+/**
+ * Вызов ssh/scp в начале строки, с необязательным потолком перед ним.
+ *
+ * Префикс `timeout` в шаблоне обязателен: без него, как только команды
+ * обзаведутся потолками, `usesSsh` перестал бы их узнавать — и весь набор
+ * ниже стал бы зелёным, ПРОСТО ПЕРЕСТАВ СМОТРЕТЬ. Сторож, зеленеющий от
+ * починки, не отличим от сторожа, зеленеющего от исчезновения предмета.
+ */
+const SSH_CALL = /^\s*(?<cap>timeout(?:\s+-\S+)*\s+\d+\s+)?(?:ssh|scp|ssh-keyscan)\s/;
+
+const sshCalls = (body: string): string[] =>
+  body.split('\n').filter((line) => SSH_CALL.test(line));
+
+const usesSsh = (body: string): boolean => sshCalls(body).length > 0;
 
 const files = readdirSync(WORKFLOWS).filter((name) => name.endsWith('.yml'));
 
@@ -118,5 +131,40 @@ describe('выкладка по ssh не может висеть молча', ()
       /* У ssh-keyscan свой таймаут, и без него первым висел бы он. */
       expect(source, `в ${file} у ssh-keyscan нет -T`).toMatch(/ssh-keyscan -T \d+/);
     });
+
+    /* ── Урок прогона 188 ─────────────────────────────────────────────────
+     *
+     * Потолок у ШАГА молчание заканчивает, но не объясняет. Прогон 188:
+     * пять минут ни одной строки, затем «has timed out after 5 minutes» — и
+     * разбирать нечего. Шаг звал четыре команды подряд (getaddrinfo внутри
+     * ssh, keyscan, mkdir, scp), в логе не было ни одной из них, а
+     * `ConnectTimeout`/`ServerAlive*` разрешение имени не покрывают вовсе.
+     *
+     * Поэтому потолок нужен КАЖДОЙ команде: тогда падает она, а не шаг, и
+     * падает раньше потолка шага — то есть успевает быть названной. */
+    it(`${label}: у каждой команды ssh свой потолок, а не только у шага`, () => {
+      const naked = ssh.flatMap((step) =>
+        sshCalls(step.body)
+          .filter((line) => SSH_CALL.exec(line)?.groups?.cap === undefined)
+          .map((line) => `${step.name}: ${line.trim()}`),
+      );
+      expect(naked, `команды ssh без своего timeout в ${file}`).toEqual([]);
+    });
+
+    it(`${label}: шаг называет, на чём встал`, () => {
+      /* Потолок команды даёт код 124 и ни слова о том, ЧТО не уложилось.
+         Ловушка ERR печатает имя фазы — иначе разбор снова упрётся в
+         пустой лог. */
+      const mute = ssh.filter((step) => !/trap\s+'[^']*'\s+ERR/.test(step.body)).map((s) => s.name);
+      expect(mute, `шаги без ловушки ERR в ${file}`).toEqual([]);
+    });
   }
+
+  it('build-android.yml по-прежнему под присмотром', () => {
+    /* Явный счёт — на случай, если шаги переименуют или разбор изменится:
+       набор обязан упасть, а не потерять предмет молча. */
+    const source = readFileSync(path.join(WORKFLOWS, 'build-android.yml'), 'utf8');
+    const ssh = stepsOf(source).filter((step) => usesSsh(step.body));
+    expect(ssh.map((s) => s.name)).toHaveLength(4);
+  });
 });

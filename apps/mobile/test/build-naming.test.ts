@@ -29,15 +29,25 @@
  *
  * Записанное правило забывается, падающая сборка — нет.
  */
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   PRODUCT,
   artifactName,
+  bundleName,
   checkArtifactName,
   checkReleaseTag,
   releaseTag,
 } from '../scripts/android-release-gate.mjs';
+
+const GATE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../scripts/android-release-gate.mjs',
+);
 
 describe('имена по правилу', () => {
   it('продукт этого репозитория — zapiski', () => {
@@ -103,5 +113,48 @@ describe('сторож тега релиза', () => {
 
   it('версия в теге обязана совпадать с версией сборки', () => {
     expect(checkReleaseTag('zapiski-v0.4.1', { version: '0.4.2' }).ok).toBe(false);
+  });
+});
+
+/**
+ * Имена считаются ПО ВЕРСИИ, а не передаются между job.
+ *
+ * Прогон 188 показал, почему это важно: значение одного из секретов
+ * репозитория — само слово «zapiski», и GitHub отказывается пропускать через
+ * outputs job любое значение, где оно встретилось («Skip output 'apk' since
+ * it may contain secret»). Имя файла содержит его всегда. Значит, единственный
+ * способ донести имя до релизного job — посчитать его там заново тем же
+ * скриптом. Разъехаться два расчёта не могут: расчёт один.
+ */
+describe('имена печатаются для GITHUB_OUTPUT', () => {
+  const print = (args: string[]): string =>
+    execFileSync('node', [GATE, 'names', ...args], { encoding: 'utf8' });
+
+  it('имя связки артефактов отличается от имени файла', () => {
+    /* В связку кладётся не только APK, но и паспорт сборки, поэтому имя у неё
+       своё — и `.apk` в нём не к месту. */
+    expect(bundleName({ version: '0.1.0' })).toBe('simpas-zapiski-android-0.1.0');
+    expect(bundleName({ version: '0.1.0', debug: true })).toBe('simpas-zapiski-android-0.1.0-debug');
+  });
+
+  it('печатает пары ключ=значение, готовые для GITHUB_OUTPUT', () => {
+    const out = print(['--version', '0.1.0', '--print']);
+    expect(out).toContain('apk=simpas-zapiski-0.1.0.apk');
+    expect(out).toContain('bundle=simpas-zapiski-android-0.1.0');
+    expect(out).toContain('tag=zapiski-v0.1.0');
+    /* Ни одной посторонней строки: вывод уходит в файл, а не человеку. */
+    for (const line of out.trim().split('\n')) expect(line).toMatch(/^[a-z]+=\S+$/);
+  });
+
+  it('без версии печатать нечего — падает, а не печатает пустое', () => {
+    /* Пустая версия дала бы `apk=simpas-zapiski-.apk` — имя, которое выглядит
+       как имя. Ровно так и выглядит вычеркнутый output. */
+    expect(() => print(['--print'])).toThrow();
+  });
+
+  it('отладочная связка помечена и в печати', () => {
+    const out = print(['--version', '0.1.0', '--debug', 'true', '--print']);
+    expect(out).toContain('apk=simpas-zapiski-0.1.0-debug.apk');
+    expect(out).toContain('bundle=simpas-zapiski-android-0.1.0-debug');
   });
 });
