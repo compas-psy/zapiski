@@ -1,6 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, createUser, noDatabase, type Harness } from './helpers/app.ts';
+// Импорт напрямую из исходников пакета, а не из package.json-зависимости:
+// сервер намеренно не зависит от @zapiski/core в рантайме (см. шапку
+// analytics-schema.ts) — это только тестовый мост, который тянет НАСТОЯЩИЙ
+// клиентский конструктор конверта, а не переписывает его вручную литералом.
+import { buildAnalyticsEvent } from '../../packages/core/src/analytics/schema.ts';
 
 /**
  * `POST /api/v1/analytics/events` (ТЗ §6, O-260817-05).
@@ -90,7 +95,16 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         method: 'POST',
         url: '/api/v1/analytics/events',
         headers: user.authHeader,
-        payload: { events: [{ event: 'note_saved', ts: new Date().toISOString(), props: { length_bucket: 's', encrypted: false } }] },
+        payload: {
+          events: [
+            {
+              event: 'note_saved',
+              ts: new Date().toISOString(),
+              props: { length_bucket: 's', encrypted: false },
+              schemaVersion: 1,
+            },
+          ],
+        },
       });
       expect(response.statusCode).toBe(200);
       expect(await eventsFor(harness, user.userId)).toHaveLength(1);
@@ -103,7 +117,16 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         method: 'POST',
         url: '/api/v1/analytics/events',
         headers: user.authHeader,
-        payload: { events: [{ event: 'note_saved', ts: new Date().toISOString(), props: { length_bucket: 's', encrypted: false } }] },
+        payload: {
+          events: [
+            {
+              event: 'note_saved',
+              ts: new Date().toISOString(),
+              props: { length_bucket: 's', encrypted: false },
+              schemaVersion: 1,
+            },
+          ],
+        },
       });
 
       await harness.app.inject({
@@ -117,7 +140,16 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         method: 'POST',
         url: '/api/v1/analytics/events',
         headers: user.authHeader,
-        payload: { events: [{ event: 'note_saved', ts: new Date().toISOString(), props: { length_bucket: 's', encrypted: false } }] },
+        payload: {
+          events: [
+            {
+              event: 'note_saved',
+              ts: new Date().toISOString(),
+              props: { length_bucket: 's', encrypted: false },
+              schemaVersion: 1,
+            },
+          ],
+        },
       });
       expect(response.statusCode).toBe(404);
       expect(await eventsFor(harness, user.userId)).toHaveLength(1); // только первое, до отзыва
@@ -134,10 +166,15 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         headers: user.authHeader,
         payload: {
           events: [
-            { event: 'note_saved', ts, props: { length_bucket: 'm', encrypted: true } },
-            { event: 'note_searched', ts, props: { query_length_bucket: 'xs', results_count: 3 } },
-            { event: 'sync_completed', ts, props: { pushed: 2, pulled: 1, conflicts: 0 } },
-            { event: 'export_requested', ts, props: { format: 'zip', notes_count: 12 } },
+            { event: 'note_saved', ts, props: { length_bucket: 'm', encrypted: true }, schemaVersion: 1 },
+            {
+              event: 'note_searched',
+              ts,
+              props: { query_length_bucket: 'xs', results_count: 3 },
+              schemaVersion: 1,
+            },
+            { event: 'sync_completed', ts, props: { pushed: 2, pulled: 1, conflicts: 0 }, schemaVersion: 1 },
+            { event: 'export_requested', ts, props: { format: 'zip', notes_count: 12 }, schemaVersion: 1 },
           ],
         },
       });
@@ -151,6 +188,32 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
         'note_searched',
         'sync_completed',
       ]);
+    });
+
+    it('конверт, собранный настоящим клиентским buildAnalyticsEvent, а не литералом руками, — принят (Д-4)', async () => {
+      // Ловит именно то, что ручной литерал в тестах выше поймать не может:
+      // buildAnalyticsEvent (packages/core/src/analytics/schema.ts:58,90)
+      // всегда кладёт в конверт поле schemaVersion — сервер обязан его знать,
+      // а не молча валить 400 на каждое настоящее событие.
+      const user = await createUser(harness);
+      await optIn(harness, user.userId);
+
+      const event = buildAnalyticsEvent('sync_completed', { pushed: 3, pulled: 1, conflicts: 0 });
+      expect(event).not.toBeNull();
+      expect(event).toHaveProperty('schemaVersion');
+
+      const response = await harness.app.inject({
+        method: 'POST',
+        url: '/api/v1/analytics/events',
+        headers: user.authHeader,
+        payload: { events: [event] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ accepted: 1 });
+      const stored = await eventsFor(harness, user.userId);
+      expect(stored).toHaveLength(1);
+      expect(stored[0]?.['event']).toBe('sync_completed');
     });
 
     it('неизвестное имя события — весь батч отклонён, ничего не сохранено', async () => {

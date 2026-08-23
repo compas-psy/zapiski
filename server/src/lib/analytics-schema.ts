@@ -15,11 +15,26 @@ import { z } from 'zod';
 const lengthBucket = z.enum(['xs', 's', 'm', 'l', 'xl']);
 const nonNegativeInt = z.number().int().nonnegative();
 
+/**
+ * Версия реестра, в котором клиент собрал событие (Д-4, `12_ANALYTICS.md §3`
+ * — поле `schema_version` единого конверта контура).
+ *
+ * `buildAnalyticsEvent` (`packages/core/src/analytics/schema.ts:58,90`)
+ * кладёт это поле в КАЖДЫЙ конверт без исключения — оно не опциональное на
+ * клиенте, и здесь не может быть опциональным тоже. До этой правки схема его
+ * не знала: `.strict()` видел лишнее поле и валил весь батч `400`, поэтому
+ * ни одно настоящее событие ЗАПИСОК не проходило приёмник (см. сообщение
+ * коммита). Значение не сверяется с конкретной цифрой реестра — сервер не
+ * обязан знать номер версии клиента заранее, только то, что версия названа.
+ */
+const schemaVersion = z.number().int().positive();
+
 const noteSaved = z
   .object({
     event: z.literal('note_saved'),
     ts: z.string().datetime(),
     props: z.object({ length_bucket: lengthBucket, encrypted: z.boolean() }).strict(),
+    schemaVersion,
   })
   .strict();
 
@@ -28,6 +43,7 @@ const noteSearched = z
     event: z.literal('note_searched'),
     ts: z.string().datetime(),
     props: z.object({ query_length_bucket: lengthBucket, results_count: nonNegativeInt }).strict(),
+    schemaVersion,
   })
   .strict();
 
@@ -38,6 +54,7 @@ const syncCompleted = z
     props: z
       .object({ pushed: nonNegativeInt, pulled: nonNegativeInt, conflicts: nonNegativeInt })
       .strict(),
+    schemaVersion,
   })
   .strict();
 
@@ -48,6 +65,7 @@ const exportRequested = z
     props: z
       .object({ format: z.enum(['md', 'html', 'docx', 'pdf', 'zip']), notes_count: nonNegativeInt })
       .strict(),
+    schemaVersion,
   })
   .strict();
 
