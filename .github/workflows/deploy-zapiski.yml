@@ -1013,6 +1013,19 @@ jobs:
                FROM analytics_events" \
             < /dev/null || echo "СЧЁТ СОБЫТИЙ НЕ ПОЛУЧЕН — причину смотри в строке ERROR выше (это отказ запроса, а не утверждение, что событий нет)"
 
+          echo "── какие события и сколько из них дошло ──"
+          # Имена событий структурны: они из реестра analytics/schema/events.yaml
+          # и содержания заметок не несут (правило 2, charter/12_ANALYTICS.md §1).
+          # Без этой разбивки «переслано N» не отличает живой путь от
+          # согласий, вставленных миграцией: consent_updated мог бы дать те же
+          # цифры при нуле настоящих действий человека.
+          dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+            "SELECT event || ': ' || count(*)
+                    || ' (переслано ' || count(practice_forwarded_at) || ')'
+               FROM analytics_events
+              GROUP BY event ORDER BY count(*) DESC LIMIT 15" \
+            < /dev/null || echo "РАЗБИВКА НЕ ПОЛУЧЕНА — причину смотри в строке ERROR выше"
+
           echo "── причины отказов ПРАКТИКИ ──"
           dc exec -T postgres psql -U zapiski -d zapiski -At -c \
             "SELECT practice_reject_reason || ': ' || count(*)
