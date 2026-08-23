@@ -63,7 +63,11 @@ const END = '<!-- END zapiski overlay -->';
  */
 const PERMISSIONS = parsePermissionList(
   readFileSync(join(SCRIPT_DIR, '..', 'android-permissions.txt'), 'utf8'),
-);
+  // В манифест кладём только системные. Разрешения из собственного
+  // пространства имён (`ru.cmpas.zapiski.*`) объявляет библиотека, которая их
+  // и завела; в списке они есть, потому что присутствуют в ПАКЕТЕ, но писать
+  // их руками — значит объявить одно и то же дважды и уронить манифест-мержер.
+).filter((entry) => entry.name.startsWith('android.permission.'));
 
 /**
  * Возможности устройства, которые нам полезны, но не обязательны.

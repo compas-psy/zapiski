@@ -282,7 +282,12 @@ export function parsePermissionList(text) {
     }
 
     const [name, ...rest] = line.split(/\s+/);
-    if (name === undefined || !name.startsWith('android.permission.')) {
+    // `android.permission.*` — системные; `<applicationId>.*` — те, что
+    // приложение объявляет САМО (AndroidX заводит такие для своих внутренних
+    // широковещательных приёмников). У человека они ничего не спрашивают и в
+    // списке разрешений на телефоне не видны, но в пакете присутствуют — и
+    // значит обязаны быть в списке, иначе сторож ловил бы их каждую сборку.
+    if (name === undefined || !/^[a-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(name)) {
       throw new Error(`android-permissions.txt: непонятная строка «${line}»`);
     }
     const max = rest

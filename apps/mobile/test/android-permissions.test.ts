@@ -51,13 +51,29 @@ describe('список разрешений в репозитории', () => {
     expect(names).not.toContain('android.permission.REQUEST_INSTALL_PACKAGES');
   });
 
-  it('в нём ровно те четыре, для которых нашлось живое применение', () => {
-    expect([...names].sort()).toEqual([
+  it('запрошенных у человека — ровно четыре, для которых нашлось живое применение', () => {
+    const asked = names.filter((name) => name.startsWith('android.permission.'));
+    expect([...asked].sort()).toEqual([
       'android.permission.INTERNET',
       'android.permission.USE_BIOMETRIC',
       'android.permission.USE_FINGERPRINT',
       'android.permission.VIBRATE',
     ]);
+  });
+
+  /*
+   * Пятое разрешение — не наше: его объявляет AndroidX Core для своих
+   * неэкспортируемых приёмников, уровень signature, у человека оно ничего не
+   * спрашивает. В списке оно потому, что есть в ПАКЕТЕ: нашла его сверка с
+   * готовым APK на первом же прогоне, в шаблоне манифеста его не видно.
+   */
+  it('служебное разрешение AndroidX объявлено явно, а не молчаливо разрешено', () => {
+    expect(names).toContain('ru.cmpas.zapiski.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION');
+  });
+
+  it('оно не из пространства android.permission — это не запрос к человеку', () => {
+    const own = names.filter((name) => !name.startsWith('android.permission.'));
+    expect(own.every((name) => name.startsWith('ru.cmpas.zapiski.'))).toBe(true);
   });
 
   it('USE_FINGERPRINT ограничен девятым Android — на новых он не нужен', () => {
@@ -111,7 +127,10 @@ describe('манифест после патча описывает ровно �
     const inManifest = [...patched.matchAll(/<uses-permission android:name="([^"]+)"/g)].map(
       (match) => match[1],
     );
-    expect([...new Set(inManifest)].sort()).toEqual([...names].sort());
+    // Служебное разрешение AndroidX в шаблон не пишем: его дописывает сама
+    // библиотека при сборке. Сверяем то, что кладём мы.
+    const ours = names.filter((name) => name.startsWith('android.permission.'));
+    expect([...new Set(inManifest)].sort()).toEqual([...ours].sort());
   });
 
   it('maxSdkVersion доехал до манифеста, а не потерялся при переносе в файл', () => {
