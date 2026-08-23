@@ -5,6 +5,7 @@ import { errors } from '../lib/errors.ts';
 import { analyticsBatchBody } from '../lib/analytics-schema.ts';
 import { authOf } from '../plugins/auth.ts';
 import { findUserById } from '../services/accounts.ts';
+import type { PracticeEnvelope } from '../services/practiceBridge.ts';
 
 /**
  * Приём событий продуктовой аналитики (ТЗ §6, O-260817-05).
@@ -21,6 +22,14 @@ import { findUserById } from '../services/accounts.ts';
  *     пачка, отправленная повторно после ретрая или потерянного ответа, не
  *     задваивает счётчики. `event_id` стабилен на клиенте (генерируется при
  *     постановке в очередь, не при отправке), уникальный индекс — на приёме.
+ *
+ * Пересылка в ПРАКТИКУ (C4, `charter/12_ANALYTICS.md §3`) — ПОСЛЕ того, как
+ * событие уже сохранено у ЗАПИСОК, и НИКОГДА не влияет на ответ этому
+ * маршруту: приём ЗАПИСОК не зависит от доступности ПРАКТИКИ. Пересылается
+ * только то, что реально ВСТАВЛЕНО (`RETURNING id` — пусто на конфликте по
+ * `event_id`): повторно отправленный дубликат уже был переслан (или ждёт
+ * sweep'а) при первой вставке, пересылать его снова значило бы задваивать
+ * строку на стороне ПРАКТИКИ, у которой своей идемпотентности пока нет.
  */
 export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<void> {
   const ctx: AppContext = app.ctx;
@@ -36,10 +45,34 @@ export async function registerAnalyticsRoutes(app: FastifyInstance): Promise<voi
     if (!parsed.success) throw errors.badRequest('bad_analytics_event');
 
     for (const event of parsed.data.events) {
-      await ctx.db.query(
-        'INSERT INTO analytics_events (user_id, event, props, client_ts, event_id) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (event_id) DO NOTHING',
-        [auth.userId, event.event, JSON.stringify(event.props), event.ts, event.eventId],
+      const inserted = await ctx.db.query<{ id: number }>(
+        `INSERT INTO analytics_events (user_id, event, props, client_ts, event_id, schema_version)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (event_id) DO NOTHING
+         RETURNING id`,
+        [auth.userId, event.event, JSON.stringify(event.props), event.ts, event.eventId, event.schemaVersion],
       );
+      const row = inserted.rows[0];
+      // Пересылка не должна ломать приём (ТЗ этого узла): отказ моста ловится
+      // здесь же и не превращается в ошибку ответа. Не дошло — sweep
+      // (retryPracticeForwarding) подхватит по practice_forwarded_at IS NULL.
+      if (row !== undefined && ctx.practiceBridge !== null) {
+        const envelope: PracticeEnvelope = {
+          event: event.event,
+          ts: event.ts,
+          product: 'zapiski',
+          account_id: auth.userId,
+          device_id: null,
+          props: event.props,
+          schema_version: event.schemaVersion,
+        };
+        const forwarded = await ctx.practiceBridge.forward(envelope).catch(() => false);
+        if (forwarded) {
+          await ctx.db
+            .query('UPDATE analytics_events SET practice_forwarded_at = now() WHERE id = $1', [row.id])
+            .catch(() => undefined);
+        }
+      }
     }
 
     return reply.send({ accepted: parsed.data.events.length });

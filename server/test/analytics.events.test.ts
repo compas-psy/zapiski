@@ -6,6 +6,7 @@ import { createHarness, createUser, noDatabase, type Harness } from './helpers/a
 // analytics-schema.ts) — это только тестовый мост, который тянет НАСТОЯЩИЙ
 // клиентский конструктор конверта, а не переписывает его вручную литералом.
 import { buildAnalyticsEvent } from '../../packages/core/src/analytics/schema.ts';
+import { PracticeBridge, type PracticeEnvelope } from '../src/services/practiceBridge.ts';
 
 /**
  * `POST /api/v1/analytics/events` (ТЗ §6, O-260817-05).
@@ -420,5 +421,144 @@ describe.skipIf(noDatabase())('POST /api/v1/analytics/events', () => {
       expect(response.statusCode).toBe(400);
       expect(await eventsFor(harness, user.userId)).toHaveLength(0);
     });
+  });
+});
+
+/**
+ * Мост в приёмник ПРАКТИКИ (C4, `charter/12_ANALYTICS.md §3`).
+ *
+ * Приём ЗАПИСОК уже проверен выше независимо от моста (харнесс по умолчанию
+ * создаёт `practiceBridge: null`, как в проде без PRACTICE_INGEST_URL/SECRET
+ * — см. helpers/app.ts). Здесь — только то, что добавляет мост: конверт,
+ * который уходит наружу, и что его отказ не трогает приём.
+ */
+describe.skipIf(noDatabase())('POST /api/v1/analytics/events — мост в ПРАКТИКУ (C4)', () => {
+  let harness: Harness;
+  beforeAll(async () => {
+    harness = await createHarness({ env: { ANALYTICS_ENABLED: '1' } });
+  });
+  afterAll(async () => harness.close());
+
+  async function optIn(userId: string): Promise<void> {
+    await harness.db.query('UPDATE users SET analytics_opt_in = true WHERE id = $1', [userId]);
+  }
+
+  async function eventsFor(userId: string): Promise<Record<string, unknown>[]> {
+    const result = await harness.db.query(
+      'SELECT event, props FROM analytics_events WHERE user_id = $1 ORDER BY id',
+      [userId],
+    );
+    return result.rows as Record<string, unknown>[];
+  }
+
+  async function forwardedAt(userId: string): Promise<(Date | null)[]> {
+    const result = await harness.db.query<{ practice_forwarded_at: Date | null }>(
+      'SELECT practice_forwarded_at FROM analytics_events WHERE user_id = $1 ORDER BY id',
+      [userId],
+    );
+    return result.rows.map((r) => r.practice_forwarded_at);
+  }
+
+  it('принятое событие уходит в /ingest ПРАКТИКИ в её конверте, с правильными product и schema_version', async () => {
+    const captured: PracticeEnvelope[] = [];
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async (_url, init) => {
+      captured.push(JSON.parse(String(init?.body)) as PracticeEnvelope);
+      return new Response('{}', { status: 200 });
+    });
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const event = buildAnalyticsEvent('note_saved', { length_bucket: 's', encrypted: true })!;
+
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]?.product).toBe('zapiski');
+    expect(captured[0]?.schema_version).toBe(event.schemaVersion);
+    expect(captured[0]?.event).toBe('note_saved');
+    expect(captured[0]?.account_id).toBe(user.userId);
+    expect(captured[0]?.props).toEqual(event.props);
+    // Не батч — /ingest ПРАКТИКИ сегодня принимает одно событие за раз.
+    expect(captured[0]).not.toHaveProperty('events');
+
+    expect((await forwardedAt(user.userId))[0]).not.toBeNull();
+    harness.ctx.practiceBridge = null;
+  });
+
+  it('ПРАКТИКА недоступна — событие всё равно сохранено у ЗАПИСОК, приём не ломается', async () => {
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async () => {
+      throw new Error('ECONNREFUSED');
+    });
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const event = buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!;
+
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] },
+    });
+
+    // Приём отвечает клиенту зависимо только от СВОЕЙ вставки, не от ПРАКТИКИ.
+    expect(response.statusCode).toBe(200);
+    const stored = await eventsFor(user.userId);
+    expect(stored).toHaveLength(1);
+    expect((await forwardedAt(user.userId))[0]).toBeNull(); // не дошло — ждёт sweep'а
+    harness.ctx.practiceBridge = null;
+  });
+
+  it('повторная отправка той же (уже принятой) пачки не пересылает дубликат в ПРАКТИКУ второй раз', async () => {
+    let calls = 0;
+    harness.ctx.practiceBridge = new PracticeBridge('https://practice.test/api/ingest', 'shh', async () => {
+      calls += 1;
+      return new Response('{}', { status: 200 });
+    });
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const event = buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!;
+
+    await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] },
+    });
+    await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] }, // тот же eventId — ON CONFLICT DO NOTHING на приёме
+    });
+
+    expect(calls).toBe(1); // не 2 — иначе у ПРАКТИКИ (своей идемпотентности не имеющей) была бы задвоенная строка
+    expect(await eventsFor(user.userId)).toHaveLength(1);
+    harness.ctx.practiceBridge = null;
+  });
+
+  it('мост выключен (PRACTICE_INGEST_URL/SECRET не заданы) — приём работает как раньше, пересылки нет', async () => {
+    expect(harness.ctx.practiceBridge).toBeNull(); // харнесс по умолчанию — как прод без настройки
+
+    const user = await createUser(harness);
+    await optIn(user.userId);
+    const event = buildAnalyticsEvent('sync_completed', { pushed: 1, pulled: 0, conflicts: 0 })!;
+
+    const response = await harness.app.inject({
+      method: 'POST',
+      url: '/api/v1/analytics/events',
+      headers: user.authHeader,
+      payload: { events: [event] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(await eventsFor(user.userId)).toHaveLength(1);
   });
 });

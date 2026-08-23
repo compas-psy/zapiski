@@ -12,6 +12,7 @@ import { signJwt } from '../../src/lib/jwt.ts';
 import { BlobStore } from '../../src/services/blobStore.ts';
 import { LiveBus } from '../../src/services/liveBus.ts';
 import { MemoryMailer } from '../../src/services/mailer.ts';
+import { createPracticeBridge } from '../../src/services/practiceBridge.ts';
 import {
   createSession,
   ensureDevice,
@@ -80,6 +81,11 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     mailer,
     live: new LiveBus(),
     yandex: null,
+    // Как в проде: env по умолчанию не задаёт PRACTICE_INGEST_URL/SECRET, и
+    // мост выключен. Тесты моста (C4) подменяют `harness.ctx.practiceBridge`
+    // напрямую (тот же приём, что для mailer/now) — ctx общий объект,
+    // маршрут читает поле на каждый запрос, а не один раз при регистрации.
+    practiceBridge: createPracticeBridge(env),
     retention: {
       trialDays: env.VERSION_RETENTION_TRIAL_DAYS,
       paidDays: env.VERSION_RETENTION_PAID_DAYS,

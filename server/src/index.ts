@@ -8,6 +8,7 @@ import { BlobStore } from './services/blobStore.ts';
 import { LiveBus } from './services/liveBus.ts';
 import { SmtpMailer } from './services/mailer.ts';
 import { YandexOAuth } from './services/yandex.ts';
+import { createPracticeBridge, retryPracticeForwarding } from './services/practiceBridge.ts';
 import { pruneExpiredVersions } from './routes/versions.ts';
 
 /**
@@ -51,6 +52,7 @@ async function main(): Promise<void> {
               `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}/api/v1/auth/yandex/callback`,
           })
         : null,
+    practiceBridge: createPracticeBridge(env),
     retention: {
       trialDays: env.VERSION_RETENTION_TRIAL_DAYS,
       paidDays: env.VERSION_RETENTION_PAID_DAYS,
@@ -63,15 +65,27 @@ async function main(): Promise<void> {
   if (ctx.yandex === null) {
     app.log.warn('YANDEX_CLIENT_ID/SECRET не заданы — вход через Яндекс ID выключен');
   }
+  // Честно и явно, а не молча (C4): без обеих переменных мост в ПРАКТИКУ
+  // выключен, событие остаётся только у ЗАПИСОК.
+  if (ctx.practiceBridge === null) {
+    app.log.warn('PRACTICE_INGEST_URL/SECRET не заданы — мост в приёмник ПРАКТИКИ выключен');
+  }
 
-  // Уборка: просроченные версии (ТЗ §4.2) и отработавшие magic-токены.
+  // Уборка: просроченные версии (ТЗ §4.2), отработавшие magic-токены и
+  // повтор пересылки в ПРАКТИКУ для событий, не дошедших с первой попытки
+  // (C4) — тот же цикл, не отдельный таймер: пересылка не настолько
+  // срочная, чтобы заводить под неё собственную инфраструктуру.
   const sweeper = setInterval(() => {
     void (async () => {
       try {
         const versions = await pruneExpiredVersions(ctx, ctx.now());
         const tokens = await pruneMagicTokens(db, ctx.now());
-        if (versions > 0 || tokens > 0) {
-          app.log.info({ event: 'sweep', versions, tokens }, 'уборка завершена');
+        const bridge = await retryPracticeForwarding(ctx);
+        if (versions > 0 || tokens > 0 || bridge.attempted > 0) {
+          app.log.info(
+            { event: 'sweep', versions, tokens, practiceForwarded: bridge.forwarded, practiceAttempted: bridge.attempted },
+            'уборка завершена',
+          );
         }
       } catch (error) {
         app.log.error({ err: error, event: 'sweep_failed' }, 'уборка не прошла');
