@@ -26,7 +26,7 @@ name: Сборка Windows
 #
 # ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ ДНЕВНИК И ВЕБ ЗАПИСОК:
 #   * job `release` пишет ровно в /var/www/zapiski.cmpas.ru/updates/ и ничего
-#     не удаляет: scp кладёт файлы, `rsync --delete` здесь не используется;
+#     не удаляет: rsync кладёт файлы, `--delete` здесь не используется;
 #   * nginx не трогается вообще — конфиг ставится провижном;
 #   * общая группа concurrency `zapiski-server` с deploy/provision: сервер в
 #     каждый момент времени трогает кто-то один.
@@ -658,7 +658,12 @@ jobs:
           target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
 
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
-          scp -i ~/.ssh/deploy_key release/* "${SERVER_USER}@${SERVER_HOST}:${target}/"
+          # `rsync`, а не `scp`: с OpenSSH 9.0 scp ходит через подсистему
+          # SFTP, а она на этом сервере не отвечает — передача встаёт молча до
+          # потолка шага. Проверено на сборке Android (прогоны 188 и 189) и на
+          # деплое веба, который тем же ключом на тот же сервер ходит rsync и
+          # не падал ни разу.
+          rsync -a --partial -e "ssh -i ~/.ssh/deploy_key" release/ "${SERVER_USER}@${SERVER_HOST}:${target}/"
           echo "Установщик ${VERSION} лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
           # Постоянный адрес свежего установщика — по той же причине, что и у
@@ -807,10 +812,10 @@ jobs:
           # новый latest.json раньше самого .exe, получил бы 404.
           for file in release/*.exe release/*.exe.sig release/*.msi; do
             [ -e "${file}" ] || continue
-            scp -i ~/.ssh/deploy_key "${file}" \
+            rsync -a --partial -e "ssh -i ~/.ssh/deploy_key" "${file}" \
               "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
           done
-          scp -i ~/.ssh/deploy_key release/latest.json \
+          rsync -a -e "ssh -i ~/.ssh/deploy_key" release/latest.json \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
 
           echo "Обновление выложено в ${target}."

@@ -46,6 +46,12 @@ on:
       - 'docs/**'
       - '**/*.md'
       - '.github/workflows/provision-zapiski.yml'
+      # Сборки приложений сервера не касаются. Без этих строк правка workflow
+      # Android поднимала деплой веба — и так каждую итерацию.
+      - 'apps/mobile/**'
+      - '.github/workflows/build-android.yml'
+      - '.github/workflows/build-windows.yml'
+      - '.github/workflows/build-macos.yml'
   pull_request:
     branches:
       - main
@@ -54,6 +60,12 @@ on:
       - 'docs/**'
       - '**/*.md'
       - '.github/workflows/provision-zapiski.yml'
+      # Сборки приложений сервера не касаются. Без этих строк правка workflow
+      # Android поднимала деплой веба — и так каждую итерацию.
+      - 'apps/mobile/**'
+      - '.github/workflows/build-android.yml'
+      - '.github/workflows/build-windows.yml'
+      - '.github/workflows/build-macos.yml'
   workflow_dispatch:
 
 permissions:
@@ -1082,7 +1094,11 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p deploy-diagnostics
-          scp -i ~/.ssh/deploy_key \
+          # rsync, а не scp: scp с OpenSSH 9.0 ходит через подсистему SFTP,
+          # которой на этом сервере нет, и встаёт молча. Обиднее всего было бы
+          # здесь: шаг работает только при провале деплоя, то есть именно
+          # тогда, когда лог и нужен.
+          rsync -az -e "ssh -i ~/.ssh/deploy_key" \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/zapiski-deploy.log" \
             deploy-diagnostics/zapiski-deploy.log
 

@@ -91,7 +91,9 @@ jobs:
       - name: Отправить конфиг vhost на сервер
         run: |
           set -euo pipefail
-          scp -i ~/.ssh/deploy_key \
+          # rsync, а не scp: scp с OpenSSH 9.0 ходит через подсистему SFTP,
+          # которой на этом сервере нет, и встаёт молча до потолка шага.
+          rsync -az -e "ssh -i ~/.ssh/deploy_key" \
             deploy/zapiski.cmpas.ru.nginx.conf \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/tmp/zapiski.cmpas.ru.nginx.conf"
 
