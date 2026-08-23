@@ -269,10 +269,20 @@ HTML приходит **от клиента** (ключей у сервера н
 ### Аналитика
 
 `POST /api/v1/analytics/events` (ТЗ §6, O-260817-05) — `{ events: AnalyticsEvent[] }`,
-до 200 штук за раз. `AnalyticsEvent` — `{ event, ts, props }`, `event` и состав
-`props` фиксированы реестром `analytics/schema/events.yaml` (`note_saved`,
-`note_searched`, `sync_completed`, `export_requested`); лишнее поле в `props`
-роняет батч целиком `400 bad_analytics_event`, а не отбрасывается молча.
+до 200 штук за раз (`MAX_EVENTS_PER_REQUEST`; клиент режет офлайн-очередь
+этим же числом, `AnalyticsQueue.take`/`ANALYTICS_MAX_BATCH_SIZE` — одна
+константа на клиенте, C2). `AnalyticsEvent` — `{ event, ts, props,
+schemaVersion, eventId }`; `event` и состав `props` фиксированы реестром
+`analytics/schema/events.yaml` (`note_saved`, `note_searched`,
+`sync_completed`, `export_requested`); лишнее поле — включая устаревший
+конверт без `schemaVersion`/`eventId` — роняет батч целиком
+`400 bad_analytics_event`, а не отбрасывается молча.
+
+`eventId` — ключ идемпотентности (C3): генерируется клиентом один раз, при
+постановке в очередь, не при отправке. Уникальный индекс на приёме и
+`ON CONFLICT (event_id) DO NOTHING` делают повтор пачки (обычное дело для
+офлайн-очереди — ретрай, потерянный ответ) бесплатным дублем, а не
+задвоенной строкой.
 
 Два независимых условия, оба обязательны: флаг `ANALYTICS_ENABLED` (по
 умолчанию `false`) и `users.analytics_opt_in` конкретного человека
@@ -280,6 +290,22 @@ HTML приходит **от клиента** (ключей у сервера н
 согласия закрывает приёмник немедленно, а не только останавливает клиент.
 Любое из двух отсутствующих условий — `404 analytics_disabled`, без разницы,
 какое именно (снаружи это не должно быть различимо). Успех — `200 { accepted }`.
+
+**Мост в ПРАКТИКУ (C4).** Каждое реально вставленное (не дубликат) событие
+пересылается в общий контур — `POST /ingest` ПРАКТИКИ, конверт
+`{event, ts, product: 'zapiski', account_id, device_id: null, props,
+schema_version}` (`charter/12_ANALYTICS.md §3`,
+`server/src/services/practiceBridge.ts`). Включён только если заданы ОБА
+`PRACTICE_INGEST_URL` и `PRACTICE_INGEST_SECRET` — иначе `null`, и лог при
+старте говорит об этом явно. Отказ моста не влияет на ответ этого маршрута:
+событие остаётся у ЗАПИСОК, недошедшее подхватывает часовой sweep
+(`retryPracticeForwarding`) по `practice_forwarded_at IS NULL`. **Важно:**
+реальный `/ingest` ПРАКТИКИ на 23.08.2026 принимает одно событие за запрос
+(не батч), не проверяет заголовок секрета и отвергает `account_id`, которого
+нет в её собственной таблице `User` — у ЗАПИСОК свой отдельный аккаунт
+(`B-260813-14`), так что события сегодня почти всегда попадают в
+`events_rejected` ПРАКТИКИ, а не в `events`. Мост от этого не бесполезен —
+он готов к моменту, когда появится общая идентичность.
 
 ### Здоровье
 
@@ -327,13 +353,13 @@ HTML приходит **от клиента** (ключей у сервера н
 | `billing_events` | `(provider, event_id)` уникально — идемпотентность вебхуков |
 | `published_pages` | `slug`, `storage_key`, `content_hash`, `size`, `revoked_at` |
 
-### `0005_analytics_events.sql`
+### `0005_analytics_events.sql`, `0009_analytics_event_id.sql`, `0010_analytics_practice_bridge.sql`
 
 | Таблица | Ключевые поля |
 | --- | --- |
-| `analytics_events` | `user_id`, `event`, `props` (jsonb — только то, что прошло `.strict()`-схему маршрута), `client_ts`, `received_at` |
+| `analytics_events` | `user_id`, `event`, `props` (jsonb — только то, что прошло `.strict()`-схему маршрута), `client_ts`, `received_at`, `event_id` (uuid, **уникален** — идемпотентность приёма, C3), `schema_version`, `practice_forwarded_at` (null — ещё не переслано в ПРАКТИКУ или все попытки отказали, C4) |
 
-Только добавляющая миграция — ничего из `0001`–`0003` не меняет. Ретенция
+Только добавляющие миграции — ничего из `0001`–`0003` не меняют. Ретенция
 сырых событий (`charter/12_ANALYTICS.md §4`: 180 дней) фоновой уборкой пока
 не реализована — решение вне рамок O-260817-05.
 
@@ -383,10 +409,13 @@ HTML приходит **от клиента** (ключей у сервера н
 | `UPDATES_MANIFEST_PATH` | — | Не задан → фид обновлений отвечает `204` |
 | `PUBLISH_ENABLED` | `true` | |
 | `ANALYTICS_ENABLED` | `false` | ТЗ §6: аналитика opt-in |
+| `PRACTICE_INGEST_URL` / `PRACTICE_INGEST_SECRET` | — | Не заданы вместе → мост в `POST /ingest` ПРАКТИКИ выключен (C4), лог при старте говорит об этом явно |
 | `CORS_ORIGINS` | — | Пусто → CORS выключен |
 | `TRUST_PROXY` | `true` | Сервер за nginx |
 
-Фоновая уборка раз в час: просроченные версии и отработавшие magic-токены.
+Фоновая уборка раз в час: просроченные версии, отработавшие magic-токены и
+повтор пересылки в ПРАКТИКУ для событий аналитики, не дошедших с первой
+попытки (`practice_forwarded_at IS NULL`, C4).
 
 ## Заметка о типах протокола
 
