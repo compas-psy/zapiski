@@ -2,30 +2,41 @@
  * `UpdaterProvider` для Android.
  *
  * Встроенный апдейтер Tauri Android не поддерживает — там нет ни установщика,
- * ни проверки подписи пакета движком. Поэтому обновление собрано из штатных
- * средств платформы:
+ * ни проверки подписи пакета движком. Осталась ровно одна половина:
  *
  *   1. `updater_check` спрашивает фид
  *      `https://zapiski.cmpas.ru/api/v1/updates/android/{{current_version}}`.
  *      Сервер отвечает `204`, если новее нечего ставить (server/src/routes/
  *      updates.ts), и манифестом Tauri-формата, если есть.
- *   2. `updater_download_install` качает APK во внутренний кэш приложения и
- *      отдаёт его установщику пакетов через `FileProvider` +
- *      `ACTION_VIEW`/`ACTION_INSTALL_PACKAGE`.
+ *   2. Вторую половину — скачивание и установку — делает НЕ приложение.
+ *      Ссылка на APK открывается во внешнем браузере, дальше человек ставит
+ *      пакет обычным путём.
  *
- * **Обновление ставится с согласия пользователя.** Системный установщик
- * показывает свой экран подтверждения, а решение начать скачивание принимает
- * `packages/app`, вызывая `downloadAndInstall()` после того, как пользователь
- * согласился. Оболочка ничего не устанавливает молча и не проверяет фид сама
- * по таймеру.
+ * ── Почему не сами ───────────────────────────────────────────────────────────
+ *
+ * Чтобы отдать скачанный APK системному установщику, нужно разрешение
+ * `REQUEST_INSTALL_PACKAGES`. Им приложение объявляет себя установщиком ДРУГИХ
+ * приложений — ровно тот признак, по которому Play Protect ловит дропперы. Из-за
+ * него блокировалась КАЖДАЯ установка ЗАПИСОК: предупреждение и второе окно
+ * «всё равно установить». Соседние продукты на том же телефоне ставятся молча
+ * (МОМЕНТЫ просят только INTERNET, ПРАКТИКА — RECORD_AUDIO).
+ *
+ * Теперь «из неизвестных источников» система спрашивает у БРАУЗЕРА, а не у нас.
+ * Обновление стоит человеку одного лишнего тапа — против блокировки при каждой
+ * установке это несопоставимо дёшево.
+ *
+ * Прогресса скачивания больше нет и быть не может: качает браузер, он же и
+ * показывает прогресс. `onProgress` контракта на Android не вызывается —
+ * молчание тут честнее выдуманных процентов.
  *
  * Подпись APK проверяет сама Android: пакет с другой подписью установщик не
- * поставит поверх существующего. Отсюда требование к CI — keystore и алиас
- * не меняются между релизами (см. `.github/workflows/build-android.yml`).
+ * поставит поверх существующего. Отсюда требование к CI — keystore и алиас не
+ * меняются между релизами (см. `.github/workflows/build-android.yml`).
  */
+import { openUrl } from '@tauri-apps/plugin-opener';
 import type { UpdateInfo, UpdaterProvider } from '@zapiski/core';
 
-import { COMMANDS, EVENTS, call, on } from './ipc';
+import { COMMANDS, call } from './ipc';
 
 export function createUpdater(): UpdaterProvider {
   let pending: UpdateInfo | null = null;
@@ -39,20 +50,16 @@ export function createUpdater(): UpdaterProvider {
       return info;
     },
 
-    async downloadAndInstall(onProgress) {
+    async downloadAndInstall() {
       const update = pending ?? (await this.check());
       if (update === null) return;
 
-      const stop =
-        onProgress === undefined
-          ? null
-          : await on<number>(EVENTS.updateProgress, (fraction) => onProgress(fraction));
+      // Только https: страница загрузки по открытому каналу — это подмена
+      // пакета на первом же общественном Wi-Fi. Проверка была на стороне
+      // Rust, пока скачивали сами; теперь она здесь и никуда не делась.
+      if (!update.url.startsWith('https://')) return;
 
-      try {
-        await call<void>(COMMANDS.updaterInstall, { url: update.url });
-      } finally {
-        stop?.();
-      }
+      await openUrl(update.url);
     },
   };
 }

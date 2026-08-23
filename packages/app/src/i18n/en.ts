@@ -416,6 +416,13 @@ export const en: AppCatalog = {
       ['#tag and #tag/nested', 'tag; nested ones use a slash'],
       ['| a | b |', 'table: a header row, then a row of dashes'],
     ] as Array<[string, string]>,
+    updatesTitle: 'How the app updates',
+    updates: [
+      'Windows and macOS update themselves: the app checks for a new version and installs it.',
+      'On Android the app checks for a new version but does not install it — it opens the file link in your browser. From there it is the usual path: download and open. The first time, the system will ask the browser for permission to install apps; that permission stays with the browser, not with ZAPISKI.',
+      'This is deliberate. To install a package itself, an app has to declare that it installs other apps — and then Play Protect warns on every single installation. One extra tap every few weeks is cheaper than that warning.',
+      'Updating never touches your notes: they live in your own folder, not inside the app.',
+    ] as string[],
     footer:
       'You do not have to type the syntax: the same actions live on the formatting panel below the text. Where two shortcuts are listed, the second one is for the browser: it keeps Ctrl+1…8, Ctrl+0, Ctrl+L and Ctrl+E for itself (tabs, zoom, address bar), so those never reach the page. Both work in the Windows and Android apps.',
   },

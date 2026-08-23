@@ -41,7 +41,6 @@ export const COMMANDS = {
   pdfRender: 'pdf_render',
   saveFile: 'save_file',
   updaterCheck: 'updater_check',
-  updaterInstall: 'updater_download_install',
   shareTake: 'share_take',
   authTake: 'auth_take',
   widgetsPublish: 'widgets_publish',
@@ -61,7 +60,6 @@ export const EVENTS = {
   /** Тап по чекбоксу в виджете «Закреплённая». */
   widgetCommand: 'zapiski://widget-command',
   /** Прогресс скачивания обновления, 0…1. */
-  updateProgress: 'zapiski://update-progress',
   /** Возврат после входа: deep-link или App Link (ТЗ §5.5). */
   authCallback: 'zapiski://auth-callback',
 } as const;

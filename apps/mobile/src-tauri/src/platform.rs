@@ -31,7 +31,6 @@ pub const EVENT_QUICK_NOTE: &str = "zapiski://quick-note";
 /// Используется только Android-веткой (`android.rs`): под linux крейт
 /// собирается ради проверки компиляции, и до этих точек дело не доходит.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-pub const EVENT_UPDATE_PROGRESS: &str = "zapiski://update-progress";
 
 const INBOX_DIR: &str = "inbox";
 const SHARE_QUEUE: &str = "share.jsonl";
@@ -258,14 +257,6 @@ pub fn flush_quick_note() {
     }
 }
 
-/// Используется только Android-веткой (`android.rs`): под linux крейт
-/// собирается ради проверки компиляции, и до этих точек дело не доходит.
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
-pub fn emit_update_progress(fraction: f64) {
-    if let Some(handle) = app() {
-        let _ = handle.emit(EVENT_UPDATE_PROGRESS, fraction);
-    }
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Команды

@@ -186,6 +186,161 @@ export function verifySigner({ apksignerOutput = '', expectedSha256 = '', exitCo
 }
 
 /** Можно ли трогать пользовательский канал выкладки. */
+/**
+ * Разбор `android-permissions.txt` — списка разрешений в репозитории.
+ *
+ * Формат намеренно бедный: имя, необязательный `maxSdkVersion=N`, и
+ * объяснение комментарием на следующих строках. Ни JSON, ни YAML: файл читают
+ * глазами в обзоре, и чем меньше в нём синтаксиса, тем труднее протащить туда
+ * лишнее незаметно.
+ *
+ * Объяснение обязательно (`why`). Разрешение без причины — это разрешение,
+ * которое никто и никогда не пересмотрит: через полгода не вспомнить, живо
+ * оно или осталось от вырезанной функции. Ровно так и жил
+ * REQUEST_INSTALL_PACKAGES.
+ */
+/**
+ * Имена сборок СИМПАС — правило одно на три продукта.
+ *
+ *   Имя файла:         simpas-<продукт>-<версия>.apk
+ *   Тег релиза:        <продукт>-v<версия>
+ *   Постоянная ссылка: /updates/latest/<продукт>.apk
+ *
+ * `<продукт>` — ровно одно из `praktika`, `zapiski`, `momenty`.
+ *
+ * Приставка `simpas` — по имени СИСТЕМЫ, объединяющей три продукта, а не по
+ * имени одного из них: имя одного продукта на файлах остальных закрепляет ту
+ * самую путаницу, из-за которой у соседей одно и то же слово транслитерируется
+ * тремя способами сразу — по-своему в каждом репозитории, третьим способом в
+ * домене. Разбор целиком — `docs/dev/contributing.md`, «Имена сборок».
+ *
+ * Ни хеша коммита, ни номера прогона: имя человек видит в загрузках, и
+ * `-a3f9c21` ему ничего не сообщает. Релиз соответствует ВЕРСИИ, а не прогону
+ * сборки — пересобрали ту же версию, обновили существующий релиз.
+ *
+ * Правило касается ИМЁН АРТЕФАКТОВ. `applicationId`, ключ подписи, домен
+ * `cmpas.ru` и организация `compas-psy` не трогаются: смена applicationId
+ * означала бы для системы ДРУГОЕ приложение — обновление поверх установленного
+ * перестало бы работать, у людей оказались бы две иконки.
+ */
+export const PRODUCT = 'zapiski';
+
+/** Приставка по имени системы, а не продукта. См. шапку выше. */
+const SYSTEM = 'simpas';
+
+export function artifactName({ product = PRODUCT, version = '', debug = false } = {}) {
+  return `${SYSTEM}-${product}-${version}${debug ? '-debug' : ''}.apk`;
+}
+
+export function releaseTag({ product = PRODUCT, version = '' } = {}) {
+  return `${product}-v${version}`;
+}
+
+/** Постоянная ссылка не зависит от версии — на неё смотрит кнопка «Скачать». */
+export function latestPath({ product = PRODUCT } = {}) {
+  return `/updates/latest/${product}.apk`;
+}
+
+function verdict(problems) {
+  return { ok: problems.length === 0, problems };
+}
+
+export function checkArtifactName(name = '', { product = PRODUCT, version = '', debug = false } = {}) {
+  const expected = artifactName({ product, version, debug });
+  if (name === expected) return verdict([]);
+  return verdict([
+    `имя артефакта «${name}» не по правилу СИМПАС — ожидалось «${expected}» ` +
+      '(simpas-<продукт>-<версия>.apk, без хеша коммита и номера прогона)',
+  ]);
+}
+
+export function checkReleaseTag(tag = '', { product = PRODUCT, version = '' } = {}) {
+  const expected = releaseTag({ product, version });
+  if (tag === expected) return verdict([]);
+  return verdict([
+    `тег релиза «${tag}» не по правилу СИМПАС — ожидался «${expected}» ` +
+      '(<продукт>-v<версия>; релиз соответствует версии, а не прогону сборки)',
+  ]);
+}
+
+export function parsePermissionList(text) {
+  const entries = [];
+  let current = null;
+
+  for (const raw of String(text).split('\n')) {
+    const line = raw.trim();
+    if (line === '') continue;
+
+    if (line.startsWith('#')) {
+      // Комментарий после имени — объяснение к нему. Комментарий до первого
+      // имени — шапка файла, к разрешениям отношения не имеет.
+      if (current !== null) {
+        const note = line.replace(/^#\s?/, '').trim();
+        if (note !== '') current.why = current.why === '' ? note : `${current.why} ${note}`;
+      }
+      continue;
+    }
+
+    const [name, ...rest] = line.split(/\s+/);
+    if (name === undefined || !name.startsWith('android.permission.')) {
+      throw new Error(`android-permissions.txt: непонятная строка «${line}»`);
+    }
+    const max = rest
+      .map((token) => /^maxSdkVersion=(\d+)$/.exec(token))
+      .find((match) => match !== null);
+    current = { name, why: '' };
+    if (max?.[1] !== undefined) current.maxSdkVersion = Number(max[1]);
+    entries.push(current);
+  }
+
+  return entries;
+}
+
+/**
+ * Сверка разрешений ГОТОВОГО пакета со списком.
+ *
+ * Расхождение в обе стороны — отказ. Лишнее в пакете очевидно: именно так
+ * приезжает разрешение из чужой зависимости. Но и недостающее — тоже отказ:
+ * список, который описывает не тот пакет, что собрался, перестаёт быть
+ * источником истины и начинает успокаивать вместо того, чтобы стеречь.
+ *
+ * Порядок и повторы значения не имеют — сравниваются множества: `aapt`
+ * печатает разрешения в своём порядке, и завязываться на него нельзя.
+ */
+export function permissionsGate(actual = [], allowed = []) {
+  const declared = new Set(allowed.map((entry) => entry.name));
+  const found = new Set(actual.filter((name) => typeof name === 'string' && name !== ''));
+
+  const problems = [];
+  for (const name of found) {
+    if (!declared.has(name)) {
+      problems.push(
+        `в пакете есть ${name}, которого нет в android-permissions.txt — ` +
+          'либо это чужая зависимость, либо разрешение добавили мимо списка',
+      );
+    }
+  }
+  for (const name of declared) {
+    if (!found.has(name)) {
+      problems.push(`в android-permissions.txt объявлен ${name}, но в пакете его нет`);
+    }
+  }
+
+  return { ok: problems.length === 0, problems };
+}
+
+/**
+ * Имена разрешений из вывода `aapt dump permissions` / `aapt2 dump permissions`.
+ * Обе утилиты печатают строки вида `uses-permission: name='android.permission.X'`.
+ */
+export function permissionsFromAapt(text) {
+  const names = [];
+  for (const match of String(text).matchAll(/uses-permission:\s*name='([^']+)'/g)) {
+    if (match[1] !== undefined) names.push(match[1]);
+  }
+  return names;
+}
+
 export function publishGate({ channel = 'development', verifiedRelease = false } = {}) {
   return channel === 'production' && verifiedRelease === true;
 }
@@ -296,7 +451,35 @@ if (isMain) {
     writeFileSync(target, `${JSON.stringify(body, null, 2)}\n`);
     console.log(`Паспорт сборки: ${target}`);
     console.log(JSON.stringify(body, null, 2));
+  } else if (command === 'names') {
+    // Имена артефакта и тега — по правилу СИМПАС. Стережём сборкой, а не
+    // памятью: записанное правило забывается, падающая сборка — нет.
+    const version = flag('version', '');
+    const problems = [
+      ...checkArtifactName(flag('artifact', ''), { version, debug: flag('debug', '') === 'true' })
+        .problems,
+    ];
+    const tag = flag('tag', '');
+    if (tag !== '') problems.push(...checkReleaseTag(tag, { version }).problems);
+    if (problems.length > 0) fail(problems.join('; '));
+    console.log(`Имена по правилу СИМПАС: ${flag('artifact', '')}${tag === '' ? '' : ` / ${tag}`}`);
+  } else if (command === 'permissions') {
+    // Разрешения ГОТОВОГО пакета против списка в репозитории. Шаблон манифеста
+    // и итоговый APK — разные вещи: Tauri генерирует манифест сам, и
+    // разрешение может приехать из зависимости, которую никто не звал.
+    const listPath = flag('list', '');
+    const dumpPath = flag('dump', '');
+    const allowed = parsePermissionList(readFileSync(listPath, 'utf8'));
+    const actual = permissionsFromAapt(readFileSync(dumpPath, 'utf8'));
+    const { ok, problems } = permissionsGate(actual, allowed);
+    console.log(`В пакете: ${actual.length === 0 ? '(ни одного)' : actual.join(', ')}`);
+    console.log(`По списку: ${allowed.map((entry) => entry.name).join(', ')}`);
+    if (!ok) fail(problems.join('; '));
+    console.log('Разрешения совпали со списком android-permissions.txt');
   } else {
-    fail(`неизвестная команда «${command ?? ''}»: channel | policy | verify | provenance`);
+    fail(
+      `неизвестная команда «${command ?? ''}»: ` +
+        'channel | policy | verify | provenance | names | permissions',
+    );
   }
 }

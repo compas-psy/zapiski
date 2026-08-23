@@ -242,19 +242,14 @@ object NativeBridge {
     }
 
     // ── Обновление ──────────────────────────────────────────────────────────
+    //
+    // Только опрос фида. Скачивания и установки здесь больше нет: ссылка на
+    // APK открывается во внешнем браузере, а разрешение установщика пакетов
+    // убрано из манифеста — из-за него Play Protect блокировал каждую
+    // установку (см. apps/mobile/android-permissions.txt).
 
     @JvmStatic
     fun httpGet(url: String): String = Updates.httpGet(url)
-
-    @JvmStatic
-    fun download(requestId: Long, url: String, destination: String) {
-        Thread { Updates.download(requestId, url, destination) }.start()
-    }
-
-    @JvmStatic
-    fun installApk(path: String) {
-        Updates.install(requireContext(), path)
-    }
 
     // ── Экспорт файла ───────────────────────────────────────────────────────
 
@@ -385,8 +380,6 @@ object NativeBridge {
 
     private external fun nativeResult(requestId: Long, ok: Boolean, text: String?, data: ByteArray?)
 
-    private external fun nativeProgress(requestId: Long, done: Long, total: Long)
-
     private external fun nativeShare()
 
     private external fun nativeQuickNote()
@@ -395,18 +388,6 @@ object NativeBridge {
 
     private external fun nativeAuthCallback()
 
-    /**
-     * Результат асинхронной операции. `ok = true` с пустыми данными — это не
-     * ошибка, а отмена пользователем (BEHAVIOR §5.2).
-     */
-    fun result(requestId: Long, ok: Boolean, text: String?, data: ByteArray?) {
-        if (!attached) return
-        nativeResult(requestId, ok, text, data)
-    }
-
-    fun progress(requestId: Long, done: Long, total: Long) {
-        if (attached) nativeProgress(requestId, done, total)
-    }
 
     /** В очереди share-target появился контент. */
     fun pokeShare() {

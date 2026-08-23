@@ -62,7 +62,6 @@ pub fn run() {
             files::save_file,
             files::share_stage,
             updater::updater_check,
-            updater::updater_download_install,
             widgets::widgets_publish,
             widgets::widgets_take_commands,
         ])

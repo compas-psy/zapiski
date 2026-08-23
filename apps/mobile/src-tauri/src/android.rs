@@ -36,8 +36,6 @@ use std::time::Duration;
 
 /// Биометрия и печать ждут человека и движок печати — минуты, не секунды.
 const SLOW: Duration = Duration::from_secs(180);
-/// Загрузка APK: 30 МБ по мобильной сети бывают долгими.
-const DOWNLOAD: Duration = Duration::from_secs(1800);
 
 /// Результат асинхронной операции Java-стороны.
 pub struct Outcome {
@@ -115,7 +113,7 @@ fn complete(id: i64, outcome: Outcome) {
 
 #[cfg(target_os = "android")]
 mod api {
-    use super::{complete, forget, register, wait, Outcome, DOWNLOAD, SLOW};
+    use super::{complete, forget, register, wait, Outcome, SLOW};
     use crate::{platform, widgets};
 
     use jni::objects::{GlobalRef, JByteArray, JObject, JString, JValue, JValueOwned};
@@ -364,43 +362,6 @@ mod api {
             }
             let text: String = env.get_string(&JString::from(value))?.into();
             Ok(text)
-        })
-    }
-
-    pub fn download(url: &str, destination: &str) -> Result<(), String> {
-        let (id, rx) = register();
-        let started = with_env(|env| {
-            let source = env.new_string(url)?;
-            let target = env.new_string(destination)?;
-            call_bridge(
-                env,
-                "download",
-                "(JLjava/lang/String;Ljava/lang/String;)V",
-                &[
-                    JValue::Long(id),
-                    JValue::Object(&source),
-                    JValue::Object(&target),
-                ],
-            )?;
-            Ok(())
-        });
-        if let Err(error) = started {
-            forget(id);
-            return Err(error);
-        }
-        wait(id, rx, DOWNLOAD)?.into_result().map(|_| ())
-    }
-
-    pub fn install_apk(path: &str) -> Result<(), String> {
-        with_env(|env| {
-            let target = env.new_string(path)?;
-            call_bridge(
-                env,
-                "installApk",
-                "(Ljava/lang/String;)V",
-                &[JValue::Object(&target)],
-            )?;
-            Ok(())
         })
     }
 
@@ -774,23 +735,6 @@ mod api {
         );
     }
 
-    /// Прогресс скачивания обновления. `total <= 0` — сервер не сообщил длину.
-    #[no_mangle]
-    pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeProgress(
-        _env: JNIEnv,
-        _this: JObject,
-        _request_id: jlong,
-        done: jlong,
-        total: jlong,
-    ) {
-        let fraction = if total > 0 {
-            (done as f64 / total as f64).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        platform::emit_update_progress(fraction);
-    }
-
     /// В очереди share-target что-то появилось (BEHAVIOR §8). Полезной
     /// нагрузки нет намеренно: контент уже лежит в файле очереди, и забрать
     /// его оттуда — единственный способ не отдать одну картинку дважды.
@@ -887,12 +831,6 @@ mod api {
     pub fn http_get(_url: &str) -> Result<String, String> {
         only_android("сетевой запрос через платформу")
     }
-    pub fn download(_url: &str, _destination: &str) -> Result<(), String> {
-        only_android("скачивание обновления")
-    }
-    pub fn install_apk(_path: &str) -> Result<(), String> {
-        only_android("установка пакета")
-    }
     pub fn refresh_widgets() -> Result<(), String> {
         only_android("виджеты")
     }
@@ -965,7 +903,7 @@ mod api {
 
 pub use api::{
     biometrics_available, biometrics_enroll, biometrics_remove, biometrics_unlock, cache_dir,
-    download, external_files_dir, files_dir, haptic, http_get, install_apk, refresh_widgets,
+    external_files_dir, files_dir, haptic, http_get, refresh_widgets,
     render_pdf, saf_has_access, saf_label, saf_list, saf_mkdir, saf_open, saf_persisted_trees,
     saf_pick_folder, saf_read, saf_release_trees, saf_remove, saf_rename, saf_stat,
     saf_supports_rename, saf_write, save_to_downloads, set_secure, set_system_bar_icons,

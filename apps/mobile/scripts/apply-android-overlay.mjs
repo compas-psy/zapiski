@@ -28,6 +28,7 @@
  *   node scripts/apply-android-overlay.mjs --self-test — проверить патч на
  *                                                        эталонном манифесте
  */
+import { parsePermissionList } from './android-release-gate.mjs';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,35 +49,21 @@ const END = '<!-- END zapiski overlay -->';
  *
  * Строка — просто имя; объект — имя с ограничением по версии (`maxSdkVersion`).
  */
-const PERMISSIONS = [
-  // Фид обновлений и загрузка APK.
-  'android.permission.INTERNET',
-  // Хэптика (BEHAVIOR §0) там, где нет отклика через View.
-  'android.permission.VIBRATE',
-  // Установка скачанного обновления системным установщиком.
-  'android.permission.REQUEST_INSTALL_PACKAGES',
-  /*
-   * Биометрия: `BiometricPrompt.authenticate()` и `BiometricManager
-   * .canAuthenticate()` помечены `@RequiresPermission(USE_BIOMETRIC)`, и без
-   * строки в манифесте система отвечает `SecurityException`.
-   *
-   * Разрешения здесь не было, и это стоило дорого. `canAuthenticate` из
-   * `Biometrics.available()` глотал исключение и отвечал «биометрии нет» —
-   * поэтому палец не предлагался на замке ни разу. А `authenticate` из
-   * `enroll` бросал то же исключение на ГЛАВНОМ потоке, где его никто не
-   * ловил: заказчик получил «при включении биометрии приложение просто
-   * крашится». Уровень защиты `normal` — у человека ничего не спрашивают,
-   * строка нужна ровно для того, чтобы система пустила нас к диалогу.
-   */
-  'android.permission.USE_BIOMETRIC',
-  /*
-   * Android 9: `BiometricManager` появился только в 10, поэтому на 9 честный
-   * ответ про «есть ли отпечаток» даёт `FingerprintManager` — а он требует
-   * своё, уже устаревшее разрешение. `maxSdkVersion` держит его ровно там, где
-   * оно нужно, и не тащит в листинг на новых версиях.
-   */
-  { name: 'android.permission.USE_FINGERPRINT', maxSdkVersion: 28 },
-];
+/*
+ * Разрешения берутся из `apps/mobile/android-permissions.txt`, а не хранятся
+ * здесь копией.
+ *
+ * Раньше список жил прямо в этом файле, среди двухсот строк патча манифеста.
+ * Добавить туда строку — правка скрипта сборки: в обзоре она не читается как
+ * решение «мы просим у человека ещё одно разрешение». Именно так тут и
+ * задержалось разрешение установщика пакетов, из-за которого Play Protect
+ * блокировал КАЖДУЮ установку (история — в шапке android-permissions.txt).
+ * Отдельный файл делает добавление сознательным действием, и с ним же CI
+ * сверяет ГОТОВЫЙ APK.
+ */
+const PERMISSIONS = parsePermissionList(
+  readFileSync(join(SCRIPT_DIR, '..', 'android-permissions.txt'), 'utf8'),
+);
 
 /**
  * Возможности устройства, которые нам полезны, но не обязательны.
@@ -216,32 +203,6 @@ const APPLICATION_CHILDREN = `
     </service>
 
     <!--
-      FileProvider отдаёт системному установщику скачанный APK.
-      Область — только cache/updates (res/xml/file_provider_paths.xml):
-      ни vault, ни ключи биометрии наружу не выдаются.
-
-      Имя класса — СВОЙ подкласс UpdatesFileProvider, а не
-      androidx.core.content.FileProvider. Причины две, обе обязательные:
-        1) шаблон Tauri уже объявляет провайдер с именем androidx-класса,
-           и второе объявление с тем же android:name роняет манифест-мержер
-           («Element provider#… duplicated»);
-        2) очевидная альтернатива — слить оба объявления, перечислив
-           authorities через \`;\` — собирается, но РАСШИРЯЕТ область: у шаблона
-           в путях стоят <external-path path="."/> и <cache-path path="."/>,
-           то есть внешний каталог и кеш целиком. Установщику это не нужно.
-      Подкласс снимает конфликт имён и сохраняет узкую область.
-    -->
-    <provider
-        android:name=".UpdatesFileProvider"
-        android:authorities="\${applicationId}.updates"
-        android:exported="false"
-        android:grantUriPermissions="true">
-        <meta-data
-            android:name="android.support.FILE_PROVIDER_PATHS"
-            android:resource="@xml/file_provider_paths" />
-    </provider>
-
-    <!--
       Второй FileProvider — картинки заметки, которые уезжают вместе с ней
       через «Поделиться». Область — только cache/share
       (res/xml/share_file_paths.xml).
@@ -331,15 +292,13 @@ export function patchManifest(source) {
 
   // 2. Разрешения и возможности — перед <application>, если их ещё нет.
   const declarations = [
-    ...PERMISSIONS.map((entry) => (typeof entry === 'string' ? { name: entry } : entry)).map(
-      ({ name, maxSdkVersion }) => ({
+    ...PERMISSIONS.map(({ name, maxSdkVersion }) => ({
         name,
         line:
           maxSdkVersion === undefined
             ? `    <uses-permission android:name="${name}" />`
             : `    <uses-permission android:name="${name}" android:maxSdkVersion="${maxSdkVersion}" />`,
-      }),
-    ),
+    })),
     ...FEATURES.map((name) => ({
       name,
       line: `    <uses-feature android:name="${name}" android:required="false" />`,
@@ -572,7 +531,6 @@ function apply() {
 const EXPECTATIONS = [
   ['разрешение INTERNET', 'android:name="android.permission.INTERNET"'],
   ['разрешение VIBRATE', 'android:name="android.permission.VIBRATE"'],
-  ['разрешение REQUEST_INSTALL_PACKAGES', 'android:name="android.permission.REQUEST_INSTALL_PACKAGES"'],
   /* Без этой строки диалог биометрии отвечает SecurityException — на главном
      потоке, то есть крахом приложения. Сборка обязана падать, если она уедет. */
   ['разрешение USE_BIOMETRIC', 'android:name="android.permission.USE_BIOMETRIC"'],
@@ -592,9 +550,6 @@ const EXPECTATIONS = [
   ['возврат входа: App Link на ссылку из письма', 'android:path="/api/v1/auth/magic-link/callback"'],
   ['возврат входа: проверка домена', 'android:autoVerify="true"'],
   ['плитка Quick Settings', 'android.service.quicksettings.action.QS_TILE'],
-  ['FileProvider', '.UpdatesFileProvider'],
-  ['FileProvider: authorities', 'android:authorities="${applicationId}.updates"'],
-  ['FileProvider: пути', '@xml/file_provider_paths'],
   ['FileProvider вложений', '.ShareFileProvider'],
   ['FileProvider вложений: authorities', 'android:authorities="${applicationId}.share"'],
   ['FileProvider вложений: пути', '@xml/share_file_paths'],
@@ -614,6 +569,16 @@ const EXPECTATIONS = [
   ['рисуем под вырезом', 'android:windowLayoutInDisplayCutoutMode="shortEdges"'],
   ['сохранён LAUNCHER', 'android.intent.category.LAUNCHER'],
 ];
+
+/**
+ * Манифест-фикстура после патча — для тестов. Самопроверка ниже ищет строки
+ * `includes`-ом и лишнего заметить не может; `test/android-permissions.test.ts`
+ * сверяет ПОЛНЫЙ состав разрешений, а для этого ему нужен весь текст.
+ */
+export function patchedManifest() {
+  const fixture = join(SCRIPT_DIR, 'fixtures', 'AndroidManifest.generated.xml');
+  return patchManifest(readFileSync(fixture, 'utf8'));
+}
 
 function selfTest() {
   const fixture = join(SCRIPT_DIR, 'fixtures', 'AndroidManifest.generated.xml');

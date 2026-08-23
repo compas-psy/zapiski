@@ -62,7 +62,7 @@ on:
     branches:
       - main
       - claude/cloud-deployment-cross-platform-9nenw7
-    tags: ["v*"]
+    tags: ["zapiski-v*"]
   pull_request:
     branches:
       - main
@@ -419,8 +419,9 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./apps/mobile/src-tauri/tauri.conf.json').version")"
           tag="${GITHUB_REF_NAME}"
-          if [ "${GITHUB_REF_TYPE}" = 'tag' ] && [ "v${version}" != "${tag}" ]; then
+          if [ "${GITHUB_REF_TYPE}" = 'tag' ] && [ "zapiski-v${version}" != "${tag}" ]; then
             echo "Тег ${tag} не совпадает с версией ${version} в tauri.conf.json." >&2
+            echo "Правило СИМПАС: тег релиза — zapiski-v${version}." >&2
             echo 'Версия в манифесте — источник истины для фида обновлений, разъезжаться им нельзя.' >&2
             exit 1
           fi
@@ -825,6 +826,30 @@ jobs:
             --expected "${EXPECTED_SIGNER_SHA256}" \
             --exit-code "${code}"
 
+      # ── Сторож имён и разрешений ГОТОВОГО пакета ─────────────────────────
+      #
+      # Оба проверяются по СОБРАННОМУ файлу, а не по шаблону: Tauri генерирует
+      # манифест сам, и разрешение может приехать из зависимости, которую никто
+      # не звал. Шаблон при этом останется чистым.
+      - name: Разрешения собранного APK против списка
+        run: |
+          set -euo pipefail
+          apk="${RUNNER_TEMP}/signed.apk"
+          [ -f "${apk}" ] || apk="$(find apps/mobile/src-tauri/gen/android/app/build/outputs -name '*.apk' -type f | sort | head -1)"
+          [ -n "${apk}" ] || { echo 'APK не найден — нечего проверять' >&2; exit 1; }
+
+          # aapt2 лежит в build-tools; версия каталога плавает между образами.
+          aapt="$(find "${ANDROID_HOME}/build-tools" -maxdepth 2 -name 'aapt2' -type f | sort -V | tail -1)"
+          [ -n "${aapt}" ] || { echo 'aapt2 не найден в build-tools' >&2; exit 1; }
+
+          "${aapt}" dump permissions "${apk}" > "${RUNNER_TEMP}/permissions.txt"
+          echo '── что напечатал aapt2 ──'
+          cat "${RUNNER_TEMP}/permissions.txt"
+
+          node apps/mobile/scripts/android-release-gate.mjs permissions \
+            --list apps/mobile/android-permissions.txt \
+            --dump "${RUNNER_TEMP}/permissions.txt"
+
       - name: Собрать артефакт
         id: collect
         run: |
@@ -833,14 +858,14 @@ jobs:
           mkdir -p artifacts
 
           if [ "${{ steps.keystore.outputs.build_type }}" = 'release' ]; then
-            name="zapiski-${version}.apk"
-            artifact="zapiski-android-${version}"
+            name="simpas-zapiski-${version}.apk"
+            artifact="simpas-zapiski-android-${version}"
             cp "${RUNNER_TEMP}/signed.apk" "artifacts/${name}"
           else
             # `-debug` и в имени файла, и в имени артефакта: тот, кто скачает
             # его из вкладки Actions, обязан понимать, что это не релиз.
-            name="zapiski-${version}-debug.apk"
-            artifact="zapiski-android-${version}-debug"
+            name="simpas-zapiski-${version}-debug.apk"
+            artifact="simpas-zapiski-android-${version}-debug"
             mapfile -t found < <(find 'apps/mobile/src-tauri/gen/android/app/build/outputs/apk/universal/debug' -name '*.apk' -type f | sort)
             [ "${#found[@]}" -gt 0 ] || { echo 'debug-APK не найден после сборки' >&2; exit 1; }
             cp "${found[0]}" "artifacts/${name}"
@@ -852,6 +877,13 @@ jobs:
           echo "artifact=${artifact}" >> "$GITHUB_OUTPUT"
           echo "apk_sha256=${apk_sha256}" >> "$GITHUB_OUTPUT"
           echo "Артефакт: ${artifact} → ${name}, размер: $((size / 1024 / 1024)) МБ"
+
+          # Имя по правилу СИМПАС — падаем здесь, а не после публикации.
+          node apps/mobile/scripts/android-release-gate.mjs names \
+            --artifact "${name}" \
+            --version "${version}" \
+            --debug "$([ "${{ steps.keystore.outputs.build_type }}" = 'release' ] && echo false || echo true)" \
+            --tag "$([ "${GITHUB_REF_TYPE}" = 'tag' ] && echo "${GITHUB_REF_NAME}" || echo '')"
           echo "APK SHA-256: ${apk_sha256}"
 
           # Паспорт сборки: чем подписано и из чего собрано.

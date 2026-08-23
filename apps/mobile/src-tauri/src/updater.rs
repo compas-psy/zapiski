@@ -10,19 +10,24 @@
 //!    Tauri-формата, если есть (`server/src/routes/updates.ts`). Текущая
 //!    версия берётся из метаданных пакета — не из строки в коде, иначе она
 //!    разъедется с `tauri.conf.json` в первый же релиз.
-//! 2. **Установка.** APK кладётся во внутренний кэш и отдаётся системному
-//!    установщику через `FileProvider` + `ACTION_VIEW`/`INSTALL_PACKAGE`.
-//!    Экран подтверждения показывает сама Android — молча приложение не
-//!    обновляется никогда.
+//! 2. **Установка — не наша.** Оболочка ТОЛЬКО узнаёт о новой версии; ссылку
+//!    на APK открывает внешний браузер (`src/platform/updater.ts`), и дальше
+//!    человек ставит пакет обычным путём.
+//!
+//!    Раньше здесь были скачивание и передача пакета системному установщику,
+//!    для чего в манифесте стояло `REQUEST_INSTALL_PACKAGES`. Этим разрешением
+//!    приложение объявляет себя установщиком ДРУГИХ приложений — признак, по
+//!    которому Play Protect ловит дропперы, — и из-за него блокировалась
+//!    КАЖДАЯ установка со вторым окном «всё равно установить». Соседние
+//!    продукты на том же телефоне ставятся молча. Два тапа вместо одного
+//!    несопоставимо дешевле блокировки на каждой установке.
 //!
 //! Подпись проверяет ОС: пакет с другой подписью не встанет поверх
 //! установленного. Отсюда требование к CI — keystore и алиас не меняются
 //! между релизами.
 
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 /// Адрес фида. Совпадает с тем, что отдаёт `server/src/routes/updates.ts`.
 const FEED: &str = "https://zapiski.cmpas.ru/api/v1/updates/android";
@@ -122,41 +127,6 @@ fn select_platform(manifest: &Manifest) -> Option<String> {
         .iter()
         .find(|(name, _)| name.starts_with(&prefix))
         .map(|(_, value)| value.url.clone())
-}
-
-/// Скачать APK и отдать системному установщику.
-///
-/// Вызывается только после согласия пользователя — решение принимает
-/// `packages/app`, оболочка ничего не качает по своей инициативе.
-#[tauri::command(async)]
-pub fn updater_download_install<R: Runtime>(app: AppHandle<R>, url: String) -> Result<(), String> {
-    if !url.starts_with("https://") {
-        // Обновление приложения по открытому каналу — это подмена пакета
-        // на первом же общественном Wi-Fi.
-        return Err("обновление скачивается только по https".to_owned());
-    }
-
-    let directory = updates_dir(&app)?;
-    std::fs::create_dir_all(&directory).map_err(|error| format!("{}: {error}", directory.display()))?;
-
-    let target = directory.join("zapiski-update.apk");
-    // Старый файл убираем до скачивания: половина прошлого APK, оставшаяся
-    // после обрыва, установщику не нужна.
-    let _ = std::fs::remove_file(&target);
-
-    let path = target.to_string_lossy().into_owned();
-    crate::android::download(&url, &path)?;
-    crate::android::install_apk(&path)
-}
-
-fn updates_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
-    let base = crate::android::cache_dir()
-        .ok()
-        .flatten()
-        .map(PathBuf::from)
-        .or_else(|| app.path().app_cache_dir().ok())
-        .ok_or_else(|| "не удалось определить кэш приложения".to_owned())?;
-    Ok(base.join("updates"))
 }
 
 #[cfg(test)]

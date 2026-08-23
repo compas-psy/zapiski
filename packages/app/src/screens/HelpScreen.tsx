@@ -82,6 +82,18 @@ export function HelpScreen(): ReactNode {
           </dl>
 
           <p className="za-muted">{copy.footer}</p>
+
+          {/*
+            Порядок обновления Android изменился — приложение больше не ставит
+            новую версию само. Человеку это надо сказать словами, иначе первый
+            же вопрос браузера «разрешить установку?» выглядит подозрительно.
+          */}
+          <Section>{copy.updatesTitle}</Section>
+          {copy.updates.map((paragraph) => (
+            <p className="za-muted" key={paragraph.slice(0, 24)}>
+              {paragraph}
+            </p>
+          ))}
         </div>
       </div>
     </div>
