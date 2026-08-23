@@ -977,6 +977,31 @@ jobs:
                FROM users GROUP BY analytics_opt_in ORDER BY count(*) DESC" \
             < /dev/null || echo "база не ответила"
 
+          # Ждём первую уборку, а не читаем контейнер двенадцатисекундной
+          # свежести. Повтор пересылки в ПРАКТИКУ живёт внутри уборки
+          # (services/sweep.ts, первый прогон через 30 с после подъёма) —
+          # без ожидания диагностика гарантированно печатала бы «переслано 0»
+          # и это ничего не значило бы.
+          #
+          # Ждём ПО ФАКТУ, а не фиксированной паузой: как только непереслáнных
+          # не осталось, идём дальше. Дождались или вышло время — сказано
+          # вслух, чтобы «переслано 0» нельзя было прочитать как «мост молчит».
+          waited=0
+          while [ "${waited}" -lt 90 ]; do
+            pending=$(dc exec -T postgres psql -U zapiski -d zapiski -At -c \
+              "SELECT count(*) FROM analytics_events
+                WHERE practice_forwarded_at IS NULL AND practice_reject_reason IS NULL" \
+              < /dev/null 2>/dev/null | tr -d '[:space:]')
+            [ "${pending:-1}" = "0" ] && break
+            sleep 10
+            waited=$((waited + 10))
+          done
+          if [ "${pending:-1}" = "0" ]; then
+            echo "уборка разгребла очередь пересылки за ${waited} с"
+          else
+            echo "за ${waited} с непереслáнных осталось ${pending:-?} — уборка не справилась или мост отказал (смотри счётчики и причины ниже)"
+          fi
+
           echo "── события: сколько всего и сколько ушло в ПРАКТИКУ ──"
           dc exec -T postgres psql -U zapiski -d zapiski -At -c \
             "SELECT 'всего ' || count(*)
