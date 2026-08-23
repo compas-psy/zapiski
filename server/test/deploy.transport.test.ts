@@ -70,6 +70,21 @@ describe('файлы на сервер едут rsync, а не scp', () => {
     });
   }
 
+  it('на раннере Windows транспорт не rsync — его там нет', () => {
+    /* Прогон 181: `rsync: command not found`. Правило «не scp» само по себе
+       уводит на rsync, и на Linux это верно, а здесь — вторая поломка вместо
+       первой. На Windows остаётся tar через ssh: он есть и в Git-bash, и на
+       сервере, и идёт тем же exec-каналом. */
+    const win = readFileSync(path.join(WORKFLOWS, 'build-windows.yml'), 'utf8');
+    const calls = win
+      .split('\n')
+      .map((line, i) => ({ line, number: i + 1 }))
+      .filter(({ line }) => !isComment(line) && /(?:^|[|;&]\s*|\s)rsync\s/.test(line))
+      .map(({ line, number }) => `${number}: ${line.trim()}`);
+    expect(calls, 'rsync на раннере Windows недоступен').toEqual([]);
+    expect(win, 'чем же тогда передавать').toMatch(/tar -C release -cf - .*\| ssh/);
+  });
+
   it('образец рядом: деплой веба ходит rsync и не падает', () => {
     /* Если однажды и он переедет на scp — набор обязан упасть здесь, а не
        через месяц на выкладке. */

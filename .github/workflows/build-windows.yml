@@ -26,7 +26,7 @@ name: Сборка Windows
 #
 # ПОЧЕМУ ЭТО НЕ МОЖЕТ ЗАДЕТЬ ДНЕВНИК И ВЕБ ЗАПИСОК:
 #   * job `release` пишет ровно в /var/www/zapiski.cmpas.ru/updates/ и ничего
-#     не удаляет: rsync кладёт файлы, `--delete` здесь не используется;
+#     не удаляет: файлы приезжают распаковкой tar поверх существующих;
 #   * nginx не трогается вообще — конфиг ставится провижном;
 #   * общая группа concurrency `zapiski-server` с deploy/provision: сервер в
 #     каждый момент времени трогает кто-то один.
@@ -657,13 +657,15 @@ jobs:
           slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
           target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
 
-          ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}'"
-          # `rsync`, а не `scp`: с OpenSSH 9.0 scp ходит через подсистему
-          # SFTP, а она на этом сервере не отвечает — передача встаёт молча до
-          # потолка шага. Проверено на сборке Android (прогоны 188 и 189) и на
-          # деплое веба, который тем же ключом на тот же сервер ходит rsync и
-          # не падал ни разу.
-          rsync -a --partial -e "ssh -i ~/.ssh/deploy_key" release/ "${SERVER_USER}@${SERVER_HOST}:${target}/"
+          # `tar` через ssh — ни scp, ни rsync.
+          #
+          # scp с OpenSSH 9.0 передаёт через подсистему SFTP, а она на этом
+          # сервере не отвечает: передача встаёт молча (сборка Android,
+          # прогоны 188 и 189). rsync — правильный ответ на Linux, но здесь
+          # его нет: раннер Windows отвечает `rsync: command not found`
+          # (прогон 181). tar есть и в Git-bash, и на сервере, и идёт обычным
+          # exec-каналом ssh — тем самым, который работает.
+          tar -C release -cf - . | ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}' && tar -C '${target}' -xf -"
           echo "Установщик ${VERSION} лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
           # Постоянный адрес свежего установщика — по той же причине, что и у
@@ -803,20 +805,26 @@ jobs:
         run: |
           set -euo pipefail
           target=/var/www/zapiski.cmpas.ru/updates
-          ssh -i ~/.ssh/deploy_key \
-            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
-            "mkdir -p ${target}"
-
+          # Транспорт — tar через ssh, по той же причине, что и выше: scp
+          # упирается в отсутствующий SFTP, а rsync на раннере Windows нет.
+          #
           # Сначала установщик и подпись, latest.json — последним. Порядок не
           # косметический: манифест ссылается на файл, и клиент, увидевший
-          # новый latest.json раньше самого .exe, получил бы 404.
+          # новый latest.json раньше самого .exe, получил бы 404. Поэтому это
+          # ДВА раздельных tar, а не один: внутри одного архива порядок
+          # распаковки нам не подчиняется.
+          payload=()
           for file in release/*.exe release/*.exe.sig release/*.msi; do
             [ -e "${file}" ] || continue
-            rsync -a --partial -e "ssh -i ~/.ssh/deploy_key" "${file}" \
-              "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
+            payload+=("$(basename "${file}")")
           done
-          rsync -a -e "ssh -i ~/.ssh/deploy_key" release/latest.json \
-            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${target}/"
+          [ "${#payload[@]}" -gt 0 ] || { echo '::error::в release/ нет ни установщика, ни .msi' >&2; exit 1; }
+          tar -C release -cf - "${payload[@]}" | ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "mkdir -p ${target} && tar -C ${target} -xf -"
+          tar -C release -cf - latest.json | ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
+            "tar -C ${target} -xf -"
 
           echo "Обновление выложено в ${target}."
 
