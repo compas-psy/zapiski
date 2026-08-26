@@ -44,6 +44,12 @@ const GENERATED_MAIN = join(GENERATED_DIR, 'app', 'src', 'main');
 const BEGIN = '<!-- BEGIN zapiski overlay: apps/mobile/scripts/apply-android-overlay.mjs -->';
 const END = '<!-- END zapiski overlay -->';
 
+const GRADLE_BEGIN = '// BEGIN zapiski overlay: apps/mobile/scripts/apply-android-overlay.mjs';
+const GRADLE_END = '// END zapiski overlay';
+
+/** https://repo1.maven.org/maven2/io/appmetrica/analytics/analytics/maven-metadata.xml */
+const APPMETRICA_VERSION = '8.5.1';
+
 /**
  * Разрешения, без которых оболочка не работает.
  *
@@ -356,6 +362,38 @@ export function patchManifest(source) {
   return manifest;
 }
 
+/**
+ * Патч Gradle-файла модуля: подключает AppMetrica.
+ *
+ * Зависимость строкой прямо в `dependencies { }`, а не version catalog:
+ * `app/build.gradle.kts` — сгенерированный файл (см. шапку файла), version
+ * catalog в шаблоне Tauri не заведён, а заводить его ради одной строки —
+ * заменить чужой файл целиком там, где патч уже решает задачу.
+ *
+ * Тот же приём, что и в `patchManifest`: свой блок помечен маркерами и
+ * переставляется целиком, поэтому повторное наложение не дублирует строку.
+ */
+export function patchGradle(source) {
+  let gradle = source;
+
+  const previous = new RegExp(
+    `\\n?[ \\t]*${escapeRegExp(GRADLE_BEGIN)}[\\s\\S]*?${escapeRegExp(GRADLE_END)}[ \\t]*\\n?`,
+    'g',
+  );
+  gradle = gradle.replace(previous, '');
+
+  const match = /dependencies\s*\{/.exec(gradle);
+  if (match === null) {
+    throw new Error('в build.gradle.kts не найден блок dependencies — AppMetrica не подключить');
+  }
+  const at = match.index + match[0].length;
+  const block =
+    `\n    ${GRADLE_BEGIN}\n` +
+    `    implementation("io.appmetrica.analytics:analytics:${APPMETRICA_VERSION}")\n` +
+    `    ${GRADLE_END}\n`;
+  return gradle.slice(0, at) + block + gradle.slice(at);
+}
+
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -518,13 +556,20 @@ function apply() {
   // FileProvider приходит из androidx.core, а тот — транзитивно из appcompat,
   // который есть в шаблоне Tauri. Если шаблон изменится, сборка упадёт на
   // непонятной ошибке компиляции; лучше сказать об этом заранее.
-  const gradle = join(GENERATED_DIR, 'app', 'build.gradle.kts');
-  if (existsSync(gradle) && !readFileSync(gradle, 'utf8').includes('appcompat')) {
+  const gradlePath = join(GENERATED_DIR, 'app', 'build.gradle.kts');
+  if (!existsSync(gradlePath)) {
+    console.log('::warning::нет app/build.gradle.kts — AppMetrica не подключена');
+    return;
+  }
+  const gradleSource = readFileSync(gradlePath, 'utf8');
+  if (!gradleSource.includes('appcompat')) {
     console.log(
       '::warning::в app/build.gradle.kts нет androidx.appcompat — ' +
         'androidx.core.content.FileProvider может не разрешиться',
     );
   }
+  writeFileSync(gradlePath, patchGradle(gradleSource), 'utf8');
+  console.log(`оверлей: Gradle пропатчен (AppMetrica) → ${gradlePath}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -599,6 +644,17 @@ function selfTest() {
   }
   if (once !== twice) problems.push('патч не идемпотентен: второй запуск меняет манифест');
 
+  const gradleFixture = join(SCRIPT_DIR, 'fixtures', 'build.gradle.kts.generated');
+  const gradleSource = readFileSync(gradleFixture, 'utf8');
+  const gradleOnce = patchGradle(gradleSource);
+  const gradleTwice = patchGradle(gradleOnce);
+  if (!gradleOnce.includes('io.appmetrica.analytics:analytics:')) {
+    problems.push('AppMetrica не подключена в build.gradle.kts');
+  }
+  if (gradleOnce !== gradleTwice) {
+    problems.push('патч Gradle не идемпотентен: второй запуск меняет файл');
+  }
+
   // Well-formed XML проверяем настоящим парсером, если он есть в системе.
   const temporary = mkdtempSync(join(tmpdir(), 'zapiski-manifest-'));
   const target = join(temporary, 'AndroidManifest.xml');
@@ -622,7 +678,7 @@ function selfTest() {
     process.exit(1);
   }
 
-  console.log(`apply-android-overlay: самопроверка пройдена, проверок: ${EXPECTATIONS.length + 2}`);
+  console.log(`apply-android-overlay: самопроверка пройдена, проверок: ${EXPECTATIONS.length + 4}`);
 }
 
 // Запускаемся только как программа. Импорт (например, из теста) обязан

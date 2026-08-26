@@ -3,6 +3,11 @@ package ru.cmpas.zapiski
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import io.appmetrica.analytics.AppMetrica
+import io.appmetrica.analytics.AppMetricaConfig
+
+/** Ключ выдан на домен zapiski.cmpas.ru — привязан к пакету, менять нельзя. */
+private const val APPMETRICA_API_KEY = "d15d5479-3420-4deb-b830-ab0b6b08d1c1"
 
 /**
  * Класс приложения. Нужен ровно за одним: знать текущую активность, не трогая
@@ -18,6 +23,10 @@ class ZapiskiApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // AppMetrica — чистый Kotlin/Java SDK, в отличие от нативного моста
+        // ниже она не ждёт загрузки библиотеки Tauri и активируется сразу.
+        AppMetrica.activate(this, AppMetricaConfig.newConfigBuilder(APPMETRICA_API_KEY).build())
+        AppMetrica.enableActivityAutoTracking(this)
         // Контекст нужен виджетам и плитке: они живут в этом же процессе, но
         // активности могут не увидеть вовсе.
         NativeBridge.rememberContext(this)
