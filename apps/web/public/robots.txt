@@ -1,9 +1,11 @@
 # ЗАПИСКИ robots.txt
-# Public promo and legal pages are indexable
-# Private user notes (/p/*) are not indexed
+# Public promo and legal pages are indexable.
+# The app itself (/notes/, sign-in screen only) and private published
+# notes (/p/*) carry no indexable content and are excluded.
 
 User-agent: *
 Allow: /
+Disallow: /notes
 Disallow: /p/
 
 # AI assistants: these are public marketing pages meant to be cited
