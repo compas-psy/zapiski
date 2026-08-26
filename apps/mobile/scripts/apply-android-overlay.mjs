@@ -579,6 +579,7 @@ function apply() {
 /** Что обязано оказаться в манифесте после патча. */
 const EXPECTATIONS = [
   ['разрешение INTERNET', 'android:name="android.permission.INTERNET"'],
+  ['разрешение ACCESS_NETWORK_STATE', 'android:name="android.permission.ACCESS_NETWORK_STATE"'],
   ['разрешение VIBRATE', 'android:name="android.permission.VIBRATE"'],
   /* Без этой строки диалог биометрии отвечает SecurityException — на главном
      потоке, то есть крахом приложения. Сборка обязана падать, если она уедет. */

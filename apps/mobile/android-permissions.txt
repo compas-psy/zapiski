@@ -45,6 +45,24 @@ android.permission.USE_FINGERPRINT maxSdkVersion=28
   # устаревшее разрешение. `maxSdkVersion` держит его ровно там, где оно
   # нужно, и не тащит в листинг на новых версиях.
 
+android.permission.ACCESS_NETWORK_STATE
+  # AppMetrica проверяет тип сети (Wi-Fi/мобильная) перед отправкой событий,
+  # чтобы экономить трафик на мобильной сети. Разрешение уровня normal, у
+  # человека ничего не спрашивает; приезжает транзитивно из
+  # io.appmetrica.analytics:analytics — в манифесте нашей оболочки его нет.
+
+com.google.android.gms.permission.AD_ID
+  # Рекламный идентификатор устройства: AppMetrica использует его для
+  # атрибуции установки — откуда пришёл человек, эффективность кампаний.
+  # Решение учредителя: оставить, а не вырезать через tools:node="remove".
+  # Уровень normal, диалога с человеком нет; управляется системной настройкой
+  # «Персонализация рекламы».
+
+com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE
+  # Install Referrer API Google Play — та же атрибуция установки. Объявляет
+  # её Play Store при связывании с рекламным SDK, у человека ничего не
+  # спрашивает.
+
 ru.cmpas.zapiski.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
   # Не наше и не системное: его объявляет САМА библиотека AndroidX Core, когда
   # приложение регистрирует неэкспортируемый широковещательный приёмник —

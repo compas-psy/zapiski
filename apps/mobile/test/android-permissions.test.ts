@@ -51,9 +51,10 @@ describe('список разрешений в репозитории', () => {
     expect(names).not.toContain('android.permission.REQUEST_INSTALL_PACKAGES');
   });
 
-  it('запрошенных у человека — ровно четыре, для которых нашлось живое применение', () => {
+  it('запрошенных у человека — ровно пять, для которых нашлось живое применение', () => {
     const asked = names.filter((name) => name.startsWith('android.permission.'));
     expect([...asked].sort()).toEqual([
+      'android.permission.ACCESS_NETWORK_STATE',
       'android.permission.INTERNET',
       'android.permission.USE_BIOMETRIC',
       'android.permission.USE_FINGERPRINT',
@@ -62,18 +63,32 @@ describe('список разрешений в репозитории', () => {
   });
 
   /*
-   * Пятое разрешение — не наше: его объявляет AndroidX Core для своих
-   * неэкспортируемых приёмников, уровень signature, у человека оно ничего не
-   * спрашивает. В списке оно потому, что есть в ПАКЕТЕ: нашла его сверка с
-   * готовым APK на первом же прогоне, в шаблоне манифеста его не видно.
+   * Ещё три разрешения — не наши и не из пространства android.permission:
+   * одно объявляет AndroidX Core для своих неэкспортируемых приёмников
+   * (уровень signature), два других — вендорские, от AppMetrica
+   * (io.appmetrica.analytics:analytics), для атрибуции установки. Ни одно
+   * из трёх не спрашивает ничего у человека диалогом. В списке они потому,
+   * что есть в ПАКЕТЕ: нашла их сверка с готовым APK, в шаблоне манифеста их
+   * не видно — Tauri, AndroidX и AppMetrica дописывают манифест при сборке.
    */
   it('служебное разрешение AndroidX объявлено явно, а не молчаливо разрешено', () => {
     expect(names).toContain('ru.cmpas.zapiski.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION');
   });
 
-  it('оно не из пространства android.permission — это не запрос к человеку', () => {
+  it('вендорские разрешения AppMetrica объявлены явно, а не молчаливо разрешены', () => {
+    expect(names).toContain('com.google.android.gms.permission.AD_ID');
+    expect(names).toContain('com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE');
+  });
+
+  it('всё, что не android.permission — это либо наше, либо явно учтённый вендор', () => {
+    const KNOWN_VENDOR = new Set([
+      'com.google.android.gms.permission.AD_ID',
+      'com.google.android.finsky.permission.BIND_GET_INSTALL_REFERRER_SERVICE',
+    ]);
     const own = names.filter((name) => !name.startsWith('android.permission.'));
-    expect(own.every((name) => name.startsWith('ru.cmpas.zapiski.'))).toBe(true);
+    expect(
+      own.every((name) => name.startsWith('ru.cmpas.zapiski.') || KNOWN_VENDOR.has(name)),
+    ).toBe(true);
   });
 
   it('USE_FINGERPRINT ограничен девятым Android — на новых он не нужен', () => {
