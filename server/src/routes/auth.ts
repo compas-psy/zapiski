@@ -93,7 +93,10 @@ function browser(
 function backToApp(ctx: AppContext): { href: string; label: string } | null {
   const base = ctx.env.PUBLIC_BASE_URL.replace(/\/+$/, '');
   if (base.length === 0) return null;
-  return { href: `${base}/`, label: 'Открыть ЗАПИСКИ' };
+  /* Корень домена отдан промо (решение учредителя), само приложение — на
+     /notes/. Оставить здесь «/» значило бы дать кнопку, ведущую на промо
+     вместо продолжения входа. */
+  return { href: `${base}/notes/`, label: 'Открыть ЗАПИСКИ' };
 }
 
 const magicLinkBody = z.object({

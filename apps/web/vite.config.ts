@@ -70,8 +70,11 @@ function themeInitPlugin(script: string): Plugin {
 }
 
 export default defineConfig(async () => ({
-  /* Сборка едет в корень домена. */
-  base: '/',
+  /* Корень домена отдан промо (решение учредителя); сама PWA живёт под
+     /notes/. Физически dist/assets и dist/index.html остаются на месте —
+     Vite не переносит их сборкой, значит nginx обязан довести /notes/*
+     до тех же файлов (см. deploy/zapiski.cmpas.ru.nginx.conf). */
+  base: '/notes/',
   plugins: [react(), themeInitPlugin(await readThemeInitScript())],
 
   /* Версия сборки — в «О приложении» (1_Design.md §3.2, И6). Читается из

@@ -157,10 +157,18 @@ export interface AddressBar {
 
 export interface AddressBarOptions {
   /**
-   * Служебный путь возврата. После разбора адрес заменяется корнем: перезагрузка
-   * страницы после входа не должна упираться в маршрут, которого нет в статике.
+   * Служебный путь возврата. После разбора адрес заменяется на `appRoot`:
+   * перезагрузка страницы после входа не должна упираться в маршрут,
+   * которого нет в статике.
    */
   authPath?: string;
+  /**
+   * Куда переписать адрес после разбора. По умолчанию корень — так было,
+   * когда оболочка жила на «/». У веба оболочка переехала на /notes/
+   * (корень отдан промо), поэтому вызывающая сторона обязана передать свой
+   * настоящий адрес — иначе перезагрузка после входа попадёт на промо.
+   */
+  appRoot?: string;
 }
 
 /**
@@ -178,6 +186,7 @@ export function takeAuthFromAddressBar(
   options: AddressBarOptions = {},
 ): AuthCallback | null {
   const authPath = options.authPath ?? '/auth';
+  const appRoot = options.appRoot ?? '/';
   const href = win.location.href;
   const callback = parseAuthCallback(href);
   if (callback === null) return null;
@@ -186,7 +195,7 @@ export function takeAuthFromAddressBar(
   try {
     const url = new URL(cleaned);
     if (url.pathname === authPath || url.pathname.startsWith(`${authPath}/`)) {
-      url.pathname = '/';
+      url.pathname = appRoot;
       cleaned = url.toString();
     }
   } catch {

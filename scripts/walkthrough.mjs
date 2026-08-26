@@ -85,7 +85,9 @@ const served = await serveDist(DIST, PORT).catch((error) => {
   return null;
 });
 const server = served;
-const URL_BASE = served.url;
+/* Приложение теперь на /notes/ — корень отдан промо. static-server.mjs
+   доводит /notes/* до тех же физических файлов, что и nginx в проде. */
+const URL_BASE = `${served.url}notes/`;
 
 const browser = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'], env: browserEnv() });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, locale: 'ru-RU' });

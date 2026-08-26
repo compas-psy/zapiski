@@ -28,7 +28,15 @@
 const VERSION = 'v2';
 const SHELL_CACHE = `zapiski-shell-${VERSION}`;
 const ASSET_CACHE = `zapiski-assets-${VERSION}`;
-const SHELL_URL = '/index.html';
+/*
+ * Корень домена отдан промо (решение учредителя), приложение — на /notes/.
+ * Физически это тот же файл, что раньше лежал в /index.html: Vite не
+ * переносит сборку, nginx доводит /notes/index.html до тех же байтов
+ * (см. deploy/zapiski.cmpas.ru.nginx.conf). «/» больше не оболочка — её
+ * нельзя ни предзагружать сюда, ни использовать как запасной ключ: там
+ * теперь обычная страница, и однажды она окажется в кэше оболочки.
+ */
+const SHELL_URL = '/notes/index.html';
 /** Куда приходит возврат после входа. Это маршрут приложения, а не файл. */
 const AUTH_ROUTE = '/auth';
 
@@ -36,7 +44,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      await cache.addAll(['/', SHELL_URL, '/manifest.webmanifest']).catch(() => undefined);
+      await cache.addAll([SHELL_URL, '/notes/manifest.webmanifest']).catch(() => undefined);
       await self.skipWaiting();
     })(),
   );
@@ -92,7 +100,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(networkFirstShell(request));
     return;
   }
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith('/notes/assets/')) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
     return;
   }
@@ -107,7 +115,7 @@ self.addEventListener('message', (event) => {
 /** Оболочка приложения: из кэша, а если её там нет — с сервера. */
 async function appShell() {
   const cache = await caches.open(SHELL_CACHE);
-  const cached = (await cache.match(SHELL_URL)) ?? (await cache.match('/'));
+  const cached = await cache.match(SHELL_URL);
   if (cached) return cached;
   const response = await fetch(SHELL_URL);
   if (response.ok) cache.put(SHELL_URL, response.clone());
@@ -150,7 +158,7 @@ async function networkFirstShell(request) {
     return response;
   } catch {
     const cache = await caches.open(SHELL_CACHE);
-    const cached = (await cache.match(SHELL_URL)) ?? (await cache.match('/'));
+    const cached = await cache.match(SHELL_URL);
     if (cached) return cached;
     throw new Error('offline');
   }

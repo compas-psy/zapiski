@@ -124,7 +124,7 @@ function loadWorker(): Harness {
        ругался бы на `undefined` — то есть врал бы о причине. */
     shell: () => {
       for (const [name, store] of stores) {
-        if (name.includes('shell')) return store.entries.get('/index.html');
+        if (name.includes('shell')) return store.entries.get('/notes/index.html');
       }
       return undefined;
     },
@@ -183,9 +183,17 @@ describe('оболочку кэширует только оболочка', () =
     expect(worker.shell()).not.toContain('/privacy');
   });
 
-  it('в кэше оболочки лежит именно оболочка', async () => {
+  it('корень домена — теперь промо, а не приложение — тоже не становится оболочкой', async () => {
+    /* / отдан промо-странице (решение учредителя): переход по корню — обычная
+       навигация, как /promo, и не должен подменить собой /notes/index.html. */
+    const root = await worker.navigate('/');
+    expect(await root?.text()).toBe('сеть:/');
+    expect(worker.shell(), 'корень подменил собой оболочку').not.toBe('сеть:/');
+  });
+
+  it('в кэше оболочки лежит именно оболочка приложения на /notes/', async () => {
     await worker.navigate('/promo');
-    expect(worker.shell()).toContain('/index.html');
+    expect(worker.shell()).toContain('/notes/index.html');
   });
 });
 
@@ -193,7 +201,7 @@ describe('возврат после входа остаётся маршруто
   it('/auth/callback отвечается оболочкой, не спрашивая сеть', async () => {
     const answer = await worker.navigate('/auth/callback#access_token=x');
     expect(answer, 'возврат после входа ушёл в сеть — статика ответит 404').not.toBeNull();
-    expect(await answer?.text()).toContain('/index.html');
+    expect(await answer?.text()).toContain('/notes/index.html');
   });
 
   it('после открытой промостраницы возврат всё равно даёт оболочку', async () => {
@@ -260,5 +268,94 @@ describe('новый воркер доезжает до устройств', () 
     const source = readFileSync(SW, 'utf8');
     expect(source).toContain('skipWaiting');
     expect(source).toContain('clients.claim');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Корень домена — промо, приложение — /notes/ (решение учредителя)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Сервис ещё не выпущен, откатывать установленные PWA не для кого — поэтому
+// перенос делается одним заходом. Но развязка у него та же, что у любой
+// живущей на весь домен статики: физический /index.html и /assets/* остаются
+// на месте (Vite не переносит их сборкой — так уже проверено настоящей
+// сборкой), а /notes/* — это ЛОГИЧЕСКИЙ адрес, который nginx обязан довести до
+// тех же файлов. Расхождение здесь — это 404 на каждый JS и CSS в проде.
+
+describe('sw.js знает новый адрес оболочки', () => {
+  it('SHELL_URL указывает на /notes/index.html, а не на корень', () => {
+    const source = readFileSync(SW, 'utf8');
+    expect(source, 'оболочка всё ещё ищется в корне — корень теперь промо').toContain(
+      "const SHELL_URL = '/notes/index.html'",
+    );
+  });
+
+  it('корень домена не входит в список предзагрузки install', () => {
+    /* «/» раньше был оболочкой и предзагружался install'ом. Теперь там
+       промо — предзагружать его в кэш ОБОЛОЧКИ значит однажды случайно
+       отдать его как fallback приложения. */
+    const source = readFileSync(SW, 'utf8');
+    const install = /self\.addEventListener\('install',[\s\S]*?\n\}\);/.exec(source)?.[0] ?? '';
+    expect(install, 'install-обработчик не найден').not.toBe('');
+    expect(install, 'корень «/» всё ещё в списке предзагрузки оболочки').not.toMatch(/addAll\(\['\/'/);
+  });
+
+  it('хешированные ассеты кэшируются по новому префиксу /notes/assets/', () => {
+    const source = readFileSync(SW, 'utf8');
+    expect(source, 'проверка ассетов ещё смотрит на голый /assets/').toContain(
+      "url.pathname.startsWith('/notes/assets/')",
+    );
+  });
+});
+
+describe('nginx: корень — промо, /notes/ — приложение, /auth — по-прежнему приложение', () => {
+  const vhost = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../deploy/zapiski.cmpas.ru.nginx.conf'),
+    'utf8',
+  );
+
+  it('точный «/» отдаёт промо, а не приложение', () => {
+    const block = /location = \/ \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'в vhost нет отдельного точного блока для «/»').not.toBe('');
+    expect(block, 'корень отдаёт не промо').toMatch(/promo\/index\.html/);
+  });
+
+  it('общий SPA-фолбэк тоже ведёт на промо, а не на приложение', () => {
+    const block = /\n    location \/ \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'в vhost нет общего блока location /').not.toBe('');
+    expect(block, 'случайный адрес всё ещё падает в приложение').toMatch(/promo\/index\.html/);
+  });
+
+  it('/notes отдаёт оболочку приложения', () => {
+    expect(vhost, 'нет location для /notes').toMatch(/location \/notes \{/);
+    const block = /location \/notes \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'блок /notes не фолбэчится на index.html приложения').toMatch(
+      /\/index\.html/,
+    );
+  });
+
+  it('/notes/assets/ доезжает до настоящих файлов в /assets/', () => {
+    const block = /location \^~ \/notes\/assets\/ \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'нет блока для /notes/assets/ — сборка станет пустой страницей без JS').not.toBe(
+      '',
+    );
+    expect(block, 'ассеты не перенаправлены на настоящий физический путь').toMatch(
+      /\/assets\/\$1/,
+    );
+  });
+
+  it('/notes/manifest.webmanifest доезжает до настоящего манифеста', () => {
+    const block = /location = \/notes\/manifest\.webmanifest \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'нет блока для /notes/manifest.webmanifest').not.toBe('');
+    expect(block).toMatch(/\/manifest\.webmanifest/);
+  });
+
+  it('/auth по-прежнему резолвится в приложение, а не в промо', () => {
+    /* Свежий /auth не проверяет только корневой фолбэк: раньше он падал в
+       общий location / (тогда — приложение), и после переноса промо на
+       корень тот же общий блок увёл бы возврат после входа на промо. */
+    const block = /location \^~ \/auth \{([^}]*)\}/.exec(vhost)?.[1] ?? '';
+    expect(block, 'нет отдельного блока для /auth — попадёт в промо-фолбэк').not.toBe('');
+    expect(block).toMatch(/\/index\.html/);
   });
 });

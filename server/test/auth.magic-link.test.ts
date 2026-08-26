@@ -408,6 +408,9 @@ describe.skipIf(noDatabase())('magic-link: страница вместо JSON', 
     expect(response.body, 'человеку показали машинный код').not.toContain('magic_link_expired');
     /* И дорога назад: иначе страница — тупик. */
     expect(response.body).toContain('Открыть ЗАПИСКИ');
+    /* Корень домена отдан промо (решение учредителя) — кнопка обязана вести
+       на само приложение, /notes/, а не на промо-страницу. */
+    expect(response.body).toMatch(/href="[^"]*\/notes\/"/);
   });
 
   /**

@@ -13,8 +13,9 @@
  *  2. адресная строка чистится СРАЗУ и до первого кадра: `history.replaceState`
  *     стирает токен и из строки, и из истории, и из `Referer` следующего
  *     перехода. Токен живёт в памяти ровно до того, как приложение его заберёт;
- *  3. служебный путь `/auth/…` заменяется корнем: перезагрузка страницы после
- *     входа не должна упираться в маршрут, которого нет в статике.
+ *  3. служебный путь `/auth/…` заменяется адресом приложения (/notes/, корень
+ *     отдан промо): перезагрузка страницы после входа не должна упираться в
+ *     маршрут, которого нет в статике.
  */
 import { takeAuthFromAddressBar, type AuthCallback } from '@zapiski/app';
 
@@ -27,7 +28,7 @@ let pending: AuthCallback | null = null;
 /** Снять возврат с текущего адреса и вычистить адресную строку. */
 function capture(): AuthCallback | null {
   if (typeof window === 'undefined') return null;
-  return takeAuthFromAddressBar(window);
+  return takeAuthFromAddressBar(window, { appRoot: '/notes/' });
 }
 
 /**

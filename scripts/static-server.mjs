@@ -43,7 +43,20 @@ export async function serveDist(root, port) {
   }
 
   const server = createServer((request, response) => {
-    const path = (request.url ?? '/').split('?')[0];
+    let path = (request.url ?? '/').split('?')[0];
+    /*
+     * Приложение живёт на /notes/ (корень отдан промо — см.
+     * deploy/zapiski.cmpas.ru.nginx.conf). Vite собирает его с base=/notes/,
+     * поэтому index.html ссылается на /notes/assets/*, /notes/manifest.
+     * webmanifest и /notes/icon*, а физически эти файлы остаются там же, где
+     * лежали раньше (dist/assets/*, dist/manifest.webmanifest, dist/icon*):
+     * Vite меняет ссылки, а не переносит файлы. В проде это доводит nginx
+     * несколькими `rewrite … last`; здесь — та же развязка, без неё браузер
+     * получит 404 на каждый JS и CSS и прогон увидит пустую страницу.
+     */
+    if (path === '/notes' || path === '/notes/') path = '/';
+    else if (path.startsWith('/notes/')) path = path.slice('/notes'.length);
+
     let file = join(root, path === '/' ? 'index.html' : path.slice(1));
     /* Каталог — не файл: отдаём его `index.html`, как это делает nginx
        (`try_files $uri $uri/`). Без этой ветки `/promo` уходил в `readFileSync`

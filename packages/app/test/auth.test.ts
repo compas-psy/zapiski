@@ -132,6 +132,21 @@ describe('токен не остаётся в адресной строке', ()
     expect(bar.replaced).toEqual([]);
   });
 
+  it('appRoot переносит очистку в /notes/, если оболочка там', () => {
+    /* Приложение переехало с корня на /notes/ (промо теперь на корне) —
+       перезагрузка после входа обязана попадать туда же, откуда пришла,
+       а не на «/», который теперь отдаёт промо. */
+    const bar = addressBar('https://zapiski.cmpas.ru/auth/callback#access_token=aaa');
+    takeAuthFromAddressBar(bar, { appRoot: '/notes/' });
+    expect(bar.location.href).toBe('https://zapiski.cmpas.ru/notes/');
+  });
+
+  it('appRoot по умолчанию остаётся корнем — обратная совместимость', () => {
+    const bar = addressBar('https://zapiski.cmpas.ru/auth/callback?token=ottt');
+    takeAuthFromAddressBar(bar);
+    expect(bar.location.href).toBe('https://zapiski.cmpas.ru/');
+  });
+
   it('stripAuthParams не оставляет ни пустого «?», ни пустого «#»', () => {
     expect(stripAuthParams('https://zapiski.cmpas.ru/x?token=a')).toBe('https://zapiski.cmpas.ru/x');
     expect(stripAuthParams('https://zapiski.cmpas.ru/x#access_token=a')).toBe(
