@@ -1,0 +1,22 @@
+# ЗАПИСКИ robots.txt
+# Public promo and legal pages are indexable
+# Private user notes (/p/*) are not indexed
+
+User-agent: *
+Allow: /
+Disallow: /p/
+
+# AI assistants: these are public marketing pages meant to be cited
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://zapiski.cmpas.ru/sitemap.xml

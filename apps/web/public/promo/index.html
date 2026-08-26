@@ -3,14 +3,16 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>ЗАПИСКИ — тихая комната для мыслей</title>
-<meta name="description" content="Заметки в Markdown, которые остаются вашими файлами. Работают без интернета, шифруются прямо на устройстве и синхронизируются через ваше облако." />
+<title>ЗАПИСКИ — тихая комната для мыслей на Markdown</title>
+<meta name="description" content="Три темы на выбор, не просто светлая/тёмная. Настоящий Markdown. Один редактор на Android, Windows и в браузере. Любую заметку можно закрыть паролем." />
 <meta name="color-scheme" content="light" />
 <link rel="icon" href="/promo/assets/zapiski-mark.svg" type="image/svg+xml" />
-<meta property="og:title" content="ЗАПИСКИ — тихая комната для мыслей" />
-<meta property="og:description" content="Заметки в Markdown, которые остаются вашими файлами." />
+<link rel="canonical" href="https://zapiski.cmpas.ru/promo" />
+<meta property="og:title" content="ЗАПИСКИ — тихая комната для мыслей на Markdown" />
+<meta property="og:description" content="Три темы на выбор, не просто светлая/тёмная. Настоящий Markdown. Один редактор на Android, Windows и в браузере. Любую заметку можно закрыть паролем." />
 <meta property="og:type" content="website" />
 <meta property="og:url" content="https://zapiski.cmpas.ru/promo" />
+<meta name="twitter:card" content="summary" />
 <style>
 /*
  * Промостраница ЗАПИСКИ — пересобрана по `REBUILD.md` пакета promo_handoff.
@@ -277,7 +279,7 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
 
 /* ── 4. Три колонки «Ваши…» ─────────────────────────────────────────────── */
 .sec--tight{padding-block:clamp(56px,7vw,96px)}
-.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:clamp(28px,4vw,56px)}
+.trio{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:clamp(28px,4vw,56px)}
 .trio__rule{inline-size:34px;block-size:2px;background:var(--accent);margin-block-end:22px}
 .trio h3{font-size:20px;font-weight:700;letter-spacing:-.015em;color:var(--text);margin-block-end:10px}
 .trio p{font-size:15px;line-height:1.62;color:var(--text-secondary)}
@@ -478,6 +480,23 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
   .slider__track{transition:none}
 }
 </style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "ЗАПИСКИ",
+  "applicationCategory": "ProductivityApplication",
+  "operatingSystem": ["Android", "Windows", "Web"],
+  "url": "https://zapiski.cmpas.ru",
+  "image": "https://zapiski.cmpas.ru/promo/assets/zapiski-mark.svg",
+  "description": "Markdown-заметки с тремя темами дизайна, работают на Android, Windows и веб. Любую заметку можно закрыть паролем. Бесплатно без регистрации.",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "RUB"
+  }
+}
+</script>
 </head>
 <body>
 
@@ -730,28 +749,89 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
   </div>
 </section>
 
-<!-- 4 · Три колонки «Ваши…» ───────────────────────────────────────────── -->
+<!-- 4 · Четыре причины ─────────────────────────────────────────────────── -->
 <section class="sec sec--white sec--tight">
   <div class="wrap trio">
     <div data-reveal>
       <div class="trio__rule"></div>
-      <h3>Ваши файлы</h3>
-      <p>Каждая заметка — обычный <span class="mono-w">.md</span> на вашем диске. Приложение можно удалить, заметки останутся.</p>
+      <h3>Ваш вид</h3>
+      <p>Три темы — не переключатель «тёмная/светлая», а три законченных характера. Выбирайте под свет за окном, а не подстраивайтесь под чужой вкус.</p>
     </div>
     <div data-reveal>
       <div class="trio__rule"></div>
-      <h3>Ваш ключ</h3>
-      <p>Шифрование AES-256 прямо на устройстве. Бесплатно, для любой заметки, без подписки и без нашего доступа.</p>
+      <h3>Ваш Markdown</h3>
+      <p>Не подобие — настоящий <span class="mono-w">.md</span> на вашем диске. Открывается любым редактором, живёт в Git.</p>
     </div>
     <div data-reveal>
       <div class="trio__rule"></div>
-      <h3>Ваш порядок</h3>
-      <p>Поиск по всем заметкам за миллисекунды и без интернета. Папки, теги и ссылки между заметками.</p>
+      <h3>Ваши три экрана</h3>
+      <p>Android, Windows и веб — один и тот же редактор, одна и та же заметка. Не урезанная версия для телефона — та же самая.</p>
+    </div>
+    <div data-reveal>
+      <div class="trio__rule"></div>
+      <h3>Ваш замок</h3>
+      <p>Любую заметку можно закрыть паролем.</p>
     </div>
   </div>
 </section>
 
-<!-- 5 · Два режима письма ─────────────────────────────────────────────── -->
+<!-- 5 · Темы ──────────────────────────────────────────────────────────── -->
+<section class="sec">
+  <div class="wrap">
+    <div class="themes__head" data-reveal>
+      <h2>Под ваш свет и ваши глаза</h2>
+      <p class="lead">Три темы — не оттенки одной, а разные характеры: тёплая бумага, строгий графит, чёрные чернила для OLED. У каждой — три акцента на выбор. По умолчанию — бумага с гранатовым акцентом; ночью — чернила: на OLED-экране такой фон почти не тратит заряд и не бьёт по глазам в темноте. Рядом в настройках — размер текста, интерлиньяж, ширина колонки и шрифт: Golos или Source Serif.</p>
+    </div>
+    <div class="themes" data-reveal>
+      <div class="theme">
+        <div class="theme__top" style="background:#FBFAF7">
+          <p class="theme__t" style="color:#38342E">Тихое утро</p>
+          <p class="theme__l" style="color:#38342E">Пауза в разговоре — не провал, а <span style="background:#F6E7E2">инструмент</span>.</p>
+          <div class="theme__c">
+            <span class="theme__box" style="background:#B5503C"><svg class="ico" width="10" height="10" style="stroke:#FFFFFF;stroke-width:3.2"><use href="#i-tick"/></svg></span>
+            <span class="theme__done" style="color:#8A8375">Проветрить кабинет</span>
+          </div>
+        </div>
+        <div class="theme__foot"><span class="theme__swatch" style="background:#FBFAF7"></span>Бумага · Гранат<span class="theme__dot" style="background:#B5503C"></span></div>
+      </div>
+      <div class="theme">
+        <div class="theme__top" style="background:#FBFAF7">
+          <p class="theme__t" style="color:#38342E">Тихое утро</p>
+          <p class="theme__l" style="color:#38342E">Пауза в разговоре — не провал, а <span style="background:#E4EAF2">инструмент</span>.</p>
+          <div class="theme__c">
+            <span class="theme__box" style="background:#4C6B94"><svg class="ico" width="10" height="10" style="stroke:#FFFFFF;stroke-width:3.2"><use href="#i-tick"/></svg></span>
+            <span class="theme__done" style="color:#726C60">Проветрить кабинет</span>
+          </div>
+        </div>
+        <div class="theme__foot"><span class="theme__swatch" style="background:#FBFAF7"></span>Бумага · Черника<span class="theme__dot" style="background:#4C6B94"></span></div>
+      </div>
+      <div class="theme">
+        <div class="theme__top" style="background:#232120">
+          <p class="theme__t" style="color:#E9E5DC">Тихое утро</p>
+          <p class="theme__l" style="color:#E9E5DC">Пауза в разговоре — не провал, а <span style="background:rgba(208,118,91,.18)">инструмент</span>.</p>
+          <div class="theme__c">
+            <span class="theme__box" style="background:#D0765B"><svg class="ico" width="10" height="10" style="stroke:#241511;stroke-width:3.2"><use href="#i-tick"/></svg></span>
+            <span class="theme__done" style="color:#9B948A">Проветрить кабинет</span>
+          </div>
+        </div>
+        <div class="theme__foot"><span class="theme__swatch" style="background:#232120"></span>Графит<span class="theme__dot" style="background:#D0765B"></span></div>
+      </div>
+      <div class="theme">
+        <div class="theme__top" style="background:#000000">
+          <p class="theme__t" style="color:#E9E5DC">Тихое утро</p>
+          <p class="theme__l" style="color:#E9E5DC">Пауза в разговоре — не провал, а <span style="background:rgba(208,118,91,.20)">инструмент</span>.</p>
+          <div class="theme__c">
+            <span class="theme__box" style="background:#D0765B"><svg class="ico" width="10" height="10" style="stroke:#241511;stroke-width:3.2"><use href="#i-tick"/></svg></span>
+            <span class="theme__done" style="color:#8F887D">Проветрить кабинет</span>
+          </div>
+        </div>
+        <div class="theme__foot"><span class="theme__swatch" style="background:#000000"></span>Чернила<span class="theme__dot" style="background:#D0765B"></span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · Два режима письма ─────────────────────────────────────────────── -->
 <section class="sec" id="write">
   <div class="wrap split">
     <div data-reveal>
@@ -814,7 +894,7 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
   </div>
 </section>
 
-<!-- 6 · Порядок без усилий ────────────────────────────────────────────── -->
+<!-- 7 · Порядок без усилий ────────────────────────────────────────────── -->
 <section class="sec" id="order">
   <div class="wrap split">
     <div data-reveal>
@@ -848,12 +928,12 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
         <p>…две <mark>розетки</mark> над столешницей, высота 110 см…</p>
         <p class="meta">4 авг · Дом</p>
       </div>
-      <p class="omock__foot">найдено за 12 мс · 64 заметки в индексе</p>
+      <p class="omock__foot">найдено мгновенно · 64 заметки в индексе</p>
     </div>
   </div>
 </section>
 
-<!-- 7 · Файлы, а не база данных ───────────────────────────────────────── -->
+<!-- 8 · Файлы, а не база данных ───────────────────────────────────────── -->
 <section class="sec sec--white" id="files">
   <div class="wrap split">
     <div data-reveal>
@@ -881,84 +961,16 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
   </div>
 </section>
 
-<!-- 8 · Темы ──────────────────────────────────────────────────────────── -->
-<section class="sec">
-  <div class="wrap">
-    <div class="themes__head" data-reveal>
-      <h2>Под ваш свет и ваши глаза</h2>
-      <p class="lead">Пять тем и шесть акцентов. По умолчанию — тёплая бумага с гранатовым акцентом. Ночью — чернила: на телефонах с OLED-экраном такой фон почти не тратит заряд и не бьёт по глазам в темноте. Рядом в настройках — размер текста, интерлиньяж, ширина колонки и шрифт: Golos или Source Serif.</p>
-    </div>
-    <div class="themes" data-reveal>
-      <div class="theme">
-        <div class="theme__top" style="background:#FBFAF7">
-          <p class="theme__t" style="color:#38342E">Тихое утро</p>
-          <p class="theme__l" style="color:#38342E">Пауза в разговоре — не провал, а <span style="background:#F6E7E2">инструмент</span>.</p>
-          <div class="theme__c">
-            <span class="theme__box" style="background:#B5503C"><svg class="ico" width="10" height="10" style="stroke:#FFFFFF;stroke-width:3.2"><use href="#i-tick"/></svg></span>
-            <span class="theme__done" style="color:#8A8375">Проветрить кабинет</span>
-          </div>
-        </div>
-        <div class="theme__foot"><span class="theme__swatch" style="background:#FBFAF7"></span>Бумага · Гранат<span class="theme__dot" style="background:#B5503C"></span></div>
-      </div>
-      <div class="theme">
-        <div class="theme__top" style="background:#F7F8F4">
-          <p class="theme__t" style="color:#142018">Тихое утро</p>
-          <p class="theme__l" style="color:#142018">Пауза в разговоре — не провал, а <span style="background:#E2EDE6">инструмент</span>.</p>
-          <div class="theme__c">
-            <span class="theme__box" style="background:#256247"><svg class="ico" width="10" height="10" style="stroke:#FFFFFF;stroke-width:3.2"><use href="#i-tick"/></svg></span>
-            <span class="theme__done" style="color:#5F6C64">Проветрить кабинет</span>
-          </div>
-        </div>
-        <div class="theme__foot"><span class="theme__swatch" style="background:#F7F8F4"></span>Крем · Хвоя<span class="theme__dot" style="background:#256247"></span></div>
-      </div>
-      <div class="theme">
-        <div class="theme__top" style="background:#FAFAFB">
-          <p class="theme__t" style="color:#33363A">Тихое утро</p>
-          <p class="theme__l" style="color:#33363A">Пауза в разговоре — не провал, а <span style="background:#E4EAF2">инструмент</span>.</p>
-          <div class="theme__c">
-            <span class="theme__box" style="background:#4C6B94"><svg class="ico" width="10" height="10" style="stroke:#FFFFFF;stroke-width:3.2"><use href="#i-tick"/></svg></span>
-            <span class="theme__done" style="color:#82868D">Проветрить кабинет</span>
-          </div>
-        </div>
-        <div class="theme__foot"><span class="theme__swatch" style="background:#FAFAFB"></span>Мел · Черника<span class="theme__dot" style="background:#4C6B94"></span></div>
-      </div>
-      <div class="theme">
-        <div class="theme__top" style="background:#232120">
-          <p class="theme__t" style="color:#E9E5DC">Тихое утро</p>
-          <p class="theme__l" style="color:#E9E5DC">Пауза в разговоре — не провал, а <span style="background:rgba(208,118,91,.18)">инструмент</span>.</p>
-          <div class="theme__c">
-            <span class="theme__box" style="background:#D0765B"><svg class="ico" width="10" height="10" style="stroke:#241511;stroke-width:3.2"><use href="#i-tick"/></svg></span>
-            <span class="theme__done" style="color:#9B948A">Проветрить кабинет</span>
-          </div>
-        </div>
-        <div class="theme__foot"><span class="theme__swatch" style="background:#232120"></span>Графит<span class="theme__dot" style="background:#D0765B"></span></div>
-      </div>
-      <div class="theme">
-        <div class="theme__top" style="background:#000000">
-          <p class="theme__t" style="color:#E9E5DC">Тихое утро</p>
-          <p class="theme__l" style="color:#E9E5DC">Пауза в разговоре — не провал, а <span style="background:rgba(208,118,91,.20)">инструмент</span>.</p>
-          <div class="theme__c">
-            <span class="theme__box" style="background:#D0765B"><svg class="ico" width="10" height="10" style="stroke:#241511;stroke-width:3.2"><use href="#i-tick"/></svg></span>
-            <span class="theme__done" style="color:#8F887D">Проветрить кабинет</span>
-          </div>
-        </div>
-        <div class="theme__foot"><span class="theme__swatch" style="background:#000000"></span>Чернила<span class="theme__dot" style="background:#D0765B"></span></div>
-      </div>
-    </div>
-  </div>
-</section>
-
 <!-- 9 · Приватность ───────────────────────────────────────────────────── -->
 <section id="privacy">
   <div class="wrap">
     <div class="band" data-reveal>
       <div class="band__text">
-        <h2>Мы не можем прочитать ваши заметки. Технически.</h2>
-        <p class="band__lead">Шифрование происходит на устройстве, до всякой синхронизации. Ключ выводится из вашего пароля и живёт в защищённом модуле телефона. Восстановить его не сможем и мы — в этом весь смысл.</p>
+        <h2>Любую заметку можно закрыть паролем</h2>
+        <p class="band__lead">Шифрование AES-256 происходит на устройстве, до всякой синхронизации. Ключ выводится из вашего пароля; если забудете его — расшифровать заметку не сможет никто, включая нас.</p>
         <div class="band__chips">
           <span class="band__chip">AES-256 на устройстве</span>
           <span class="band__chip">Разблокировка отпечатком</span>
-          <span class="band__chip">Серверы в России</span>
           <span class="band__chip">Аналитика — по желанию</span>
         </div>
       </div>
@@ -1020,11 +1032,10 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
         <div class="card__h"><b>Вход — только в вебе</b><span class="badge badge--mono">браузер</span></div>
         <div class="rows rows--gap">
           <p class="row"><span class="row__bullet"></span><span>Заметки в браузере на чужом компьютере</span></p>
-          <p class="row"><span class="row__bullet"></span><span>Публикация заметки по ссылке</span></p>
           <p class="row"><span class="row__bullet"></span><span>Облако СИМПАС и подписка — тоже из веб-кабинета</span></p>
         </div>
         <div class="rows">
-          <div class="fake"><img src="/promo/assets/yandex-logo.png" alt="" />Войти с Яндекс ID</div>
+          <div class="fake"><img src="/promo/assets/yandex-logo.png" alt="Логотип Яндекса" />Войти с Яндекс ID</div>
           <div class="fake fake--alt">
             <svg class="ico" width="18" height="18" viewBox="0 0 24 24" style="stroke:#5F6C64;stroke-width:1.75"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>Ссылка на почту
           </div>
@@ -1069,9 +1080,9 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
         <p class="plan__sub">или 249&nbsp;₽ при оплате за год</p>
         <div class="rows">
           <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Всё бесплатное — и сверху:</span></p>
-          <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Облако СИМПАС: 10 ГБ, E2E-шифрование</span></p>
+          <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Облако СИМПАС: 10 ГБ хранилища</span></p>
+          <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Заметки, закрытые паролем, остаются закрытыми и там</span></p>
           <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>История версий за год и веб-доступ</span></p>
-          <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Публикация заметки по ссылке</span></p>
           <p class="row"><svg class="ico" width="17" height="17"><use href="#i-tick"/></svg><span>Приоритетная поддержка и ранний доступ к новому</span></p>
         </div>
         <div class="plan__cta"><a class="btn btn--primary btn--lg btn--wide" href="#get">Попробовать 14 дней</a></div>
@@ -1092,7 +1103,7 @@ h2{font-size:clamp(30px,4.4vw,54px);font-weight:700;letter-spacing:-.032em;line-
       <a class="btn btn--primary btn--lg" href="/updates/latest/zapiski-setup.exe">Скачать для Windows</a>
       <a class="btn btn--secondary btn--lg" href="/">Открыть в браузере</a>
     </div>
-    <p class="under">Android · Windows · веб · iOS и macOS — скоро</p>
+    <p class="under">Android · Windows · веб · macOS — скоро</p>
   </div>
 </section>
 
