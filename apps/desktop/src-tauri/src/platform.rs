@@ -155,6 +155,23 @@ pub fn forward_opened_urls<R: Runtime>(app: &AppHandle<R>, urls: &[tauri::Url]) 
     let _ = app.emit(EVENT_OPEN_FILE, files);
 }
 
+/// Прочитать байты файла, на который указывает `AppIntent.open-file`.
+///
+/// Путь снаружи vault'а — обычный `std::fs::read`, а не `@tauri-apps/plugin-fs`
+/// из вебвью: скоуп плагина открыт только на каталог хранилища
+/// (`vault_open`), и путь к файлу с рабочего стола под него не подходит.
+/// `Ok(None)` — файл переместили или удалили между запуском и чтением; не
+/// ошибка, потому что решать, что сказать человеку, — дело `packages/app`
+/// (ARCHITECTURE §1), а не оболочки.
+#[tauri::command]
+pub fn read_opened_file(path: String) -> Result<Option<Vec<u8>>, String> {
+    match std::fs::read(&path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{path}: {error}")),
+    }
+}
+
 /// Какая система под приложением.
 ///
 /// Оболочка одна на Windows и macOS, а различий между ними хватает: своя
@@ -194,5 +211,28 @@ mod tests {
     fn узнаёт_запуск_в_трей() {
         assert!(started_in_tray(&["zapiski.exe".into(), TRAY_ARG.into()]));
         assert!(!started_in_tray(&["zapiski.exe".into()]));
+    }
+
+    #[test]
+    fn читает_открытый_файл_снаружи_vault() {
+        let dir = std::env::temp_dir().join(format!("zapiski-open-file-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("Идея.md");
+        std::fs::write(&path, "# Идея\n").unwrap();
+
+        let bytes = read_opened_file(path.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(bytes.as_deref(), Some("# Идея\n".as_bytes()));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn пропавший_файл_не_ошибка() {
+        /* Между запуском и чтением файл могли переместить или удалить —
+           не exception, а честный `None`: решать, что сказать человеку,
+           дело продукта, а не оболочки. */
+        let missing = std::env::temp_dir().join("zapiski-open-file-test-missing.md");
+        let bytes = read_opened_file(missing.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(bytes, None);
     }
 }

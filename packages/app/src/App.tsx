@@ -41,6 +41,11 @@ import { IconBug } from "./components/icons.js";
 import { EmptyBlock } from "./components/ScreenStates.js";
 import { ScreenBoundary } from "./components/ScreenBoundary.js";
 import { PaneResizer } from "./components/PaneResizer.js";
+import {
+  flattenFolders,
+  FolderPickerDialog,
+  NO_CURRENT_LOCATION,
+} from "./components/FolderDialogs.js";
 import { CommandPalette } from "./screens/CommandPalette.js";
 import { RemoveEncryptionSheet } from "./screens/NoteMenu.js";
 import { DebugMenu } from "./screens/DebugMenu.js";
@@ -132,6 +137,8 @@ export function AppShell(): ReactNode {
      остаётся ПОД клавиатурой, что заказчик и увидел на Android. */
   useKeyboardInset();
   const [shared, setShared] = useState<SharedPayload | null>(null);
+  /** Файл ассоциации `.md`, дожидающийся выбора папки (ТЗ §5.4). */
+  const [openFile, setOpenFile] = useState<{ name: string; bytes: Uint8Array } | null>(null);
   /** Что показывает панель редактора, когда маршрут — список (desktop). */
   const [lastNote, setLastNote] = useState<VaultPath | null>(null);
 
@@ -196,17 +203,34 @@ export function AppShell(): ReactNode {
         case "open-note":
           app.openNote(intent.id);
           return;
+        case "open-file":
+          void openIncomingFile(intent.path);
+          return;
         default:
-          /* `open-file` и `toggle-todo` живут в оболочках, которые их шлют;
-             молча игнорировать неизвестное здесь правильнее, чем падать. */
+          /* `toggle-todo` живёт в оболочке, которая его шлёт; молча
+             игнорировать неизвестное здесь правильнее, чем падать. */
           return;
       }
+    };
+    /**
+     * Файл ассоциации `.md`: читает байты оболочка (путь снаружи хранилища,
+     * вебу такого файла не видно), а куда его положить — спрашивает уже
+     * продукт (BEHAVIOR §8, ТЗ §5.4).
+     */
+    const openIncomingFile = async (path: string): Promise<void> => {
+      const bytes = await app.host.readOpenedFile?.(path);
+      if (!bytes) {
+        app.toast({ message: strings.library.openFileUnavailable });
+        return;
+      }
+      const name = path.split(/[/\\]/).pop() ?? path;
+      setOpenFile({ name, bytes });
     };
     void app.host.takeInitialIntent?.().then((intent) => {
       if (intent) handle(intent);
     });
     return app.host.onIntent?.(handle);
-  }, [app]);
+  }, [app, strings]);
 
   /* Карта хоткеев оболочки (BEHAVIOR §7). Команды текста — в редакторе:
      если он их уже обработал, событие приходит с defaultPrevented. */
@@ -338,6 +362,29 @@ export function AppShell(): ReactNode {
           app.toggleShare(false);
           setShared(null);
         }}
+      />
+      {/*
+        Файл ассоциации `.md`: байты уже прочитаны оболочкой (эффект выше),
+        остаётся спросить папку — тем же диалогом, что и «Переместить», но со
+        своим заголовком: файл ещё не заметка, значит не «переместить».
+      */}
+      <FolderPickerDialog
+        open={openFile !== null}
+        current={NO_CURRENT_LOCATION}
+        folders={flattenFolders(state.folders)}
+        title={
+          openFile ? strings.library.openFileFolderTitle(openFile.name) : ""
+        }
+        onPick={(folder) => {
+          if (!openFile) return;
+          void app
+            .importOpenedFile(openFile.name, openFile.bytes, folder)
+            .then((path) => {
+              if (path) app.openNote(path);
+            });
+          setOpenFile(null);
+        }}
+        onClose={() => setOpenFile(null)}
       />
       {/* Библиотека — выезжающая панель везде, кроме трёхпанельной раскладки. */}
       {layout !== "triple" ? (

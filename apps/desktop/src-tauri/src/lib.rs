@@ -97,6 +97,7 @@ pub fn run() {
             platform::shell_ready,
             auth::auth_take,
             platform::host_os,
+            platform::read_opened_file,
         ])
         .setup(move |app| {
             /*

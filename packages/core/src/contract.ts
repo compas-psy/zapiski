@@ -104,11 +104,18 @@ export interface GlobalHotkeyProvider {
 }
 
 export interface SharedPayload {
-  kind: 'text' | 'link' | 'image';
+  /**
+   * `file` — вложение `.md` из системного «Поделиться» (например, из Telegram).
+   * В отличие от `image`, содержимое ложится в тело заметки, а не в вложение,
+   * поэтому имени файла достаточно и хватает существующего `bytes`.
+   */
+  kind: 'text' | 'link' | 'image' | 'file';
   text?: string;
   url?: string;
   bytes?: Uint8Array;
   mime?: string;
+  /** Имя файла — для `file`, чтобы заголовок заметки не терялся при импорте. */
+  name?: string;
 }
 
 export interface ShareTargetProvider {

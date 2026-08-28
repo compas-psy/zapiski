@@ -105,6 +105,19 @@ export function FolderNameDialog({
   );
 }
 
+/**
+ * Значение `current` для объекта, у которого места в хранилище ЕЩЁ нет
+ * (файл ассоциации `.md`, «Открыть с помощью», «Поделиться»).
+ *
+ * Пустая строка как `current` означает «объект уже в корне», и ровно поэтому
+ * прячет кнопку «В корень» — переносить в корень уже лежащий там объект
+ * нечего предлагать. У входящего файла корня-по-умолчанию нет вовсе: корень
+ * для него такой же выбор, как любая папка, и на пустом хранилище без единой
+ * папки это вообще единственный выбор. Значение нарочно не пустая строка и не
+ * реальный путь — ни с чем в списке не совпадёт.
+ */
+export const NO_CURRENT_LOCATION = '\u0000';
+
 export interface FolderPickerDialogProps {
   open: boolean;
   /**
@@ -112,10 +125,21 @@ export interface FolderPickerDialogProps {
    * Для заметки — пустая строка: заметке любое поддерево подходит.
    */
   source?: string;
-  /** Где объект лежит сейчас — туда переносить некуда, пункта нет. */
+  /**
+   * Где объект лежит сейчас — туда переносить некуда, пункта нет. Пустая
+   * строка — корень. Для объекта без места в хранилище — `NO_CURRENT_LOCATION`.
+   */
   current: string;
   /** Плоский список путей всех папок хранилища. */
   folders: readonly string[];
+  /**
+   * Заголовок диалога. По умолчанию — «Переместить»: у диалога один
+   * заголовок на всех, кто просто переносит существующий объект. Файл,
+   * пришедший извне (ассоциация `.md`, «Открыть с помощью», «Поделиться»),
+   * ничего не переносит — он ещё не заметка, — и заголовок должен говорить
+   * «куда сохранить», а не «куда переместить».
+   */
+  title?: string;
   onPick: (parent: string) => void;
   onClose: () => void;
 }
@@ -135,6 +159,7 @@ export function FolderPickerDialog({
   source = '',
   current,
   folders,
+  title,
   onPick,
   onClose,
 }: FolderPickerDialogProps): ReactNode {
@@ -151,7 +176,7 @@ export function FolderPickerDialog({
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={strings.library.moveFolderTitle}>
+    <Modal open={open} onClose={onClose} title={title ?? strings.library.moveFolderTitle}>
       {/* «В корень» не показывается, когда объект уже в корне. */}
       {current === '' ? null : (
         <Button variant="secondary" fullWidth onClick={choose('')}>

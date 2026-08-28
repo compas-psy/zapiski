@@ -259,3 +259,29 @@ describe('файл .md, брошенный в редактор', () => {
     expect(paths).toHaveLength(2);
   });
 });
+
+describe('файл .md, пришедший извне (ассоциация Windows, «Открыть с помощью» и «Поделиться» на Android)', () => {
+  it('ложится в выбранную папку тем же путём, что и бросок мышью', async () => {
+    const app = await mount(() => <LibraryPanel />);
+    const path = await app.importOpenedFile(
+      'Идея.md',
+      new TextEncoder().encode('# Идея\n\nтекст\n'),
+      'Практика',
+    );
+
+    expect(path).toBe('Практика/Идея.md');
+    expect(app.getState().notes.some((note) => note.path === path)).toBe(true);
+  });
+
+  it('без папки ложится в корень', async () => {
+    const app = await mount(() => <LibraryPanel />);
+    const path = await app.importOpenedFile('Заметка.md', new TextEncoder().encode('текст'));
+    expect(path).toBe('Заметка.md');
+  });
+
+  it('не-markdown извне не становится заметкой', async () => {
+    const app = await mount(() => <LibraryPanel />);
+    const path = await app.importOpenedFile('фото.jpg', new Uint8Array([1, 2, 3]));
+    expect(path).toBeNull();
+  });
+});

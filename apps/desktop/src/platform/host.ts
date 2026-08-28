@@ -7,7 +7,7 @@
  */
 import { invoke } from '@tauri-apps/api/core';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
-import type { AppHost } from '@zapiski/app';
+import type { AppHost, AppIntent } from '@zapiski/app';
 import { LOCAL_OWNER } from '@zapiski/core';
 import type { Locale, VaultStorage } from '@zapiski/core';
 
@@ -21,7 +21,28 @@ import { WebviewPdfRenderer } from './pdf';
 import { NativePreferences, SHELL_PREF } from './prefs';
 import { platformStrings, resolveShellLocale, type PlatformStrings } from './strings';
 import { NativeUpdater } from './updater';
+import { onOpenFile } from './tray';
 import { currentVaultRoot, openVaultAt } from './vault';
+
+/**
+ * Намерения открыть `.md` (ассоциация файлов, ТЗ §5.4).
+ *
+ * Подписка на `onOpenFile` — первым же действием модуля, а не внутри
+ * `createDesktopShell()`: путь может прийти раньше, чем React смонтируется и
+ * позовёт `onIntent` (см. `main.tsx` — окно показывается уже после первого
+ * кадра). Без буфера намерение холодного старта терялось бы молча.
+ */
+const pendingIntents: AppIntent[] = [];
+let intentHandler: ((intent: AppIntent) => void) | null = null;
+
+function dispatchIntent(intent: AppIntent): void {
+  if (intentHandler) intentHandler(intent);
+  else pendingIntents.push(intent);
+}
+
+void onOpenFile((paths) => {
+  for (const path of paths) dispatchIntent({ kind: 'open-file', path });
+});
 
 /** Боевой ZapiskiCloud. В дев-режиме подменяется переменной окружения Vite. */
 // База ОБЯЗАНА включать префикс версии: приложение дописывает только путь
@@ -120,6 +141,22 @@ export async function createDesktopShell(): Promise<DesktopShell> {
     /** Возврат после входа по `zapiski://` (см. `platform/auth.ts`). */
     takeInitialAuthCallback,
     onAuthCallback,
+
+    /** Ассоциация `.md` (ТЗ §5.4) — путь уже мог прийти, см. буфер выше. */
+    async takeInitialIntent(): Promise<AppIntent | null> {
+      return pendingIntents.shift() ?? null;
+    },
+    onIntent(handler: (intent: AppIntent) => void): () => void {
+      intentHandler = handler;
+      while (pendingIntents.length > 0) handler(pendingIntents.shift()!);
+      return () => {
+        intentHandler = null;
+      };
+    },
+    async readOpenedFile(path: string): Promise<Uint8Array | null> {
+      const bytes = await invoke<number[] | null>('read_opened_file', { path });
+      return bytes ? Uint8Array.from(bytes) : null;
+    },
 
     pdf: new WebviewPdfRenderer(),
 

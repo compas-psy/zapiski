@@ -39,6 +39,12 @@ export function ShareSheet({ open, payload, onClose }: ShareSheetProps): ReactNo
 
   /** Текст, который ляжет в заметку. Ссылка — `[заголовок](url)`. */
   const text = useMemo(() => sharedText(payload), [payload]);
+  /**
+   * Превью для `.md`-файла — имя, а не всё содержимое: содержимое может быть
+   * сколько угодно длинным, а карточка превью тут одна строка, как и у любого
+   * другого источника.
+   */
+  const preview = payload?.kind === 'file' ? payload.name ?? text : text;
 
   const recent = useMemo(
     () =>
@@ -61,7 +67,7 @@ export function ShareSheet({ open, payload, onClose }: ShareSheetProps): ReactNo
     <BottomSheet open={open} onClose={onClose} title={strings.share.title}>
       {/* Превью содержимого на `--surface`. */}
       <div className="za-card za-card--static">
-        <span className="za-card__text">{text}</span>
+        <span className="za-card__text">{preview}</span>
       </div>
 
       <div className="za-stack za-stack--tight">
@@ -127,7 +133,19 @@ export function ShareSheet({ open, payload, onClose }: ShareSheetProps): ReactNo
     try {
       let path: VaultPath | null = null;
       let title = '';
-      if (target === 'new') {
+      if (target === 'new' && payload?.kind === 'file' && payload.bytes && payload.name) {
+        /*
+         * Файл `.md` — тем же импортом, что и бросок мышью и ассоциация на
+         * Windows (BEHAVIOR §9: импорт никогда не перезаписывает существующую
+         * заметку). `vaultRef.create()` этого не умеет — он завёл бы вторую
+         * дорогу в хранилище без этого правила.
+         */
+        path = await app.importOpenedFile(payload.name, payload.bytes, folder);
+        if (path) {
+          const created = await app.readNote(path);
+          title = created?.title ?? '';
+        }
+      } else if (target === 'new') {
         const created = await app.vaultRef?.create({
           body: text,
           ...(folder ? { folder } : {}),
@@ -169,5 +187,14 @@ export function sharedText(payload: SharedPayload | null): string {
     return payload.text ? `[${payload.text}](${payload.url})` : payload.url;
   }
   if (payload.kind === 'image') return payload.text ?? '';
+  /*
+   * `file` — вложение `.md`: приходит байтами, не готовым текстом. Нужен
+   * при добавлении в СУЩЕСТВУЮЩУЮ заметку (там текст просто дописывается),
+   * при создании новой заметки в дело идёт `importOpenedFile` — он читает
+   * байты сам.
+   */
+  if (payload.kind === 'file') {
+    return payload.bytes ? new TextDecoder().decode(payload.bytes) : payload.text ?? '';
+  }
   return payload.text ?? payload.url ?? '';
 }

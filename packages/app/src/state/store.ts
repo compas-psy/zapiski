@@ -2751,21 +2751,56 @@ export class AppController {
    * (в редакторе они становятся вложениями).
    */
   async importDroppedNotes(files: readonly File[], folder?: string): Promise<VaultPath[]> {
-    const vault = this.vault;
-    if (!vault) {
-      this.toast({ message: this.strings.errors.folderUnavailable });
-      return [];
-    }
     const map = new Map<string, Uint8Array>();
     for (const file of files) {
       if (!isMarkdownFile(file.name)) continue;
       map.set(file.name, new Uint8Array(await file.arrayBuffer()));
     }
+    return this.importNoteBytes(map, folder);
+  }
+
+  /**
+   * Файл, пришедший извне: ассоциация `.md` на Windows, «Открыть с помощью» и
+   * «Поделиться» на Android (ТЗ §5.4, BEHAVIOR §8). У платформы уже есть байты
+   * и имя — читает их оболочка (путь снаружи хранилища, вебу такого файла не
+   * видно), сюда попадает готовое содержимое.
+   *
+   * Тем же `importNoteBytes`, что и бросок мышью: один файл — тоже импорт, и
+   * инвариант BEHAVIOR §9 не должен знать, что источников у него два.
+   */
+  async importOpenedFile(name: string, bytes: Uint8Array, folder?: string): Promise<VaultPath | null> {
+    if (!isMarkdownFile(name)) return null;
+    const paths = await this.importNoteBytes(new Map([[name, bytes]]), folder);
+    return paths[0] ?? null;
+  }
+
+  /**
+   * Общая запись в vault и для броска мышью, и для файла, пришедшего извне.
+   *
+   * ── Почему через тот же `applyImport`, что и мастер импорта ─────────────
+   *
+   * Инвариант BEHAVIOR §9 «импорт никогда не перезаписывает существующие
+   * заметки» держится в одном месте — в ядре. Написать здесь «прочитать файл и
+   * создать заметку» значило бы завести вторую дорогу в хранилище, у которой
+   * этого правила нет: файл с уже занятым именем молча затёр бы чужой текст.
+   * Заодно бесплатно достаются суффиксы при совпадении имён и переписывание
+   * `[[ссылок]]`, поехавших за этими суффиксами.
+   *
+   * Возвращает пути созданных заметок в порядке файлов: экран открывает
+   * первую.
+   */
+  private async importNoteBytes(map: Map<string, Uint8Array>, folder?: string): Promise<VaultPath[]> {
+    const vault = this.vault;
+    if (!vault) {
+      this.toast({ message: this.strings.errors.folderUnavailable });
+      return [];
+    }
     if (map.size === 0) return [];
 
     /*
-     * `stripRoot: false` — имена и так без папок: у файла, брошенного мышью,
-     * пути нет вовсе. А общий префикс на одном файле срезал бы его имя.
+     * `stripRoot: false` — имена и так без папок: у файла, брошенного мышью
+     * или пришедшего извне, пути нет вовсе. А общий префикс на одном файле
+     * срезал бы его имя.
      */
     const bundle = importFolder(map, { stripRoot: false });
     const report = await applyImport(vault, bundle, {

@@ -47,8 +47,9 @@ export function onQuickNote(handler: () => void): Promise<UnlistenFn> {
 /**
  * Подписка на открытие `.md` из проводника (ассоциация файлов, ТЗ §5.4).
  *
- * ⚠️ Та же история: порта в `AppHost` нет. Ассоциация регистрируется
- * установщиком, путь долетает до фронтенда, дальше нужен контракт.
+ * Слушатель здесь только транспорт: продуктовую сторону (буфер холодного
+ * старта, `AppIntent.open-file`) собирает `platform/host.ts`, а не эта
+ * функция и не `main.tsx` (ARCHITECTURE §1).
  */
 export function onOpenFile(handler: (paths: string[]) => void): Promise<UnlistenFn> {
   return listen<string[]>(EVENT_OPEN_FILE, (event) => handler(event.payload));

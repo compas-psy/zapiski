@@ -15,7 +15,7 @@ import { App } from '@zapiski/app';
 import { createRoot } from 'react-dom/client';
 
 import { createDesktopShell } from './platform/host';
-import { initTray, onOpenFile, onQuickNote } from './platform/tray';
+import { initTray, onQuickNote } from './platform/tray';
 import { scheduleUpdateChecks } from './platform/updater';
 
 /* Задержка для всего, что не нужно в первом кадре. Холодный старт по ТЗ §6 —
@@ -68,14 +68,12 @@ async function afterFirstPaint(shell: Awaited<ReturnType<typeof createDesktopShe
      оболочка своё снимет. */
   await shell.hotkey.bootDefault(shell.hotkeyAccelerator);
 
-  /* ⚠️ Два события ниже доходят до оболочки, но передать их приложению нечем:
-     в `AppHost` нет портов ни для «быстрой заметки» из трея, ни для открытия
-     `.md` из проводника. Половина оболочки сделана (ассоциация
-     зарегистрирована, путь доставлен) — вторая половина требует поля в
-     контракте, а не экрана в `apps/*` (ARCHITECTURE §1). Пока обработчики
-     пустые, и это видно в коде, а не спрятано за молчанием. */
+  /* ⚠️ Событие «быстрая заметка» из трея доходит до оболочки, но передать его
+     приложению нечем: в `AppHost` нет порта для этого (ассоциация `.md` уже
+     получила свой — `platform/host.ts`). Пока обработчик пустой, и это видно
+     в коде, а не спрятано за молчанием (ARCHITECTURE §1: «не хватает порта —
+     добавляется порт, а не экран»). */
   await onQuickNote(() => {});
-  await onOpenFile(() => {});
 
   /* Обновления: проверка при старте и раз в сутки, установка — с согласия
      пользователя (системный диалог, своих экранов у оболочки нет). */
