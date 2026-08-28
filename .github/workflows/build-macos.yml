@@ -204,6 +204,39 @@ jobs:
           codesign --verify --deep --strict "${app}"
           echo 'Подпись на месте (ad-hoc). Нотаризации нет и не будет: у нас нет Apple Developer Program.'
 
+      # `universal-apple-darwin` — это `lipo`, склеивающий два отдельно
+      # собранных бинаря. Склейка не гарантирована самим фактом успешного
+      # шага сборки: если один таргет неявно не собрался (кэш, флаг, версия
+      # тулчейна), `lipo` может отработать и на одном бинаре, а
+      # target=universal-apple-darwin в выводе уже написан. Тихо суженная
+      # сборка — ровно тот сценарий, который сама сборка называет по имени
+      # («Intel-Мак, на котором приложение не запустится, и никто не будет
+      # знать почему») — только для него не было проверки, только warning на
+      # случай отказа ВСЕГО universal-таргета целиком.
+      - name: Архитектуры внутри бинаря
+        env:
+          TARGET: ${{ steps.build.outputs.target }}
+        run: |
+          set -euo pipefail
+          app="$(find "apps/desktop/src-tauri/target/${TARGET}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          binary="${app}/Contents/MacOS/zapiski-desktop"
+          archs="$(lipo -archs "${binary}")"
+          echo "Архитектуры в бинаре: ${archs}"
+          if [ "${TARGET}" = 'universal-apple-darwin' ]; then
+            for want in arm64 x86_64; do
+              case " ${archs} " in
+                *" ${want} "*) ;;
+                *)
+                  echo "::error title=Universal-сборка сузилась::заявлен target=universal-apple-darwin, а в бинаре нет ${want}. Собрано только: ${archs}. На Мак с этой архитектурой приложение не запустится."
+                  exit 1
+                  ;;
+              esac
+            done
+            echo 'Обе архитектуры на месте: arm64 и x86_64.'
+          else
+            echo "::warning::universal не собрался на этом прогоне (см. предупреждение шага «Сборка .app и .dmg») — в бинаре только ${archs}."
+          fi
+
       - name: Найти .dmg и посчитать отпечаток
         id: dmg
         env:
@@ -375,3 +408,92 @@ jobs:
             printf '%s\n' "${section}"
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      # ── Настоящий вердикт Gatekeeper, а не наше предположение о нём ────────
+      #
+      # Всё, что было выше, проверяло СБОРКУ: подпись есть, процесс не падает,
+      # ассоциация с .md на месте. Ни один из этих шагов не воспроизводит то,
+      # с чем сталкивается человек, — двойной щелчок по приложению, СКАЧАННОМУ
+      # из интернета. У собранного здесь же .app нет атрибута
+      # `com.apple.quarantine`, и предыдущий смоук-тест запускал бинарь
+      # напрямую из шелла — тем же путём, каким Gatekeeper вообще не
+      # интересуется. Заказчик прислал реальный отказ («Не удается открыть
+      # программу «ЗАПИСКИ».», одна кнопка OK) — то есть страница
+      # /macos-warning и предыдущий смоук-тест не покрывают ровно тот путь, на
+      # котором ломается по-настоящему.
+      #
+      # Здесь имитируется этот путь без живого человека и без GUI-диалога:
+      # .app копируется из готового .dmg (не из каталога сборки — та же
+      # причина, что и у CFBundleDocumentTypes выше), помечается тем же
+      # атрибутом карантина, что ставит браузер при скачивании, и оценивается
+      # командой, которую использует сама Finder при попытке открыть файл —
+      # `spctl -t open --context context:primary-signature`. Это не догадка
+      # по форумам, а прямой ответ Gatekeeper на настоящей macOS-14 машине.
+      #
+      # Отказ (rejected) здесь — это НЕ поломка сборки: ad-hoc подпись без
+      # нотаризации отклоняется всегда, ради этого и существует
+      # /macos-warning. Шаг падает не на отказе, а если сама проверка
+      # отказывается работать (сломанный .app, spctl не нашёл вообще ничего) —
+      # такое уже не в духе «нужен пароль», а в духе «сборка битая».
+      - name: Настоящий вердикт Gatekeeper на закарантиненной копии
+        env:
+          DMG: ${{ steps.dmg.outputs.path }}
+        run: |
+          set -euo pipefail
+          mount="$(mktemp -d)"
+          hdiutil attach "${DMG}" -nobrowse -readonly -mountpoint "${mount}" > /dev/null
+          trap 'hdiutil detach "${mount}" -quiet || true' EXIT
+
+          src="$(find "${mount}" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "${src}" ]; then
+            echo '::error::в образе нет .app — проверять нечего'
+            exit 1
+          fi
+
+          # Копия в writable-каталог — как перетаскивание из окна .dmg в
+          # «Программы». Смонтированный образ read-only, xattr на него не
+          # поставить, да и реальный путь пользователя именно такой.
+          work="$(mktemp -d)"
+          app="${work}/$(basename "${src}")"
+          cp -R "${src}" "${app}"
+
+          # Атрибут карантина: ставит его браузер при скачивании файла, не
+          # система при установке. Формат «флаги;время;агент;UUID» —
+          # `0083` (LSQuarantineTypeOtherDownload) — тот же класс, что у
+          # .dmg, скачанного из Chrome или Safari.
+          xattr -w com.apple.quarantine "0083;$(printf '%08x' "$(date +%s)");Safari;$(uuidgen)" "${app}"
+          xattr -p com.apple.quarantine "${app}"
+
+          echo '── spctl -t open (оценка «пользователь открывает из Finder») ──'
+          set +e
+          verdict="$(spctl -a -vv -t open --context context:primary-signature "${app}" 2>&1)"
+          code=$?
+          set -e
+          printf '%s\n' "${verdict}"
+          echo "── код возврата spctl: ${code} ──────────────────────────────"
+
+          {
+            echo
+            echo '#### Вердикт Gatekeeper (spctl -t open, с атрибутом карантина)'
+            echo
+            echo 'Проверено на закарантиненной копии `.app` из готового `.dmg` — то, что'
+            echo 'реально видит Gatekeeper при открытии скачанного файла, а не догадка.'
+            echo
+            echo '```'
+            printf '%s\n' "${verdict}"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${code}" -eq 0 ]; then
+            echo 'Принято без предупреждения — неожиданно для ad-hoc без нотаризации, но не проблема.'
+            exit 0
+          fi
+
+          if printf '%s' "${verdict}" | grep -qi 'no such file\|not accessible\|source=$'; then
+            echo '::error title=spctl не смог оценить .app::см. вывод выше — это не «нужно разрешение в настройках», а сломанная проверка или сломанный .app.'
+            exit 1
+          fi
+
+          echo 'Gatekeeper отклоняет (rejected) — ожидаемо для ad-hoc подписи без нотаризации.'
+          echo 'Причина отказа — в «source=» строке вывода выше; это и есть тот текст,'
+          echo 'который в итоге определяет, какой путь обхода доступен человеку.'
