@@ -9,7 +9,7 @@ import { LOCAL_OWNER } from '@zapiski/core';
 import { onAuthCallback, takeInitialAuthCallback } from './platform/auth';
 import { onSystemBack } from './platform/back';
 import { createBiometrics } from './platform/biometrics';
-import { onIntent, takeInitialIntent } from './platform/intents';
+import { onIntent, readOpenedFile, takeInitialIntent } from './platform/intents';
 import {
   adoptSafTree,
   chosenSafTree,
@@ -122,6 +122,13 @@ export async function createHost(): Promise<AppHost> {
      */
     takeInitialIntent,
     onIntent,
+
+    /**
+     * Файл ассоциации `.md` (см. `platform/intents.ts`): «Открыть с
+     * помощью» уже скопировал байты в приватный каталог приложения, этот
+     * порт их просто читает.
+     */
+    readOpenedFile,
 
     /**
      * Где лежат заметки. Порядок такой:

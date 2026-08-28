@@ -129,6 +129,25 @@ const APPLICATION_CHILDREN = `
             <category android:name="android.intent.category.DEFAULT" />
             <data android:mimeType="text/plain" />
         </intent-filter>
+        <!--
+          Файл .md, пришедший через «Поделиться» (пример заказчика: Telegram
+          → «поделиться» → ЗАПИСКИ → выбор папки, ТЗ §5.4). Тип, который
+          сообщает отправитель, у .md не стандартизован — text/plain уже
+          покрыт строкой выше, здесь довешены два других частых варианта.
+          Решает не заявленный тип, а ИМЯ файла (ShareActivity.kt): чужой
+          файл незнакомого типа под эти фильтры не подходит и просто не
+          покажет ЗАПИСКИ как цель.
+        -->
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/markdown" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.SEND" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/x-markdown" />
+        </intent-filter>
         <intent-filter>
             <action android:name="android.intent.action.SEND" />
             <category android:name="android.intent.category.DEFAULT" />
@@ -138,6 +157,57 @@ const APPLICATION_CHILDREN = `
             <action android:name="android.intent.action.SEND_MULTIPLE" />
             <category android:name="android.intent.category.DEFAULT" />
             <data android:mimeType="image/*" />
+        </intent-filter>
+    </activity>
+
+    <!--
+      Ассоциация .md (ТЗ §5.4): «Открыть с помощью» из файлового менеджера.
+      Активность невидима, как и share-target, и по той же причине: путь
+      к файлу нужно принять и разбудить приложение независимо от того, живо
+      ли оно, — папку для файла спрашивает уже packages/app.
+
+      На стоковом Android .md не зарегистрирован в MimeTypeMap, и файловые
+      менеджеры чаще всего открывают его с типом application/octet-stream —
+      поэтому первый фильтр берёт */* и решает по pathPattern, а не по
+      заявленному типу (устоявшийся приём для markdown-редакторов на
+      Android). Второй фильтр — тот же приём для совсем старых менеджеров,
+      отдающих file://. Третий и четвёртый — на случай, если тип всё же
+      назван прямо.
+    -->
+    <activity
+        android:name=".OpenFileActivity"
+        android:exported="true"
+        android:excludeFromRecents="true"
+        android:noHistory="true"
+        android:taskAffinity=""
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data
+                android:scheme="content"
+                android:host="*"
+                android:mimeType="*/*"
+                android:pathPattern=".*\\.md" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data
+                android:scheme="file"
+                android:mimeType="*/*"
+                android:pathPattern=".*\\.md" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/markdown" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <data android:mimeType="text/x-markdown" />
         </intent-filter>
     </activity>
 
@@ -593,6 +663,9 @@ const EXPECTATIONS = [
   ['share-target: SEND_MULTIPLE', 'android.intent.action.SEND_MULTIPLE'],
   ['share-target: текст', 'android:mimeType="text/plain"'],
   ['share-target: картинка', 'android:mimeType="image/*"'],
+  ['share-target: .md через text/markdown', 'android:mimeType="text/markdown"'],
+  ['открытие .md: активность', 'android:name=".OpenFileActivity"'],
+  ['открытие .md: по расширению независимо от заявленного типа', 'android:pathPattern=".*\\.md"'],
   ['выбор папки: активность', 'android:name=".FolderPickActivity"'],
   ['возврат входа: активность', 'android:name=".AuthActivity"'],
   ['возврат входа: схема zapiski://', 'android:scheme="zapiski"'],

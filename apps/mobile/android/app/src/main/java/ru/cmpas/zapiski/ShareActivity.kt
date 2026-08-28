@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Patterns
 import org.json.JSONObject
 import java.io.File
@@ -56,6 +57,16 @@ class ShareActivity : Activity() {
             return image(uri, type)
         }
 
+        /*
+         * Файл, а не текст: Telegram и подобные шлют документ через
+         * EXTRA_STREAM, а не EXTRA_TEXT, независимо от заявленного типа
+         * (заказчик: «в Telegram прислали .md файл → поделиться»). Проверяем
+         * EXTRA_STREAM раньше EXTRA_TEXT — иначе файл молча провалился бы в
+         * «нет EXTRA_TEXT → ничего не приняли», как было до этой правки.
+         */
+        val streamUri = uriExtra(source, Intent.EXTRA_STREAM)
+        if (streamUri != null) return markdownFile(streamUri)
+
         val text = source.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: return null
         val subject = source.getCharSequenceExtra(Intent.EXTRA_SUBJECT)?.toString()
         return text(text, subject)
@@ -99,18 +110,7 @@ class ShareActivity : Activity() {
      * payload позже — возможно, после перезапуска.
      */
     private fun image(uri: Uri, type: String): JSONObject? {
-        val directory = File(cacheDir, "share").apply { mkdirs() }
-        val target = File(directory, "share-${System.currentTimeMillis()}-${uri.hashCode()}.bin")
-
-        val copied = try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            } != null
-        } catch (error: Throwable) {
-            false
-        }
-        if (!copied) return null
-
+        val target = stage(uri) ?: return null
         val mime = contentResolver.getType(uri) ?: type
         return JSONObject().apply {
             put("kind", "image")
@@ -118,6 +118,59 @@ class ShareActivity : Activity() {
             put("mime", mime)
         }
     }
+
+    /**
+     * Файл `.md`, пришедший через «Поделиться» (ТЗ §5.4, BEHAVIOR §8).
+     *
+     * Решает ИМЯ файла, а не `intent.type`: тип, который сообщает
+     * отправитель, для `.md` не стандартизован — `text/plain` и
+     * `application/octet-stream` встречаются одинаково часто, — а имя не
+     * подделаешь и без него. Незнакомое расширение молча пропускаем, как и
+     * раньше пропускался любой непонятный `intent` (чужое приложение — веры
+     * ему нет).
+     *
+     * Тот же payload, что и у ассоциации на Windows (`packages/core`
+     * `SharedPayload.kind === 'file'`): `path` ведёт на временную копию,
+     * `name` — исходное имя для заголовка заметки после импорта.
+     */
+    private fun markdownFile(uri: Uri): JSONObject? {
+        val name = displayName(uri) ?: return null
+        val lower = name.lowercase()
+        if (!lower.endsWith(".md") && !lower.endsWith(".markdown")) return null
+
+        val target = stage(uri) ?: return null
+        return JSONObject().apply {
+            put("kind", "file")
+            put("name", name)
+            put("path", target.absolutePath)
+        }
+    }
+
+    /** Скопировать байты `content://` во временный файл кэша. */
+    private fun stage(uri: Uri): File? {
+        val directory = File(cacheDir, "share").apply { mkdirs() }
+        val target = File(directory, "share-${System.currentTimeMillis()}-${uri.hashCode()}.bin")
+        val copied = try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> input.copyTo(output) }
+            } != null
+        } catch (error: Throwable) {
+            false
+        }
+        return if (copied) target else null
+    }
+
+    /** Настоящее имя файла за `content://` — ContentResolver его знает, Uri почти никогда. */
+    private fun displayName(uri: Uri): String? =
+        try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (!cursor.moveToFirst()) return@use null
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index >= 0) cursor.getString(index) else null
+            }
+        } catch (error: Throwable) {
+            null
+        }
 
     private fun uriExtra(source: Intent, name: String): Uri? =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

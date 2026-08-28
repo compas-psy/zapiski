@@ -25,6 +25,9 @@ pub const EVENT_SHARE: &str = "zapiski://share";
 /// Возврат после входа: deep-link `zapiski://` или App Link на наш домен.
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 pub const EVENT_AUTH_CALLBACK: &str = "zapiski://auth-callback";
+/// ОС попросила открыть `.md` (ассоциация файлов, ТЗ §5.4).
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub const EVENT_OPEN_FILE: &str = "zapiski://open-file";
 /// Быстрая заметка: плитка Quick Settings или виджет «Записать» 1×1.
 pub const EVENT_QUICK_NOTE: &str = "zapiski://quick-note";
 /// Прогресс скачивания обновления, доля 0…1.
@@ -40,6 +43,10 @@ const QUICK_NOTE_MARK: &str = "quick-note";
 /// Возврат после входа: по строке-адресу на переход (`zapiski://…`).
 const AUTH_QUEUE: &str = "auth.jsonl";
 const AUTH_TAKEN: &str = "auth.taken.jsonl";
+/// Ассоциация `.md`: по строке-пути на файл, как и у возврата после входа —
+/// нести, кроме пути, нечего, байты уже лежат в приватном каталоге приложения.
+const OPEN_FILE_QUEUE: &str = "open-file.jsonl";
+const OPEN_FILE_TAKEN: &str = "open-file.taken.jsonl";
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 
@@ -47,11 +54,13 @@ static APP: OnceLock<AppHandle> = OnceLock::new();
 static PENDING: Mutex<Vec<SharedPayload>> = Mutex::new(Vec::new());
 /// Адреса возврата после входа, которые ещё никто не забрал.
 static PENDING_AUTH: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// Пути файлов ассоциации, которые ещё никто не забрал.
+static PENDING_OPEN_FILE: Mutex<Vec<String>> = Mutex::new(Vec::new());
 /// Забор очереди — «прочитать и опустошить», двумя потоками сразу нельзя.
 static DRAIN_LOCK: Mutex<()> = Mutex::new(());
 
-/// То, что пишет Kotlin. Картинку он кладёт во временный файл и передаёт
-/// путь: гонять мегабайты фотографии через JNI незачем.
+/// То, что пишет Kotlin. Картинку и файл `.md` он кладёт во временный файл и
+/// передаёт путь: гонять мегабайты через JNI незачем.
 #[derive(Deserialize)]
 struct SharedIntent {
     kind: String,
@@ -59,6 +68,8 @@ struct SharedIntent {
     url: Option<String>,
     path: Option<String>,
     mime: Option<String>,
+    /// Имя файла — только у `kind: "file"` (ТЗ §5.4).
+    name: Option<String>,
 }
 
 /// `SharedPayload` из контракта ядра.
@@ -73,6 +84,8 @@ pub struct SharedPayload {
     pub bytes: Option<Vec<u8>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 pub fn remember_app(handle: AppHandle) {
@@ -108,12 +121,12 @@ fn inbox_dir() -> Option<PathBuf> {
 /// извне, и доверия к нему нет.
 fn parse_intent(line: &str) -> Option<SharedPayload> {
     let intent: SharedIntent = serde_json::from_str(line).ok()?;
-    if !matches!(intent.kind.as_str(), "text" | "link" | "image") {
+    if !matches!(intent.kind.as_str(), "text" | "link" | "image" | "file") {
         return None;
     }
 
-    // Картинка приезжает файлом: читаем и сразу убираем за собой — временная
-    // копия чужой фотографии не должна оставаться в кэше.
+    // Картинка и файл `.md` приезжают файлом: читаем и сразу убираем за
+    // собой — временная копия чужого содержимого не должна оставаться в кэше.
     let bytes = intent.path.as_deref().and_then(|path| {
         let data = std::fs::read(path).ok();
         let _ = std::fs::remove_file(path);
@@ -126,6 +139,7 @@ fn parse_intent(line: &str) -> Option<SharedPayload> {
         url: intent.url,
         bytes,
         mime: intent.mime,
+        name: intent.name,
     })
 }
 
@@ -234,6 +248,61 @@ pub fn poke_auth() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Ассоциация `.md` (ТЗ §5.4)
+//
+// Та же дорога, что у возврата после входа: Kotlin копирует байты в приватный
+// каталог приложения (см. `OpenFileActivity`) и кладёт путь строкой в
+// `open-file.jsonl`, а Rust забирает файл, когда фронтенд уже готов.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Забрать файл очереди путей и разложить его в память.
+fn collect_open_file_from_disk() {
+    let _guard = DRAIN_LOCK.lock();
+    let Some(directory) = inbox_dir() else {
+        return;
+    };
+
+    let queue = directory.join(OPEN_FILE_QUEUE);
+    let taken = directory.join(OPEN_FILE_TAKEN);
+    if std::fs::rename(&queue, &taken).is_err() {
+        return;
+    }
+    let content = std::fs::read_to_string(&taken).unwrap_or_default();
+    let _ = std::fs::remove_file(&taken);
+
+    let parsed: Vec<String> = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+
+    if let Ok(mut pending) = PENDING_OPEN_FILE.lock() {
+        pending.extend(parsed);
+    }
+}
+
+fn take_pending_open_file() -> Vec<String> {
+    PENDING_OPEN_FILE
+        .lock()
+        .map(|mut queue| std::mem::take(&mut *queue))
+        .unwrap_or_default()
+}
+
+/// Kotlin сообщил, что пришёл путь к файлу ассоциации, и приложение живо.
+/// Используется только Android-веткой (`android.rs`).
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub fn poke_open_file() {
+    collect_open_file_from_disk();
+    let Some(handle) = app() else {
+        return;
+    };
+    for path in take_pending_open_file() {
+        let _ = handle.emit(EVENT_OPEN_FILE, path);
+    }
+}
+
 /// Тап по плитке Quick Settings или виджету «Записать» при живом приложении.
 pub fn emit_quick_note() {
     if let Some(handle) = app() {
@@ -279,6 +348,31 @@ pub fn share_take() -> Vec<SharedPayload> {
 pub fn auth_take() -> Vec<String> {
     collect_auth_from_disk();
     take_pending_auth()
+}
+
+/// Забрать накопившиеся пути файлов ассоциации `.md` (ТЗ §5.4).
+///
+/// Очередь опустошается: тот же путь не должен предложить диалог выбора
+/// папки дважды.
+#[tauri::command(async)]
+pub fn open_file_take() -> Vec<String> {
+    collect_open_file_from_disk();
+    take_pending_open_file()
+}
+
+/// Прочитать байты файла ассоциации `.md`, уже скопированного Kotlin'ом в
+/// приватный каталог приложения (`OpenFileActivity`).
+///
+/// Обычный `std::fs::read`, а не SAF: путь уже наш, не `content://`.
+/// `Ok(None)` — файл успели убрать между запуском и чтением; не ошибка, как и
+/// на Windows (`apps/desktop/src-tauri/src/platform.rs::read_opened_file`).
+#[tauri::command(async)]
+pub fn read_opened_file(path: String) -> Result<Option<Vec<u8>>, String> {
+    match std::fs::read(&path) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("{path}: {error}")),
+    }
 }
 
 /// FLAG_SECURE (BEHAVIOR §5.3, приёмочный критерий №7).
@@ -365,5 +459,29 @@ mod tests {
         assert!(parse_intent("не json").is_none());
         assert!(parse_intent(r#"{"kind":"text","te"#).is_none());
         assert!(parse_intent(r#"{"kind":"video","path":"/sdcard/x.mp4"}"#).is_none());
+    }
+
+    #[test]
+    fn файл_md_из_поделиться_читает_байты_по_пути_и_убирает_за_собой() {
+        // Тот же приём, что у картинки: Kotlin кладёт байты во временный
+        // файл и путь к нему, а не гонит содержимое через JNI строкой.
+        let path = std::env::temp_dir().join(format!(
+            "zapiski-share-file-test-{}-{}.bin",
+            std::process::id(),
+            std::process::id()
+        ));
+        std::fs::write(&path, "# Идея\n\nтекст\n").unwrap();
+
+        let line = format!(
+            r#"{{"kind":"file","name":"Идея.md","path":"{}"}}"#,
+            path.to_string_lossy().replace('\\', "\\\\")
+        );
+        let file = parse_intent(&line).expect("файл .md");
+        assert_eq!(file.kind, "file");
+        assert_eq!(file.name.as_deref(), Some("Идея.md"));
+        assert_eq!(file.bytes.as_deref(), Some("# Идея\n\nтекст\n".as_bytes()));
+
+        // Временная копия чужого файла не должна пережить разбор.
+        assert!(!path.exists(), "временный файл .md не убран за собой");
     }
 }

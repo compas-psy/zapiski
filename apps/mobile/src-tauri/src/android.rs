@@ -777,6 +777,16 @@ mod api {
     ) {
         platform::poke_auth();
     }
+
+    /// Ассоциация `.md`: «Открыть с помощью» из файлового менеджера (ТЗ §5.4).
+    /// Путь уже лежит в файле очереди, откуда его заберут ровно один раз.
+    #[no_mangle]
+    pub extern "system" fn Java_ru_cmpas_zapiski_NativeBridge_nativeOpenFile(
+        _env: JNIEnv,
+        _this: JObject,
+    ) {
+        platform::poke_open_file();
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

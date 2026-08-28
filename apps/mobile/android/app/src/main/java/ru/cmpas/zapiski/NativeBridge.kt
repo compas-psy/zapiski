@@ -388,6 +388,8 @@ object NativeBridge {
 
     private external fun nativeAuthCallback()
 
+    private external fun nativeOpenFile()
+
     /**
      * Результат асинхронной операции. `ok = true` с пустыми данными — это не
      * ошибка, а отмена пользователем (BEHAVIOR §5.2).
@@ -419,5 +421,13 @@ object NativeBridge {
      */
     fun pokeAuthCallback() {
         if (attached) nativeAuthCallback()
+    }
+
+    /**
+     * В очереди появился путь к файлу ассоциации `.md` (ТЗ §5.4): «Открыть
+     * с помощью» из файлового менеджера. Путь уже лежит в файле очереди.
+     */
+    fun pokeOpenFile() {
+        if (attached) nativeOpenFile()
     }
 }

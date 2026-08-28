@@ -30,6 +30,8 @@ interface SharedPayloadDto {
   url?: string | null;
   bytes?: number[] | null;
   mime?: string | null;
+  /** Имя файла — только у `kind: 'file'` (ТЗ §5.4). */
+  name?: string | null;
 }
 
 function fromDto(dto: SharedPayloadDto): SharedPayload {
@@ -38,6 +40,7 @@ function fromDto(dto: SharedPayloadDto): SharedPayload {
   if (typeof dto.url === 'string') payload.url = dto.url;
   if (Array.isArray(dto.bytes)) payload.bytes = Uint8Array.from(dto.bytes);
   if (typeof dto.mime === 'string') payload.mime = dto.mime;
+  if (typeof dto.name === 'string') payload.name = dto.name;
   return payload;
 }
 

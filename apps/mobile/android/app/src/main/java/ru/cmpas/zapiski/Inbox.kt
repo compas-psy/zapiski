@@ -24,6 +24,7 @@ object Inbox {
     private const val SHARE = "share.jsonl"
     private const val QUICK_NOTE = "quick-note"
     private const val AUTH = "auth.jsonl"
+    private const val OPEN_FILE = "open-file.jsonl"
 
     private fun dir(context: Context): File = File(context.filesDir, DIR).apply { mkdirs() }
 
@@ -53,6 +54,18 @@ object Inbox {
     fun putAuth(context: Context, url: String) {
         append(File(dir(context), AUTH), url.replace("\n", ""))
         NativeBridge.pokeAuthCallback()
+    }
+
+    /**
+     * Положить в очередь путь к файлу ассоциации `.md` и разбудить приложение.
+     *
+     * Одна строка = один путь, как и у `putAuth`: нести, кроме пути, нечего —
+     * байты уже лежат в приватном каталоге приложения (`OpenFileActivity`), а
+     * куда их положить, спросит `packages/app`.
+     */
+    fun putOpenFile(context: Context, path: String) {
+        append(File(dir(context), OPEN_FILE), path)
+        NativeBridge.pokeOpenFile()
     }
 
     /** Дописать строку. Ошибку глотаем: очередь — не источник истины. */

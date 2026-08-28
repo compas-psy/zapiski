@@ -30,15 +30,20 @@
  */
 import type { AppIntent } from '@zapiski/app';
 
-import { EVENTS, on } from './ipc';
+import { COMMANDS, EVENTS, call, on } from './ipc';
 
 /**
  * Намерение холодного старта.
  *
- * Отдельной команды «забрать намерение» в Rust нет: очередь быстрой заметки
- * взводится событием сразу после открытия хранилища, и подписка ниже его
- * получает. Функция оставлена, чтобы контракт был реализован целиком и чтобы
- * появление такой команды не требовало правок в `packages/app`.
+ * Отдельной команды «забрать намерение» в Rust нет для плитки/виджета:
+ * очередь быстрой заметки взводится событием сразу после открытия
+ * хранилища, и подписка ниже его получает. Функция оставлена, чтобы контракт
+ * был реализован целиком и чтобы появление такой команды не требовало правок
+ * в `packages/app`.
+ *
+ * Ассоциация `.md` (ниже, в `onIntent`) устроена иначе — холодный старт там
+ * не ждёт открытия хранилища, а забирает очередь сам, той же дорогой, что и
+ * `share_take()`.
  */
 export async function takeInitialIntent(): Promise<AppIntent | null> {
   return null;
@@ -64,9 +69,39 @@ export function onIntent(handler: (intent: AppIntent) => void): () => void {
      папки живёт на самом листе, где человек его и видит. */
   listen<null>(EVENTS.quickNote, () => ({ kind: 'new-note' }));
 
+  /*
+   * Ассоциация `.md`: «Открыть с помощью» из файлового менеджера (ТЗ §5.4).
+   * Папку для файла спрашивает `packages/app` (`App.tsx`) тем же диалогом,
+   * что и на Windows — здесь только путь.
+   */
+  listen<string>(EVENTS.openFile, (path) => ({ kind: 'open-file', path }));
+
+  /*
+   * Холодный старт: путь, оставленный до запуска, лежит в очереди — та же
+   * развилка, что у share-target (`share.ts`, `share_take()`). Без этого
+   * забора «Открыть с помощью» на остановленном приложении поднимало бы
+   * ЗАПИСКИ и ничего не показывало.
+   */
+  void call<string[]>(COMMANDS.openFileTake)
+    .then((pending) => {
+      if (disposed) return;
+      for (const path of pending) handler({ kind: 'open-file', path });
+    })
+    .catch(() => undefined);
+
   return () => {
     disposed = true;
     for (const stop of stops) stop();
     stops.length = 0;
   };
+}
+
+/**
+ * Байты файла ассоциации — уже наши, в приватном каталоге приложения
+ * (`OpenFileActivity` скопировал их из `content://`). Обычный файловый read,
+ * а не SAF: путь снаружи vault'а, но не снаружи нашего приложения.
+ */
+export async function readOpenedFile(path: string): Promise<Uint8Array | null> {
+  const bytes = await call<number[] | null>(COMMANDS.readOpenedFile, { path });
+  return bytes ? Uint8Array.from(bytes) : null;
 }

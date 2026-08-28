@@ -43,6 +43,9 @@ export const COMMANDS = {
   updaterCheck: 'updater_check',
   shareTake: 'share_take',
   authTake: 'auth_take',
+  /* Ассоциация `.md` — `platform.rs::open_file_take`/`read_opened_file`. */
+  openFileTake: 'open_file_take',
+  readOpenedFile: 'read_opened_file',
   widgetsPublish: 'widgets_publish',
   widgetsTakeCommands: 'widgets_take_commands',
 } as const;
@@ -62,6 +65,8 @@ export const EVENTS = {
   /** Прогресс скачивания обновления, 0…1. */
   /** Возврат после входа: deep-link или App Link (ТЗ §5.5). */
   authCallback: 'zapiski://auth-callback',
+  /** ОС попросила открыть `.md` — ассоциация файлов (ТЗ §5.4). */
+  openFile: 'zapiski://open-file',
 } as const;
 
 /** `invoke` без аргументов-заглушек и с человеческим типом. */

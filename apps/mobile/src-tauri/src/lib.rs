@@ -54,6 +54,8 @@ pub fn run() {
             platform::share_text,
             platform::share_take,
             platform::auth_take,
+            platform::open_file_take,
+            platform::read_opened_file,
             biometrics::biometrics_available,
             biometrics::biometrics_enroll,
             biometrics::biometrics_unlock,
