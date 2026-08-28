@@ -326,11 +326,13 @@ mod imp {
 
     pub fn available() -> bool {
         let context = unsafe { LAContext::new() };
+        // `Ok(())` — политику МОЖНО оценить (биометрия настроена); `Err` — нет
+        // (недоступна или не настроена), и текст ошибки нам не нужен: контракт
+        // порта — это `bool`, а не причина отказа.
         unsafe {
-            context.canEvaluatePolicy_error(
-                LAPolicy::DeviceOwnerAuthenticationWithBiometrics,
-                std::ptr::null_mut(),
-            )
+            context
+                .canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics)
+                .is_ok()
         }
     }
 
