@@ -69,6 +69,17 @@ aes-gcm = "0.10"
 sha2 = "0.10"
 getrandom = "0.3"
 
+# Touch ID (BiometricProvider) — ровно две вещи из двух крейтов:
+# `objc2-local-authentication` только проверяет, есть ли Touch ID вообще
+# (`LAContext.canEvaluatePolicy`, без запроса пальца), а сам запрос и
+# хранение делает Keychain через `security-framework`: элемент с
+# `AccessControlOptions::BIOMETRY_CURRENT_SET` система сама не отдаст без
+# Touch ID — так проще и надёжнее, чем спрашивать LocalAuthentication
+# отдельно и потом городить свою привязку результата к секрету.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2-local-authentication = { version = "0.3.2", default-features = false, features = ["std", "LAContext"] }
+security-framework = "3.6.0"
+
 [features]
 # Tauri по умолчанию включает devtools в дебаге; в релизе их нет.
 default = ["custom-protocol"]

@@ -240,6 +240,71 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # ── Запуск: доказать, что приложение действительно открывается ─────────
+      #
+      # До этого шага .app только СОБРАН и подписан ad-hoc — и ни разу не
+      # исполнялся. CI-машина не «чужой компьютер»: файл собран здесь же, у
+      # него нет атрибута карантина `com.apple.quarantine`, и Gatekeeper тут
+      # ни при чём — запуск либо переживёт первую секунду, либо упадёт по
+      # причине в самом коде. Раньше об этом узнавали только с чужого Мака.
+      #
+      # Шаг стоит ПОСЛЕ выгрузки артефакта: упадёт — .dmg всё равно можно
+      # будет скачать и открыть руками (тот же приём, что и у проверки
+      # CFBundleDocumentTypes ниже).
+      - name: Запустить .app и проверить, что процесс не падает
+        env:
+          TARGET: ${{ steps.build.outputs.target }}
+        run: |
+          set -euo pipefail
+          app="$(find "apps/desktop/src-tauri/target/${TARGET}/release/bundle/macos" -maxdepth 1 -name '*.app' | head -1)"
+          binary="${app}/Contents/MacOS/zapiski-desktop"
+          if [ ! -x "${binary}" ]; then
+            echo "::error::бинарь не найден или не исполняемый: ${binary}"
+            exit 1
+          fi
+
+          marker="$(mktemp)"
+          log="$(mktemp)"
+          # Запуск как у человека — без --tray: тот путь, где показывается окно.
+          "${binary}" > "${log}" 2>&1 &
+          pid=$!
+
+          # 10 с — щедрый запас: окно показывается по сигналу фронтенда, а
+          # собственная подстраховка приложения (REVEAL_FALLBACK) на случай
+          # молчания фронтенда срабатывает через 2,5 с.
+          alive='нет'
+          for _ in $(seq 1 20); do
+            sleep 0.5
+            if ! kill -0 "${pid}" 2>/dev/null; then
+              break
+            fi
+            alive='да'
+          done
+
+          if [ "${alive}" != 'да' ]; then
+            echo '::error title=Приложение не пережило запуск::процесс завершился сам меньше чем за секунду — вывод ниже'
+            cat "${log}" || true
+            exit 1
+          fi
+          echo 'Процесс жив спустя 10 с после запуска — приложение не падает на старте.'
+
+          kill "${pid}" 2>/dev/null || true
+          wait "${pid}" 2>/dev/null || true
+          pkill -f "${binary}" 2>/dev/null || true
+
+          # Падение уже ПОСЛЕ первых секунд (например, при первом сигнале от
+          # фронтенда) процесс живым не покажет — его ловит отчёт системы.
+          crash="$(find ~/Library/Logs/DiagnosticReports -maxdepth 1 \( -name 'zapiski-desktop-*' -o -name 'zapiski-desktop_*' \) -newer "${marker}" 2>/dev/null | head -1)"
+          if [ -n "${crash}" ]; then
+            echo "::error title=Найден отчёт о падении::${crash}"
+            cat "${crash}" || true
+            exit 1
+          fi
+
+          echo 'Отчётов о падении в DiagnosticReports нет.'
+          echo '### Запуск .app' >> "${GITHUB_STEP_SUMMARY}"
+          echo 'Приложение запустилось на CI-машине и проработало 10 с без падения.' >> "${GITHUB_STEP_SUMMARY}"
+
       # ── Ассоциация с .md: проверка без Мака ───────────────────────────────
       #
       # `fileAssociations` в конфиге — это ОБЕЩАНИЕ. Выполняет его бандлер,

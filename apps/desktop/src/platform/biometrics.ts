@@ -1,20 +1,22 @@
 /**
- * Порт `BiometricProvider` поверх Windows Hello.
+ * Порт `BiometricProvider` поверх системной биометрии: Windows Hello на
+ * Windows, Touch ID на macOS.
  *
- * Вся работа с `KeyCredentialManager` и заворачиванием секрета в AES-GCM
- * живёт в Rust (`src-tauri/src/hello.rs`) — в JS не попадает ни ключ, ни
- * подпись. Здесь только вызовы команд.
+ * Одни и те же команды на обеих платформах — какую из двух реализаций
+ * позвать, решает Rust по `cfg(target_os)` (`src-tauri/src/hello.rs`), а
+ * сюда, в JS, ни ключ, ни секрет биометрии не попадают. Здесь только вызовы
+ * команд.
  *
- * Честность важнее наличия галочки: если Windows Hello на машине не настроен,
+ * Честность важнее наличия галочки: если биометрия на машине не настроена,
  * `isAvailable()` вернёт `false`, а `PlatformCapabilities.biometrics` станет
  * `null` — и UI **скроет** тумблер биометрии, а не покажет его выключенным
  * (BEHAVIOR §5.1, ARCHITECTURE §2). Никакой имитации «биометрия прошла»
- * здесь нет и быть не может: без подписи Hello секрет не расшифровывается.
+ * здесь нет и быть не может: без Hello/Touch ID секрет не расшифровывается.
  */
 import { invoke } from '@tauri-apps/api/core';
 import type { BiometricProvider } from '@zapiski/core';
 
-export class WindowsHello implements BiometricProvider {
+export class SystemBiometrics implements BiometricProvider {
   async isAvailable(): Promise<boolean> {
     /* Ошибка вызова — это тоже «недоступно»: лучше спрятать тумблер, чем
        предложить способ входа, который не сработает. */
@@ -38,7 +40,7 @@ export class WindowsHello implements BiometricProvider {
 }
 
 /**
- * Провайдер, если Hello действительно доступен, иначе `null`.
+ * Провайдер, если системная биометрия действительно доступна, иначе `null`.
  *
  * Проверка делается один раз при старте, до монтирования приложения: контракт
  * `PlatformCapabilities.biometrics` — поле, а не функция, и «выяснится позже»
@@ -46,6 +48,6 @@ export class WindowsHello implements BiometricProvider {
  * настроек.
  */
 export async function createBiometrics(): Promise<BiometricProvider | null> {
-  const hello = new WindowsHello();
-  return (await hello.isAvailable()) ? hello : null;
+  const biometrics = new SystemBiometrics();
+  return (await biometrics.isAvailable()) ? biometrics : null;
 }
