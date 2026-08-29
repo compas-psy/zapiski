@@ -94,17 +94,41 @@ await page.evaluate(
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: '32px',
+      gap: '40px',
       padding: '0 48px',
       zIndex: '99999',
       textAlign: 'center',
     });
-    overlay.innerHTML =
-      `<svg viewBox="0 0 500 500" width="148" height="148" xmlns="http://www.w3.org/2000/svg">` +
-      `<path d="${markPath}" fill="#FBF3E3" fill-rule="evenodd" clip-rule="evenodd"></path></svg>` +
-      `<p style="margin:0;color:#FBF3E3;font-family:${fontFamily};font-weight:${fontWeight};` +
-      `font-size:28px;line-height:1.3;letter-spacing:-0.01em;max-width:280px;">` +
-      `Тихая комната для мыслей</p>`;
+    // DOM API, не строковый HTML: fontFamily несёт двойные кавычки
+    // («Golos Text», «Segoe UI», …), и они обрывали `style="…"` на первой же
+    // кавычке — размер вообще не применялся, текст шёл дефолтным 16px
+    // браузера. Через свойства style такой уязвимости к экранированию нет.
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', '0 0 500 500');
+    svg.setAttribute('width', '148');
+    svg.setAttribute('height', '148');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', markPath);
+    path.setAttribute('fill', '#FBF3E3');
+    path.setAttribute('fill-rule', 'evenodd');
+    path.setAttribute('clip-rule', 'evenodd');
+    svg.appendChild(path);
+
+    const caption = document.createElement('p');
+    caption.textContent = 'Тихая комната для мыслей';
+    Object.assign(caption.style, {
+      margin: '0',
+      color: '#FBF3E3',
+      fontFamily,
+      fontWeight,
+      fontSize: '38px',
+      lineHeight: '1.22',
+      letterSpacing: '-0.01em',
+      maxWidth: '320px',
+    });
+
+    overlay.append(svg, caption);
     document.body.appendChild(overlay);
   },
   { ...heroStyle, markPath: MARK_PATH },
