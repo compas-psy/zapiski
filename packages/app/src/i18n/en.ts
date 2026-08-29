@@ -420,7 +420,7 @@ export const en: AppCatalog = {
     updates: [
       'Windows and macOS update themselves: the app checks for a new version and installs it.',
       'On Android the app checks for a new version but does not install it — it opens the file link in your browser. From there it is the usual path: download and open. The first time, the system will ask the browser for permission to install apps; that permission stays with the browser, not with ZAPISKI.',
-      'This is deliberate. To install a package itself, an app has to declare that it installs other apps — and then Play Protect warns on every single installation. One extra tap every few weeks is cheaper than that warning.',
+      'This is deliberate. To install a package itself, an app has to declare that it installs other apps — and Android security systems warn on every single installation with that right, no matter where you got ZAPISKI. One extra tap every few weeks is cheaper than that warning.',
       'Updating never touches your notes: they live in your own folder, not inside the app.',
     ] as string[],
     footer:
