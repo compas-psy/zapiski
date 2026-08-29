@@ -15,7 +15,7 @@
  * молчаливый пропуск обходится дороже всего.
  */
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -64,13 +64,46 @@ describe('документы пакета опубликованы', () => {
     expect(response.body).toContain('ОСОБЫЕ УСЛОВИЯ ИСПОЛЬЗОВАНИЯ СЕРВИСА');
   });
 
-  it('реквизиты Оператора остались плейсхолдерами', async () => {
-    /* §18 и §21 запрещают их выдумывать. Пока владелец не заполнил, в тексте
-       обязаны стоять метки — и страница обязана честно называть себя рабочей
-       редакцией. */
+  it('ФИО, ОГРНИП, ИНН и адрес Оператора заполнены владельцем — не плейсхолдеры', async () => {
+    /* Реквизиты ИП внесены 29 августа 2026 по официальным документам
+       (справка Т-Банка, лист записи ЕГРИП) — не выдуманы, §18/§21 это и
+       требуют. */
     const response = await app.inject({ method: 'GET', url: '/legal/terms' });
-    expect(response.body).toContain('{{ФИО ОПЕРАТОРА}}');
+    expect(response.body).not.toContain('{{ФИО ОПЕРАТОРА}}');
+    expect(response.body).toContain('Мартынов Илья Николаевич');
+    expect(response.body).toContain('324774600361792');
+    expect(response.body).toContain('505003226577');
+  });
+
+  it('контактные email Оператора остались плейсхолдерами — и страница честно называет себя рабочей редакцией', async () => {
+    /* §18 и §21 запрещают их выдумывать. Пока владелец не назвал реальные
+       адреса, в тексте обязаны стоять метки — и страница обязана называть
+       себя рабочей редакцией. Как только последний плейсхолдер закроют,
+       баннер обязан исчезнуть сам (см. `isDraft` в legal.ts) — вот это и
+       проверяет второе утверждение теста ниже. */
+    const response = await app.inject({ method: 'GET', url: '/legal/terms' });
+    expect(response.body).toContain('{{LEGAL_EMAIL}}');
+    expect(response.body).toContain('{{SUPPORT_EMAIL}}');
     expect(response.body).toContain('Рабочая редакция');
+  });
+
+  it('баннер черновика гаснет сам, когда в тексте не остаётся плейсхолдеров', async () => {
+    /* Не полагаемся на память будущей правки: баннер обязан быть функцией от
+       содержимого файла, а не отдельной фразой, которую надо не забыть убрать
+       в день, когда владелец впишет последний email. Подменяем файл на диске
+       временно и убеждаемся, что страница это отражает без единой правки
+       кода. */
+    const filePath = path.join(ROOT, `legal/terms-${LEGAL_PACK_VERSION}.md`);
+    const original = await readFile(filePath, 'utf8');
+    const resolved = original.replace(/\{\{[^}]+\}\}/g, 'значение@example.test');
+    await writeFile(filePath, resolved, 'utf8');
+    try {
+      const response = await app.inject({ method: 'GET', url: '/legal/terms' });
+      expect(response.body).not.toContain('Рабочая редакция');
+      expect(response.body).not.toContain('{{');
+    } finally {
+      await writeFile(filePath, original, 'utf8');
+    }
   });
 });
 
