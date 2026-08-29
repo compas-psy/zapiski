@@ -51,3 +51,7 @@ pnpm-debug.log*
 # как наше обновление. Правило сторожит .github/workflows/security.yml.
 tauri-private.key
 *.p12
+
+# скриншоты для карточки стора — генерируются scripts/store-screenshots.mjs,
+# каждый раз заново, коммитить нечего
+/store-screenshots/
