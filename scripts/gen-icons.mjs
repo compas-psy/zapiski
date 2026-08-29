@@ -96,6 +96,19 @@ function variant(kind) {
        зона маскируемой иконки — центральные 80%. Влезает с запасом. */
     return markup.replace(PLATE_RECT, `<rect width="500" height="500" fill="${PLATE}"></rect>`);
   }
+  if (kind === 'monochrome') {
+    /* Тематическая иконка Android 13+ (Material You): систем сама красит
+       силуэт под обои пользователя, поэтому конкретный цвет источника не
+       имеет значения — важна только форма и прозрачность вовне неё. Чёрный
+       здесь тот же условный выбор, что и у `template` для macOS. Масштаб и
+       холст — те же, что у foreground: система накладывает единую маску на
+       оба слоя, и расхождение в размере рассинхронизировало бы силуэт между
+       обычной и тематической иконкой на одном и том же экране. */
+    return markup
+      .replace(PLATE_RECT, '')
+      .replace('scale(0.74)', 'scale(0.49)')
+      .replace(/fill="#FBF3E3"/g, 'fill="#000000"');
+  }
   /* Передний план adaptive. Холст 108dp, видимыми после маски остаются
      центральные 72dp — две трети. Чтобы дерево выглядело ровно так же, как
      на плитке (там оно занимает 0.74 стороны), на этом холсте оно должно
@@ -120,6 +133,29 @@ async function png(kind, size) {
     svg.setAttribute('height', String(s));
   }, size);
   const element = await page.$('#icon');
+  return element.screenshot({ omitBackground: true, type: 'png' });
+}
+
+/**
+ * Квадратная плитка размера `mark`, отцентрованная на прозрачном холсте
+ * `width`×`height`. Нужна ровно одному потребителю — широкому логотипу MSIX
+ * (`Wide310x150Logo.png`): там плитка не растягивается в прямоугольник, а
+ * остаётся квадратной и просто лежит на более широком прозрачном поле.
+ */
+async function pngPadded(kind, mark, width, height) {
+  await page.setContent(
+    `<!doctype html><html><body style="margin:0;background:transparent">
+       <div style="width:${width}px;height:${height}px;display:flex;align-items:center;justify-content:center">
+         <div id="icon" style="width:${mark}px;height:${mark}px">${variant(kind)}</div>
+       </div>
+     </body></html>`,
+  );
+  await page.evaluate((s) => {
+    const svg = document.querySelector('#icon svg');
+    svg.setAttribute('width', String(s));
+    svg.setAttribute('height', String(s));
+  }, mark);
+  const element = await page.$('div');
   return element.screenshot({ omitBackground: true, type: 'png' });
 }
 
@@ -261,12 +297,31 @@ const plan = [
   ['apps/mobile/src-tauri/icons/128x128.png', 'mark', 128],
   ['apps/mobile/src-tauri/icons/128x128@2x.png', 'mark', 256],
   ['apps/mobile/src-tauri/icons/icon.png', 'mark', 512],
+  /* MSIX (Microsoft Store, task #126) — те же квадратные плитки, что и везде
+     остальные. До этой правки собирались отдельно от общего источника, и
+     цвет держался в согласии только по случайности ручной сверки, а не по
+     построению — отсюда и запрос «сверь всё». StoreLogo и Square44 —
+     плотный кегль, тот же 0.74, что и у остальных «mark»: замеры показали,
+     что дерево на них уже занимало ровно такую же долю стороны. */
+  ['apps/desktop/msix/assets/Square44x44Logo.png', 'mark', 44],
+  ['apps/desktop/msix/assets/Square150x150Logo.png', 'mark', 150],
+  ['apps/desktop/msix/assets/Square310x310Logo.png', 'mark', 310],
+  ['apps/desktop/msix/assets/StoreLogo.png', 'mark', 50],
 ];
 for (const [density, launcher, foreground] of DENSITIES) {
   plan.push([`apps/mobile/android/app/src/main/res/mipmap-${density}/ic_launcher.png`, 'mark', launcher]);
   plan.push([
     `apps/mobile/android/app/src/main/res/mipmap-${density}/ic_launcher_foreground.png`,
     'foreground',
+    foreground,
+  ]);
+  /* Тематическая иконка Android 13+ — тот же холст и масштаб, что у
+     foreground, но силуэтом для системной перекраски (Material You). Раньше
+     этого слоя не было вовсе: приложение не участвовало в теме обоев, и
+     adaptive-icon XML не объявлял <monochrome> вообще. */
+  plan.push([
+    `apps/mobile/android/app/src/main/res/mipmap-${density}/ic_launcher_monochrome.png`,
+    'monochrome',
     foreground,
   ]);
 }
@@ -290,6 +345,13 @@ async function put(relativePath, data) {
 for (const [target, kind, size] of plan) {
   await put(target, await png(kind, size));
 }
+
+/* MSIX широкий тайл: та же квадратная плитка 150 px, отцентрованная на
+   прозрачном холсте 310×150, — не растянутый в прямоугольник знак. */
+await put(
+  'apps/desktop/msix/assets/Wide310x150Logo.png',
+  await pngPadded('mark', 150, 310, 150),
+);
 
 /* Windows: один файл со всеми размерами, которые запрашивает проводник. */
 const icoSizes = [16, 24, 32, 48, 64, 128, 256];
@@ -317,6 +379,14 @@ await put('apps/desktop/src-tauri/icons/icon.icns', icns(icnsData));
 /* Веб: тот же знак вектором — favicon и `manifest.webmanifest`. */
 await put('apps/web/public/icon.svg', Buffer.from(`${markup}\n`, 'utf8'));
 
+/* Промо-сайт: та же марка, тем же вектором. До этой правки файл жил
+   отдельно и был собран когда-то вручную с терракотой #C8604A — цветом
+   идентичности по старой редакции гайда (docs/spec/ds/zapiski-handoff.md).
+   design/tokens.json прямо документирует более позднее решение Р5:
+   «Гранат везде, включая иконку» — и вот именно поэтому фавикон и марка
+   на промо-странице визуально не совпадали с иконкой приложения. */
+await put('apps/web/public/promo/assets/zapiski-mark.svg', Buffer.from(`${markup}\n`, 'utf8'));
+
 /* Android adaptive: слои раздельно, фон — плоский цвет, а не картинка. */
 await put(
   'apps/mobile/android/app/src/main/res/values/ic_launcher_background.xml',
@@ -333,10 +403,14 @@ for (const name of ['ic_launcher.xml', 'ic_launcher_round.xml']) {
     Buffer.from(
       `<?xml version="1.0" encoding="utf-8"?>\n` +
         `<!-- СГЕНЕРИРОВАНО scripts/gen-icons.mjs. Слои раздельно: маску формы\n` +
-        `     рисует система, поэтому своего скругления у переднего плана нет. -->\n` +
+        `     рисует система, поэтому своего скругления у переднего плана нет.\n` +
+        `     <monochrome> — тематическая иконка Android 13+ (Material You):\n` +
+        `     систем сама красит силуэт под обои, элемент игнорируется на\n` +
+        `     версиях старше — объявлять его безопасно независимо от minSdk. -->\n` +
         `<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n` +
         `    <background android:drawable="@color/ic_launcher_background" />\n` +
         `    <foreground android:drawable="@mipmap/ic_launcher_foreground" />\n` +
+        `    <monochrome android:drawable="@mipmap/ic_launcher_monochrome" />\n` +
         `</adaptive-icon>\n`,
       'utf8',
     ),
