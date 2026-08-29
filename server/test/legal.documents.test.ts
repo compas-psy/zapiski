@@ -75,32 +75,39 @@ describe('документы пакета опубликованы', () => {
     expect(response.body).toContain('505003226577');
   });
 
-  it('контактные email Оператора остались плейсхолдерами — и страница честно называет себя рабочей редакцией', async () => {
-    /* §18 и §21 запрещают их выдумывать. Пока владелец не назвал реальные
-       адреса, в тексте обязаны стоять метки — и страница обязана называть
-       себя рабочей редакцией. Как только последний плейсхолдер закроют,
-       баннер обязан исчезнуть сам (см. `isDraft` в legal.ts) — вот это и
-       проверяет второе утверждение теста ниже. */
+  it('контактные email Оператора заполнены владельцем — не плейсхолдеры', async () => {
+    /* legal@cmpas.ru и support@cmpas.ru названы владельцем 29 августа 2026 —
+       последние два плейсхолдера пакета, §18/§21 не позволяли придумать их
+       самостоятельно. */
     const response = await app.inject({ method: 'GET', url: '/legal/terms' });
-    expect(response.body).toContain('{{LEGAL_EMAIL}}');
-    expect(response.body).toContain('{{SUPPORT_EMAIL}}');
-    expect(response.body).toContain('Рабочая редакция');
+    expect(response.body).not.toContain('{{LEGAL_EMAIL}}');
+    expect(response.body).not.toContain('{{SUPPORT_EMAIL}}');
+    expect(response.body).toContain('legal@cmpas.ru');
+    expect(response.body).toContain('support@cmpas.ru');
   });
 
-  it('баннер черновика гаснет сам, когда в тексте не остаётся плейсхолдеров', async () => {
-    /* Не полагаемся на память будущей правки: баннер обязан быть функцией от
-       содержимого файла, а не отдельной фразой, которую надо не забыть убрать
-       в день, когда владелец впишет последний email. Подменяем файл на диске
-       временно и убеждаемся, что страница это отражает без единой правки
-       кода. */
+  it('все реквизиты Оператора закрыты — баннер черновика погас сам, без отдельной правки кода', async () => {
+    /* Реквизиты заполнялись по частям (сперва ФИО/ОГРНИП/ИНН/адрес, потом
+       email), и баннер обязан реагировать на каждый шаг сам — как функция
+       от того, остался ли в файле хоть один `{{…}}` (см. `isDraft` в
+       legal.ts), а не по отдельной правке кода в день последнего плейсхолдера. */
+    const response = await app.inject({ method: 'GET', url: '/legal/terms' });
+    expect(response.body).not.toContain('{{');
+    expect(response.body).not.toContain('Рабочая редакция');
+  });
+
+  it('баннер черновика — функция от содержимого файла, а не от факта его исчерпания сейчас', async () => {
+    /* Падающий контрольный случай: если бы кто-то по памяти вернул в файл
+       хоть один плейсхолдер (новая правка текста, слияние старой ветки),
+       баннер обязан появиться заново без единой правки кода. Проверяем это
+       прямо, временно подменяя файл на диске, а не полагаясь на то, что
+       сейчас он и так пуст от `{{…}}`. */
     const filePath = path.join(ROOT, `legal/terms-${LEGAL_PACK_VERSION}.md`);
     const original = await readFile(filePath, 'utf8');
-    const resolved = original.replace(/\{\{[^}]+\}\}/g, 'значение@example.test');
-    await writeFile(filePath, resolved, 'utf8');
+    await writeFile(filePath, `${original}\n{{СНОВА ПЛЕЙСХОЛДЕР}}`, 'utf8');
     try {
       const response = await app.inject({ method: 'GET', url: '/legal/terms' });
-      expect(response.body).not.toContain('Рабочая редакция');
-      expect(response.body).not.toContain('{{');
+      expect(response.body).toContain('Рабочая редакция');
     } finally {
       await writeFile(filePath, original, 'utf8');
     }
