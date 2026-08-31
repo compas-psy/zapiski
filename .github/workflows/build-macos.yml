@@ -498,29 +498,48 @@ jobs:
           echo 'Причина отказа — в «source=» строке вывода выше; это и есть тот текст,'
           echo 'который в итоге определяет, какой путь обхода доступен человеку.'
 
-  # ── Диагностика на настоящей Tahoe: не гадать, а увидеть факт ───────────────
+  # ── Подпись на настоящей Tahoe: факт вместо догадки ──────────────────────────
   #
   # Заказчик сообщил о двух РАЗНЫХ отказах на разных Мак: на M2 (старее macOS)
   # помогает «Всё равно открыть» в Настройках, на M4 — голое «Не удается
   # открыть программу», без единого пункта обхода нигде. Раннер macos-14 этого
-  # не видит: это Sonoma, не Tahoe. До февраля 2026 проверить это в CI было
-  # нечем — с тех пор у GitHub есть настоящие Tahoe-раннеры (macos-26).
+  # не видит: это Sonoma, не Tahoe. С февраля 2026 у GitHub есть настоящие
+  # Tahoe-раннеры (macos-26) — с тех пор это можно проверить фактом, а не
+  # гадать по форумам.
   #
-  # Есть версия из внешнего источника: на Tahoe инструментарий подписи по
+  # Внешний источник объяснял разницу так: на Tahoe инструментарий подписи по
   # умолчанию режет CodeDirectory страницами по 16 КБ вместо 4 КБ, и ядро
   # (AMFI) будто бы отвергает такую подпись у крупных бинарей уже ПОСЛЕ старта
-  # процесса — не то же самое, что отказ Gatekeeper ДО старта. Независимого
-  # подтверждения именно этого механизма не нашлось: единственный источник —
-  # сам тикет, а issue, на которые он ссылается как на «подтверждающие»,
-  # называют другие причины (xattr `com.apple.provenance`, устаревший формат
-  # resource envelope). Поэтому здесь не чиним наугад, а сначала СМОТРИМ: что
-  # реально происходит с подписью и что пишет система при попытке запуска —
-  # безо всякого fix. Правка пайплайна — отдельным шагом, по факту из этого job.
+  # процесса. ПРОВЕРЕНО НА НАСТОЯЩЕЙ macOS 26.5.2 (25F84) и ОПРОВЕРГНУТО:
+  #
+  #   · Page size у нашего бинаря УЖЕ 4096, не 16384 — чинить нечем, версия
+  #     неприменима к этой сборке в принципе (правка --pagesize=4096 была бы
+  #     no-op).
+  #   · codesign --verify --deep --strict: «valid on disk, satisfies its
+  #     Designated Requirement» — подпись структурно исправна.
+  #   · xattr com.apple.provenance на файле нет вовсе — альтернативная версия
+  #     (из issue astral-sh/uv и openai/codex) тоже не подтвердилась.
+  #   · log show по kernel/syspolicyd/amfid за время попытки запуска —
+  #     НИ ОДНОЙ строки про сигнатуру, политику или отказ.
+  #   · Настоящий `open -n` на закарантиненной копии не убил процесс: он
+  #     провисел живым до принудительной уборки раннера 20 минут спустя —
+  #     то есть ядро его не отвергло и не убило, а `open` синхронно ждал
+  #     разрешения диалога Gatekeeper, которое в headless CI некому дать.
+  #
+  # Итог: `spctl -t open` на Tahoe отвечает тем же самым «rejected» без
+  # source=, что и на macos-14, — это тот же самый, уже объяснённый на
+  # /macos-warning случай (ad-hoc подпись без нотаризации, версия macOS может
+  # не показывать обход в Настройках вовсе), а не отдельный баг AMFI. Реальная
+  # попытка запуска убрана из постоянного job: она не блокируется и не падает
+  # сама — она виснет до таймаута раннера и ничего нового не измеряет сверх
+  # уже полученного факта. Осталась только быстрая (~15 с) проверка подписи —
+  # держит вахту на случай, если будущее обновление Tauri/Xcode сменит page
+  # size по умолчанию, и тогда снова будет что чинить.
   verify-tahoe:
-    name: Диагностика на настоящей Tahoe (macOS 26)
+    name: Подпись на настоящей Tahoe (macOS 26)
     needs: build
     runs-on: macos-26
-    timeout-minutes: 20
+    timeout-minutes: 10
 
     steps:
       - name: Версия системы и инструментов
@@ -564,11 +583,12 @@ jobs:
           echo "app=${app}" >> "${GITHUB_OUTPUT}"
           echo "bin=${app}/Contents/MacOS/zapiski-desktop" >> "${GITHUB_OUTPUT}"
 
-      # Смотрим на подпись ДО попытки запуска: точный размер страницы
-      # CodeDirectory и наличие xattr `com.apple.provenance` — два разных
-      # кандидата в причину из независимых источников, а не только тот,
-      # что назван в тикете.
-      - name: Подпись до запуска — то, что можно измерить фактом
+      # Регрессионный сторож: если будущее обновление Tauri/Xcode снова
+      # начнёт резать CodeDirectory страницами по 16 КБ или добавит xattr
+      # com.apple.provenance — здесь это будет видно фактом, а не жалобой
+      # пользователя месяцы спустя. Сейчас (Tauri 2.11.x, Xcode 26.6) оба
+      # значения в порядке — см. комментарий у job выше.
+      - name: Подпись на Tahoe — page size, provenance, spctl
         run: |
           set -euo pipefail
           app="${{ steps.prep.outputs.app }}"
@@ -576,85 +596,40 @@ jobs:
 
           echo '── codesign -dvvv (main executable) ──────────────────────────'
           codesign -dvvv --verbose=4 "${bin}" 2>&1 || true
-          echo '── codesign -dvvv (.app) ──────────────────────────────────────'
-          codesign -dvvv --verbose=4 "${app}" 2>&1 || true
           echo '── codesign --verify --deep --strict ──────────────────────────'
           codesign --verify --deep --strict --verbose=4 "${app}" 2>&1 || true
 
           echo '── xattr на .app ────────────────────────────────────────────'
           xattr -l "${app}" 2>&1 || true
-          echo '── com.apple.provenance на бинаре (если есть) ─────────────────'
-          xattr -p com.apple.provenance "${bin}" 2>&1 || echo 'отсутствует'
 
           echo '── spctl -t open (то же, что видит Finder) ────────────────────'
-          spctl -a -vv -t open --context context:primary-signature "${app}" 2>&1 || true
+          verdict="$(spctl -a -vv -t open --context context:primary-signature "${app}" 2>&1 || true)"
+          printf '%s\n' "${verdict}"
 
-      # Настоящий запуск через `open`, как двойной клик в Finder — не прямой
-      # exec бинаря из шелла, которым Gatekeeper вообще не интересуется.
-      # Опрашиваем процесс несколько раз: «не появился ни разу» (заблокирован
-      # ДО старта — политика Gatekeeper/LaunchServices) и «появился и исчез»
-      # (стартовал и убит ПОСЛЕ — то, что описывает версия про AMFI) —
-      # это два разных факта, и дальше нужен именно тот, что подтвердится.
-      - name: Настоящий запуск закарантиненного .app
-        id: launch
-        run: |
-          set -euo pipefail
-          app="${{ steps.prep.outputs.app }}"
-          bin="${{ steps.prep.outputs.bin }}"
+          page_size="$(codesign -dvvv --verbose=4 "${bin}" 2>&1 | grep -o 'Page size=[0-9]*' | cut -d= -f2 || true)"
+          has_provenance='нет'
+          xattr -p com.apple.provenance "${bin}" > /dev/null 2>&1 && has_provenance='да'
 
-          since="$(date -u '+%Y-%m-%d %H:%M:%S')"
-
-          set +e
-          open -n "${app}" 2>&1
-          open_status=$?
-          set -e
-          echo "Код возврата 'open -n': ${open_status}"
-
-          seen='нет'
-          alive='нет'
-          for _ in $(seq 1 16); do
-            sleep 0.5
-            if pgrep -f "${bin}" > /dev/null 2>&1; then
-              seen='да'
-              alive='да'
-            else
-              alive='нет'
-            fi
-          done
-
-          pkill -f "${bin}" 2>/dev/null || true
-
-          if [ "${seen}" = 'да' ] && [ "${alive}" = 'да' ]; then
-            result='запустилось и работает'
-          elif [ "${seen}" = 'да' ] && [ "${alive}" = 'нет' ]; then
-            result='стартовало и исчезло — процесс убит после запуска'
-          else
-            result='процесс ни разу не появился — заблокировано до старта'
-          fi
-
-          echo "since=${since}" >> "${GITHUB_OUTPUT}"
-          echo "result=${result}" >> "${GITHUB_OUTPUT}"
-          echo "Итог: ${result}"
-
-      - name: Системный лог за время попытки запуска
-        if: always()
-        run: |
-          set -euo pipefail
-          echo '── log show: kernel / syspolicyd / amfid ───────────────────────'
-          log show --start "${{ steps.launch.outputs.since }}" --style compact \
-            --predicate 'process == "kernel" OR process == "syspolicyd" OR process == "amfid"' \
-            2>&1 | grep -i 'zapiski\|amfi\|code.signature\|signature\|policy\|denied\|reject' \
-            | tail -200 || echo 'подходящих строк не найдено'
-
-      - name: Итог диагностики в сводку
-        if: always()
-        run: |
           {
-            echo '### Диагностика на настоящей macOS 26 (Tahoe)'
+            echo '### Подпись на настоящей macOS 26 (Tahoe)'
             echo
-            echo "Результат запуска закарантиненного ad-hoc \`.app\`: **${{ steps.launch.outputs.result }}**"
+            echo "* Page size CodeDirectory: \`${page_size:-?}\`"
+            echo "* xattr com.apple.provenance: ${has_provenance}"
+            echo "* Вердикт spctl -t open: \`$(printf '%s' "${verdict}" | tail -1)\`"
             echo
-            echo 'Полная подпись, xattr и системный лог — в логе шагов выше.'
-            echo 'Это только диагностика: пайплайн по этому job пока не меняется —'
-            echo 'правка вносится отдельным коммитом по итогам факта, а не догадки.'
+            echo 'Тот же bare `rejected` без `source=`, что и на macos-14 —'
+            echo 'ожидаемое поведение ad-hoc подписи без нотаризации на этой версии'
+            echo 'macOS, объяснено на /macos-warning. Реальный запуск через `open`'
+            echo 'здесь не проверяется намеренно: в headless CI он виснет до'
+            echo 'таймаута раннера вместо ответа (LaunchServices ждёт закрытия'
+            echo 'диалога Gatekeeper, которое некому дать) и не измеряет ничего'
+            echo 'сверх того, что уже видно по подписи и spctl выше.'
           } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [ "${page_size}" != '4096' ]; then
+            echo "::error title=Page size CodeDirectory изменился::было 4096, стало ${page_size:-пусто}. Раньше на этом настаивал внешний тикет про AMFI на Tahoe — если это подтвердится ещё и реальным отказом запуска у пользователя, здесь есть с чего начинать."
+            exit 1
+          fi
+          if [ "${has_provenance}" = 'да' ]; then
+            echo '::warning title=Появился xattr com.apple.provenance::раньше отсутствовал. Это тот атрибут, на который ссылались issue astral-sh/uv и openai/codex как на причину похожего отказа — стоит присмотреться, если появятся новые жалобы на Tahoe.'
+          fi
