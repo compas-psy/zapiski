@@ -497,3 +497,164 @@ jobs:
           echo 'Gatekeeper отклоняет (rejected) — ожидаемо для ad-hoc подписи без нотаризации.'
           echo 'Причина отказа — в «source=» строке вывода выше; это и есть тот текст,'
           echo 'который в итоге определяет, какой путь обхода доступен человеку.'
+
+  # ── Диагностика на настоящей Tahoe: не гадать, а увидеть факт ───────────────
+  #
+  # Заказчик сообщил о двух РАЗНЫХ отказах на разных Мак: на M2 (старее macOS)
+  # помогает «Всё равно открыть» в Настройках, на M4 — голое «Не удается
+  # открыть программу», без единого пункта обхода нигде. Раннер macos-14 этого
+  # не видит: это Sonoma, не Tahoe. До февраля 2026 проверить это в CI было
+  # нечем — с тех пор у GitHub есть настоящие Tahoe-раннеры (macos-26).
+  #
+  # Есть версия из внешнего источника: на Tahoe инструментарий подписи по
+  # умолчанию режет CodeDirectory страницами по 16 КБ вместо 4 КБ, и ядро
+  # (AMFI) будто бы отвергает такую подпись у крупных бинарей уже ПОСЛЕ старта
+  # процесса — не то же самое, что отказ Gatekeeper ДО старта. Независимого
+  # подтверждения именно этого механизма не нашлось: единственный источник —
+  # сам тикет, а issue, на которые он ссылается как на «подтверждающие»,
+  # называют другие причины (xattr `com.apple.provenance`, устаревший формат
+  # resource envelope). Поэтому здесь не чиним наугад, а сначала СМОТРИМ: что
+  # реально происходит с подписью и что пишет система при попытке запуска —
+  # безо всякого fix. Правка пайплайна — отдельным шагом, по факту из этого job.
+  verify-tahoe:
+    name: Диагностика на настоящей Tahoe (macOS 26)
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - name: Версия системы и инструментов
+        run: |
+          set -euo pipefail
+          sw_vers
+          codesign --version 2>&1 || true
+          xcodebuild -version 2>&1 || true
+
+      - name: Скачать собранный .dmg
+        uses: actions/download-artifact@v4
+        with:
+          name: zapiski-macos-dmg
+          path: dmg
+
+      - name: Подготовить закарантиненную копию, как у реального пользователя
+        id: prep
+        run: |
+          set -euo pipefail
+          dmg="$(find dmg -maxdepth 1 -name '*.dmg' | head -1)"
+          if [ -z "${dmg}" ]; then
+            echo '::error::.dmg-артефакт не скачался — проверять нечего'
+            exit 1
+          fi
+
+          mount="$(mktemp -d)"
+          hdiutil attach "${dmg}" -nobrowse -readonly -mountpoint "${mount}" > /dev/null
+          src="$(find "${mount}" -maxdepth 1 -name '*.app' | head -1)"
+          if [ -z "${src}" ]; then
+            hdiutil detach "${mount}" -quiet || true
+            echo '::error::в образе нет .app'
+            exit 1
+          fi
+
+          work="$(mktemp -d)"
+          app="${work}/$(basename "${src}")"
+          cp -R "${src}" "${app}"
+          hdiutil detach "${mount}" -quiet
+
+          xattr -w com.apple.quarantine "0083;$(printf '%08x' "$(date +%s)");Safari;$(uuidgen)" "${app}"
+          echo "app=${app}" >> "${GITHUB_OUTPUT}"
+          echo "bin=${app}/Contents/MacOS/zapiski-desktop" >> "${GITHUB_OUTPUT}"
+
+      # Смотрим на подпись ДО попытки запуска: точный размер страницы
+      # CodeDirectory и наличие xattr `com.apple.provenance` — два разных
+      # кандидата в причину из независимых источников, а не только тот,
+      # что назван в тикете.
+      - name: Подпись до запуска — то, что можно измерить фактом
+        run: |
+          set -euo pipefail
+          app="${{ steps.prep.outputs.app }}"
+          bin="${{ steps.prep.outputs.bin }}"
+
+          echo '── codesign -dvvv (main executable) ──────────────────────────'
+          codesign -dvvv --verbose=4 "${bin}" 2>&1 || true
+          echo '── codesign -dvvv (.app) ──────────────────────────────────────'
+          codesign -dvvv --verbose=4 "${app}" 2>&1 || true
+          echo '── codesign --verify --deep --strict ──────────────────────────'
+          codesign --verify --deep --strict --verbose=4 "${app}" 2>&1 || true
+
+          echo '── xattr на .app ────────────────────────────────────────────'
+          xattr -l "${app}" 2>&1 || true
+          echo '── com.apple.provenance на бинаре (если есть) ─────────────────'
+          xattr -p com.apple.provenance "${bin}" 2>&1 || echo 'отсутствует'
+
+          echo '── spctl -t open (то же, что видит Finder) ────────────────────'
+          spctl -a -vv -t open --context context:primary-signature "${app}" 2>&1 || true
+
+      # Настоящий запуск через `open`, как двойной клик в Finder — не прямой
+      # exec бинаря из шелла, которым Gatekeeper вообще не интересуется.
+      # Опрашиваем процесс несколько раз: «не появился ни разу» (заблокирован
+      # ДО старта — политика Gatekeeper/LaunchServices) и «появился и исчез»
+      # (стартовал и убит ПОСЛЕ — то, что описывает версия про AMFI) —
+      # это два разных факта, и дальше нужен именно тот, что подтвердится.
+      - name: Настоящий запуск закарантиненного .app
+        id: launch
+        run: |
+          set -euo pipefail
+          app="${{ steps.prep.outputs.app }}"
+          bin="${{ steps.prep.outputs.bin }}"
+
+          since="$(date -u '+%Y-%m-%d %H:%M:%S')"
+
+          set +e
+          open -n "${app}" 2>&1
+          open_status=$?
+          set -e
+          echo "Код возврата 'open -n': ${open_status}"
+
+          seen='нет'
+          alive='нет'
+          for _ in $(seq 1 16); do
+            sleep 0.5
+            if pgrep -f "${bin}" > /dev/null 2>&1; then
+              seen='да'
+              alive='да'
+            else
+              alive='нет'
+            fi
+          done
+
+          pkill -f "${bin}" 2>/dev/null || true
+
+          if [ "${seen}" = 'да' ] && [ "${alive}" = 'да' ]; then
+            result='запустилось и работает'
+          elif [ "${seen}" = 'да' ] && [ "${alive}" = 'нет' ]; then
+            result='стартовало и исчезло — процесс убит после запуска'
+          else
+            result='процесс ни разу не появился — заблокировано до старта'
+          fi
+
+          echo "since=${since}" >> "${GITHUB_OUTPUT}"
+          echo "result=${result}" >> "${GITHUB_OUTPUT}"
+          echo "Итог: ${result}"
+
+      - name: Системный лог за время попытки запуска
+        if: always()
+        run: |
+          set -euo pipefail
+          echo '── log show: kernel / syspolicyd / amfid ───────────────────────'
+          log show --start "${{ steps.launch.outputs.since }}" --style compact \
+            --predicate 'process == "kernel" OR process == "syspolicyd" OR process == "amfid"' \
+            2>&1 | grep -i 'zapiski\|amfi\|code.signature\|signature\|policy\|denied\|reject' \
+            | tail -200 || echo 'подходящих строк не найдено'
+
+      - name: Итог диагностики в сводку
+        if: always()
+        run: |
+          {
+            echo '### Диагностика на настоящей macOS 26 (Tahoe)'
+            echo
+            echo "Результат запуска закарантиненного ad-hoc \`.app\`: **${{ steps.launch.outputs.result }}**"
+            echo
+            echo 'Полная подпись, xattr и системный лог — в логе шагов выше.'
+            echo 'Это только диагностика: пайплайн по этому job пока не меняется —'
+            echo 'правка вносится отдельным коммитом по итогам факта, а не догадки.'
+          } >> "${GITHUB_STEP_SUMMARY}"
