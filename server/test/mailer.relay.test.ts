@@ -219,6 +219,48 @@ describe('молчащий адрес', () => {
   });
 });
 
+describe('SEC-020: адрес получателя проверяется перед отправкой', () => {
+  /*
+   * `nodemailer` до 7.0.7 расходился с `zod().email()` в разборе адреса —
+   * несколько CVE, включая «письмо уходит не в тот домен». На пути
+   * magic-link это означает захват аккаунта, поэтому адрес проверяется
+   * ЕЩЁ РАЗ прямо перед `sendMail`, не полагаясь на то, что уже сделал
+   * чужой парсер выше по цепочке. Релей в этих проверках недостижим
+   * (порт 1 закрыт всегда) — если бы проверка не срабатывала ДО сети,
+   * отказ пришёл бы с сетевым кодом (ECONNREFUSED), а не с кодом отказа
+   * валидации; тесты ниже отличают эти два случая по тексту причины.
+   */
+  const unreachable = (): SmtpMailer => mailerFor(1, true);
+
+  it.each([
+    ['два адреса через запятую', 'a@cmpas.ru,evil@attacker.example'],
+    ['второй адрес через точку с запятой', 'a@cmpas.ru;evil@attacker.example'],
+    ['два @ подряд', 'a@b@evil.example'],
+    ['угловые скобки вокруг адреса', '<a@cmpas.ru>'],
+    ['перевод строки — CRLF-инъекция в заголовки', 'a@cmpas.ru\r\nBcc: evil@attacker.example'],
+    ['голый перевод строки', 'a@cmpas.ru\nBcc: evil@attacker.example'],
+    ['длиннее 254 символов', `${'a'.repeat(250)}@cmpas.ru`],
+    ['без @ вовсе', 'не-адрес'],
+  ])('%s — отклоняется, релея не касается', async (_name, address) => {
+    const mailer = unreachable();
+    await expect(
+      mailer.sendMagicLink({ to: address, url: 'https://cmpas.ru/x', ttlMinutes: 15 }),
+    ).rejects.toThrow(/адрес/i);
+  });
+
+  it('обычный адрес по-прежнему уходит в релей — проверка не мешает штатному входу', async () => {
+    const relay = await startRelay('upgrade');
+    try {
+      const mailer = mailerFor(relay.port, true);
+      await expect(
+        mailer.sendMagicLink({ to: 'user@cmpas.ru', url: 'https://cmpas.ru/x', ttlMinutes: 15 }),
+      ).resolves.toBeUndefined();
+    } finally {
+      await relay.close();
+    }
+  });
+});
+
 describe('describeMailError', () => {
   it('складывает код, команду и текст', () => {
     const error = Object.assign(new Error('Error initiating TLS'), {

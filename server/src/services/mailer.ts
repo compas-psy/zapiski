@@ -124,6 +124,12 @@ export class SmtpMailer implements Mailer {
   }
 
   async sendMagicLink(mail: MagicLinkMail): Promise<void> {
+    if (!isSafeMailAddress(mail.to)) {
+      // Адрес не проверяется на входе первый раз здесь: `zod().email()` в
+      // маршруте уже отсеял большую часть мусора. Эта проверка — второй,
+      // независимый барьер прямо перед сетью (см. `isSafeMailAddress`).
+      throw new Error('получатель отклонён проверкой адреса перед отправкой');
+    }
     const { subject, text, html } = renderMagicLink(mail);
     await this.#transport.sendMail({
       from: this.#from,
@@ -133,6 +139,25 @@ export class SmtpMailer implements Mailer {
       html,
     });
   }
+}
+
+/**
+ * SEC-020: `nodemailer`/`addressparser` расходились с `zod().email()` в
+ * разборе адреса на нескольких CVE (до 7.0.7) — письмо уходило не в тот
+ * домен. На пути magic-link это захват аккаунта, а не абстрактный риск,
+ * поэтому адрес проверяется ЕЩЁ РАЗ прямо перед `sendMail`, не полагаясь на
+ * то, что уже сделал зависимый парсер выше по цепочке. Это не замена
+ * `zod().email()`, а второй, независимый барьер: не полный RFC 5322, а
+ * минимальный набор запретов ровно под то, чем реально расходились разборы
+ * адреса в перечисленных уязвимостях — список получателей через `,`/`;`,
+ * второй адрес через `@`, управляющие символы (CR/LF — инъекция заголовков
+ * SMTP) и чрезмерная длина.
+ */
+export function isSafeMailAddress(address: string): boolean {
+  if (address.length === 0 || address.length > 254) return false;
+  if (/[\r\n]/.test(address)) return false;
+  if (/[,;<>]/.test(address)) return false;
+  return address.split('@').length === 2;
 }
 
 /** Мейлер для тестов и локальной разработки: письма копятся в памяти. */
