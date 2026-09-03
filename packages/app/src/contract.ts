@@ -304,6 +304,14 @@ export interface AuthCallback {
   refreshToken?: string;
   /** Секунды жизни access-токена, как их называет сервер. */
   expiresIn?: number;
+  /**
+   * Эхо nonce, которым устройство сопровождало запрос входа (SEC: auth
+   * nonce) — `SessionStore.adopt` сверяет его перед тем, как принять
+   * `accessToken`/`refreshToken` как сессию. Отсутствует у ссылок,
+   * выпущенных до этой правки, и у прямого обмена `magicToken` (тот уже
+   * привязан к устройству на сервере).
+   */
+  nonce?: string;
   /** `magic_link_expired`, `magic_link_used`, `oauth_declined`, … */
   error?: string;
 }

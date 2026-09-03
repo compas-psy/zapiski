@@ -186,6 +186,11 @@ export async function createMagicToken(
        Между этими моментами им негде жить, кроме как рядом с токеном. */
     termsVersion?: string | null;
     marketingOptIn?: boolean | null;
+    /* Nonce клиента (см. 0013_auth_nonce.sql) — эхом возвращается в deep-link
+       при обмене, привязывая финальный колбэк к устройству, реально
+       запросившему вход. Отсутствует у клиентов до этой правки — обмен для
+       них проходит без сверки nonce (см. respondWithSession). */
+    nonce?: string | null;
   },
   now: Date = new Date(),
 ): Promise<IssuedMagicToken> {
@@ -194,8 +199,8 @@ export async function createMagicToken(
   await db.query(
     `INSERT INTO magic_tokens
        (email, token_hash, device_key, platform, created_at, expires_at,
-        terms_version, marketing_opt_in)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        terms_version, marketing_opt_in, nonce)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       normalizeEmail(input.email),
       sha256Hex(token),
@@ -205,6 +210,7 @@ export async function createMagicToken(
       expiresAt,
       input.termsVersion ?? null,
       input.marketingOptIn ?? null,
+      input.nonce ?? null,
     ],
   );
   return { token, expiresAt };
@@ -219,6 +225,8 @@ export type MagicConsumeResult =
       /** Согласия, данные в момент запроса ссылки. */
       termsVersion: string | null;
       marketingOptIn: boolean | null;
+      /** Nonce, с которым запрашивалась ссылка — эхом в deep-link (SEC: auth nonce). */
+      nonce: string | null;
     }
   | { ok: false; reason: 'unknown' | 'expired' | 'used' | 'device_mismatch' };
 
@@ -240,6 +248,7 @@ export async function consumeMagicToken(
     const { rows } = await client.query<{
       terms_version: string | null;
       marketing_opt_in: boolean | null;
+      nonce: string | null;
       id: string;
       email: string;
       device_key: string;
@@ -248,7 +257,7 @@ export async function consumeMagicToken(
       used_at: Date | null;
     }>(
       `SELECT id, email, device_key, platform, expires_at, used_at,
-              terms_version, marketing_opt_in
+              terms_version, marketing_opt_in, nonce
          FROM magic_tokens WHERE token_hash = $1 FOR UPDATE`,
       [tokenHash],
     );
@@ -267,6 +276,7 @@ export async function consumeMagicToken(
       platform: row.platform,
       termsVersion: row.terms_version,
       marketingOptIn: row.marketing_opt_in,
+      nonce: row.nonce,
     };
   });
 }

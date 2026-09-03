@@ -10,9 +10,13 @@
  *
  *  • `?token=…` — одноразовый токен из письма. Сервер ждёт к нему `device_id`,
  *    поэтому обменять его может только приложение;
- *  • `#access_token=…&refresh_token=…&expires_in=…` — сервер уже обменял токен
- *    и отдал сессию через `AUTH_SUCCESS_REDIRECT`. Фрагмент выбран не случайно:
- *    он не уходит на сервер и не оседает в чужих журналах;
+ *  • `#access_token=…&refresh_token=…&expires_in=…&nonce=…` — сервер уже
+ *    обменял токен и отдал сессию через `AUTH_SUCCESS_REDIRECT`. Фрагмент
+ *    выбран не случайно: он не уходит на сервер и не оседает в чужих
+ *    журналах. `nonce` — эхо клиентского значения, которым `SessionStore`
+ *    сверяет, что этот колбэк отвечает на вход, который запросило именно
+ *    это устройство, а не произвольный `zapiski://…access_token=…` от
+ *    постороннего приложения (SEC: auth nonce);
  *  • `?error=…` — отказ. Код машинный, текст берётся из реестра BEHAVIOR §11.
  *
  * Фрагмент разбирается наравне с query, потому что оба варианта реальны:
@@ -31,6 +35,7 @@ export const AUTH_CALLBACK_PARAMS = [
   'access_token',
   'refresh_token',
   'expires_in',
+  'nonce',
   'error',
   'error_description',
   'code',
@@ -98,6 +103,9 @@ export function parseAuthCallback(href: string): AuthCallback | null {
 
   const expiresIn = Number(params.get('expires_in'));
   if (Number.isFinite(expiresIn) && expiresIn > 0) callback.expiresIn = expiresIn;
+
+  const nonce = params.get('nonce');
+  if (nonEmpty(nonce)) callback.nonce = nonce;
 
   return callback;
 }

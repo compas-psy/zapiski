@@ -212,14 +212,19 @@ describe('форма запроса не изменилась', () => {
     const trace = await traceMagicLink(async () => 'windows');
     expect(trace.url).toBe('https://zapiski.cmpas.ru/api/v1/auth/magic-link');
     /* Поля перечислены поимённо: лишнее поле в теле — такая же поломка
-       контракта, как пропавшее, и сервер о нём не просил. */
+       контракта, как пропавшее, и сервер о нём не просил.
+       `nonce` — SEC: auth nonce (закрытие захвата сессии через
+       zapiski://…access_token=…): сервер эхом возвращает его в deep-link,
+       и `SessionStore.adopt` сверяет перед тем, как принять колбэк. */
     expect(Object.keys(trace.body).sort()).toEqual([
       'acceptedTerms',
       'deviceId',
       'email',
       'marketingOptIn',
+      'nonce',
       'platform',
     ]);
     expect(String(trace.body['deviceId'])).toMatch(/^dev-[0-9a-f]{32}$/);
+    expect(String(trace.body['nonce'])).toMatch(/^[0-9a-f]{32}$/);
   });
 });

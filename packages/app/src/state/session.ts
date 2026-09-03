@@ -32,7 +32,21 @@ export interface Consents {
 export const AUTH_PREF = {
   session: 'auth.session',
   device: 'auth.deviceId',
+  pendingNonce: 'auth.pendingNonce',
 } as const;
+
+interface PendingNonce {
+  value: string;
+  expiresAt: number;
+}
+
+/**
+ * Сколько живёт локально сгенерированный nonce (SEC: auth nonce) — не короче
+ * TTL самого входа: `MAGIC_LINK_TTL_SECONDS` (15 мин, server/src/config/env.ts)
+ * и `state` Яндекс-OAuth (10 мин, server/src/routes/auth.ts). Меньшее значение
+ * отклоняло бы прочитанное не сразу письмо ещё до истечения самой ссылки.
+ */
+const PENDING_NONCE_TTL_MS = 20 * 60_000;
 
 /**
  * Машинные коды отказа. Текст для человека подставляет контроллер из реестра
@@ -165,6 +179,7 @@ export class SessionStore {
    */
   async requestMagicLink(email: string, consents: Consents): Promise<void> {
     const deviceId = await this.deviceId();
+    const nonce = await this.freshNonce();
     const response = await this.send(`${this.base}/auth/magic-link`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -176,6 +191,7 @@ export class SessionStore {
            показанная человеку редакция обязана совпасть с отправленной. */
         acceptedTerms: LEGAL_VERSION,
         marketingOptIn: consents.marketing,
+        nonce,
       }),
     });
     if (response.status === 429) throw new AuthError('too_soon');
@@ -187,11 +203,13 @@ export class SessionStore {
   /** Адрес, который оболочка открывает во внешнем браузере для Яндекс ID. */
   async yandexUrl(consents: Consents): Promise<string> {
     const deviceId = await this.deviceId();
+    const nonce = await this.freshNonce();
     const query = new URLSearchParams({
       device_id: deviceId,
       platform: this.platform,
       terms: LEGAL_VERSION,
       marketing: consents.marketing ? '1' : '0',
+      nonce,
     });
     return `${this.base}/auth/yandex?${query.toString()}`;
   }
@@ -313,6 +331,20 @@ export class SessionStore {
     }
 
     if (typeof callback.accessToken === 'string' && callback.accessToken.length > 0) {
+      /*
+       * SEC: auth nonce. Без этой сверки сюда попадал ЛЮБОЙ
+       * `zapiski://…access_token=…`, включая присланный не нашим сервером,
+       * а произвольным приложением на устройстве, — токены при этом
+       * настоящие (атакующий получает их, просто зарегистрировав СВОЙ
+       * аккаунт), поэтому `/auth/me` ниже такую подделку не ловит: он
+       * честно отвечает «да, валидные токены», просто для чужого аккаунта.
+       * Единственное, что отличает наш колбэк от подделанного, — nonce,
+       * который это устройство сгенерировало перед началом входа
+       * (`freshNonce`) и не раскрывало никому, кроме собственного сервера.
+       */
+      if (!(await this.consumePendingNonce(callback.nonce))) {
+        throw new AuthError('link_dead');
+      }
       // Сервер уже обменял токен и вернул сессию во фрагменте. Кто именно
       // вошёл — спрашиваем у `/auth/me`: складывать почту в адрес незачем.
       const deviceId = await this.deviceId();
@@ -411,6 +443,41 @@ export class SessionStore {
   }
 
   // ── Внутреннее ─────────────────────────────────────────────────────────────
+
+  /**
+   * Свежий одноразовый nonce для начинающегося входа (SEC: auth nonce) —
+   * запоминается локально и уходит на сервер вместе с запросом. Каждый
+   * вызов заменяет прежний ожидающий nonce: одновременно в реальности
+   * начат только один вход, а более новый запрос делает предыдущий
+   * неактуальным сам по себе.
+   */
+  private async freshNonce(): Promise<string> {
+    const value = randomHex(16);
+    const pending: PendingNonce = { value, expiresAt: this.now() + PENDING_NONCE_TTL_MS };
+    await this.host.prefs.set<PendingNonce | null>(AUTH_PREF.pendingNonce, pending);
+    return value;
+  }
+
+  /**
+   * Сверка и одноразовое погашение ожидающего nonce (SEC: auth nonce).
+   * Совпал и не просрочен — колбэк отвечает на вход, который это
+   * устройство только что запросило само, и nonce гасится: повторно
+   * предъявить то же значение нельзя, даже если оно ещё не истекло.
+   *
+   * Не совпал, просрочен или его не было вовсе — колбэк отклоняется, а
+   * ожидающий nonce остаётся НЕТРОНУТЫМ. Гасить его при любой попытке
+   * (в том числе неудачной) значило бы дать постороннему приложению
+   * затирать настоящий ожидающий вход одним неверным предположением —
+   * до того, как настоящий колбэк из браузера успеет прийти следом.
+   */
+  private async consumePendingNonce(candidate: string | undefined): Promise<boolean> {
+    const stored = await this.host.prefs.get<PendingNonce | null>(AUTH_PREF.pendingNonce, null);
+    if (stored === null || typeof candidate !== 'string' || candidate.length === 0) return false;
+    if (stored.expiresAt <= this.now()) return false;
+    if (stored.value !== candidate) return false;
+    await this.host.prefs.set<PendingNonce | null>(AUTH_PREF.pendingNonce, null);
+    return true;
+  }
 
   /** База уже содержит `/api/v1` — это условие контракта `AppHost`. */
   private get base(): string {

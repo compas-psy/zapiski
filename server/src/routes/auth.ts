@@ -117,6 +117,13 @@ const magicLinkBody = z.object({
    */
   marketingOptIn: z.boolean().optional(),
   platform: z.enum(PLATFORMS).optional(),
+  /**
+   * Одноразовый nonce клиента (см. 0013_auth_nonce.sql) — привязывает
+   * финальный deep-link-колбэк к устройству, реально запросившему вход.
+   * Необязателен: клиент до этой правки его не пришлёт, обмен для него
+   * проходит как раньше, просто без сверки на своей стороне.
+   */
+  nonce: z.string().trim().min(16).max(128).optional(),
 });
 
 const callbackQuery = z.object({
@@ -133,6 +140,8 @@ const yandexStartQuery = z.object({
      возвратом у них нет. */
   terms: z.string().trim().min(1).max(64),
   marketing: z.enum(['0', '1']).optional(),
+  /** См. magicLinkBody.nonce — тот же смысл, тот же необязательный статус. */
+  nonce: z.string().trim().min(16).max(128).optional(),
 });
 
 const yandexCallbackQuery = z.object({
@@ -166,7 +175,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/api/v1/auth/magic-link', async (request, reply) => {
     const parsed = magicLinkBody.safeParse(request.body);
     if (!parsed.success) throw errors.badRequest('bad_email_or_device');
-    const { email, deviceId, platform, acceptedTerms, marketingOptIn } = parsed.data;
+    const { email, deviceId, platform, acceptedTerms, marketingOptIn, nonce } = parsed.data;
 
     const now = ctx.now();
     const cooldown = ctx.env.MAGIC_LINK_COOLDOWN_SECONDS;
@@ -191,6 +200,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
            ссылке, и записать их раньше некуда — пользователя ещё нет. */
         termsVersion: acceptedTerms,
         marketingOptIn: marketingOptIn ?? false,
+        nonce: nonce ?? null,
       },
       now,
     );
@@ -299,7 +309,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       'ссылка из письма разменяна',
     );
 
-    return respondWithSession(ctx, reply, session, parsed.data.format, result.platform);
+    return respondWithSession(ctx, reply, session, parsed.data.format, result.platform, result.nonce);
   }));
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -336,8 +346,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const parsed = yandexStartQuery.safeParse(request.query);
     if (!parsed.success) throw errors.badRequest('device_id_required');
 
-    // state — короткоживущий подписанный токен: он же переносит device_id,
-    // поэтому отдельной таблицы под OAuth-состояния не нужно.
+    // state — короткоживущий подписанный токен: он же переносит device_id
+    // и nonce, поэтому отдельной таблицы под OAuth-состояния не нужно.
     const state = signJwt(
       {
         sub: 'oauth',
@@ -345,6 +355,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
         marketing: parsed.data.marketing === '1',
         sid: 'oauth',
         did: parsed.data.device_id,
+        // См. magicLinkBody.nonce — тот же смысл, тот же необязательный статус.
+        nonce: parsed.data.nonce ?? null,
         typ: 'oauth_state',
         platform: parsed.data.platform ?? null,
       },
@@ -373,6 +385,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       throw errors.badRequest('bad_state');
     }
     const platform = typeof state.claims['platform'] === 'string' ? state.claims['platform'] : null;
+    const nonce = typeof state.claims['nonce'] === 'string' ? state.claims['nonce'] : null;
 
     let identity;
     try {
@@ -396,7 +409,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       ctx.now(),
     );
     const session = await issueSession(ctx, user.id, deviceKey, platform);
-    return respondWithSession(ctx, reply, session, undefined, platform);
+    return respondWithSession(ctx, reply, session, undefined, platform, nonce);
   }));
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -638,6 +651,15 @@ function respondWithSession(
   session: SessionResponse,
   format: 'json' | 'redirect' | undefined,
   platform: string | null,
+  /**
+   * Nonce, с которым запрашивался вход (см. 0013_auth_nonce.sql) — эхом в
+   * deep-link, без изменений. Клиент сверяет его перед тем, как принять
+   * колбэк как «это мой, только что запрошенный вход», и этим отличает
+   * настоящий возврат из браузера от произвольного `zapiski://…access_token=…`,
+   * присланного любым другим приложением на устройстве. `null`/отсутствие —
+   * клиент до этой правки, для него ничего не меняется: он это поле не читает.
+   */
+  nonce: string | null = null,
 ): FastifyReply {
   const redirect = authReturnUrl(ctx.env, platform);
   if (format !== 'json' && redirect !== undefined && redirect.length > 0) {
@@ -645,6 +667,7 @@ function respondWithSession(
       access_token: session.accessToken,
       refresh_token: session.refreshToken,
       expires_in: String(session.expiresIn),
+      ...(nonce !== null ? { nonce } : {}),
     });
     const target = `${redirect}#${fragment.toString()}`;
 

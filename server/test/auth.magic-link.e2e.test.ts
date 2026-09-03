@@ -91,6 +91,9 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
    * одиночестве, не стережёт ничего.
    */
   const windowsEmail = `e2e.win.${process.pid}@example.test`;
+  /* Nonce, который клиент сгенерировал и отправил при запросе ссылки (SEC:
+     auth nonce) — сверяется с тем, что сервер эхом вернёт в deep-link. */
+  let windowsNonce: string | null = null;
 
   beforeAll(async () => {
     SessionStore = await loadClient();
@@ -155,12 +158,17 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
      * Если бы клиент прислал незнакомую строку, zod отверг бы запрос целиком,
      * и письмо не ушло бы вовсе.
      */
-    const token = await harness.db.query<{ platform: string | null }>(
-      `SELECT platform FROM magic_tokens WHERE lower(email) = lower($1) ORDER BY created_at DESC LIMIT 1`,
+    const token = await harness.db.query<{ platform: string | null; nonce: string | null }>(
+      `SELECT platform, nonce FROM magic_tokens WHERE lower(email) = lower($1) ORDER BY created_at DESC LIMIT 1`,
       [windowsEmail],
     );
     note(`  сервер записал токену platform=${token.rows[0]?.platform ?? '—'}`);
     expect(token.rows[0]?.platform).toBe('windows');
+    /* Клиент (настоящий SessionStore) сам сгенерировал nonce и отправил его
+       вместе с запросом — сервер обязан был его сохранить как есть. */
+    windowsNonce = token.rows[0]?.nonce ?? null;
+    note(`  сервер записал токену nonce=${windowsNonce ?? '—'}`);
+    expect(windowsNonce).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it('ссылка из письма ведёт в наш же API и несёт device_id', async () => {
@@ -212,6 +220,11 @@ describe.skipIf(noDatabase())('вход по почте: клиент, соке�
       expect(payload.get(field), `в ссылке для приложения нет ${field}`).toBeTruthy();
     }
     note(`  во фрагменте: ${[...payload.keys()].join(', ')}`);
+    /* SEC: auth nonce — сервер обязан вернуть ТО ЖЕ значение, что клиент
+       отправил при запросе письма (первый тест этого набора). Без этого
+       эха `SessionStore.adopt` на другом конце отклонил бы этот самый,
+       настоящий колбэк как чужой. */
+    expect(payload.get('nonce')).toBe(windowsNonce);
     /* Именно refresh_token отличает «вошёл» от «вошёл на четверть часа»: без
        него оболочка потеряет сессию по истечении access-токена и попросит
        войти заново — жалоба, неотличимая от «вход не работает». */

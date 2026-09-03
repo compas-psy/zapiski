@@ -349,6 +349,142 @@ describe('сессия облака', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SEC: auth nonce — колбэк обязан доказать, что вход запросило ЭТО устройство
+//
+// Без сверки сюда попадал бы ЛЮБОЙ `zapiski://…access_token=…`, включая
+// присланный не нашим сервером, а произвольным приложением на устройстве —
+// токены при этом настоящие (атакующий получает их, просто зарегистрировав
+// СВОЙ аккаунт), и `/auth/me` такую подделку не ловит. Единственное отличие
+// настоящего колбэка от подделанного — nonce, сгенерированный этим
+// устройством перед началом входа и никому не раскрытый, кроме сервера.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SEC: auth nonce', () => {
+  it('requestMagicLink отправляет nonce вместе с запросом', async () => {
+    const bodies: string[] = [];
+    const host = createTestHost();
+    const session = new SessionStore(host, {
+      fetch: async (_url, init) => {
+        bodies.push(String(init?.body ?? ''));
+        return jsonOk({ sent: true }, 202);
+      },
+    });
+
+    await session.requestMagicLink('marina@ya.ru', { marketing: false });
+
+    const sent = JSON.parse(bodies[0] as string) as Record<string, string>;
+    expect(sent['nonce']).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('yandexUrl несёт nonce в query', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk({ sent: true }) });
+
+    const url = await session.yandexUrl({ marketing: false });
+
+    expect(new URL(url).searchParams.get('nonce')).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('колбэк с тем самым nonce, что уходил на сервер, принимается', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    const nonce = new URL(await session.yandexUrl({ marketing: false })).searchParams.get('nonce')!;
+
+    const result = await session.adopt({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      expiresIn: 900,
+      nonce,
+    });
+
+    expect(result.accessToken).toBe('access-1');
+  });
+
+  it('[SEC] колбэк вовсе без nonce отклоняется — так выглядит подделанный deep-link', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    // Вход НЕ запрашивался этим устройством — ожидающего nonce нет вовсе.
+
+    await expect(
+      session.adopt({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900 }),
+    ).rejects.toMatchObject({ code: 'link_dead' });
+    expect(session.current()).toBeNull();
+  });
+
+  it('[SEC] колбэк с чужим nonce отклоняется', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    await session.yandexUrl({ marketing: false }); // запомнил свой nonce
+
+    await expect(
+      session.adopt({
+        accessToken: 'access-1',
+        refreshToken: 'refresh-1',
+        expiresIn: 900,
+        // То, чем реально располагает атакующий: своими, но настоящими
+        // токенами — а не тем nonce, который никогда ему не передавался.
+        nonce: 'attacker-controlled-nonce-guess',
+      }),
+    ).rejects.toMatchObject({ code: 'link_dead' });
+    expect(session.current()).toBeNull();
+  });
+
+  it('[SEC] nonce одноразовый: повторное предъявление того же значения отклоняется', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    const nonce = new URL(await session.yandexUrl({ marketing: false })).searchParams.get('nonce')!;
+
+    await session.adopt({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900, nonce });
+
+    await expect(
+      session.adopt({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900, nonce }),
+    ).rejects.toMatchObject({ code: 'link_dead' });
+  });
+
+  it('[SEC] просроченный nonce отклоняется', async () => {
+    let now = 1_000_000;
+    const host = createTestHost();
+    const session = new SessionStore(host, { now: () => now, fetch: async () => jsonOk(SESSION_BODY) });
+    const nonce = new URL(await session.yandexUrl({ marketing: false })).searchParams.get('nonce')!;
+
+    now += 21 * 60_000; // за пределами TTL (20 мин)
+
+    await expect(
+      session.adopt({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900, nonce }),
+    ).rejects.toMatchObject({ code: 'link_dead' });
+  });
+
+  it('новый запрос входа делает прежний ожидающий nonce недействительным', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+    const first = new URL(await session.yandexUrl({ marketing: false })).searchParams.get('nonce')!;
+    const second = new URL(await session.yandexUrl({ marketing: false })).searchParams.get('nonce')!;
+    expect(second).not.toBe(first);
+
+    await expect(
+      session.adopt({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 900, nonce: first }),
+    ).rejects.toMatchObject({ code: 'link_dead' });
+
+    const result = await session.adopt({
+      accessToken: 'access-1',
+      refreshToken: 'refresh-1',
+      expiresIn: 900,
+      nonce: second,
+    });
+    expect(result.accessToken).toBe('access-1');
+  });
+
+  it('обмен magicToken (уже привязан к устройству на сервере) nonce не требует', async () => {
+    const host = createTestHost();
+    const session = new SessionStore(host, { fetch: async () => jsonOk(SESSION_BODY) });
+
+    const result = await session.adopt({ magicToken: 'ottt' });
+
+    expect(result.accessToken).toBe('access-1');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Пути облака: ядро ходит по ADR-0003, сервер отвечает по своим
 // ─────────────────────────────────────────────────────────────────────────────
 
