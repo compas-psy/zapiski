@@ -24,6 +24,7 @@ import { syntaxTree } from '@codemirror/language';
 
 import { emphasisExit } from './emphasis-exit.js';
 import { setextGuard } from './setext-guard.js';
+import { isComposing } from '../ime/composition.js';
 
 /** `[]` в начале строки (возможно, уже после маркера списка). */
 const CHECKBOX_SHORTCUT = /^([\t ]*)((?:[-*+]|\d+[.)])[\t ]+)?\[\]$/;
@@ -39,6 +40,10 @@ const DIVIDER = /^[\t ]*(-{3,}|\*{3,}|_{3,})[\t ]*$/;
 export const checkboxShortcut: Extension = EditorView.inputHandler.of(
   (view, from, to, text) => {
     if (text !== ' ') return false;
+    /* Композиция ещё идёт — символ транзитный, переписывать по нему рано
+       (см. `ime/composition.ts`: то же правило, что уже соблюдают
+       `table-format.ts` и `live-preview/plugin.ts`). */
+    if (isComposing(view)) return false;
     const line = view.state.doc.lineAt(from);
     const before = line.text.slice(0, from - line.from);
     const match = CHECKBOX_SHORTCUT.exec(before);

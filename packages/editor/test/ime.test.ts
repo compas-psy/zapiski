@@ -127,3 +127,62 @@ describe('IME: перерисовка откладывается до compositio
     expect(compositionDeferrals(view)).toBe(0);
   });
 });
+
+/**
+ * P1-аудит IME: обработчики автоформата не проверяли композицию.
+ *
+ * `EditorView.dispatch()` (приём, которым набирает предыдущий блок) НЕ
+ * проходит через `inputHandler` вовсе — это отдельный путь CodeMirror,
+ * вызываемый только настоящей DOM-мутацией. Поэтому здесь обработчики
+ * зовутся напрямую, той же сигнатурой, что использует сам CodeMirror
+ * (`view, from, to, text, defaultInsert`) — иначе тест не проверяет то, что
+ * реально происходит при вводе во время композиции, а проверяет функцию в
+ * вакууме.
+ */
+describe('IME: автоформат не должен срабатывать во время композиции', () => {
+  function fireHandlers(target: EditorView, from: number, to: number, text: string): boolean {
+    const handlers = target.state.facet(EditorView.inputHandler);
+    const defaultInsert = (): ReturnType<EditorView['state']['update']> =>
+      target.state.update({ changes: { from, to, insert: text } });
+    return handlers.some((handler) => handler(target, from, to, text, defaultInsert));
+  }
+
+  it('checkboxShortcut: «[]» + пробел не превращается в чекбокс во время композиции', () => {
+    view = makeView('[]', { selection: { anchor: 2 } });
+    fireComposition(view, 'compositionstart');
+    expect(isComposing(view)).toBe(true);
+
+    const handled = fireHandlers(view, 2, 2, ' ');
+
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe('[]');
+  });
+
+  it('setextGuard: одиночный «-» не вставляет пустую строку во время композиции', () => {
+    view = makeView('Текст абзаца\n', { selection: { anchor: 13 } });
+    fireComposition(view, 'compositionstart');
+    expect(isComposing(view)).toBe(true);
+
+    const handled = fireHandlers(view, 13, 13, '-');
+
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe('Текст абзаца\n');
+  });
+
+  it('emphasisExit: пробел на краю начертания не выносится наружу во время композиции', () => {
+    view = makeView('**bold**', { selection: { anchor: 6 } });
+    fireComposition(view, 'compositionstart');
+    expect(isComposing(view)).toBe(true);
+
+    const handled = fireHandlers(view, 6, 6, ' ');
+
+    expect(handled).toBe(false);
+    expect(view.state.doc.toString()).toBe('**bold**');
+  });
+
+  it('вне композиции все три обработчика по-прежнему срабатывают как раньше', () => {
+    view = makeView('[]', { selection: { anchor: 2 } });
+    expect(fireHandlers(view, 2, 2, ' ')).toBe(true);
+    expect(view.state.doc.toString()).toBe('- [ ] ');
+  });
+});

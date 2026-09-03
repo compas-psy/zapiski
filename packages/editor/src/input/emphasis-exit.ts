@@ -37,6 +37,7 @@ import { syntaxTree } from '@codemirror/language';
 import type { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { isComposing } from '../ime/composition.js';
 
 /**
  * Начертания, у которых пробел на краю ломает запись.
@@ -98,6 +99,8 @@ function wholeContent(state: EditorState, from: number, to: number): { from: num
  */
 export const emphasisExit: Extension = EditorView.inputHandler.of((view, from, to, text) => {
   if (text !== ' ') return false;
+  /* Композиция ещё идёт — пробел транзитный, выносить его наружу пары рано. */
+  if (isComposing(view)) return false;
 
   if (from !== to) {
     const whole = wholeContent(view.state, from, to);

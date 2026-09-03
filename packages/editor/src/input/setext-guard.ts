@@ -26,12 +26,17 @@ import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
 import { needsBlankLineBefore } from '../syntax/block-boundary.js';
+import { isComposing } from '../ime/composition.js';
 
 /** Маркеры, которые в одиночку на строке читаются как подчёркивание. */
 const MARKERS = new Set(['-', '*', '+']);
 
 export const setextGuard: Extension = EditorView.inputHandler.of((view, from, to, text) => {
   if (!MARKERS.has(text)) return false;
+  /* Композиция ещё идёт — символ транзитный (IME может на мгновение
+     провести курсор через одиночный «-», не собираясь его набирать),
+     вставлять пустую строку по нему рано. */
+  if (isComposing(view)) return false;
 
   const line = view.state.doc.lineAt(from);
   const before = line.text.slice(0, from - line.from);

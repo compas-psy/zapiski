@@ -6,10 +6,14 @@ import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { ensureSyntaxTree } from '@codemirror/language';
+import { insertNewlineAndIndent, deleteCharBackward } from '@codemirror/commands';
 import { zapiskiEditor } from '../src/setup.js';
 import { noopRuntime } from '../src/runtime.js';
 import type { EditorRuntime } from '../src/runtime.js';
 import { buildLivePreview } from '../src/live-preview/decorations.js';
+import { completeDivider, completeFencedCode } from '../src/input/autoformat.js';
+import { enterAtBlockStart } from '../src/input/block-start.js';
+import { dedentListItem, indentListItem, listBackspace, listNewline } from '../src/input/lists.js';
 
 export function runtimeOf(overrides: Partial<EditorRuntime> = {}): EditorRuntime {
   return { ...noopRuntime, ...overrides };
@@ -88,4 +92,44 @@ export function makeView(doc: string, options: StateOptions = {}): EditorView {
   const view = new EditorView({ state: makeState(doc, options), parent });
   ensureSyntaxTree(view.state, view.state.doc.length, 30_000);
   return view;
+}
+
+/*
+ * Ниже — воспроизведение РЕАЛЬНОГО нажатия клавиши: та же цепочка команд и
+ * тот же порядок, что в `commands/keymap.ts`. Тесты, вызывающие отдельную
+ * функцию (`listNewline`, `enterAtBlockStart`, …) напрямую, проверяют узел
+ * цепочки в изоляции; эти помощники — то, что действительно происходит при
+ * нажатии Enter/Backspace/Tab, включая молчаливое падение в стандартную
+ * команду CodeMirror, когда ни один наш обработчик не сработал.
+ */
+
+/** Enter: код-блок → разделитель → начало размеченной строки → список → CM. */
+export function pressEnter(view: EditorView): boolean {
+  return (
+    completeFencedCode(view) ||
+    completeDivider(view) ||
+    enterAtBlockStart(view) ||
+    listNewline(view) ||
+    insertNewlineAndIndent(view)
+  );
+}
+
+/** Backspace: снятие маркера списка, иначе обычное удаление символа назад. */
+export function pressBackspace(view: EditorView): boolean {
+  return listBackspace(view) || deleteCharBackward(view);
+}
+
+/**
+ * Tab: вложенность списка. Вне списка в `keymap.ts` своего обработчика нет
+ * (кроме приёма подсказки автодополнения — она к структуре markdown не
+ * относится и здесь не воспроизводится): реальная клавиатура в этом случае
+ * отдаёт Tab браузеру.
+ */
+export function pressTab(view: EditorView): boolean {
+  return indentListItem(view);
+}
+
+/** Shift-Tab: уменьшение вложенности списка; вне списка своего обработчика нет. */
+export function pressShiftTab(view: EditorView): boolean {
+  return dedentListItem(view);
 }
