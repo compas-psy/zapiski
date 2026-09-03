@@ -251,6 +251,18 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/editor-regression.mjs --strict
 
+      # FolderPicker настоящей клавиатурой и мышью: move note/folder,
+      # вложенная папка, root, одинаковые basename в разных ветках,
+      # expand/collapse, шеврон не выбирает узел (только раскрывает), Escape,
+      # keyboard navigation. Заведён после structural edge-case, где текущая
+      # папка при переносе пропадала из дерева, а её дети поднимались на
+      # чужой уровень — модульные тесты в happy-dom доказывают DOM-структуру,
+      # но не настоящий правый клик и не то, что клик по шеврону и клик по
+      # названию строки — разные зоны.
+      - name: Живой браузер — FolderPicker
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/folder-picker-regression.mjs --strict
+
       # Ширина экранов на телефонных вьюпортах (320, 360, 412 и планшет).
       # Заказчик прислал с Android «текст не подстраивается под ширину экрана,
       # меню не влазит» и «в Настройках экраны также не адаптируются»: экран
