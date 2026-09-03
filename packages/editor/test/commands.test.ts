@@ -186,12 +186,80 @@ describe('заголовки', () => {
       expect(v.state.doc.toString()).toBe('Текст\n\n');
     });
 
-    it('существующий Setext из импортированного файла не трогается без явной команды', () => {
-      // Обычный Ctrl+2 (другой заголовок) на соседней строке не должен цеплять чужой Setext.
+    it('Ctrl+2 на первой строке МНОГОСТРОЧНОГО Setext честно рвёт его на ATX + абзац', () => {
+      /*
+       * `Заголовок\nТекст\n-----` — это ОДИН Setext H2 (CommonMark разрешает
+       * многострочное содержимое подчёркиванию: обе строки без пустой между
+       * ними — один и тот же абзац, и `-----` подчёркивает его целиком, а не
+       * только «Текст»; проверено деревом разбора). Курсор на первой строке —
+       * курсор ВНУТРИ этого заголовка, а не рядом с чужим.
+       *
+       * До P1-аудита команда трогала только строку «Заголовок» и оставляла
+       * «Текст\n-----» как есть — но результат `## Заголовок\nТекст\n-----`
+       * заново разбирается уже НЕ как «нетронутый чужой Setext», а как ДВА
+       * заголовка: ATX H2 «Заголовок» и НОВЫЙ, никем не просимый Setext H2
+       * «Текст» — то есть прежнее поведение само создавало заголовок из
+       * воздуха, просто на строку ниже. Теперь подчёркивание снимается вместе
+       * с превращением в ATX, и «Текст» остаётся обычным абзацем — везде
+       * ровно то, о чём попросили, и ничего лишнего не появляется.
+       */
       const v = open('Заголовок\nТекст\n-----', 2);
       setHeading(2)(v);
-      expect(v.state.doc.toString()).toBe('## Заголовок\nТекст\n-----');
-      expect(syntaxTree(v.state).topNode.getChild('SetextHeading2')).not.toBeNull();
+      expect(v.state.doc.toString()).toBe('## Заголовок\nТекст\n\n');
+      const tree = syntaxTree(v.state);
+      expect(tree.topNode.getChild('SetextHeading2')).toBeNull();
+      expect(tree.topNode.getChild('ATXHeading2')).not.toBeNull();
+      const paragraphs = tree.topNode.getChildren('Paragraph');
+      expect(paragraphs.some((p) => v.state.sliceDoc(p.from, p.to) === 'Текст')).toBe(true);
+    });
+  });
+
+  describe('setHeading(N>0) на Setext-заголовке не оставляет мусора (P1-аудит)', () => {
+    /*
+     * `setHeading(0)`/«Обычный текст» уже умел снимать Setext-подчёркивание
+     * (см. блок выше) — а сам выбор конкретного уровня (Ctrl+1…6) не умел
+     * вовсе: он прописывал ATX-маркер НАД строкой содержимого, но
+     * подчёркивание СНИЗУ не трогал. Для H2/H1 это оставляло посторонний
+     * HorizontalRule под новым заголовком; для любого другого уровня — ещё
+     * хуже: буквальный текст «=====» становился видимым абзацем под
+     * заголовком, которого никто не печатал.
+     */
+    it('Setext H2 (---) → Ctrl+1: подчёркивание уходит, никакого HorizontalRule не остаётся', () => {
+      const v = open('Текст\n-----', 2);
+      expect(setHeading(1)(v)).toBe(true);
+      // Подчёркивание в конце документа схлопывается до настоящей пустой
+      // строки — тот же приём и тот же итог, что уже доказан для Ctrl+0.
+      expect(v.state.doc.toString()).toBe('# Текст\n\n');
+      const tree = syntaxTree(v.state);
+      expect(tree.topNode.getChild('SetextHeading2')).toBeNull();
+      expect(tree.topNode.getChild('HorizontalRule')).toBeNull();
+      expect(tree.topNode.getChild('ATXHeading1')).not.toBeNull();
+    });
+
+    it('Setext H1 (===) → Ctrl+3: подчёркивание уходит, «=====» не остаётся видимым текстом', () => {
+      const v = open('Текст\n=====', 2);
+      expect(setHeading(3)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('### Текст\n\n');
+      const tree = syntaxTree(v.state);
+      expect(tree.topNode.getChild('SetextHeading1')).toBeNull();
+      expect(v.state.doc.toString()).not.toContain('=====');
+      expect(tree.topNode.getChild('ATXHeading3')).not.toBeNull();
+    });
+
+    it('Setext H1 (===) → Ctrl+1: даже «тот же самый» уровень не no-op, а честное превращение в ATX', () => {
+      const v = open('Текст\n=====', 2);
+      expect(setHeading(1)(v)).toBe(true);
+      // Подчёркивание в конце документа схлопывается до настоящей пустой
+      // строки — тот же приём и тот же итог, что уже доказан для Ctrl+0
+      // (см. «Setext H2 (---) без текста ниже» выше).
+      expect(v.state.doc.toString()).toBe('# Текст\n\n');
+      expect(syntaxTree(v.state).topNode.getChild('SetextHeading1')).toBeNull();
+    });
+
+    it('текст ниже подчёркивания остаётся нетронутым', () => {
+      const v = open('Текст\n-----\nСледующий абзац', 2);
+      expect(setHeading(2)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('## Текст\n\nСледующий абзац');
     });
   });
 

@@ -347,14 +347,83 @@ const clearHeading: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/**
+ * Ctrl+1…6 на строке Setext-заголовка: ставит ATX-маркер выбранного уровня И
+ * снимает подчёркивание снизу в одной правке (P1-аудит).
+ *
+ * `applyBlockMarker` смотрит только на ТЕКУЩУЮ строку через `splitLine()` —
+ * у Setext маркера на ней нет вовсе, он живёт СТРОКОЙ НИЖЕ (подчёркивание
+ * `---`/`===`). Без этой правки заголовок получал ATX-маркер сверху, а
+ * подчёркивание оставалось мусором под ним: для `---` — посторонним
+ * HorizontalRule, для `===` — и того хуже, буквальным видимым текстом
+ * «=====» (`=` не значит ничего вне Setext). Структура повторяет
+ * `clearHeading` — тот же приём для той же болезни, только вместо снятия
+ * маркера начисто здесь маркер меняется на новый уровень.
+ */
+function setHeadingLevel(level: number): StateCommand {
+  const marker = `${'#'.repeat(level)} `;
+  return ({ state, dispatch }) => {
+    const lineNumbers: number[] = [];
+    const seen = new Set<number>();
+    for (const range of state.selection.ranges) {
+      const first = state.doc.lineAt(range.from).number;
+      const last = state.doc.lineAt(range.to).number;
+      for (let n = first; n <= last; n++) {
+        if (seen.has(n)) continue;
+        seen.add(n);
+        lineNumbers.push(n);
+      }
+    }
+    if (!lineNumbers.length) return false;
+
+    const parts = lineNumbers.map((n) => splitLine(state.doc.line(n).text));
+    const allMarked = parts.every((p) => isHeading(p.marker, level));
+
+    const changes: ChangeSpec[] = [];
+    const handledUnderlines = new Set<number>();
+    lineNumbers.forEach((n, i) => {
+      const line = state.doc.line(n);
+      const part = parts[i];
+      if (!part) return;
+
+      const underline = setextUnderlineOf(state, Math.min(line.from + 1, line.to));
+      if (underline && !handledUnderlines.has(underline.from)) {
+        handledUnderlines.add(underline.from);
+        changes.push(collapseLineToBlankBoundary(state, underline).changes);
+      }
+
+      const nextMarker = allMarked ? '' : marker;
+      if (nextMarker === part.marker) return;
+      const at = line.from + part.indent.length;
+      if (
+        i === 0 &&
+        !allMarked &&
+        needsBlankLineBefore(state, n, `${part.indent}${nextMarker}${part.rest}`)
+      ) {
+        changes.push({ from: line.from, to: line.from, insert: '\n' });
+      }
+      changes.push({ from: at, to: at + part.marker.length, insert: nextMarker });
+    });
+    if (!changes.length) return false;
+
+    const changeSet = state.changes(changes);
+    dispatch(
+      state.update({
+        changes: changeSet,
+        selection: state.selection.map(changeSet, 1),
+        scrollIntoView: true,
+        userEvent: 'input.format',
+      }),
+    );
+    return true;
+  };
+}
+
 /** Ctrl+1…6 — заголовок уровня; Ctrl+0 — обычный абзац. */
 export function setHeading(level: number): StateCommand {
   // Ctrl+0 всегда снимает маркер (включая Setext) и никогда не возвращает его обратно.
   if (level === 0) return clearHeading;
-  return applyBlockMarker(
-    () => `${'#'.repeat(level)} `,
-    (marker) => isHeading(marker, level),
-  );
+  return setHeadingLevel(level);
 }
 
 /** «H» в тулбаре: H1 → H2 → H3 → обычный (BEHAVIOR §2.7). */
