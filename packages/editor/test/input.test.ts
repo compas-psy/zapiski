@@ -5,6 +5,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { EditorSelection, EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { undo } from '@codemirror/commands';
+import { syntaxTree } from '@codemirror/language';
 import { completeDivider, completeFencedCode } from '../src/input/autoformat.js';
 import {
   dedentListItem,
@@ -14,6 +16,15 @@ import {
   MAX_LIST_DEPTH,
 } from '../src/input/lists.js';
 import { makeView } from './helpers.js';
+
+/** Строка курсора не принадлежит ни одному `ListItem` — список действительно позади. */
+function insideListItem(state: EditorState, pos: number): boolean {
+  let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(pos, -1);
+  for (; node; node = node.parent) {
+    if (node.name === 'ListItem') return true;
+  }
+  return false;
+}
 
 let view: EditorView | null = null;
 afterEach(() => {
@@ -114,6 +125,85 @@ describe('Enter, Tab и Backspace в списках', () => {
   it('Enter на пустом элементе выходит из списка', () => {
     const { doc } = runState(stateOf('- первый\n- ', 11), listNewline);
     expect(doc.endsWith('- ')).toBe(false);
+  });
+
+  describe('выход из списка на пустом элементе верхнего уровня — настоящая граница блока (MVP P0)', () => {
+    /*
+     * Заказчик: обычная последовательность «список → Enter → Enter → следующий
+     * абзац» на деле не создаёт новый top-level абзац. `insertNewlineContinue-
+     * MarkupCommand` на пустом элементе снимает маркер, но оставляет ОДИН
+     * перенос строки — это не настоящая пустая строка CommonMark, а значит
+     * следующий введённый текст становится lazy continuation прежнего пункта
+     * и молча возвращается внутрь списка/абзаца, из которого человек только
+     * что вышел.
+     *
+     * Слабый тест выше («doc.endsWith('- ') === false») этого не ловит —
+     * "- первый\n" тоже не заканчивается на «- », и тест зелёный на дефекте.
+     */
+    it('bullet: после второго Enter получается настоящая пустая строка, а не lazy continuation', () => {
+      view = makeView('- Один', { selection: { anchor: 6 } });
+      expect(listNewline(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n- ');
+
+      expect(listNewline(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n\n');
+      expect(view.state.selection.main.head).toBe(view.state.doc.length);
+      expect(insideListItem(view.state, view.state.selection.main.head)).toBe(false);
+
+      const pos = view.state.selection.main.head;
+      view.dispatch({ changes: { from: pos, insert: 'Текст' }, selection: { anchor: pos + 5 } });
+      expect(view.state.doc.toString()).toBe('- Один\n\nТекст');
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(false);
+
+      const finalState = view.state;
+      const paragraphs = syntaxTree(finalState).topNode.getChildren('Paragraph');
+      expect(paragraphs.some((p) => finalState.sliceDoc(p.from, p.to) === 'Текст')).toBe(true);
+    });
+
+    it('ordered: та же граница после второго Enter', () => {
+      view = makeView('1. Один', { selection: { anchor: 7 } });
+      listNewline(view);
+      listNewline(view);
+      expect(view.state.doc.toString()).toBe('1. Один\n\n');
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(false);
+    });
+
+    it('task: та же граница после второго Enter', () => {
+      view = makeView('- [ ] Один', { selection: { anchor: 10 } });
+      listNewline(view);
+      listNewline(view);
+      expect(view.state.doc.toString()).toBe('- [ ] Один\n\n');
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(false);
+    });
+
+    it('список не в конце документа: следующий абзац сохраняет тип, а не становится частью списка', () => {
+      view = makeView('- Один\n- \nВторой абзац', { selection: { anchor: 9 } });
+      expect(listNewline(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n\nВторой абзац');
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(false);
+      const finalState = view.state;
+      const paragraphs = syntaxTree(finalState).topNode.getChildren('Paragraph');
+      expect(
+        paragraphs.some((p) => finalState.sliceDoc(p.from, p.to) === 'Второй абзац'),
+      ).toBe(true);
+    });
+
+    it('вложенный пустой элемент: Enter выводит на уровень выше, не выходя из списка сразу', () => {
+      view = makeView('- Один\n  - ', { selection: { anchor: 11 } });
+      expect(listNewline(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n- ');
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(true);
+    });
+
+    it('undo возвращает пустой элемент списка одним логическим шагом', () => {
+      // Уже пустой пункт — Enter, который тестируется, ровно один: выход из
+      // списка. Undo обязан откатить именно эту транзакцию целиком.
+      view = makeView('- Один\n- ', { selection: { anchor: 9 } });
+      expect(listNewline(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n\n');
+      expect(undo(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Один\n- ');
+    });
   });
 
   it('Tab увеличивает вложенность', () => {

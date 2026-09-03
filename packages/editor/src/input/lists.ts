@@ -12,10 +12,14 @@ import {
   insertNewlineContinueMarkupCommand,
   deleteMarkupBackward,
 } from '@codemirror/lang-markdown';
-import type { StateCommand } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
+import type { EditorState, StateCommand } from '@codemirror/state';
+import { collapseLineToBlankBoundary } from '../syntax/block-boundary.js';
 
 /** Элемент списка любого вида, включая задачи. */
 const LIST_ITEM = /^([\t ]*)((?:[-*+]|\d+[.)])[\t ]+)/;
+/** Пустой пункт списка целиком — маркер (и чекбокс задачи, если есть) и ничего больше. */
+const EMPTY_LIST_ITEM_LINE = /^([\t ]*)(?:[-*+]|\d+[.)])[\t ]+(?:\[[ xX]\][\t ]+)?$/;
 /** Шаг вложенности: два пробела — минимум, который markdown понимает как уровень. */
 const STEP = '  ';
 /** Предел вложенности из BEHAVIOR §2.1. */
@@ -28,16 +32,64 @@ function depthOf(indent: string): number {
   return Math.floor(spaces / STEP.length);
 }
 
+/** Курсор действительно разобран парсером как `ListItem`, а не просто похож на него текстом. */
+function cursorInsideListItem(state: EditorState, pos: number): boolean {
+  for (let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(pos, -1); node; node = node.parent) {
+    if (node.name === 'ListItem') return true;
+  }
+  return false;
+}
+
 /**
- * Enter в списке: следующий элемент того же типа; на пустом — выход из списка.
+ * Штатный `insertNewlineContinueMarkupCommand`: следующий элемент того же
+ * типа, а на пустом элементе — снятие маркера.
  *
  * `nonTightLists: false` принципиально: с настройкой по умолчанию CodeMirror на
  * пустом втором элементе «разрежает» список, добавляя пустую строку, а
  * BEHAVIOR §2.1 требует именно выхода из списка со снятием маркера.
  */
-export const listNewline: StateCommand = insertNewlineContinueMarkupCommand({
+const continueMarkup: StateCommand = insertNewlineContinueMarkupCommand({
   nonTightLists: false,
 });
+
+/**
+ * Enter в списке — с продуктовым выходом на пустом элементе ВЕРХНЕГО уровня.
+ *
+ * ── Чего не хватало `continueMarkup` ────────────────────────────────────────
+ *
+ * На пустом элементе штатная команда снимает маркер, но оставляет ровно один
+ * `\n` — это НЕ настоящая пустая строка CommonMark, а значит первый же
+ * введённый следом символ становится lazy continuation прежнего пункта: список
+ * молча забирает в себя абзац, который пользователь печатает уже после выхода
+ * из него (BEHAVIOR MVP §4). Вложенные пустые пункты этой болезнью не страдают
+ * — штатная команда дедентит их на уровень выше, оставляя настоящий ListItem,
+ * и это поведение сохраняется как есть (§4.1, «не менять по вкусу»).
+ */
+export const listNewline: StateCommand = (target) => {
+  const { state } = target;
+  const { main } = state.selection;
+  if (!main.empty) return continueMarkup(target);
+
+  const line = state.doc.lineAt(main.head);
+  if (main.head !== line.to) return continueMarkup(target);
+
+  const match = EMPTY_LIST_ITEM_LINE.exec(line.text);
+  if (!match) return continueMarkup(target);
+  if (!cursorInsideListItem(state, main.head)) return continueMarkup(target);
+  if (depthOf(match[1] ?? '') > 0) return continueMarkup(target);
+
+  // Пустой пункт верхнего уровня — настоящий выход из списка одной транзакцией.
+  const { changes, cursor } = collapseLineToBlankBoundary(state, line);
+  target.dispatch(
+    state.update({
+      changes,
+      selection: { anchor: cursor },
+      userEvent: 'delete.dedent',
+      scrollIntoView: true,
+    }),
+  );
+  return true;
+};
 
 /** Backspace в начале элемента списка снимает маркер, не удаляя строку. */
 export const listBackspace: StateCommand = deleteMarkupBackward;
