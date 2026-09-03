@@ -148,6 +148,53 @@ describe('заголовки', () => {
     expect(v.state.doc.toString()).toBe('Заголовок');
   });
 
+  describe('Setext heading recovery — «Обычный текст» снимает и подчёркивание (MVP P0 §7)', () => {
+    /*
+     * Заказчик: «текст вдруг стал крупным, а избавиться невозможно». Причина —
+     * у Setext-заголовка маркер живёт на СЛЕДУЮЩЕЙ строке (подчёркивание `---`
+     * или `===`), а `setHeading(0)` снимает маркер только текущей строки через
+     * `splitLine()`. На строке содержимого маркера нет вовсе — команда была
+     * молчаливым no-op именно там, где пользователь её и вызывал.
+     */
+    it('Setext H2 (---) без текста ниже: подчёркивание снимается целиком', () => {
+      const v = open('Текст\n-----', 2);
+      expect(setHeading(0)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('Текст\n\n');
+      expect(syntaxTree(v.state).topNode.getChild('SetextHeading2')).toBeNull();
+    });
+
+    it('Setext H2 (---) с текстом ниже: подчёркивание уходит, абзац остаётся нетронутым', () => {
+      const v = open('Текст\n-----\nСледующий', 2);
+      expect(setHeading(0)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('Текст\n\nСледующий');
+      const tree = syntaxTree(v.state);
+      expect(tree.topNode.getChild('SetextHeading2')).toBeNull();
+      const paragraphs = tree.topNode.getChildren('Paragraph');
+      expect(paragraphs.some((p) => v.state.sliceDoc(p.from, p.to) === 'Следующий')).toBe(true);
+    });
+
+    it('Setext H1 (===) снимается тем же способом', () => {
+      const v = open('Текст\n=====', 2);
+      expect(setHeading(0)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('Текст\n\n');
+      expect(syntaxTree(v.state).topNode.getChild('SetextHeading1')).toBeNull();
+    });
+
+    it('курсор на самой строке подчёркивания — тот же результат', () => {
+      const v = open('Текст\n-----', 7);
+      expect(setHeading(0)(v)).toBe(true);
+      expect(v.state.doc.toString()).toBe('Текст\n\n');
+    });
+
+    it('существующий Setext из импортированного файла не трогается без явной команды', () => {
+      // Обычный Ctrl+2 (другой заголовок) на соседней строке не должен цеплять чужой Setext.
+      const v = open('Заголовок\nТекст\n-----', 2);
+      setHeading(2)(v);
+      expect(v.state.doc.toString()).toBe('## Заголовок\nТекст\n-----');
+      expect(syntaxTree(v.state).topNode.getChild('SetextHeading2')).not.toBeNull();
+    });
+  });
+
   it('«H» в тулбаре крутит H1 → H2 → H3 → обычный', () => {
     const v = open('Текст', 2);
     cycleHeading(v);

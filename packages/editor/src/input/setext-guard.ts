@@ -15,15 +15,17 @@
  *
  * ── Почему правило одно на два пути ─────────────────────────────────────────
  *
- * `needsBlankLineBefore` берётся из `commands/formatting.ts` — тот же самый
- * предикат, что у кнопки. Скопировать его сюда значило бы завести вторую
- * редакцию правила, и однажды они разъедутся: одну поправят, другую забудут.
- * Ровно так у нас уже случилось с Т-Кассой.
+ * `needsBlankLineBefore` берётся из `syntax/block-boundary.ts` — единого
+ * владельца всей семантики «нужна ли пустая строка» (BEHAVIOR MVP §8): тот же
+ * предикат использует и кнопка через `commands/formatting.ts`, и `lists.ts`.
+ * Скопировать его сюда значило бы завести вторую редакцию правила, и однажды
+ * они разъедутся: одну поправят, другую забудут. Ровно так у нас уже
+ * случилось с Т-Кассой.
  */
 import { EditorView } from '@codemirror/view';
 import type { Extension } from '@codemirror/state';
 
-import { needsBlankLineBefore } from '../commands/formatting.js';
+import { needsBlankLineBefore } from '../syntax/block-boundary.js';
 
 /** Маркеры, которые в одиночку на строке читаются как подчёркивание. */
 const MARKERS = new Set(['-', '*', '+']);

@@ -6,6 +6,13 @@
 import { EditorSelection } from '@codemirror/state';
 import type { ChangeSpec, EditorState, SelectionRange, StateCommand } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
+import {
+  collapseLineToBlankBoundary,
+  needsBlankLineBefore,
+  setextUnderlineOf,
+} from '../syntax/block-boundary.js';
+
+export { needsBlankLineBefore } from '../syntax/block-boundary.js';
 
 /** Разбор начала строки на отступ, блочный маркер и остальное. */
 const MARKER =
@@ -199,43 +206,6 @@ type MarkerFor = (parts: LineParts, indexInSelection: number) => string;
  * Поэтому команда ставит пустую строку — ровно то, что поставил бы человек,
  * знающий это правило.
  */
-const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
-
-/**
- * Нужна ли пустая строка перед вставляемым маркером.
- *
- * Безопасен ровно один сосед — пункт списка: там `- ` начинает соседний
- * пункт, и пустая строка только разредила бы список. Во всех остальных
- * случаях непустой соседней строки пустая строка ставится.
- *
- * Первая редакция проверяла узко — «абзац ли это» — и пропустила строку
- * таблицы: она не абзац, а заголовок из неё получался такой же. Ловить
- * перечислением видов блока значит однажды снова не угадать вид; поэтому
- * правило перевёрнуто на разрешительное. Лишняя пустая строка после
- * заголовка или цитаты — обычный стиль markdown и ничего не меняет в разборе;
- * пропущенная ловушка меняет чужой абзац.
- *
- * Принадлежность списку выясняется у того же дерева разбора, которым рисуется
- * живой показ, — гадать по виду строки здесь нечем.
- */
-export function needsBlankLineBefore(
-  state: EditorState,
-  lineNumber: number,
-  nextText: string,
-): boolean {
-  if (lineNumber <= 1) return false;
-  if (!EMPTY_LIST_ITEM.test(nextText)) return false;
-
-  const previous = state.doc.line(lineNumber - 1);
-  if (previous.text.trim().length === 0) return false;
-
-  const node = syntaxTree(state).resolveInner(Math.min(previous.from + 1, previous.to), 1);
-  for (let cursor: typeof node | null = node; cursor !== null; cursor = cursor.parent) {
-    if (cursor.name === 'ListItem') return false;
-  }
-  return true;
-}
-
 /** Применить блочный маркер к строкам выделения; повторный вызов снимает его. */
 function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boolean): StateCommand {
   return ({ state, dispatch }) => {
@@ -313,15 +283,74 @@ function applyBlockMarker(markerFor: MarkerFor, matches: (marker: string) => boo
 const isHeading = (marker: string, level: number): boolean =>
   new RegExp(`^#{${level}}[\\t ]+$`).test(marker);
 
+/**
+ * Строка Setext-подчёркивания заголовка, которому принадлежит `pos` — если
+ * таковой вообще есть — см. `setextUnderlineOf` в `syntax/block-boundary.ts`.
+ *
+ * У Setext (`Текст\n---` → H2, `Текст\n===` → H1) маркер живёт на СЛЕДУЮЩЕЙ
+ * строке, а не на строке содержимого. `splitLine()`/`MARKER` смотрят только на
+ * текущую строку и такой заголовок не видят вовсе — отсюда и жалоба «текст
+ * стал заголовком, а обычным его сделать нельзя».
+ */
+
+/**
+ * Ctrl+0 / «Обычный текст» — снимает любой блочный маркер, включая Setext.
+ *
+ * Для ATX и списков/цитаты маркер живёт на самой строке, и его снимает та же
+ * точечная правка, что и раньше (`applyBlockMarker(() => '', () => false)`).
+ * Для Setext это не работает: маркера на строке содержимого нет, поэтому здесь
+ * — отдельная проверка через `setextUnderlineOf`, которая находит подчёркивание
+ * НИЖЕ, и `collapseLineToBlankBoundary`, которая его стирает до настоящей
+ * пустой строки CommonMark (см. `syntax/block-boundary.ts`).
+ */
+const clearHeading: StateCommand = ({ state, dispatch }) => {
+  const lineNumbers: number[] = [];
+  const seen = new Set<number>();
+  for (const range of state.selection.ranges) {
+    const first = state.doc.lineAt(range.from).number;
+    const last = state.doc.lineAt(range.to).number;
+    for (let n = first; n <= last; n++) {
+      if (seen.has(n)) continue;
+      seen.add(n);
+      lineNumbers.push(n);
+    }
+  }
+  if (!lineNumbers.length) return false;
+
+  const changes: ChangeSpec[] = [];
+  const handledUnderlines = new Set<number>();
+  for (const n of lineNumbers) {
+    const line = state.doc.line(n);
+    const { indent, marker } = splitLine(line.text);
+    if (marker !== '') {
+      const at = line.from + indent.length;
+      changes.push({ from: at, to: at + marker.length, insert: '' });
+    }
+
+    const underline = setextUnderlineOf(state, Math.min(line.from + 1, line.to));
+    if (underline && !handledUnderlines.has(underline.from)) {
+      handledUnderlines.add(underline.from);
+      changes.push(collapseLineToBlankBoundary(state, underline).changes);
+    }
+  }
+  if (!changes.length) return false;
+
+  const changeSet = state.changes(changes);
+  dispatch(
+    state.update({
+      changes: changeSet,
+      selection: state.selection.map(changeSet, 1),
+      scrollIntoView: true,
+      userEvent: 'input.format',
+    }),
+  );
+  return true;
+};
+
 /** Ctrl+1…6 — заголовок уровня; Ctrl+0 — обычный абзац. */
 export function setHeading(level: number): StateCommand {
-  if (level === 0) {
-    // Ctrl+0 всегда снимает маркер и никогда не возвращает его обратно.
-    return applyBlockMarker(
-      () => '',
-      () => false,
-    );
-  }
+  // Ctrl+0 всегда снимает маркер (включая Setext) и никогда не возвращает его обратно.
+  if (level === 0) return clearHeading;
   return applyBlockMarker(
     () => `${'#'.repeat(level)} `,
     (marker) => isHeading(marker, level),
