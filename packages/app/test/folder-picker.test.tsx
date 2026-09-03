@@ -60,14 +60,42 @@ describe('buildFolderDestinationTree — чистая функция (§19)', ()
     expect(result.some((n) => n.path === 'Images')).toBe(false);
   });
 
-  it('текущую папку назначения не показывает, но поднимает её детей на её место', () => {
-    // Сценарий §21 «обычный move»: переносим заметку из «Работа».
+  it('текущая папка остаётся в дереве структурным родителем — не поднимает детей в root', () => {
+    /*
+     * Первая редакция убирала узел `current` и поднимала его детей на его
+     * место — при одинаковых basename в разных ветках это стирало разницу
+     * между ними (см. отдельный тест ниже с двумя «Архив»). Правильная
+     * модель: сама папка остаётся в дереве (её просто нельзя выбрать —
+     * это решает `toPickerTree`/`disabled`, не эта функция), а её дети
+     * — там же, где были, под тем же родителем.
+     */
     const result = buildFolderDestinationTree(TREE, { current: 'Работа' });
-    expect(result.some((n) => n.path === 'Работа')).toBe(false);
-    const paths = result.map((n) => n.path);
-    expect(paths).toContain('Работа/Клиенты');
-    expect(paths).toContain('Работа/Проекты');
-    expect(paths).toContain('Личное');
+    const work = result.find((n) => n.path === 'Работа');
+    expect(work, 'узел «Работа» пропал из дерева').toBeDefined();
+    expect(work?.children.map((c) => c.path)).toEqual(['Работа/Клиенты', 'Работа/Проекты']);
+    // И структура top-level не поменялась: «Работа» и «Личное» — сёстры, не слиты.
+    expect(result.map((n) => n.path)).toEqual(['Работа', 'Личное']);
+  });
+
+  it('одинаковые basename при переносе ИЗ одной из веток не путаются между собой', () => {
+    // §21: Архив в корне + Работа/Архив + Личное/Архив, перенос из «Работа».
+    const withRootArchive: FolderNode[] = [
+      folder('Архив', 'Архив'),
+      folder('Работа', 'Работа', [folder('Работа/Архив', 'Архив')]),
+      folder('Личное', 'Личное', [folder('Личное/Архив', 'Архив')]),
+    ];
+    const result = buildFolderDestinationTree(withRootArchive, { current: 'Работа' });
+    const allPaths: string[] = [];
+    const collect = (nodes: readonly FolderNode[], depth: number): void => {
+      for (const n of nodes) {
+        allPaths.push(n.path);
+        collect(n.children, depth + 1);
+      }
+    };
+    collect(result, 0);
+    // Все три «Архив» присутствуют, и каждый — под СВОИМ путём, не слиты в один.
+    expect(allPaths).toEqual(['Архив', 'Работа', 'Работа/Архив', 'Личное', 'Личное/Архив']);
+    expect(new Set(allPaths).size).toBe(allPaths.length);
   });
 
   it('перенос папки исключает её саму и всех потомков целиком', () => {
@@ -172,6 +200,50 @@ describe('FolderPickerDialog — рендер поверх Tree (§18, §21)', (
     expect(screen.queryByRole('treeitem', { name: 'Проекты' })).toBeNull();
     expect(screen.queryByRole('treeitem', { name: '2026' })).toBeNull();
     expect(screen.getByRole('treeitem', { name: 'Клиенты' })).toBeTruthy();
+  });
+
+  describe('текущая папка — видимый, но невыбираемый родитель (structural edge-case)', () => {
+    it('строка «Работа» видна, помечена суффиксом и aria-disabled', async () => {
+      await mountPicker({ current: 'Работа' });
+      const row = screen.getByRole('treeitem', { name: `Работа · ${ru.library.currentLocationSuffix}` });
+      expect(row).toBeTruthy();
+      expect(row.getAttribute('aria-disabled')).toBe('true');
+      expect(row.getAttribute('aria-selected')).not.toBe('true');
+    });
+
+    it('клик по названию текущей папки ничего не выбирает', async () => {
+      const { onPick, onClose } = await mountPicker({ current: 'Работа' });
+      const row = screen.getByRole('treeitem', { name: `Работа · ${ru.library.currentLocationSuffix}` });
+      fireEvent.click(row);
+      expect(onPick).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('дети текущей папки остаются видны и выбираемы под ней', async () => {
+      const { onPick } = await mountPicker({ current: 'Работа' });
+      expect(screen.getByRole('treeitem', { name: 'Клиенты' })).toBeTruthy();
+      expect(screen.getByRole('treeitem', { name: 'Проекты' })).toBeTruthy();
+      fireEvent.click(screen.getByRole('treeitem', { name: 'Клиенты' }));
+      expect(onPick).toHaveBeenCalledWith('Работа/Клиенты');
+    });
+
+    it('одинаковые basename в разных ветках однозначно различимы при активном current', async () => {
+      const withRootArchive: FolderNode[] = [
+        folder('Архив', 'Архив'),
+        folder('Работа', 'Работа', [folder('Работа/Архив', 'Архив')]),
+        folder('Личное', 'Личное', [folder('Личное/Архив', 'Архив')]),
+      ];
+      const { onPick } = await mountPicker({ folders: withRootArchive, current: 'Работа' });
+      // Три строки с именем «Архив» — корневая, под disabled-«Работа», под «Личное».
+      const archives = screen.getAllByRole('treeitem', { name: 'Архив' });
+      expect(archives).toHaveLength(3);
+      // Клик по КОРНЕВОМУ «Архив» (первому в DOM-порядке) выбирает именно его,
+      // а не тот, что внутри «Работа» или «Личное» — структура решает вопрос.
+      const rootArchive = archives[0];
+      if (!rootArchive) throw new Error('строка «Архив» не найдена');
+      fireEvent.click(rootArchive);
+      expect(onPick).toHaveBeenCalledWith('Архив');
+    });
   });
 
   it('пустое хранилище — доступен только «В корень»', async () => {

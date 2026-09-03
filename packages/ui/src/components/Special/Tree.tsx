@@ -21,6 +21,16 @@ export interface TreeNode {
    * приложение, и в дереве они не должны выглядеть наравне с папками человека.
    */
   muted?: boolean;
+  /**
+   * Строка видна и раскрывается как обычно, но её саму выбрать нельзя —
+   * `onSelect` для неё не вызывается.
+   *
+   * Заведено для FolderPicker: текущее место переносимого объекта остаётся в
+   * дереве структурным родителем (иначе его дети либо пропадают из вида, либо
+   * поднимаются на чужой уровень и путаются с одноимёнными папками в другой
+   * ветке) — но выбрать «перенести в то же самое место» бессмысленно.
+   */
+  disabled?: boolean;
   children?: readonly TreeNode[];
 }
 
@@ -91,11 +101,13 @@ export function Tree({
             role="treeitem"
             aria-level={level + 1}
             aria-expanded={hasChildren ? isOpen : undefined}
-            aria-selected={isSelected}
+            aria-selected={node.disabled ? undefined : isSelected}
+            aria-disabled={node.disabled || undefined}
             className={cx(
               'z-tree__item',
-              isSelected && 'z-tree__item--selected',
+              isSelected && !node.disabled && 'z-tree__item--selected',
               node.muted && 'z-tree__item--muted',
+              node.disabled && 'z-tree__item--disabled',
             )}
             style={{ '--z-tree-level': level } as CSSProperties}
             onClick={(event) => {
@@ -123,6 +135,10 @@ export function Tree({
                 return;
               }
               if (hasChildren && !isOpen) toggle(node.id);
+              /* Раскрытие срабатывает даже для disabled — только выбор гасится:
+                 запрещённая для выбора папка (например, текущее место
+                 переносимого объекта) остаётся доступна для просмотра детей. */
+              if (node.disabled) return;
               onSelect?.(node.id);
             }}
             onKeyDown={(event) => {

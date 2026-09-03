@@ -454,6 +454,7 @@ export const en: AppCatalog = {
     moveFolder: 'Move',
     moveFolderTitle: 'Move to',
     moveToRoot: 'To root',
+    currentLocationSuffix: 'currently here',
     openFileFolderTitle: (name: string): string => `Save "${name}" to`,
     openFileUnavailable: 'File unavailable — it may have been moved or deleted',
   },

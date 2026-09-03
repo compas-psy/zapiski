@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { FolderNode } from '@zapiski/core';
 import { Button, IconFolder, Modal, TextField, Tree, type TreeNode } from '@zapiski/ui';
 import { useStrings } from '../state/context.js';
+import type { Strings } from '../i18n/index.js';
 
 /**
  * Плоский список путей всех папок — для выбора получателя при переносе.
@@ -121,15 +122,20 @@ export const NO_CURRENT_LOCATION = '\u0000';
 /**
  * Дерево доступных папок-получателей — чистая функция (BEHAVIOR MVP §19).
  *
- * Три правила, в порядке применения:
+ * Два правила, в порядке применения:
  *  - системные папки вложений (`Images`, `Audio`, `Other files`) не место
  *    для заметок — исключаются всегда, независимо от `source`/`current`;
  *  - перемещаемая ПАПКА (`source`) и всё её поддерево исключаются целиком:
- *    положить папку внутрь себя — отрезать её от хранилища;
- *  - текущее место объекта (`current`) не предлагается как выбор — это было
- *    бы переносом в то же самое место, — но её ПОДПАПКИ остаются доступны:
- *    сама строка `current` из дерева убирается, а её дети поднимаются на
- *    место, где она стояла, а не исчезают вместе с ней.
+ *    положить папку внутрь себя — отрезать её от хранилища.
+ *
+ * Текущее место объекта (`current`) в дереве ОСТАЁТСЯ — просто не как выбор:
+ * `toPickerTree` ниже помечает этот единственный узел `disabled`. Первая
+ * редакция вместо этого убирала узел `current` и поднимала его детей на его
+ * место — и ровно этим ломала структуру: подпапка «Архив» внутри «Работы»
+ * поднималась в корень и переставала отличаться от точно такой же «Архив» из
+ * «Личного», хотя пользователь их прекрасно различал по вложенности до
+ * переноса. Сохранение узла — единственный способ остаться структурным:
+ * дети видны там же, где были, и подписаны тем же родителем.
  *
  * `source` пустой строкой значит «заметка», а не папка: у заметки нет
  * собственного поддерева, которое надо было бы исключать.
@@ -148,10 +154,6 @@ export function buildFolderDestinationTree(
       if (node.system) continue;
       if (isSourceOrDescendant(node.path)) continue;
       const children = walk(node.children);
-      if (node.path === options.current) {
-        out.push(...children);
-        continue;
-      }
       out.push(children === node.children ? node : { ...node, children });
     }
     return out;
@@ -160,13 +162,24 @@ export function buildFolderDestinationTree(
   return walk(nodes);
 }
 
-function toPickerNode(node: FolderNode): TreeNode {
-  return {
-    id: node.path,
-    label: node.name,
-    icon: <IconFolder size={15} />,
-    ...(node.children.length > 0 ? { children: node.children.map(toPickerNode) } : {}),
+/**
+ * `FolderNode[]` → `TreeNode[]` для показа: текущее место объекта помечается
+ * `disabled` (видно, раскрывается, не выбирается) и получает суффикс в
+ * подписи — иначе строка, на которую нажатие ничего не делает, выглядит как
+ * молчаливая поломка, а не как обозначенная граница.
+ */
+function toPickerTree(nodes: readonly FolderNode[], current: string, strings: Strings): TreeNode[] {
+  const convert = (node: FolderNode): TreeNode => {
+    const isCurrent = node.path === current;
+    return {
+      id: node.path,
+      label: isCurrent ? `${node.name} · ${strings.library.currentLocationSuffix}` : node.name,
+      icon: <IconFolder size={15} />,
+      ...(isCurrent ? { disabled: true } : {}),
+      ...(node.children.length > 0 ? { children: node.children.map(convert) } : {}),
+    };
   };
+  return nodes.map(convert);
 }
 
 /** Все id узлов дерева, плоским списком — раскрыть дерево целиком по умолчанию. */
@@ -236,8 +249,8 @@ export function FolderPickerDialog({
 }: FolderPickerDialogProps): ReactNode {
   const strings = useStrings();
   const nodes = useMemo(
-    () => buildFolderDestinationTree(folders, { source, current }).map(toPickerNode),
-    [folders, source, current],
+    () => toPickerTree(buildFolderDestinationTree(folders, { source, current }), current, strings),
+    [folders, source, current, strings],
   );
   const expandedIds = useMemo(() => allIds(nodes), [nodes]);
   const dialogTitle = title ?? strings.library.moveFolderTitle;
