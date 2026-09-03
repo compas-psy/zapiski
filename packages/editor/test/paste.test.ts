@@ -129,6 +129,70 @@ describe('вставка в редактор', () => {
     expect(v.state.doc.toString()).toBe('## Два');
   });
 
+  describe('вставка не переопределяет соседний блок (MVP P0 §9)', () => {
+    /*
+     * Заказчик (через аудит): «Обычный абзац» + вставка «---» не имеет права
+     * стать Setext H2 — тот же класс ловушки, что и ручной ввод/тулбар, но
+     * `smart-paste.ts` вставлял обычный текст напрямую через
+     * `insertText()`/нативную вставку CodeMirror, минуя всякую проверку.
+     */
+    it('"---" после абзаца получает пустую строку перед собой, а не становится H2', () => {
+      const v = makeView('Обычный абзац\n', { selection: { anchor: 14 } });
+      view = v;
+      paste(v, clipboard({ text: '---' }));
+      expect(v.state.doc.toString()).toBe('Обычный абзац\n\n---');
+    });
+
+    it('"===" после абзаца не становится H1', () => {
+      const v = makeView('Обычный абзац\n', { selection: { anchor: 14 } });
+      view = v;
+      paste(v, clipboard({ text: '===' }));
+      expect(v.state.doc.toString()).toBe('Обычный абзац\n\n===');
+    });
+
+    it('маркированный список из буфера не прерывает абзац лишним слиянием', () => {
+      const v = makeView('Варианты:\n', { selection: { anchor: 10 } });
+      view = v;
+      paste(v, clipboard({ text: '- раз\n- два' }));
+      expect(v.state.doc.toString()).toBe('Варианты:\n\n- раз\n- два');
+    });
+
+    it('нумерованный список из буфера — та же защита', () => {
+      const v = makeView('Шаги:\n', { selection: { anchor: 6 } });
+      view = v;
+      paste(v, clipboard({ text: '1. раз' }));
+      expect(v.state.doc.toString()).toBe('Шаги:\n\n1. раз');
+    });
+
+    it('цитата из буфера — та же защита', () => {
+      const v = makeView('Комментарий:\n', { selection: { anchor: 13 } });
+      view = v;
+      paste(v, clipboard({ text: '> цитата' }));
+      expect(v.state.doc.toString()).toBe('Комментарий:\n\n> цитата');
+    });
+
+    it('уже есть пустая строка — лишней не добавляется', () => {
+      const v = makeView('Обычный абзац\n\n', { selection: { anchor: 15 } });
+      view = v;
+      paste(v, clipboard({ text: '---' }));
+      expect(v.state.doc.toString()).toBe('Обычный абзац\n\n---');
+    });
+
+    it('вставка внутрь списка не разбавляется лишней пустой строкой', () => {
+      const v = makeView('- один\n- ', { selection: { anchor: 9 } });
+      view = v;
+      paste(v, clipboard({ text: '---' }));
+      expect(v.state.doc.toString()).toBe('- один\n- ---');
+    });
+
+    it('обычный текст без опасного начала вставляется как раньше', () => {
+      const v = makeView('Обычный абзац\n', { selection: { anchor: 14 } });
+      view = v;
+      paste(v, clipboard({ text: 'Ещё текст' }));
+      expect(v.state.doc.toString()).toBe('Обычный абзац\nЕщё текст');
+    });
+  });
+
   it('картинка уходит в колбэк и вставляется как ![](attachments/…)', async () => {
     const file = new File([new Uint8Array([1, 2, 3])], 'кот.png', { type: 'image/png' });
     const onPaste = vi.fn(async () => 'attachments/2026-08-09_ab12.png');

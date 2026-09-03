@@ -16,8 +16,9 @@ import type { EditorState, ChangeSpec } from '@codemirror/state';
 const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
 
 /**
- * Нужна ли пустая строка перед вставляемым маркером `nextText` на строке
- * `lineNumber`.
+ * Строка выше `lineNumber` — «опасный» сосед, у которого непустая строка
+ * рядом способна переопределить его AST-тип (Setext underline, поглощение
+ * списком и т. п.).
  *
  * Безопасен ровно один сосед — пункт списка: там `- ` начинает соседний
  * пункт, и пустая строка только разредила бы список. Во всех остальных
@@ -29,14 +30,8 @@ const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
  * Принадлежность списку выясняется у того же дерева разбора, которым
  * рисуется живой показ, — гадать по виду строки здесь нечем.
  */
-export function needsBlankLineBefore(
-  state: EditorState,
-  lineNumber: number,
-  nextText: string,
-): boolean {
+function previousLineIsDangerousNeighbor(state: EditorState, lineNumber: number): boolean {
   if (lineNumber <= 1) return false;
-  if (!EMPTY_LIST_ITEM.test(nextText)) return false;
-
   const previous = state.doc.line(lineNumber - 1);
   if (previous.text.trim().length === 0) return false;
 
@@ -45,6 +40,47 @@ export function needsBlankLineBefore(
     if (cursor.name === 'ListItem') return false;
   }
   return true;
+}
+
+/**
+ * Нужна ли пустая строка перед вставляемым маркером `nextText` на строке
+ * `lineNumber`.
+ */
+export function needsBlankLineBefore(
+  state: EditorState,
+  lineNumber: number,
+  nextText: string,
+): boolean {
+  if (!EMPTY_LIST_ITEM.test(nextText)) return false;
+  return previousLineIsDangerousNeighbor(state, lineNumber);
+}
+
+/**
+ * Строка, способная сама начать блок, который переопределит AST соседа
+ * сверху (BEHAVIOR MVP §9 — защита Paste): маркер списка/нумерации/цитаты
+ * ИЛИ Setext-подчёркивание/тематический разрыв (`---`, `===`, 3+ символа).
+ *
+ * Уже пропущенное правило `needsBlankLineBefore` рассчитано на строго ПУСТОЙ
+ * пункт списка (кнопка/ручной ввод одного маркера); вставка приносит целый
+ * готовый текст, где первая строка списка обычно уже с содержимым
+ * (`- раз`), а сама «опасная» форма шире — включает и thematic-break-подобные
+ * строки, которых при точечном вводе одного символа не бывает.
+ */
+const PASTE_BLOCK_START = /^[\t ]{0,3}(?:(?:[-*+]|\d+[.)])(?:[\t ]|$)|>[\t ]?|[-=]{3,}[\t ]*$)/;
+
+/**
+ * Нужна ли пустая строка перед вставляемым текстом `pastedText`, если он
+ * ложится на строку `lineNumber` (первую строку текущего выделения после
+ * вставки).
+ */
+export function pasteNeedsBlankLineBefore(
+  state: EditorState,
+  lineNumber: number,
+  pastedText: string,
+): boolean {
+  const firstLine = pastedText.split('\n', 1)[0] ?? '';
+  if (!PASTE_BLOCK_START.test(firstLine)) return false;
+  return previousLineIsDangerousNeighbor(state, lineNumber);
 }
 
 /**

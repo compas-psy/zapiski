@@ -19,6 +19,7 @@ import { EditorView } from '@codemirror/view';
 import type { Command } from '@codemirror/view';
 import { editorRuntime } from '../runtime.js';
 import { htmlToMarkdown } from './html-to-markdown.js';
+import { pasteNeedsBlankLineBefore } from '../syntax/block-boundary.js';
 
 /** Ссылка целиком, без пробелов внутри. */
 const URL_ONLY = /^(https?:\/\/|mailto:|obsidian:\/\/|zapiski:\/\/)\S+$/i;
@@ -37,11 +38,24 @@ export const plainPaste: Command = () => {
   return false;
 };
 
+/**
+ * Вставить текст, при необходимости отделив его от соседнего блока сверху
+ * пустой строкой (BEHAVIOR MVP §9): вставленное «---» после абзаца не имеет
+ * права стать Setext-заголовком, вставленный список — молча слиться со
+ * строкой над ним. Проверка — на дереве разбора (`pasteNeedsBlankLineBefore`),
+ * не догадкой по regex, и применяется только когда первая строка вставляемого
+ * текста действительно похожа на начало нового блока — обычный текст границу
+ * не трогает.
+ */
 function insertText(view: EditorView, text: string): void {
-  const tr = view.state.changeByRange((range) => ({
-    changes: { from: range.from, to: range.to, insert: text },
-    range: EditorSelection.cursor(range.from + text.length),
-  }));
+  const tr = view.state.changeByRange((range) => {
+    const lineNumber = view.state.doc.lineAt(range.from).number;
+    const insert = pasteNeedsBlankLineBefore(view.state, lineNumber, text) ? `\n${text}` : text;
+    return {
+      changes: { from: range.from, to: range.to, insert },
+      range: EditorSelection.cursor(range.from + insert.length),
+    };
+  });
   view.dispatch(view.state.update(tr, { scrollIntoView: true, userEvent: 'input.paste' }));
 }
 
@@ -117,7 +131,18 @@ export const smartPaste: Extension = EditorView.domEventHandlers({
       }
     }
 
-    // Обычный текст — как есть, стандартным обработчиком CodeMirror.
+    // Обычный текст без HTML — своя вставка только если первая строка
+    // способна переопределить блок над курсором; иначе, как и раньше, отдаём
+    // событие стандартному обработчику CodeMirror.
+    if (text) {
+      const range = view.state.selection.main;
+      const lineNumber = view.state.doc.lineAt(range.from).number;
+      if (pasteNeedsBlankLineBefore(view.state, lineNumber, text)) {
+        event.preventDefault();
+        insertText(view, text);
+        return true;
+      }
+    }
     return false;
   },
 });
