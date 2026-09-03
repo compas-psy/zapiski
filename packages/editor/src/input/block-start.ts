@@ -33,6 +33,7 @@ import type { StateCommand } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 
 import { editorModeOf } from '../live-preview/editor-mode.js';
+import { isInsideFence } from '../syntax/block-boundary.js';
 
 /**
  * Разметка блока, которую простой режим прячет целиком: заголовок и цитата.
@@ -61,6 +62,10 @@ export const enterAtBlockStart: StateCommand = ({ state, dispatch }) => {
   /* Только ровно на границе разметки: внутри текста Enter обязан делить строку
      как обычно. */
   if (range.head !== line.from + prefix.length) return false;
+  /* Внутри код-блока «# fake»/«> quote» — буквальный текст, не начало
+     заголовка/цитаты (P1-аудит): комментарий или пример в коде не обязан
+     вести себя как разметка. */
+  if (isInsideFence(state, range.head)) return false;
 
   dispatch(
     state.update({

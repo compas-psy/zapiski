@@ -25,6 +25,7 @@ import { syntaxTree } from '@codemirror/language';
 import { emphasisExit } from './emphasis-exit.js';
 import { setextGuard } from './setext-guard.js';
 import { isComposing } from '../ime/composition.js';
+import { isInsideFence } from '../syntax/block-boundary.js';
 
 /** `[]` в начале строки (возможно, уже после маркера списка). */
 const CHECKBOX_SHORTCUT = /^([\t ]*)((?:[-*+]|\d+[.)])[\t ]+)?\[\]$/;
@@ -44,6 +45,9 @@ export const checkboxShortcut: Extension = EditorView.inputHandler.of(
        (см. `ime/composition.ts`: то же правило, что уже соблюдают
        `table-format.ts` и `live-preview/plugin.ts`). */
     if (isComposing(view)) return false;
+    /* Внутри код-блока «[]» — буквальный текст (P1-аудит: комментарий/пример
+       кода не обязан выглядеть как markdown, чтобы не переписываться). */
+    if (isInsideFence(view.state, from)) return false;
     const line = view.state.doc.lineAt(from);
     const before = line.text.slice(0, from - line.from);
     const match = CHECKBOX_SHORTCUT.exec(before);
@@ -110,6 +114,8 @@ export const completeDivider: Command = (view) => {
   const line = doc.lineAt(range.head);
   if (range.head !== line.to) return false;
   if (!DIVIDER.test(line.text)) return false;
+  /* Внутри код-блока «---» — буквальный текст, не разделитель (P1-аудит). */
+  if (isInsideFence(view.state, range.head)) return false;
 
   const prev = line.number > 1 ? doc.line(line.number - 1) : null;
   const needsBlank = prev !== null && prev.text.trim().length > 0;

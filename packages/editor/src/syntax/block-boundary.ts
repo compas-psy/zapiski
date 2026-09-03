@@ -12,8 +12,14 @@
 import { syntaxTree } from '@codemirror/language';
 import type { EditorState, ChangeSpec } from '@codemirror/state';
 
-/** Пустой пункт списка — единственный сосед, которого пустая строка не касается. */
-const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+]|\d+[.)])[\t ]*$/;
+/**
+ * Пустой пункт списка ИЛИ одиночный `=` — единственные маркеры, которым
+ * может понадобиться пустая строка сверху. `=` сюда попал по той же причине,
+ * что и `-`/`*`/`+`: он не список, а единственный кандидат в Setext-H1
+ * (`====`), и без этой же защиты набор `=` под абзацем молча укрупняет его
+ * в заголовок (P1-аудит — тот же класс дефекта, что уже закрыт для `-`).
+ */
+const EMPTY_LIST_ITEM = /^[\t ]{0,3}(?:[-*+=]|\d+[.)])[\t ]*$/;
 
 /**
  * Строка выше `lineNumber` — «опасный» сосед, у которого непустая строка
@@ -81,6 +87,26 @@ export function pasteNeedsBlankLineBefore(
   const firstLine = pastedText.split('\n', 1)[0] ?? '';
   if (!PASTE_BLOCK_START.test(firstLine)) return false;
   return previousLineIsDangerousNeighbor(state, lineNumber);
+}
+
+/**
+ * Курсор уже внутри открытого блока кода (P1-аудит).
+ *
+ * Четыре обработчика ввода (`checkboxShortcut`, `setextGuard`,
+ * `completeDivider`, `enterAtBlockStart`) разбирают ТЕКСТ строки под
+ * курсором regex'ом — и одинаково не знали, что строка при этом может лежать
+ * внутри уже открытого код-блока. Код-комментарий `# fake` или голая `[]` в
+ * примере JSON тогда read'ились как настоящая разметка и переписывались:
+ * содержимое кода — единственное место документа, которое не должно
+ * переинтерпретироваться НИКОГДА, вне зависимости от того, на что оно похоже.
+ * Правда о границе кода — только в дереве разбора, как и у Setext.
+ */
+export function isInsideFence(state: EditorState, pos: number): boolean {
+  const node = syntaxTree(state).resolveInner(pos, -1);
+  for (let cursor: typeof node | null = node; cursor !== null; cursor = cursor.parent) {
+    if (cursor.name === 'FencedCode') return true;
+  }
+  return false;
 }
 
 /**

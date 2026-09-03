@@ -194,3 +194,42 @@ describe('дефис, набранный пальцем, тоже не дела�
     expect(v.state.selection.main.head).toBe(v.state.doc.length);
   });
 });
+
+describe('«=», набранный пальцем, тоже не делает заголовка (P1-аудит)', () => {
+  /*
+   * `-` был защищён с самого начала, а `=` — единственный другой символ,
+   * из которого строится Setext-заголовок (H1), — этой же защиты не имел
+   * вовсе: набор «====» под абзацем молча укрупнял его в H1, без единого
+   * нажатия Enter, которое хотя бы предупредило.
+   */
+  function typeChar(doc: string, at: number, char: string): EditorView {
+    view = makeView(doc, { selection: { anchor: at } });
+    const handled = view.state.facet(EditorView.inputHandler).some(
+      (handler) => handler(view as EditorView, at, at, char, () => null as never) === true,
+    );
+    if (!handled) view.dispatch({ changes: { from: at, insert: char } });
+    return view;
+  }
+
+  it('под абзацем ставит пустую строку сам', () => {
+    const v = typeChar('Слишком много выбора:\n', 22, '=');
+    expect(v.state.doc.toString()).toBe('Слишком много выбора:\n\n=');
+  });
+
+  it('и парсер заголовка больше не видит', () => {
+    const v = typeChar('Слишком много выбора:\n', 22, '=');
+    const names: string[] = [];
+    syntaxTree(v.state).iterate({ enter: (node) => void names.push(node.name) });
+    expect(names.filter((n) => /Heading/.test(n)), 'абзац снова стал заголовком').toEqual([]);
+  });
+
+  it('после пустой строки не вмешивается', () => {
+    const v = typeChar('Абзац\n\n', 7, '=');
+    expect(v.state.doc.toString()).toBe('Абзац\n\n=');
+  });
+
+  it('внутри слова не трогает', () => {
+    const v = typeChar('Абзац\nA', 7, '=');
+    expect(v.state.doc.toString()).toBe('Абзац\nA=');
+  });
+});
