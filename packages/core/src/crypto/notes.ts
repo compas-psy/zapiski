@@ -6,11 +6,13 @@
  * исходный `.md` затирается нулями и удаляется, и лишь затем запись убирается
  * из индекса.
  */
-import type { CryptoProvider, MasterKey, VaultPath, VaultStorage } from '../contract.js';
+import type { CryptoProvider, MasterKey, NoteId, VaultPath, VaultStorage } from '../contract.js';
 import { readText, writeAtomic } from '../vault/atomic.js';
 import { normalizePath } from '../util/path.js';
 import { utf8 } from '../util/bytes.js';
 import { LEGACY_CONTAINER_VERSION } from './container.js';
+import { VersionHistory } from '../sync/versions.js';
+import { CrdtStore } from '../crdt/store.js';
 
 export function encryptedPathOf(path: VaultPath): VaultPath {
   const normalized = normalizePath(path);
@@ -25,6 +27,16 @@ export function plainPathOf(path: VaultPath): VaultPath {
 /**
  * Зашифровать существующую заметку ключом хранилища. Возвращает путь `.md.enc`.
  * Пароль здесь не спрашивается: он был задан один раз (ТЗ §3.3).
+ *
+ * `noteId`, если передан, — тот же идентификатор, которым эта заметка
+ * адресуется в `.zapiski/versions/<id>.json` и `.zapiski/crdt/<id>.bin`
+ * (SyncEngine.recordLocalEdit кладёт их туда при каждом автосохранении). Без
+ * очистки эти служебные файлы переживают шифрование как есть — оба хранят
+ * ПОЛНЫЙ открытый текст заметки, накопленный до момента шифрования, и второй
+ * из них по умолчанию синхронизируется в облако (SEC-003). «Открытый текст
+ * никогда не пишется на диск» касается и наследия, оставшегося ДО того, как
+ * заметку решили защитить, — иначе обещание держится только для текста,
+ * набранного после этого решения.
  */
 export async function encryptNoteFile(
   storage: VaultStorage,
@@ -32,6 +44,7 @@ export async function encryptNoteFile(
   path: VaultPath,
   master: MasterKey,
   hint?: string,
+  noteId?: NoteId,
 ): Promise<VaultPath> {
   const source = normalizePath(path);
   const text = await readText(storage, source);
@@ -45,6 +58,10 @@ export async function encryptNoteFile(
     // доступными, но содержимое по старому пути уже не читается приложением.
     await storage.write(source, new Uint8Array(utf8(text).length)).catch(() => undefined);
     await storage.remove(source);
+  }
+  if (noteId !== undefined) {
+    await new VersionHistory(storage).clear(noteId);
+    await new CrdtStore(storage).remove(noteId);
   }
   return target;
 }

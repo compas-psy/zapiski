@@ -218,10 +218,12 @@ describe('SEC-003: следы открытого текста после шиф�
     return found;
   };
 
-  it('[ДЕФЕКТ] CRDT-лог и локальная история переживают шифрование', async () => {
+  it('[ДЕФЕКТ] без noteId служебные файлы переживают шифрование — так вызывать нельзя', async () => {
     const storage = await buildVaultWithHistory();
     const master = await provider.deriveMaster('пароль', provider.randomSalt());
 
+    // Тот же вызов, что до фикса SEC-003 (без noteId) — очистки не будет,
+    // это и есть дефект, который делает следующий тест обязательным.
     await encryptNoteFile(storage, provider, 'Дневник.md', master);
 
     // Сам `.md` затёрт и удалён — это сделано верно.
@@ -233,10 +235,10 @@ describe('SEC-003: следы открытого текста после шиф�
     expect(traces).toContain('.zapiski/crdt/note-1.bin');
   });
 
-  it.fails('[SEC-003] после шифрования открытого текста на диске не остаётся', async () => {
+  it('[SEC-003] с noteId после шифрования открытого текста на диске не остаётся', async () => {
     const storage = await buildVaultWithHistory();
     const master = await provider.deriveMaster('пароль', provider.randomSalt());
-    await encryptNoteFile(storage, provider, 'Дневник.md', master);
+    await encryptNoteFile(storage, provider, 'Дневник.md', master, undefined, 'note-1');
     expect(await plaintextTraces(storage)).toEqual([]);
   });
 });

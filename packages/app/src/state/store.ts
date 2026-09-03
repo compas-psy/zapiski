@@ -3570,7 +3570,8 @@ export class AppController {
     }
     const source = await this.resolveSavePath(path);
     if ((await vault.storage.stat(source)) === null) return null;
-    const target = await encryptNoteFile(vault.storage, this.crypto, source, master, hint);
+    const noteId = vault.metaOf(source)?.id ?? stemOf(source);
+    const target = await encryptNoteFile(vault.storage, this.crypto, source, master, hint, noteId);
     await vault.rebuild();
     await this.refresh();
     const body = (await decryptNoteFile(vault.storage, this.crypto, target, master)) ?? '';
