@@ -11,9 +11,9 @@
  * сохраняют текст. Список мест с подтверждением закрыт типом и расширению не
  * подлежит — BEHAVIOR §0.
  */
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { FolderNode } from '@zapiski/core';
-import { Button, Modal, TextField } from '@zapiski/ui';
+import { Button, IconFolder, Modal, TextField, Tree, type TreeNode } from '@zapiski/ui';
 import { useStrings } from '../state/context.js';
 
 /**
@@ -118,6 +118,67 @@ export function FolderNameDialog({
  */
 export const NO_CURRENT_LOCATION = '\u0000';
 
+/**
+ * Дерево доступных папок-получателей — чистая функция (BEHAVIOR MVP §19).
+ *
+ * Три правила, в порядке применения:
+ *  - системные папки вложений (`Images`, `Audio`, `Other files`) не место
+ *    для заметок — исключаются всегда, независимо от `source`/`current`;
+ *  - перемещаемая ПАПКА (`source`) и всё её поддерево исключаются целиком:
+ *    положить папку внутрь себя — отрезать её от хранилища;
+ *  - текущее место объекта (`current`) не предлагается как выбор — это было
+ *    бы переносом в то же самое место, — но её ПОДПАПКИ остаются доступны:
+ *    сама строка `current` из дерева убирается, а её дети поднимаются на
+ *    место, где она стояла, а не исчезают вместе с ней.
+ *
+ * `source` пустой строкой значит «заметка», а не папка: у заметки нет
+ * собственного поддерева, которое надо было бы исключать.
+ */
+export function buildFolderDestinationTree(
+  nodes: readonly FolderNode[],
+  options: { source?: string; current: string },
+): FolderNode[] {
+  const source = options.source ?? '';
+  const isSourceOrDescendant = (path: string): boolean =>
+    source !== '' && (path === source || path.startsWith(`${source}/`));
+
+  const walk = (list: readonly FolderNode[]): FolderNode[] => {
+    const out: FolderNode[] = [];
+    for (const node of list) {
+      if (node.system) continue;
+      if (isSourceOrDescendant(node.path)) continue;
+      const children = walk(node.children);
+      if (node.path === options.current) {
+        out.push(...children);
+        continue;
+      }
+      out.push(children === node.children ? node : { ...node, children });
+    }
+    return out;
+  };
+
+  return walk(nodes);
+}
+
+function toPickerNode(node: FolderNode): TreeNode {
+  return {
+    id: node.path,
+    label: node.name,
+    icon: <IconFolder size={15} />,
+    ...(node.children.length > 0 ? { children: node.children.map(toPickerNode) } : {}),
+  };
+}
+
+/** Все id узлов дерева, плоским списком — раскрыть дерево целиком по умолчанию. */
+function allIds(nodes: readonly TreeNode[]): string[] {
+  const out: string[] = [];
+  for (const node of nodes) {
+    out.push(node.id);
+    if (node.children) out.push(...allIds(node.children));
+  }
+  return out;
+}
+
 export interface FolderPickerDialogProps {
   open: boolean;
   /**
@@ -130,8 +191,8 @@ export interface FolderPickerDialogProps {
    * строка — корень. Для объекта без места в хранилище — `NO_CURRENT_LOCATION`.
    */
   current: string;
-  /** Плоский список путей всех папок хранилища. */
-  folders: readonly string[];
+  /** Дерево папок хранилища — то же самое, что показывает Библиотека. */
+  folders: readonly FolderNode[];
   /**
    * Заголовок диалога. По умолчанию — «Переместить»: у диалога один
    * заголовок на всех, кто просто переносит существующий объект. Файл,
@@ -145,14 +206,24 @@ export interface FolderPickerDialogProps {
 }
 
 /**
- * Выбор папки-получателя для «Переместить» (BEHAVIOR §3).
+ * Выбор папки-получателя для «Переместить» (BEHAVIOR §3, MVP P0 §16-21).
  *
- * Список плоский, с полными путями: дерево внутри дерева читается хуже, а путь
- * снимает вопрос «которая из двух „Супервизии“».
+ * До этого компонента диалог получал `flattenFolders()` — плоский список
+ * `readonly string[]` — и показывал каждый путь отдельной одинаковой большой
+ * кнопкой: «Работа», «Работа/Клиенты», «Работа/Клиенты/Иван» в одну ленту.
+ * Заказчик увидел в этом «максимально уродливый и неструктурированный список
+ * папок». Дерево здесь — тот же самый `@zapiski/ui` `Tree`, которым уже
+ * рисует свои папки `LibraryPanel` (MVP §17: не заводить второй `FolderTree`),
+ * поэтому раскрытие/схлопывание, `role=tree`/`treeitem`, клавиатура
+ * (ArrowRight/ArrowLeft раскрывают/сворачивают, Enter/Space — родное поведение
+ * кнопки) и «клик по названию выбирает, шеврон только раскрывает» достаются
+ * бесплатно, а не переписываются заново.
  *
- * Себя и своё поддерево в списке нет: положить папку внутрь себя — значит
- * отрезать её от хранилища. Ядро такую попытку и так отклоняет, но показывать
- * заведомо нерабочий пункт нельзя — это обещание, которое не будет исполнено.
+ * Себя и своё поддерево (при переносе папки) в дереве нет — см.
+ * `buildFolderDestinationTree`. Раскрыто по умолчанию целиком: это диалог
+ * выбора, а не постоянная панель навигации, и лишний клик по каждому шеврону
+ * ради того, чтобы просто ОБНАРУЖИТЬ вложенную папку, был бы шагом назад
+ * относительно прежнего плоского списка, где всё было видно сразу.
  */
 export function FolderPickerDialog({
   open,
@@ -164,30 +235,34 @@ export function FolderPickerDialog({
   onClose,
 }: FolderPickerDialogProps): ReactNode {
   const strings = useStrings();
-  const targets = folders.filter(
-    (path) =>
-      path !== current &&
-      (source === '' || (path !== source && !path.startsWith(`${source}/`))),
+  const nodes = useMemo(
+    () => buildFolderDestinationTree(folders, { source, current }).map(toPickerNode),
+    [folders, source, current],
   );
+  const expandedIds = useMemo(() => allIds(nodes), [nodes]);
+  const dialogTitle = title ?? strings.library.moveFolderTitle;
 
-  const choose = (target: string) => () => {
+  const choose = (target: string): void => {
     onPick(target);
     onClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={title ?? strings.library.moveFolderTitle}>
+    <Modal open={open} onClose={onClose} title={dialogTitle}>
       {/* «В корень» не показывается, когда объект уже в корне. */}
       {current === '' ? null : (
-        <Button variant="secondary" fullWidth onClick={choose('')}>
+        <Button variant="secondary" fullWidth onClick={() => choose('')}>
           {strings.library.moveToRoot}
         </Button>
       )}
-      {targets.map((path) => (
-        <Button key={path} variant="secondary" fullWidth onClick={choose(path)}>
-          {path}
-        </Button>
-      ))}
+      {nodes.length > 0 ? (
+        <Tree
+          nodes={nodes}
+          label={dialogTitle}
+          defaultExpandedIds={expandedIds}
+          onSelect={choose}
+        />
+      ) : null}
       <Button variant="text" fullWidth onClick={onClose}>
         {strings.app.cancel}
       </Button>

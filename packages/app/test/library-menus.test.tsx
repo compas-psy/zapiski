@@ -85,8 +85,8 @@ describe('меню папки открывается жестом из ТЗ', ()
     fireEvent.click(await screen.findByRole('menuitem', { name: ru.library.moveFolder }));
     // В получателях — «Работа», но не сама «Практика»: класть папку внутрь
     // себя нельзя, и показывать такой пункт значило бы обещать несбыточное.
-    expect(await screen.findByRole('button', { name: 'Работа' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Практика' })).toBeNull();
+    expect(await screen.findByRole('treeitem', { name: 'Работа' })).toBeTruthy();
+    expect(screen.queryByRole('treeitem', { name: 'Практика' })).toBeNull();
   });
 
   it('«Удалить папку» доводит до выбора исхода, а не удаляет молча', async () => {

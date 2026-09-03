@@ -42,7 +42,6 @@ import { EmptyBlock } from "./components/ScreenStates.js";
 import { ScreenBoundary } from "./components/ScreenBoundary.js";
 import { PaneResizer } from "./components/PaneResizer.js";
 import {
-  flattenFolders,
   FolderPickerDialog,
   NO_CURRENT_LOCATION,
 } from "./components/FolderDialogs.js";
@@ -371,7 +370,7 @@ export function AppShell(): ReactNode {
       <FolderPickerDialog
         open={openFile !== null}
         current={NO_CURRENT_LOCATION}
-        folders={flattenFolders(state.folders)}
+        folders={state.folders}
         title={
           openFile ? strings.library.openFileFolderTitle(openFile.name) : ""
         }

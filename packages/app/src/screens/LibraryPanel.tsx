@@ -31,7 +31,6 @@ import { useApp, useAppState, useLayout, useStrings } from '../state/context.js'
 import { Section, TreeSkeleton } from '../components/ScreenStates.js';
 import { ContextMenu } from '../components/ContextMenu.js';
 import {
-  flattenFolders,
   FolderDeleteSheet,
   FolderNameDialog,
   FolderPickerDialog,
@@ -276,7 +275,6 @@ export function LibraryPanel(): ReactNode {
         .map(toTreeNode),
     [state.folders, showAttachmentFolders],
   );
-  const folderPaths = useMemo(() => flattenFolders(state.folders), [state.folders]);
   const tagNodes = useMemo(() => buildTagTree(state.tags), [state.tags]);
 
   const activeNotes = state.notes.filter((note) => !note.archived);
@@ -535,7 +533,7 @@ export function LibraryPanel(): ReactNode {
         current={
           moving && moving.includes('/') ? moving.slice(0, moving.lastIndexOf('/')) : ''
         }
-        folders={folderPaths}
+        folders={state.folders}
         onPick={(parent) => void app.moveFolder(moving ?? '', parent)}
         onClose={() => setMoving(null)}
       />

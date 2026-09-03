@@ -14,7 +14,7 @@ import { IconMenu } from '../components/icons.js';
 import { NoteRow } from '../components/NoteRow.js';
 import { ContextMenu, type MenuItem } from '../components/ContextMenu.js';
 import { SyncIndicator } from '../components/SyncIndicator.js';
-import { flattenFolders, FolderPickerDialog } from '../components/FolderDialogs.js';
+import { FolderPickerDialog } from '../components/FolderDialogs.js';
 import { AttachmentFolderView } from './AttachmentFolderView.js';
 import { EncryptSheet } from './EncryptSheet.js';
 import {
@@ -48,8 +48,6 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
   /** Какую заметку выгружаем и в каком формате. */
   const [exporting, setExporting] = useState<NoteMeta | null>(null);
 
-  /** Плоский список папок — для выбора получателя при переносе заметки. */
-  const folderPaths = useMemo(() => flattenFolders(state.folders), [state.folders]);
   const [sortMenu, setSortMenu] = useState(false);
 
   const haptic = app.host.platform.haptics
@@ -320,7 +318,7 @@ export function NoteListScreen({ embedded = false, compactRows = false }: NoteLi
             ? movingNote.path.slice(0, movingNote.path.lastIndexOf('/'))
             : ''
         }
-        folders={folderPaths}
+        folders={state.folders}
         onPick={(folder) => {
           if (movingNote) void app.move(movingNote.path, folder);
         }}

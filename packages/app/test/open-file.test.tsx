@@ -94,7 +94,7 @@ describe('намерение «open-file» доводит до диалога в
     openFile('/tmp/Идея.md', new TextEncoder().encode('# Идея\n\nтекст\n'));
 
     await screen.findByRole('dialog', { name: ru.library.openFileFolderTitle('Идея.md') });
-    fireEvent.click(screen.getByRole('button', { name: 'Работа' }));
+    fireEvent.click(screen.getByRole('treeitem', { name: 'Работа' }));
 
     await waitFor(() => {
       const created = app.getState().notes.find((note) => note.path === 'Работа/Идея.md');
