@@ -243,6 +243,14 @@ jobs:
         if: steps.scripts.outputs.web_buildable == 'true'
         run: node scripts/check-hotkeys.mjs --strict
 
+      # Настоящей клавиатурой: список → Enter × 2 → абзац не возвращается
+      # в список, и Setext-заголовок снимается «Обычным текстом» (MVP P0 §13).
+      # Модульные тесты зовут `listNewline`/`setHeading` напрямую — этот прогон
+      # доказывает дорогу от нажатия клавиши до них, а не саму команду.
+      - name: Живой браузер — редактор, список → абзац, Setext
+        if: steps.scripts.outputs.web_buildable == 'true'
+        run: node scripts/editor-regression.mjs --strict
+
       # Ширина экранов на телефонных вьюпортах (320, 360, 412 и планшет).
       # Заказчик прислал с Android «текст не подстраивается под ширину экрана,
       # меню не влазит» и «в Настройках экраны также не адаптируются»: экран
