@@ -37,6 +37,7 @@ import {
 import { completeDivider, completeFencedCode } from '../input/autoformat.js';
 import { enterAtBlockStart } from '../input/block-start.js';
 import { dedentListItem, indentListItem, listBackspace, listNewline } from '../input/lists.js';
+import { tableEnter } from './table.js';
 import { toggleTaskAtCursor } from '../live-preview/interactions.js';
 import { toggleRawMode } from '../live-preview/raw-mode.js';
 import { toggleFocusMode } from '../focus/focus-mode.js';
@@ -141,10 +142,11 @@ const bindings: KeyBinding[] = [
     run,
     preventDefault: preventDefault ?? true,
   })),
-  // Enter: код-блок → разделитель → начало размеченной строки → продолжение
-  // списка → обычный перевод строки.
+  // Enter: код-блок → разделитель → внутри строки таблицы → начало
+  // размеченной строки → продолжение списка → обычный перевод строки.
   { key: 'Enter', run: completeFencedCode },
   { key: 'Enter', run: completeDivider },
+  { key: 'Enter', run: tableEnter },
   /* В простом режиме разметка блока спрятана, и «начало строки» на экране —
      это позиция после неё. Обычный перевод строки оставлял бы `# ` сверху и
      превращал заголовок в обычный текст на глазах у человека, который ничего

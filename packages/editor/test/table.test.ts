@@ -11,7 +11,8 @@
  * только текстом, а именно ровность и ломается первой.
  */
 import { EditorState } from '@codemirror/state';
-import { describe, expect, it } from 'vitest';
+import type { EditorView } from '@codemirror/view';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   alignColumn,
@@ -24,8 +25,10 @@ import {
   renderTable,
   setCell,
   tableAt,
+  tableEnter,
   toggleHeader,
 } from '../src/commands/table.js';
+import { makeView } from './helpers.js';
 
 /** Канонический вид: колонки по самой длинной ячейке, минимум три дефиса. */
 const TABLE = [
@@ -283,5 +286,59 @@ describe('правка ячейки', () => {
       ReturnType<typeof tableAt>
     >;
     expect(setCell(model, 1, 0, 'Бумага ').rows[1]?.[0]).toBe('Бумага ');
+  });
+});
+
+/**
+ * P1-аудит: обычный Enter внутри строки таблицы разрубал `| 1 | 2 |` пополам
+ * — половина оставалась в таблице, вторая переставала начинаться с `|` и
+ * выпадала из TABLE_ROW насовсем. Тихая потеря данных на ровном месте:
+ * ни диалога, ни визуальной тревоги, автосохранение фиксирует урон. Здесь —
+ * проверка через настоящий `EditorView`, а не только модель: дефект был
+ * именно в маршруте нажатия клавиши, а не в разборе.
+ */
+describe('Enter внутри таблицы', () => {
+  let view: EditorView | null = null;
+  afterEach(() => {
+    view?.destroy();
+    view = null;
+  });
+
+  const DOC = '| A | B |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n\nхвост';
+
+  it('посреди ячейки не разрубает строку — таблица остаётся одним блоком', () => {
+    const pos = DOC.indexOf('1');
+    view = makeView(DOC, { selection: { anchor: pos } });
+    tableEnter(view);
+
+    expect(view.state.doc.toString()).toBe(DOC);
+    const model = tableAt(view.state, pos);
+    expect(model).not.toBeNull();
+    expect(model?.lastLine).toBe(4);
+  });
+
+  it('в конце НЕ последней строки таблицы тоже не разрывает таблицу надвое', () => {
+    const pos = DOC.indexOf('| 1 | 2 |') + '| 1 | 2 |'.length;
+    view = makeView(DOC, { selection: { anchor: pos } });
+    tableEnter(view);
+
+    expect(view.state.doc.toString()).toBe(DOC);
+    const model = tableAt(view.state, pos);
+    expect(model?.lastLine).toBe(4);
+  });
+
+  it('в конце ПОСЛЕДНЕЙ строки таблицы обычный Enter по-прежнему создаёт абзац после неё', () => {
+    const pos = DOC.indexOf('| 3 | 4 |') + '| 3 | 4 |'.length;
+    view = makeView(DOC, { selection: { anchor: pos } });
+    const handled = tableEnter(view);
+
+    // Не обработано ЭТОЙ командой — цепочка Enter доходит до обычного
+    // перевода строки, который и добавляет абзац после таблицы.
+    expect(handled).toBe(false);
+  });
+
+  it('вне таблицы не вмешивается', () => {
+    view = makeView('Обычный абзац', { selection: { anchor: 5 } });
+    expect(tableEnter(view)).toBe(false);
   });
 });

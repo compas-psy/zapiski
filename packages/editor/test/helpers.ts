@@ -14,6 +14,7 @@ import { buildLivePreview } from '../src/live-preview/decorations.js';
 import { completeDivider, completeFencedCode } from '../src/input/autoformat.js';
 import { enterAtBlockStart } from '../src/input/block-start.js';
 import { dedentListItem, indentListItem, listBackspace, listNewline } from '../src/input/lists.js';
+import { tableEnter } from '../src/commands/table.js';
 
 export function runtimeOf(overrides: Partial<EditorRuntime> = {}): EditorRuntime {
   return { ...noopRuntime, ...overrides };
@@ -103,11 +104,12 @@ export function makeView(doc: string, options: StateOptions = {}): EditorView {
  * команду CodeMirror, когда ни один наш обработчик не сработал.
  */
 
-/** Enter: код-блок → разделитель → начало размеченной строки → список → CM. */
+/** Enter: код-блок → разделитель → таблица → начало размеченной строки → список → CM. */
 export function pressEnter(view: EditorView): boolean {
   return (
     completeFencedCode(view) ||
     completeDivider(view) ||
+    tableEnter(view) ||
     enterAtBlockStart(view) ||
     listNewline(view) ||
     insertNewlineAndIndent(view)

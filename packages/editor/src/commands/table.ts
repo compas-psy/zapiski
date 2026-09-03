@@ -17,6 +17,7 @@
  * невозможно — а файл обязан оставаться человеческим (file over app).
  */
 import type { ChangeSpec, EditorState } from '@codemirror/state';
+import type { Command } from '@codemirror/view';
 
 /** Выравнивание колонки, как его кодирует строка-разделитель. */
 export type ColumnAlign = 'none' | 'left' | 'center' | 'right';
@@ -167,6 +168,34 @@ export function tableAt(state: EditorState, pos = state.selection.main.head): Ta
     column: columnAt(cursorLine.text, pos - cursorLine.from),
   };
 }
+
+/**
+ * Enter внутри строки таблицы — не переводит строку (P1-аудит).
+ *
+ * Обычный перевод строки посреди `| 1 | 2 |` разрубает саму строку: половина
+ * остаётся на своём месте, вторая половина больше не начинается с `|` и
+ * выпадает из TABLE_ROW насовсем — тихая потеря данных, без диалога и без
+ * визуальной тревоги. То же самое, только внутри таблицы, а не внутри
+ * строки, происходит и на конце НЕпоследней строки: пустая строка между
+ * строками таблицы рвёт один блок на два.
+ *
+ * Правка ячеек в этом продукте и так идёт через `TableDialog` (Tab внутри
+ * таблицы по той же причине умышленно ничего не делает — см. `helpers.ts`),
+ * поэтому Enter внутри уже начатой таблицы просто гасится, кроме одного
+ * случая: курсор в конце ПОСЛЕДНЕЙ строки таблицы — это единственное место,
+ * где обычный перевод строки ожидаемо создаёт абзац ПОСЛЕ таблицы, и его
+ * трогать не нужно.
+ */
+export const tableEnter: Command = (view) => {
+  const range = view.state.selection.main;
+  if (!range.empty) return false;
+  const model = tableAt(view.state, range.head);
+  if (!model) return false;
+  const line = view.state.doc.lineAt(range.head);
+  const atEndOfLastLine = line.number === model.lastLine && range.head === line.to;
+  if (atEndOfLastLine) return false;
+  return true;
+};
 
 /** В какой ячейке стоит курсор — считаем палки левее него. */
 function columnAt(line: string, offset: number): number {
