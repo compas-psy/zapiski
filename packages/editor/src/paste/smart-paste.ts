@@ -46,11 +46,22 @@ export const plainPaste: Command = () => {
  * не догадкой по regex, и применяется только когда первая строка вставляемого
  * текста действительно похожа на начало нового блока — обычный текст границу
  * не трогает.
+ *
+ * Защита срабатывает ТОЛЬКО когда курсор реально стоит в начале целевой
+ * строки (P1-аудит). Вставка посреди слова/строки не может начать новый
+ * блок в принципе — блоки CommonMark различаются по началу строки, а не по
+ * произвольной позиции внутри неё, — но прежняя проверка смотрела только на
+ * «опасна ли строка НАД целевой» и вставляла защитный перевод строки в любую
+ * позицию курсора, включая середину слова: абзац рвался пополам, а хвост
+ * строки превращался в самостоятельный список или цитату вместо буквальной
+ * вставки. Внутри строки вставка ведёт себя как обычный набор символов.
  */
 function insertText(view: EditorView, text: string): void {
   const tr = view.state.changeByRange((range) => {
-    const lineNumber = view.state.doc.lineAt(range.from).number;
-    const insert = pasteNeedsBlankLineBefore(view.state, lineNumber, text) ? `\n${text}` : text;
+    const line = view.state.doc.lineAt(range.from);
+    const atLineStart = range.from === line.from;
+    const insert =
+      atLineStart && pasteNeedsBlankLineBefore(view.state, line.number, text) ? `\n${text}` : text;
     return {
       changes: { from: range.from, to: range.to, insert },
       range: EditorSelection.cursor(range.from + insert.length),
