@@ -108,7 +108,9 @@ export const smartPaste: Extension = EditorView.domEventHandlers({
     const text = data.getData('text/plain');
 
     // ── Ссылка поверх выделения ─────────────────────────────────────────────
-    if (text && URL_ONLY.test(text.trim())) {
+    // «Без форматирования» (P1-аудит) обещает буквальный текст — автоссылка
+    // такое же форматирование, как любое другое, и подчиняется тому же флагу.
+    if (!plain && text && URL_ONLY.test(text.trim())) {
       const range = view.state.selection.main;
       if (!range.empty) {
         event.preventDefault();

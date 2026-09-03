@@ -119,6 +119,17 @@ describe('вставка в редактор', () => {
     expect(v.state.doc.toString()).toBe('Раз Два');
   });
 
+  it('Ctrl+Shift+V поверх выделения не оборачивает URL ссылкой (P1-аудит)', () => {
+    /* «Без форматирования» обещает буквальный текст, а не какую-то другую
+       разметку взамен — автоссылка над выделением такое же форматирование,
+       как и любое другое, и обязана подчиняться тому же флагу. */
+    const v = makeView('документация', { selection: { anchor: 0, head: 12 } });
+    view = v;
+    plainPaste(v);
+    paste(v, clipboard({ text: 'https://example.org/doc' }));
+    expect(v.state.doc.toString()).toBe('https://example.org/doc');
+  });
+
   it('после обычной вставки метка «без форматирования» сбрасывается', () => {
     const v = makeView('', { selection: { anchor: 0 } });
     view = v;

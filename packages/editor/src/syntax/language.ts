@@ -69,5 +69,19 @@ export function zapiskiMarkdown(options: MarkdownLanguageOptions = {}): Extensio
     codeLanguages: options.codeLanguages ?? codeLanguages,
     extensions: zapiskiMarkdownExtensions,
     addKeymap: false, // свой keymap собираем сами, BEHAVIOR §7
+    /*
+     * У `@codemirror/lang-markdown` есть собственная встроенная вставка
+     * «URL поверх выделения → ссылка» (`pasteURLAsLink`, включена по
+     * умолчанию) — и она регистрируется РАНЬШЕ нашего `paste/smart-paste.ts`
+     * в списке расширений, поэтому побеждает первой и до своего же
+     * обработчика `smartPaste` вставка просто не доходит (P1-аудит: этим и
+     * объяснялось, почему Ctrl+Shift+V «без форматирования» всё равно
+     * оборачивал вставленный URL ссылкой — работал не наш код, а чужой,
+     * который о флаге «без форматирования» знать не может). Отключаем
+     * встроенную реализацию, чтобы вставка URL была только одна и только
+     * наша — ровно тот же принцип «один владелец правила», которым уже
+     * пользуется `syntax/block-boundary.ts`.
+     */
+    pasteURLAsLink: false,
   });
 }
