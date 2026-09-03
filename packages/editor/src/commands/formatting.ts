@@ -92,17 +92,65 @@ function trimRange(state: EditorState, range: SelectionRange): SelectionRange {
   return EditorSelection.range(range.from + leading, range.to - trailing);
 }
 
+/**
+ * Длина максимального прогона символа `ch`, примыкающего к `pos` с указанной
+ * стороны (`-1` — считать влево, `+1` — вправо). Нужна только для одиночных
+ * маркеров из одного и того же символа (курсив `*`) — см. комментарий в
+ * `toggleWrap`.
+ */
+function adjacentRunLength(state: EditorState, pos: number, ch: string, dir: -1 | 1): number {
+  let n = 0;
+  let p = pos;
+  while (dir === -1 ? p > 0 : p < state.doc.length) {
+    const c = dir === -1 ? state.sliceDoc(p - 1, p) : state.sliceDoc(p, p + 1);
+    if (c !== ch) break;
+    n++;
+    p += dir;
+  }
+  return n;
+}
+
 export function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     const tr = state.changeByRange((cursor) => {
       const range = wrapTarget(state, trimRange(state, cursor));
       const outerFrom = range.from - open.length;
       const outerTo = range.to + close.length;
-      const hasOuter =
+      const rawHasOuter =
         outerFrom >= 0 &&
         outerTo <= state.doc.length &&
         state.sliceDoc(outerFrom, range.from) === open &&
         state.sliceDoc(range.to, outerTo) === close;
+
+      /*
+       * P1-аудит: «Ctrl+I поверх жирного текста снимает жирный вместо
+       * добавления курсива». Для `**word**` с выделенным "word" сосед слева
+       * (`*`) — это ВТОРАЯ половина открывающего `**`, а не самостоятельный
+       * маркер курсива; `sliceDoc` совпадает случайно, потому что курсив и
+       * жирный делят один и тот же символ `*`.
+       *
+       * Различить их посимвольно НЕЛЬЗЯ — оба маркера сделаны из одинаковых
+       * `*`, и, скажем, для `***word***` посимвольное снятие ОДНОГО символа
+       * с каждой стороны как раз правильно (снимает курсив, жирный остаётся:
+       * `**word**`), а для `**word**` то же снятие одного символа — ошибка
+       * (превращает жирный в курсив, а не убирает несуществующий курсив).
+       * Разница — в ЧЁТНОСТИ длины набегающего прогona одинаковых `*`:
+       * прогон длиной 2 (или любой чётной длины — вложенные друг в друга
+       * жирные) курсива не содержит вовсе, и одиночный `*` там снимать
+       * нельзя — нужно ОБЕРНУТЬ заново, прогон вырастет до нечётного.
+       * Прогон нечётной длины (1 или 3) уже содержит слой курсива — его и
+       * снимаем, прогон уменьшится на 1 и останется чётным.
+       *
+       * Проверка нужна только одиночному маркеру из одного и того же символа
+       * (курсив `*`, единственный такой случай в наборе команд — жирный
+       * `**`, подсветка `==`, зачёркнутый `~~` и код `` ` `` у своей длины
+       * второго значения не делят, там просто чётности не бывает).
+       */
+      const isSharedSingleCharMarker = open === close && open.length === 1;
+      const hasOuter =
+        rawHasOuter &&
+        (!isSharedSingleCharMarker ||
+          adjacentRunLength(state, range.from, open, -1) % 2 === 1);
 
       if (hasOuter) {
         return {

@@ -125,6 +125,76 @@ describe('парные маркеры', () => {
   });
 });
 
+/**
+ * P1-аудит: Ctrl+I поверх уже жирного текста должен добавить курсив к
+ * жирному (`***word***`), а не снять жирный. Направление «жирный → курсив»
+ * ломалось, а обратное («курсив → жирный») — нет, и разница объясняется
+ * устройством `hasOuter` в `toggleWrap`.
+ *
+ * Для `doc = "**word**"`, выделение "word" (позиции 2–6), `toggleItalic`
+ * (`open = close = '*'`): `outerFrom = 2 - 1 = 1`, `sliceDoc(1, 2)` — это
+ * ВТОРОЙ символ открывающего `**`, тоже `'*'`. Проверка «совпал ли открывающий
+ * маркер» этого не различает и совпадает случайно: символ действительно `*`,
+ * но как часть более длинного маркера `**`, а не сам по себе. `hasOuter`
+ * становится `true`, код разворачивает то, что считает курсивом, и жирный
+ * маркер стирается наполовину — результат `*word*`, жирности нет вовсе.
+ *
+ * Обратное направление («курсив → жирный», `doc = "*word*"`, `toggleBold`,
+ * `open = close = '**'`) совпадения не ловит: `outerFrom = 2 - 2 = 0`,
+ * `sliceDoc(0, 2)` — это `"*w"`, а не `"**"`, потому что открывающий маркер
+ * короче двух символов. Отсюда и асимметрия из аудита.
+ */
+describe('жирный + курсив вместе (P1-аудит)', () => {
+  it('Ctrl+I поверх «**word**» добавляет курсив, а не снимает жирный', () => {
+    const v = open('**word**', 2, 6);
+    toggleItalic(v);
+    expect(v.state.doc.toString()).toBe('***word***');
+    /*
+     * `***word***` разбирается как `Emphasis[0,10] > StrongEmphasis[1,9]`
+     * (внешний слой — курсив, внутренний — жирный: подтверждено дампом
+     * дерева, у "word" нет собственного узла, поэтому `resolveInner`
+     * посередине содержимого возвращает именно `StrongEmphasis`, самый
+     * внутренний ИМЕНОВАННЫЙ узел).
+     */
+    const tree = syntaxTree(v.state);
+    const inner = tree.resolveInner(5, 0);
+    expect(inner.name).toBe('StrongEmphasis');
+    expect(inner.parent?.name).toBe('Emphasis');
+  });
+
+  it('Ctrl+B поверх «*word*» добавляет жирный, а не снимает курсив (уже верно — не регресс)', () => {
+    const v = open('*word*', 1, 5);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('***word***');
+  });
+
+  it('Ctrl+I поверх «***word***» снимает курсив и оставляет жирный', () => {
+    const v = open('***word***', 3, 7);
+    toggleItalic(v);
+    expect(v.state.doc.toString()).toBe('**word**');
+  });
+
+  it('Ctrl+B поверх «**word**» по-прежнему снимает жирный целиком (не задето фиксом)', () => {
+    const v = open('**word**', 2, 6);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('word');
+  });
+
+  it('Ctrl+B поверх «***word***» снимает жирный и оставляет курсив (не задето фиксом: open.length===2 — своя ветка)', () => {
+    const v = open('***word***', 3, 7);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('*word*');
+  });
+
+  it('туда-обратно: курсив на жирном добавляется и снимается без потерь', () => {
+    const v = open('**word**', 2, 6);
+    toggleItalic(v);
+    expect(v.state.doc.toString()).toBe('***word***');
+    toggleItalic(v);
+    expect(v.state.doc.toString()).toBe('**word**');
+  });
+});
+
 describe('заголовки', () => {
   it('Ctrl+1..6 ставят нужный уровень', () => {
     for (let level = 1; level <= 6; level++) {
