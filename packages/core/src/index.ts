@@ -59,6 +59,28 @@ export { BILLING_ENABLED } from './billing.js';
 export { OWN_STORAGE_ENABLED } from './storage-choices.js';
 export { CLOUD_SYNC_ENABLED } from './cloud-sync.js';
 export {
+  deriveContentKey,
+  deriveCrdtKey,
+  deriveManifestKey,
+  deriveSyncKey,
+  deriveVersionsKey,
+  formatRecoveryCode,
+  generateRecoveryCode,
+  generateSmk,
+  parseRecoveryCode,
+  syncKeyInfo,
+  unwrapSmk,
+  wrapSmk,
+  RECOVERY_CODE_ENTROPY_BYTES,
+  SMK_LENGTH,
+  SYNC_KEY_SCHEMA_VERSION,
+  SYNC_NONCE_LENGTH,
+  type RecoveryCode,
+  type RecoveryCodeParse,
+  type SubtleLike,
+  type SyncKeyDomain,
+} from './crypto/sync-keys.js';
+export {
   TRIAL_DAYS_EARLY,
   TRIAL_DAYS_REGULAR,
   TRIAL_EARLY_UNTIL,
