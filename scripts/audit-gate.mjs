@@ -15,9 +15,21 @@
  *
  * Правило продиктовано явно: не слабить audit-level, не добавлять `|| true`
  * на high/critical, различать «реально нашли» и «реестр недоступен»,
- * ограниченное число повторов, а если оба провайдера (pnpm workspace И npm
- * production graph) исчерпали повторы именно по сетевой причине — джоба
- * обязана остаться FAILED, не GREEN.
+ * ограниченное число повторов, а если провайдер исчерпал повторы именно по
+ * сетевой причине — джоба обязана остаться FAILED, не GREEN.
+ *
+ * ── pnpm workspace И npm production graph — оба ВСЕГДА, оба authoritative ──
+ *
+ * pnpm-lock.yaml и server/package-lock.json — независимые графы: npm не
+ * читает pnpm.overrides, а образ прода собирается `npm ci` именно по
+ * server/package-lock.json (deploy/api.Dockerfile). Найдено фактом: этот
+ * lock-файл расходился с pnpm-графом больше двух недель, и «чистый pnpm»
+ * никак не показывал расхождение. Поэтому модель не «pnpm чист → npm можно
+ * не спрашивать» и не «сбой pnpm → fallback на npm», а оба audit ВСЕГДА
+ * выполняются, и оба обязаны дать authoritative-ответ: находка в любом
+ * графе — FAIL; сетевой/неясный сбой любого графа держит джобу FAILED, пока
+ * именно этот граф не подтверждён чистым — чистота другого графа тут ничего
+ * не доказывает.
  *
  * ── Как различаем находку и сетевой сбой ─────────────────────────────────
  *
@@ -140,14 +152,17 @@ export async function auditProviderWithRetries({
   return { provider: name, ...last, attempts: log };
 }
 
-// ── 3. Оркестрация: pnpm workspace → npm production graph при сетевом сбое ──
+// ── 3. Оркестрация: pnpm workspace И npm production graph — оба всегда ───
 
 /**
- * `pnpmRun`/`npmRun` — те же функции `(attempt) => Promise<{exitCode,
- * stdout, stderr}>`, что принимает `auditProviderWithRetries`. npm-fallback
- * запускается ТОЛЬКО если pnpm исчерпал повторы, оставшись в
- * transport-error/unknown — находка (`vulnerable`) или подтверждённая
- * чистота (`clean`) от pnpm НИКОГДА не переключает на fallback.
+ * pnpm-lock.yaml и server/package-lock.json — два независимых графа
+ * зависимостей (npm не читает pnpm.overrides), и образ прода собирается
+ * ИМЕННО по второму (`npm ci`, deploy/api.Dockerfile). Поэтому оба audit
+ * ВСЕГДА выполняются и оба authoritative — не «pnpm чист → npm можно не
+ * спрашивать»: чистый pnpm ничего не доказывает про server/package-lock.json.
+ *
+ * `pnpmRun`/`npmRun` — функции `(attempt) => Promise<{exitCode, stdout,
+ * stderr}>`, что принимает `auditProviderWithRetries`.
  */
 export async function runAuditGate({
   pnpmRun,
@@ -157,7 +172,7 @@ export async function runAuditGate({
   delayMs = (attempt) => attempt * 15000,
   sleepFn = sleep,
 }) {
-  const pnpmResult = await auditProviderWithRetries({
+  const pnpm = await auditProviderWithRetries({
     name: 'pnpm',
     run: pnpmRun,
     attempts: pnpmAttempts,
@@ -165,10 +180,7 @@ export async function runAuditGate({
     usesIgnoreRegistryErrors: true,
     sleepFn,
   });
-  if (!RETRYABLE_STATUSES.has(pnpmResult.status)) {
-    return { ...pnpmResult, fallbackUsed: false, pnpmAttempts: pnpmResult.attempts };
-  }
-  const npmResult = await auditProviderWithRetries({
+  const npm = await auditProviderWithRetries({
     name: 'npm',
     run: npmRun,
     attempts: npmAttempts,
@@ -176,17 +188,26 @@ export async function runAuditGate({
     usesIgnoreRegistryErrors: false,
     sleepFn,
   });
-  return { ...npmResult, fallbackUsed: true, pnpmAttempts: pnpmResult.attempts };
+  return { pnpm, npm };
 }
 
 /**
- * Итоговый вердикт джобы. `ok: false` покрывает и «нашли», и «оба
- * провайдера недоступны» — но с разным `reason`, чтобы лог и отчёт не
- * путали находку с сетевым отказом.
+ * Итоговый вердикт джобы — по ОБОИМ графам сразу:
+ *   ok: true             — оба графа дали структурированный чистый отчёт;
+ *   reason 'vulnerable'  — хотя бы один граф РЕАЛЬНО нашёл high/critical
+ *                          (находка в одном не гасится чистотой другого);
+ *   reason 'inconclusive'— ни одной находки, но хотя бы один граф не дал
+ *                          authoritative-ответа (сеть/неясно) — «чист
+ *                          pnpm» не является доказательством «чист npm»,
+ *                          так что непроверенный граф держит джобу FAILED.
  */
-export function auditVerdict(result) {
-  if (result.status === 'clean') return { ok: true, reason: 'clean' };
-  if (result.status === 'vulnerable') return { ok: false, reason: 'vulnerable' };
+export function auditVerdict({ pnpm, npm }) {
+  if (pnpm.status === 'vulnerable' || npm.status === 'vulnerable') {
+    return { ok: false, reason: 'vulnerable' };
+  }
+  if (pnpm.status === 'clean' && npm.status === 'clean') {
+    return { ok: true, reason: 'clean' };
+  }
   return { ok: false, reason: 'inconclusive' };
 }
 
@@ -231,32 +252,35 @@ async function cliMain() {
 
   const result = await runAuditGate({ pnpmRun, npmRun });
   const verdict = auditVerdict(result);
-  const counts = result.counts ?? { critical: '?', high: '?', moderate: '?', low: '?' };
+  const describe = (r) =>
+    r.counts
+      ? `high=${r.counts.high} critical=${r.counts.critical} moderate=${r.counts.moderate} low=${r.counts.low}`
+      : `статус=${r.status} (структурированного отчёта нет)`;
 
   console.log('--- итог dependency-audit ---');
-  console.log(`провайдер: ${result.provider}`);
-  console.log(`fallback на npm использован: ${result.fallbackUsed ? 'да' : 'нет'}`);
-  console.log(
-    `high=${counts.high} critical=${counts.critical} moderate=${counts.moderate} low=${counts.low}`,
-  );
-  console.log(`попытки pnpm: ${JSON.stringify(result.pnpmAttempts ?? result.attempts)}`);
-  if (result.fallbackUsed) console.log(`попытки npm: ${JSON.stringify(result.attempts)}`);
+  console.log(`pnpm workspace (pnpm-lock.yaml): ${describe(result.pnpm)}`);
+  console.log(`попытки pnpm: ${JSON.stringify(result.pnpm.attempts)}`);
+  console.log(`npm production graph (server/package-lock.json): ${describe(result.npm)}`);
+  console.log(`попытки npm: ${JSON.stringify(result.npm.attempts)}`);
 
   if (verdict.ok) {
-    console.log('вердикт: OK — high/critical не найдено, подтверждено структурированным отчётом.');
+    console.log(
+      'вердикт: OK — оба графа (pnpm workspace, npm production) подтверждены чистыми ' +
+        'структурированным отчётом.',
+    );
     process.exit(0);
   }
   if (verdict.reason === 'vulnerable') {
     console.error(
-      `::error::dependency-audit: найдены high/critical (high=${counts.high}, critical=${counts.critical}) — провайдер ${result.provider}.`,
+      `::error::dependency-audit: найдены high/critical — pnpm: ${describe(result.pnpm)}; npm: ${describe(result.npm)}.`,
     );
     process.exit(1);
   }
   console.error(
-    '::error::dependency-audit: НЕЯСНО — оба провайдера (pnpm workspace и npm production graph) ' +
-      'не дали структурированного отчёта после повторов. Это не подтверждённая находка, но и не ' +
-      'подтверждённая чистота: джоба остаётся FAILED, а не GREEN, пока хотя бы один audit-путь не ' +
-      'завершится реальным отчётом.',
+    '::error::dependency-audit: НЕЯСНО — по крайней мере один из графов (pnpm workspace, npm ' +
+      'production) не дал структурированного отчёта после повторов. Чистота другого графа это не ' +
+      'доказывает: джоба остаётся FAILED, а не GREEN, пока ОБА графа не подтверждены реальным ' +
+      `отчётом. pnpm: ${describe(result.pnpm)}; npm: ${describe(result.npm)}.`,
   );
   process.exit(1);
 }
@@ -373,45 +397,73 @@ async function selfTest() {
     check('вердикт — vulnerable, ретраи не маскируют находку', p.status === 'vulnerable');
   }
 
-  // ── Оркестрация pnpm → npm fallback ──────────────────────────────────
+  // ── Оркестрация: pnpm workspace И npm production — оба ВСЕГДА, оба authoritative ──
   {
     let pnpmCalls = 0;
     let npmCalls = 0;
-    const pnpmAlwaysNetwork = async () => {
+    const pnpmClean = async () => {
       pnpmCalls += 1;
-      return { exitCode: 0, stdout: '', stderr: '' };
+      return { exitCode: 0, stdout: cleanJson, stderr: '' };
     };
     const npmClean = async () => {
       npmCalls += 1;
       return { exitCode: 0, stdout: cleanJson, stderr: '' };
     };
+    const result = await runAuditGate({ pnpmRun: pnpmClean, npmRun: npmClean, delayMs: () => 0 });
+    check('npm ВСЕГДА вызывается, даже когда pnpm уже чист', npmCalls > 0);
+    check('pnpm тоже вызывается', pnpmCalls > 0);
+    check('оба графа чисты → OK', auditVerdict(result).ok === true);
+  }
+  {
+    // Ровно тот сценарий, который нашли фактом: pnpm-lock.yaml чист, а
+    // server/package-lock.json (граф прод-образа) — нет. Чистота pnpm НЕ
+    // должна давать зелёный вердикт.
+    let npmCalls = 0;
+    const pnpmClean = async () => ({ exitCode: 0, stdout: cleanJson, stderr: '' });
+    const npmVulnerable = async () => {
+      npmCalls += 1;
+      return { exitCode: 1, stdout: vulnerableJson, stderr: '' };
+    };
     const result = await runAuditGate({
-      pnpmRun: pnpmAlwaysNetwork,
+      pnpmRun: pnpmClean,
+      npmRun: npmVulnerable,
+      delayMs: () => 0,
+    });
+    check('npm реально проверяется, даже когда pnpm чист', npmCalls > 0);
+    check(
+      'чистый pnpm не маскирует находку в npm production graph',
+      auditVerdict(result).ok === false && auditVerdict(result).reason === 'vulnerable',
+    );
+  }
+  {
+    // Симметрично: находка в pnpm workspace тоже не гасится чистым npm.
+    const pnpmVulnerable = async () => ({ exitCode: 1, stdout: vulnerableJson, stderr: '' });
+    const npmClean = async () => ({ exitCode: 0, stdout: cleanJson, stderr: '' });
+    const result = await runAuditGate({
+      pnpmRun: pnpmVulnerable,
       npmRun: npmClean,
       delayMs: () => 0,
     });
-    check('pnpm исчерпал попытки → npm fallback реально вызван', npmCalls > 0);
-    check('fallbackUsed=true отражает реальный переход на npm', result.fallbackUsed === true);
-    check('итог через fallback — clean', auditVerdict(result).ok === true);
-    check('pnpm вызывался (не пропущен полностью)', pnpmCalls > 0);
+    check(
+      'чистый npm не маскирует находку в pnpm workspace graph',
+      auditVerdict(result).ok === false && auditVerdict(result).reason === 'vulnerable',
+    );
   }
   {
-    let npmCalls = 0;
-    const pnpmVulnerable = async () => ({ exitCode: 1, stdout: vulnerableJson, stderr: '' });
-    const npmShouldNotRun = async () => {
-      npmCalls += 1;
-      return { exitCode: 0, stdout: cleanJson, stderr: '' };
-    };
+    // Транспортный сбой ровно одного графа: другой граф чист, но это не
+    // разрешает объявить весь gate зелёным — непроверенный граф остаётся
+    // непроверенным.
+    const pnpmClean = async () => ({ exitCode: 0, stdout: cleanJson, stderr: '' });
+    const npmNetworkDown = async () => ({ exitCode: 1, stdout: '', stderr: 'ETIMEDOUT' });
     const result = await runAuditGate({
-      pnpmRun: pnpmVulnerable,
-      npmRun: npmShouldNotRun,
+      pnpmRun: pnpmClean,
+      npmRun: npmNetworkDown,
       delayMs: () => 0,
     });
-    check('реальная находка от pnpm НЕ запускает npm fallback', npmCalls === 0);
-    check('находка не маскируется fallback-провайдером', auditVerdict(result).ok === false);
+    const verdict = auditVerdict(result);
     check(
-      'причина отказа — vulnerable, не inconclusive',
-      auditVerdict(result).reason === 'vulnerable',
+      'сетевой сбой ОДНОГО графа не даёт OK, даже если другой граф чист',
+      verdict.ok === false && verdict.reason === 'inconclusive',
     );
   }
   {
@@ -423,7 +475,7 @@ async function selfTest() {
     });
     const verdict = auditVerdict(result);
     check(
-      'оба провайдера недоступны → вердикт FAILED (inconclusive), а не OK',
+      'оба графа недоступны → вердикт FAILED (inconclusive), а не OK',
       verdict.ok === false && verdict.reason === 'inconclusive',
     );
   }
