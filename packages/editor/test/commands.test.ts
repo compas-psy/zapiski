@@ -274,6 +274,44 @@ describe('пересекающееся выделение не ломает су
   });
 });
 
+/**
+ * P1-аудит closure-pass: «форматирование через границу блока оставляет
+ * мусорные маркеры». `**` открытый в одном абзаце и закрытый в другом — не
+ * разметка ни для одного парсера: CommonMark inline-разбор не выходит за
+ * пределы блока, в котором начался. Выделение через два абзаца и Ctrl+B
+ * оставляло два бессмысленных `**` голым текстом — жирности не было нигде.
+ * Правильный ответ — честный отказ (документ не меняется), а не вставка
+ * маркеров, которые ничего не форматируют.
+ */
+describe('форматирование через границу блока отказывается, а не мусорит (P1-аудит)', () => {
+  it('выделение через два абзаца — документ не меняется', () => {
+    const v = open('First paragraph\n\nSecond paragraph', 6, 25);
+    const before = v.state.doc.toString();
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe(before);
+  });
+
+  it('выделение из абзаца в пункт списка — документ не меняется', () => {
+    const v = open('Text here\n\n- item one', 5, 20);
+    const before = v.state.doc.toString();
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe(before);
+  });
+
+  it('выделение из заголовка в абзац — документ не меняется', () => {
+    const v = open('# Heading\n\nBody text', 3, 15);
+    const before = v.state.doc.toString();
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe(before);
+  });
+
+  it('выделение внутри ОДНОГО абзаца по-прежнему работает — не задето фиксом', () => {
+    const v = open('First paragraph\n\nSecond paragraph', 0, 5);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('**First** paragraph\n\nSecond paragraph');
+  });
+});
+
 describe('заголовки', () => {
   it('Ctrl+1..6 ставят нужный уровень', () => {
     for (let level = 1; level <= 6; level++) {

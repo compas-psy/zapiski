@@ -168,6 +168,59 @@ function expandPastPartialOverlap(state: EditorState, range: SelectionRange): Se
 }
 
 /**
+ * Узел-контейнер строчного содержимого, которому принадлежит `pos` —
+ * абзац, заголовок и т. п. `null`, если позиция вообще вне такого узла
+ * (документ пуст, курсор на границе строки без содержимого).
+ */
+const INLINE_CONTAINER_NODES = new Set([
+  'Paragraph',
+  'ATXHeading1',
+  'ATXHeading2',
+  'ATXHeading3',
+  'ATXHeading4',
+  'ATXHeading5',
+  'ATXHeading6',
+  'SetextHeading1',
+  'SetextHeading2',
+]);
+
+function inlineContainerAt(state: EditorState, pos: number): { from: number; to: number } | null {
+  // Обе стороны — на границе документа/блока (`pos = 0` и т. п.) резолв в
+  // одну сторону может не спуститься до Paragraph вовсе и вернуть более
+  // внешний узел (Document), у которого нет родителя-контейнера.
+  for (const side of [1, -1] as const) {
+    let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(
+      pos,
+      side,
+    );
+    for (; node; node = node.parent) {
+      if (INLINE_CONTAINER_NODES.has(node.name)) return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Выделение переходит границу блока (P1-аудит: «форматирование через
+ * границу блока оставляет мусорные маркеры»).
+ *
+ * `**` открытый в одном абзаце и закрытый в другом — не разметка ни для
+ * одного парсера: CommonMark inline-разбор не выходит за пределы блока, в
+ * котором начался. `Ctrl+B` на выделении «paragraph\n\nSecond p» вставлял
+ * маркеры буквально по краям выделения — оба остаются голым текстом,
+ * жирности нет нигде, а в документе появляются два бессмысленных `**`.
+ * Тот же класс дефекта и для перехода абзац → пункт списка, заголовок →
+ * абзац: разные `Paragraph`/`ATXHeading`-узлы — разные блоки.
+ */
+function crossesBlockBoundary(state: EditorState, range: SelectionRange): boolean {
+  if (range.empty) return false;
+  const from = inlineContainerAt(state, range.from);
+  const to = inlineContainerAt(state, Math.max(range.from, range.to - 1));
+  if (!from || !to) return from !== to;
+  return from.from !== to.from || from.to !== to.to;
+}
+
+/**
  * Отрезать пробелы по краям выделения.
  *
  * ── Отказ, ради которого написано ───────────────────────────────────────────
@@ -216,6 +269,13 @@ function adjacentRunLength(state: EditorState, pos: number, ch: string, dir: -1 
 export function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     const tr = state.changeByRange((cursor) => {
+      // Переход границы блока — до всего остального: раздвижение по
+      // существующему маркеру (ниже) само по себе блок не меняет, но резать
+      // ему нечего, если исходное выделение уже переходило из одного
+      // абзаца/заголовка в другой — там сразу отказ, без вставки маркеров.
+      if (crossesBlockBoundary(state, cursor)) {
+        return { changes: [], range: cursor };
+      }
       const range = wrapTarget(state, trimRange(state, cursor));
       const outerFrom = range.from - open.length;
       const outerTo = range.to + close.length;
