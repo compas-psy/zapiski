@@ -47,6 +47,15 @@ import {
 import { looksLikeEnvelope, SyncCrypto } from './sync-crypto.js';
 import { SyncError, type FetchLike } from './webdav.js';
 
+/**
+ * Как выглядит адрес объекта у зашифрованного аккаунта: 128 бит `HMAC-SHA256`
+ * от пути, в hex (`SyncCrypto.pathToken`). Отличить его от настоящего пути
+ * достаточно по форме — в путях vault'а есть точка расширения и почти всегда
+ * есть буквы вне `a–f`, а ровно 32 шестнадцатеричных знака без точки путём
+ * заметки быть не может.
+ */
+const SYNC_ADDRESS = /^[0-9a-f]{32}$/;
+
 export interface ZapiskiCloudOptions {
   /** Базовый адрес, по умолчанию — `https://zapiski.cmpas.ru` (ADR-0003 §1). */
   baseUrl?: string;
@@ -247,7 +256,21 @@ export class ZapiskiCloudBackend implements SyncBackend {
     const response = await this.call(VAULT_ENDPOINTS.list);
     if (!response.ok) return [];
     const body = (await response.json()) as CloudListResponse;
-    return (body.entries ?? [])
+    const entries = body.entries ?? [];
+    /*
+     * Неизвестный адрес — это почти всегда заметка с ДРУГОГО устройства, а не
+     * мусор: соответствие «токен → путь» приезжает в зашифрованном оглавлении
+     * (`pullManifest`). Достаём его прямо здесь, потому что список — то
+     * единственное место, где недостача обнаруживается, и потому что иначе
+     * заметки, созданные на втором устройстве, не появляются на первом
+     * никогда: оглавление тянулось ровно один раз, при подключении.
+     *
+     * Один запрос и только когда есть чего не хватать.
+     */
+    if (this.sync !== undefined && entries.some((entry) => this.isUnknownAddress(entry.path))) {
+      await this.pullManifest().catch(() => 0);
+    }
+    return entries
       .map((entry) => {
         /* SEC-001 §7: с сервера приходит адрес, а не путь. Неизвестный адрес
            пропускается, а не превращается в файл с именем-токеном: заметка,
@@ -297,18 +320,36 @@ export class ZapiskiCloudBackend implements SyncBackend {
     return this.sync.openContent(normalizePath(path), data);
   }
 
-  async get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null> {
-    const address = await this.addressOf(path);
+  /** Прочитать объект по АДРЕСУ на сервере, без расшифровки. */
+  private async readAddress(address: string): Promise<{ raw: Uint8Array; etag: string } | null> {
     const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`);
-    if (response.status === 404) return null;
-    if (!response.ok) return null;
-    const raw = new Uint8Array(await response.arrayBuffer());
-    const data = await this.unseal(path, raw);
-    if (data === null) return null;
+    if (response.status === 404 || !response.ok) return null;
     return {
-      data,
+      raw: new Uint8Array(await response.arrayBuffer()),
       etag: response.headers.get('etag')?.replace(/"/g, '') ?? '',
     };
+  }
+
+  /** Удалить объект по АДРЕСУ на сервере. */
+  private async deleteAddress(address: string): Promise<void> {
+    await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /** Знает ли это устройство, какой заметке принадлежит адрес. */
+  private isUnknownAddress(address: string): boolean {
+    return address !== MANIFEST_ADDRESS && this.pathOfAddress(address) === null;
+  }
+
+  async get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null> {
+    const address = await this.addressOf(path);
+    const found = await this.readAddress(address);
+    if (found === null) return null;
+    const raw = found.raw;
+    const data = await this.unseal(path, raw);
+    if (data === null) return null;
+    return { data, etag: found.etag };
   }
 
   async put(path: VaultPath, data: Uint8Array, ifMatch?: string): Promise<{ etag: string }> {
@@ -333,8 +374,56 @@ export class ZapiskiCloudBackend implements SyncBackend {
   }
 
   async remove(path: VaultPath): Promise<void> {
-    const address = await this.addressOf(path);
-    await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`, { method: 'DELETE' });
+    await this.deleteAddress(await this.addressOf(path));
+  }
+
+  /**
+   * Перевести объекты прошлых версий на шифрование (SEC-001 §10).
+   *
+   * ── Зачем это вообще нужно ───────────────────────────────────────────────
+   *
+   * До SEC-001 Облако адресовало заметку её ПУТЁМ и хранило содержимое как
+   * есть. После — адрес это токен `HMAC(K_manifest, путь)`, а содержимое
+   * конверт. Значит объект, оставшийся с прошлых версий, для нового клиента
+   * не существует: по токену его нет, а его собственный адрес ни один
+   * `list()` в путь не превращает. Человек увидел бы, что заметки из облака
+   * пропали, — и это была бы неправда только наполовину: локально они есть, а
+   * в облаке лежат, и лежат ОТКРЫТЫМ ТЕКСТОМ, что и есть сама находка
+   * SEC-001.
+   *
+   * Поэтому переезд обязателен и обязателен целиком: перечитать открытый
+   * объект, положить его запечатанным по новому адресу и УБРАТЬ открытую
+   * копию. Оставить её значило бы объявить аккаунт зашифрованным, держа
+   * рядом ту же заметку в открытом виде.
+   *
+   * Возвращает число переехавших объектов; ноль — что переезжать нечего
+   * (аккаунт заведён уже после перехода), а не что что-то сломалось. Вызов
+   * идемпотентен: второй раз находить нечего.
+   *
+   * Объект, который не открылся нашим ключом, не трогается вовсе (design §9):
+   * это не наш мусор, а чужие или повреждённые байты, и удалять их — значит
+   * терять чужие данные по догадке.
+   */
+  async migrateLegacy(): Promise<number> {
+    if (this.sync === undefined) return 0;
+    const response = await this.call(VAULT_ENDPOINTS.list).catch(() => null);
+    if (!response || !response.ok) return 0;
+    const body = (await response.json().catch(() => null)) as CloudListResponse | null;
+    let moved = 0;
+    for (const entry of body?.entries ?? []) {
+      if (entry.path === MANIFEST_ADDRESS) continue;
+      if (SYNC_ADDRESS.test(entry.path)) continue; // уже переведён
+      const path = normalizePath(entry.path);
+      const found = await this.readAddress(entry.path).catch(() => null);
+      if (found === null) continue;
+      const data = await this.unseal(path, found.raw);
+      if (data === null) continue; // чужим ключом не открылось — не наше
+      await this.put(path, data);
+      await this.deleteAddress(entry.path);
+      moved += 1;
+    }
+    if (moved > 0) await this.pushManifest(this.knownPaths());
+    return moved;
   }
 
   /**

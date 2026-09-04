@@ -175,15 +175,16 @@ describe('SEC-001 сквозной: два устройства, настоящ�
       sync: unlocked.crypto,
     });
 
-    // До манифеста устройство B не знает чужих адресов — и честно
-    // показывает пусто, а не файлы с именами-токенами.
-    expect(await deviceB.list()).toEqual([]);
-
-    const learned = await deviceB.pullManifest();
-    expect(learned).toBe(1);
-
+    /* Первый же список на новом устройстве возвращает НАСТОЯЩИЙ путь, а не
+       токен и не пусто: неизвестные адреса `list()` разбирает сам, дотянув
+       зашифрованное оглавление. Раньше здесь стояло `toEqual([])` — так и
+       было, и ровно из-за этого второе устройство в живом приложении
+       показывало пустой список: оглавление тянулось только вручную. */
     const listed = await deviceB.list();
     expect(listed.map((e) => e.path), 'путь восстановлен настоящим').toEqual([NOTE_PATH]);
+
+    // И явный вызов остаётся рабочим — им пользуется подключение облака.
+    expect(await deviceB.pullManifest()).toBe(1);
 
     const fetched = await deviceB.get(NOTE_PATH);
     expect(fetched).not.toBeNull();

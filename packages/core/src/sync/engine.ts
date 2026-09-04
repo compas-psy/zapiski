@@ -423,6 +423,8 @@ export class SyncEngine {
       }
     }
 
+    await this.publishManifest();
+
     this.state.lastSyncAt = this.now();
     await this.saveState();
     const notes = this.vault.notes();
@@ -434,6 +436,33 @@ export class SyncEngine {
     if (outcome.state === 'synced' && this.queue.size > 0) outcome.state = 'syncing';
     return outcome;
   }
+
+  /**
+   * Опубликовать оглавление хранилища (SEC-001 §7).
+   *
+   * Что публикуем — `state.entries`: это и есть память движка о том, что на
+   * той стороне лежит. Локальный список тут не годится (в нём есть то, что
+   * ещё не уехало), удалённый — тоже (в нём адреса, а не пути).
+   *
+   * Публикуем ТОЛЬКО когда набор путей изменился: иначе каждый проход синка
+   * — а он ходит по таймеру — добавлял бы лишнюю запись на сервер ни за чем.
+   * Отметку ставим после успеха, поэтому неудачная публикация повторится
+   * следующим проходом, а не потеряется.
+   *
+   * Порта нет — значит адрес на той стороне и есть путь, и публиковать
+   * нечего: у папки, WebDAV и Яндекс.Диска оглавление не имеет смысла.
+   */
+  private async publishManifest(): Promise<void> {
+    if (this.backend.pushManifest === undefined) return;
+    const paths = Object.keys(this.state.entries).sort() as VaultPath[];
+    const digest = paths.join('\n');
+    if (digest === this.publishedManifest) return;
+    const ok = await this.backend.pushManifest(paths).catch(() => false);
+    if (ok) this.publishedManifest = digest;
+  }
+
+  /** Оглавление, которое уже лежит на той стороне, — чтобы не слать его зря. */
+  private publishedManifest: string | null = null;
 
   /**
    * Что синк вообще соглашается положить в vault — БЕЛЫЙ список (SEC-023).
