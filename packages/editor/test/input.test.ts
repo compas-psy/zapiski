@@ -245,4 +245,57 @@ describe('Enter, Tab и Backspace в списках', () => {
     const { doc } = runState(withSelection, indentListItem);
     expect(doc).toBe('  - один\n  - два');
   });
+
+  /*
+   * P1-аудит, самая серьёзная находка списочного аудита: Tab/Shift+Tab на
+   * пункте с ВЛОЖЕННЫМ поддеревом двигали только СТРОКУ КУРСОРА — ни
+   * `LIST_ITEM`-regex, ни выбор строк по `state.selection.ranges` не знали
+   * про дочерние пункты, лежащие НИЖЕ курсора в тексте, но принадлежащие
+   * тому же `ListItem` по дереву. Результат на `"- Parent\n  - Child"`,
+   * Tab на "Parent": `"  - Parent\n  - Child"` — оба пункта получили
+   * ОДИНАКОВЫЙ отступ, и AST это подтверждает буквально: `Child` был
+   * `ListItem` ВНУТРИ `Parent`, а стал его СОСЕДОМ в одном плоском
+   * `BulletList` — вложенность потеряна безвозвратно одним нажатием.
+   */
+  describe('Tab/Shift+Tab на пункте с поддеревом двигают поддерево целиком (P1-аудит)', () => {
+    function topLevelItems(state: EditorState): number {
+      return syntaxTree(state).topNode.getChild('BulletList')?.getChildren('ListItem').length ?? 0;
+    }
+
+    it('Tab на родителе уносит вложенный дочерний пункт вместе с собой', () => {
+      view = makeView('- Parent\n  - Child', { selection: { anchor: 2 } });
+      expect(topLevelItems(view.state)).toBe(1); // Child уже вложен, на верхнем уровне один пункт
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('  - Parent\n    - Child');
+      // Дерево обязано остаться тем же: Parent — единственный пункт нового
+      // вложенного списка на его собственном уровне, Child по-прежнему внутри.
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(true);
+    });
+
+    it('Shift+Tab на родителе уносит вложенный дочерний пункт вместе с собой', () => {
+      view = makeView('  - Parent\n    - Child', { selection: { anchor: 4 } });
+      expect(dedentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Parent\n  - Child');
+    });
+
+    it('глубже: Tab на родителе с двумя уровнями вложенности двигает всё поддерево', () => {
+      view = makeView('- A\n  - B\n    - C', { selection: { anchor: 2 } });
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('  - A\n    - B\n      - C');
+    });
+
+    it('Tab на самом ВЛОЖЕННОМ пункте не трогает родителя и не выходит за предел глубины родителя', () => {
+      view = makeView('- Parent\n  - Child', { selection: { anchor: 12 } }); // курсор внутри "Child"
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- Parent\n    - Child');
+    });
+
+    it('предел вложенности проверяется по корню поддвига, а не по каждой строке отдельно', () => {
+      const deepChild = `${'  '.repeat(MAX_LIST_DEPTH - 1)}- глубоко`;
+      view = makeView(`- Parent\n${deepChild}`, { selection: { anchor: 2 } });
+      // Parent сам на глубине 0 — сдвиг его поддерева разрешён, несмотря на то
+      // что дочерний пункт уже глубоко: предел считается от корня операции.
+      expect(indentListItem(view)).toBe(true);
+    });
+  });
 });
