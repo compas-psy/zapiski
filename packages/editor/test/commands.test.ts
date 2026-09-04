@@ -9,6 +9,7 @@ import { syntaxTree } from '@codemirror/language';
 import {
   cycleHeading,
   insertCodeBlock,
+  insertDivider,
   insertLink,
   insertTable,
   insertWikiLink,
@@ -494,6 +495,50 @@ describe('блочные команды', () => {
     insertCodeBlock(v);
     expect(v.state.doc.toString()).toBe('```\n\n```');
     expect(v.state.selection.main.head).toBe(4);
+  });
+});
+
+/**
+ * P1-аудит closure-pass: «insertDivider из toolbar всё ещё способен попасть
+ * в Setext-trap». Курсор на ПУСТОЙ строке сразу под абзацем (без пустой
+ * строки между ними) не получал защитной пустой строки перед разделителем
+ * — `"Paragraph\n---\n"` читается CommonMark как `SetextHeading2`, а не как
+ * отдельный тематический разрыв, которого просил человек, нажав кнопку.
+ */
+describe('вставка разделителя не попадает в Setext-ловушку (P1-аудит)', () => {
+  it('курсор на пустой строке сразу под абзацем — разделитель получает пустую строку перед собой', () => {
+    const v = open('Paragraph\n', 10);
+    insertDivider(v);
+    expect(v.state.doc.toString()).toBe('Paragraph\n\n---\n');
+    const tree = syntaxTree(v.state);
+    const nodes = tree.topNode.getChildren('SetextHeading1').concat(
+      tree.topNode.getChildren('SetextHeading2'),
+    );
+    expect(nodes, 'разделитель не должен превратить абзац в Setext-заголовок').toHaveLength(0);
+  });
+
+  it('курсор на непустой строке — уже работало верно, не задето фиксом', () => {
+    const v = open('Paragraph', 9);
+    insertDivider(v);
+    expect(v.state.doc.toString()).toBe('Paragraph\n\n---\n');
+  });
+
+  it('уже есть пустая строка перед курсором — лишней не добавляется', () => {
+    const v = open('Paragraph\n\n', 11);
+    insertDivider(v);
+    expect(v.state.doc.toString()).toBe('Paragraph\n\n---\n');
+  });
+
+  it('разделитель в самом начале документа — защита не нужна и не мешает', () => {
+    const v = open('', 0);
+    insertDivider(v);
+    expect(v.state.doc.toString()).toBe('---\n');
+  });
+
+  it('пустая строка под пунктом списка — список не считается опасным соседом (не задето фиксом)', () => {
+    const v = open('- один\n', 7);
+    insertDivider(v);
+    expect(v.state.doc.toString()).toBe('- один\n---\n');
   });
 });
 

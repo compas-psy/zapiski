@@ -9,6 +9,7 @@ import { syntaxTree } from '@codemirror/language';
 import {
   collapseLineToBlankBoundary,
   needsBlankLineBefore,
+  pasteNeedsBlankLineBefore,
   setextUnderlineOf,
 } from '../syntax/block-boundary.js';
 
@@ -870,10 +871,26 @@ export function insertImage(markdown: string): StateCommand {
   };
 }
 
-/** Тулбар «⋯» → разделитель. */
+/**
+ * Тулбар «⋯» → разделитель.
+ *
+ * P1-аудит closure-pass: кнопка попадала в тот же Setext-капкан, что уже
+ * закрыт для ручного набора (`setext-guard.ts`) и вставки (`smart-paste.ts`)
+ * — курсор на ПУСТОЙ строке сразу под абзацем (`"Paragraph\n"`, курсор на
+ * пустой второй строке) не получал никакой пустой строки перед собой:
+ * `prefix` пуст, раз текущая строка и так пуста, а строка НАД ней — обычный
+ * абзац без проверки. Результат — `"Paragraph\n---\n"`, что CommonMark
+ * читает как `SetextHeading2`, а не как отдельный тематический разрыв,
+ * которого просил человек, нажав кнопку «Разделитель».
+ */
 export const insertDivider: StateCommand = ({ state, dispatch }) => {
   const line = state.doc.lineAt(state.selection.main.head);
-  const prefix = line.text.trim().length ? '\n\n' : '';
+  const lineHasContent = line.text.trim().length > 0;
+  const prefix = lineHasContent
+    ? '\n\n'
+    : pasteNeedsBlankLineBefore(state, line.number, '---')
+      ? '\n'
+      : '';
   const at = line.to;
   dispatch(
     state.update({
