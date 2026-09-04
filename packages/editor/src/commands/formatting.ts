@@ -53,7 +53,7 @@ export function splitLine(text: string): LineParts {
  * честным markdown — ссылка внутри выделения жирного, а не наоборот.
  */
 function wrapTarget(state: EditorState, range: SelectionRange): SelectionRange {
-  if (!range.empty) return range;
+  if (!range.empty) return expandPastPartialOverlap(state, range);
   let node = syntaxTree(state).resolveInner(range.from, 0);
   while (node.parent) {
     if (node.name === 'Link' || node.name === 'Image') {
@@ -62,6 +62,109 @@ function wrapTarget(state: EditorState, range: SelectionRange): SelectionRange {
     node = node.parent;
   }
   return range;
+}
+
+/**
+ * Узлы, чьи маркеры `toggleWrap` умеет ставить/снимать. Выделение, ЧАСТИЧНО
+ * их задевающее (не целиком внутри и не целиком снаружи), — источник P1-
+ * аудита: «пересекающееся inline-форматирование ломает существующую
+ * разметку».
+ */
+const WRAPPABLE_MARK_NODES = new Set([
+  'Emphasis',
+  'StrongEmphasis',
+  'Strikethrough',
+  'ZHighlight',
+  'InlineCode',
+]);
+
+/**
+ * `pos` действительно РЕЖЕТ узел `node` — то есть попадает либо внутрь его
+ * маркера (между символами `**`/`~~`), либо строго внутрь содержимого, НЕ
+ * считая самих границ содержимого.
+ *
+ * Граница содержимого (сразу после открывающего маркера или сразу перед
+ * закрывающим) — это НЕ порез: это именно то место, где `range.from`/
+ * `range.to` стоят, когда выделено содержимое узла ЦЕЛИКОМ («word» внутри
+ * `**word**») — штатный случай снятия/добавления обёртки, который уже
+ * умеет `toggleWrap` ниже безо всякого раздвижения. Если бы граница
+ * содержимого тоже считалась «резом», выделение «word» стало бы резать
+ * СВОЙ ЖЕ узел и раздвигалось бы до всего `**word**` — не порча, но и не то,
+ * чего ждёт человек, нажимая Ctrl+I поверх готового `**word**` (P1-аудит,
+ * фикс P1-EDITOR-010).
+ */
+function positionCutsNode(node: ReturnType<typeof syntaxTree>['topNode'], pos: number): boolean {
+  const open = node.firstChild;
+  const close = node.lastChild;
+  if (!open || !close || !open.name.endsWith('Mark') || !close.name.endsWith('Mark')) {
+    // Форма узла не та, что ожидалась (нет пары маркеров-детей) — считаем
+    // разрезом любую строго внутреннюю позицию, тот же осторожный дефолт.
+    return node.from < pos && pos < node.to;
+  }
+  if (open.from < pos && pos < open.to) return true; // середина открывающего маркера
+  if (close.from < pos && pos < close.to) return true; // середина закрывающего маркера
+  return open.to < pos && pos < close.from; // строго внутри содержимого, не на его границах
+}
+
+/** Ближайший «оборачиваемый» узел, который `pos` действительно режет. */
+function enclosingWrappableNode(
+  state: EditorState,
+  pos: number,
+): { from: number; to: number } | null {
+  for (const side of [1, -1] as const) {
+    let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(
+      pos,
+      side,
+    );
+    for (; node; node = node.parent) {
+      if (WRAPPABLE_MARK_NODES.has(node.name) && positionCutsNode(node, pos)) return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Расширить границы выделения так, чтобы они не резали существующий
+ * оборачиваемый узел пополам.
+ *
+ * ── Отказ, ради которого написано ───────────────────────────────────────────
+ *
+ * P1-аудит: выделение «old\*\* t» (пересекает закрывающий маркер `**bold**`
+ * и уходит в соседнее слово), `Ctrl+B` — раньше `toggleWrap` резал границу
+ * буквально там, где кончалось выделение, не зная, что там проходит
+ * СЕРЕДИНА существующего маркера. Результат — `**bo**ld** t**ext`: маркеры
+ * вставлялись внутрь уже существующей пары, разметка ломалась необратимо.
+ *
+ * Если хоть одна граница выделения лежит СТРОГО внутри уже существующего
+ * оборачиваемого узла (`Emphasis`/`StrongEmphasis`/`Strikethrough`/
+ * `ZHighlight`/`InlineCode`) — неважно, в его маркере или в содержимом, —
+ * эта граница раздвигается до границы узла ЦЕЛИКОМ. Раздвижение повторяется,
+ * пока новые границы не перестанут задевать что-то ещё (соседний узел мог
+ * сам оказаться частично захвачен раздвинутой границей). Итог — выделение
+ * либо полностью внутри такого узла, либо полностью снаружи каждого из них:
+ * резать маркер пополам после этого негде, а `toggleWrap` ниже либо снимет
+ * существующую пару целиком (если она теперь совпадает с границами), либо
+ * честно обернёт весь расширенный диапазон заново — вложенным маркером
+ * вокруг уже существующего, что для markdown всегда синтаксически верно.
+ */
+function expandPastPartialOverlap(state: EditorState, range: SelectionRange): SelectionRange {
+  let from = range.from;
+  let to = range.to;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const atFrom = enclosingWrappableNode(state, from);
+    if (atFrom && atFrom.from < from) {
+      from = atFrom.from;
+      changed = true;
+    }
+    const atTo = enclosingWrappableNode(state, to);
+    if (atTo && atTo.to > to) {
+      to = atTo.to;
+      changed = true;
+    }
+  }
+  return from === range.from && to === range.to ? range : EditorSelection.range(from, to);
 }
 
 /**

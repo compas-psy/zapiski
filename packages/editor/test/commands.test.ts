@@ -195,6 +195,85 @@ describe('жирный + курсив вместе (P1-аудит)', () => {
   });
 });
 
+/**
+ * P1-аудит closure-pass: «пересекающееся inline-форматирование ломает
+ * существующую Markdown-разметку». Выделение, которое ЧАСТИЧНО задевает
+ * готовый маркер (не целиком внутри, не целиком снаружи — режет саму
+ * границу маркера), раньше вставляло новую пару символов буквально по
+ * краям выделения, не зная, что там проходит середина чужого маркера.
+ *
+ * Пример: `**bold** text`, выделено «old\*\* t» (позиции 4–10, пересекает
+ * закрывающий `**` и уходит в соседнее слово), `Ctrl+B` — было:
+ * `**bo**ld** t**ext`, разметка сломана необратимо (проверено вручную
+ * перед фиксом, см. коммит).
+ *
+ * Правило: если граница выделения лежит СТРОГО внутри уже существующего
+ * оборачиваемого узла — эта граница раздвигается до границы узла целиком,
+ * пока резать середину чужого маркера негде не станет вовсе. Итог не
+ * обязан быть «минимальным» (лишний уровень вложенности допустим), но
+ * обязан быть ВАЛИДНЫМ markdown, где старое форматирование не потеряно —
+ * проверяется деревом, не только строкой.
+ */
+describe('пересекающееся выделение не ломает существующую разметку (P1-аудит)', () => {
+  it('выделение через закрывающий ** внутрь соседнего слова — bold остаётся целым узлом', () => {
+    const v = open('**bold** text', 4, 10);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('****bold** t**ext');
+    const tree = syntaxTree(v.state);
+    // Старый "bold" остался ЦЕЛЫМ вложенным StrongEmphasis — не разрублен.
+    const boldNode = tree.resolveInner(6, 0); // где-то внутри "bold"
+    let node: typeof boldNode | null = boldNode;
+    let foundClean = false;
+    for (; node; node = node.parent) {
+      if (node.name === 'StrongEmphasis' && v.state.sliceDoc(node.from, node.to) === '**bold**') {
+        foundClean = true;
+        break;
+      }
+    }
+    expect(foundClean, 'исходный **bold** должен остаться целым узлом дерева').toBe(true);
+  });
+
+  it('выделение через открывающий ** из соседнего слова — bold остаётся целым узлом', () => {
+    const v = open('text **bold**', 3, 9);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('tex**t **bold****');
+    const tree = syntaxTree(v.state);
+    const node = tree.resolveInner(10, 0); // где-то внутри "bold"
+    let cur: typeof node | null = node;
+    let foundClean = false;
+    for (; cur; cur = cur.parent) {
+      if (cur.name === 'StrongEmphasis' && v.state.sliceDoc(cur.from, cur.to) === '**bold**') {
+        foundClean = true;
+        break;
+      }
+    }
+    expect(foundClean, 'исходный **bold** должен остаться целым узлом дерева').toBe(true);
+  });
+
+  it('выделение частично внутри курсива, Ctrl+B — курсив остаётся целым узлом, документ валиден', () => {
+    const v = open('*italic* text', 3, 10);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('***italic* t**ext');
+    const tree = syntaxTree(v.state);
+    const node = tree.resolveInner(5, 0); // где-то внутри "italic"
+    let cur: typeof node | null = node;
+    let foundClean = false;
+    for (; cur; cur = cur.parent) {
+      if (cur.name === 'Emphasis' && v.state.sliceDoc(cur.from, cur.to) === '*italic*') {
+        foundClean = true;
+        break;
+      }
+    }
+    expect(foundClean, 'исходный *italic* должен остаться целым узлом дерева').toBe(true);
+  });
+
+  it('выделение целиком внутри готового маркера — обычное снятие, не задето фиксом', () => {
+    const v = open('**bold** text', 2, 6);
+    toggleBold(v);
+    expect(v.state.doc.toString()).toBe('bold text');
+  });
+});
+
 describe('заголовки', () => {
   it('Ctrl+1..6 ставят нужный уровень', () => {
     for (let level = 1; level <= 6; level++) {
