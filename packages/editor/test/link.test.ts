@@ -11,8 +11,10 @@
  */
 import { EditorState } from '@codemirror/state';
 import { describe, expect, it } from 'vitest';
+import { syntaxTree } from '@codemirror/language';
 
 import { applyLink, linkDraft } from '../src/commands/link.js';
+import { makeState } from './helpers.js';
 
 /** Состояние с курсором на `|` или с выделением между двумя `|`. */
 function at(text: string): EditorState {
@@ -98,5 +100,71 @@ describe('что ложится в файл', () => {
 
   it('пустой текст с адресом даёт форму вложения', () => {
     expect(inserted(at('|'), '', 'attachments/файл.pdf')).toBe('[](attachments/файл.pdf)');
+  });
+});
+
+/**
+ * P1-аудит closure-pass: «URL со скобками/пробелами/Markdown-special chars —
+ * ссылка должна либо корректно экранироваться, либо команда должна безопасно
+ * отказаться, но не создавать сломанный Markdown».
+ *
+ * Обычный (без `<>`) адрес не может содержать пробел — разбор останавливается
+ * на первом же пробеле, и текст после него вываливается из ссылки голым
+ * текстом; непарная `(` внутри адреса обрывает ссылку на первой же `)`.
+ * Каждый тест проверяет не только итоговую строку, но и AST — то, что
+ * получившийся текст парсер действительно читает как ОДНУ ссылку с полным
+ * адресом, а не как обрубок.
+ */
+describe('URL со спецсимволами не создаёт сломанный markdown (P1-аудит)', () => {
+  /* Настоящее дерево GFM-разбора — `EditorState.create` без расширений языка
+     (как в `at()`/`inserted()` выше) синтаксис не разбирает вовсе. */
+  function linkNode(doc: string) {
+    const state = makeState(doc);
+    return syntaxTree(state).topNode.getChild('Paragraph')?.getChild('Link') ?? null;
+  }
+
+  it('пробел в адресе — ссылка получает форму <адрес>', () => {
+    const doc = inserted(at('|'), 'заметка', 'attachments/my file.md');
+    expect(doc).toBe('[заметка](<attachments/my file.md>)');
+    const link = linkNode(doc);
+    expect(link, 'ссылка обязана разобраться как ОДИН Link-узел').not.toBeNull();
+    expect(link ? doc.slice(link.from, link.to) : '').toBe(doc);
+  });
+
+  it('незакрытая скобка в адресе — та же защита', () => {
+    const doc = inserted(at('|'), 'заметка', 'http://example.com/foo(bar');
+    expect(doc).toBe('[заметка](<http://example.com/foo(bar>)');
+    const link = linkNode(doc);
+    expect(link, 'ссылка обязана разобраться как ОДИН Link-узел').not.toBeNull();
+    expect(link ? doc.slice(link.from, link.to) : '').toBe(doc);
+  });
+
+  /*
+   * Сбалансированные скобки парсер и без `<>` читает верно (проверено
+   * отдельной диагностикой перед фиксом) — но отличать «сбалансировано» от
+   * «не сбалансировано» здесь не требуется: `<>` вокруг него тоже разбирается
+   * однозначно и правильно, а решать эту задачу заново значило бы повторять
+   * то, что уже решил сам парсер. Простое правило «есть хоть одна скобка —
+   * оборачиваем» безопасно для обоих случаев одинаково.
+   */
+  it('скобки в адресе, даже сбалансированные, — та же защита, ссылка не ломается', () => {
+    const doc = inserted(at('|'), 'заметка', 'http://example.com/foo(bar)');
+    expect(doc).toBe('[заметка](<http://example.com/foo(bar)>)');
+    const link = linkNode(doc);
+    expect(link, 'ссылка обязана разобраться как ОДИН Link-узел').not.toBeNull();
+    expect(link ? doc.slice(link.from, link.to) : '').toBe(doc);
+  });
+
+  it('обычный адрес без спецсимволов не задет фиксом', () => {
+    expect(inserted(at('|'), 'заметка', 'https://example.org/path')).toBe(
+      '[заметка](https://example.org/path)',
+    );
+  });
+
+  it('символы < и > внутри адреса экранируются, чтобы не закрыть форму раньше времени', () => {
+    const doc = inserted(at('|'), 'заметка', 'a b<c>d');
+    expect(doc).toBe('[заметка](<a b\\<c\\>d>)');
+    const link = linkNode(doc);
+    expect(link, 'ссылка обязана разобраться как ОДИН Link-узел').not.toBeNull();
   });
 });
