@@ -21,11 +21,12 @@ import type { PlatformCapabilities, VaultStorage } from '@zapiski/core';
 import { ThemeProvider, ToastProvider } from '@zapiski/ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { PreferencesStore } from '../src/contract.js';
 import { AppProvider } from '../src/state/context.js';
 import { AppController } from '../src/state/store.js';
 import { SettingsScreen } from '../src/screens/SettingsScreen.js';
 import { strings } from '../src/i18n/index.js';
-import { createTestHost } from './host.js';
+import { createTestHost, memoryPreferences } from './host.js';
 
 const ru = strings('ru');
 const SESSION = { accessToken: 'токен', refreshToken: 'обновление', deviceId: 'dev-0123456789ab' };
@@ -122,11 +123,14 @@ function deviceKeystore(): NonNullable<PlatformCapabilities['biometrics']> {
 async function device(
   keystore: NonNullable<PlatformCapabilities['biometrics']>,
   files: Record<string, string> = {},
+  prefsStore?: PreferencesStore,
 ): Promise<{ app: AppController; storage: VaultStorage }> {
   const host = createTestHost({
     files,
-    prefs: { onboarded: true, 'auth.session': SESSION },
     platform: { kind: 'windows', biometrics: keystore },
+    ...(prefsStore
+      ? { prefsStore }
+      : { prefs: { onboarded: true, 'auth.session': SESSION } }),
   });
   const app = new AppController(host);
   await app.boot();
@@ -213,25 +217,33 @@ describe('SEC-001 A: без входа кнопка не молчит', () => {
 });
 
 describe('SEC-001 B: перезапуск приложения', () => {
-  it('код восстановления второй раз не спрашивают', async () => {
+  it('облако поднимается само, кода не спрашивают', async () => {
     const cloud = sharedCloud();
     vi.stubGlobal('fetch', cloud.fetch);
     const keystore = deviceKeystore();
+    /* Настройки устройства переживают перезапуск — как настоящие. */
+    const prefs = memoryPreferences({ onboarded: true, 'auth.session': SESSION });
 
-    const { app: first } = await device(keystore);
+    const { app: first } = await device(keystore, {}, prefs);
     await first.enableCloudEncryption();
     await first.confirmRecoveryCodeSaved();
     expect(first.getState().backendId).toBe('zapiski');
     first.dispose();
 
-    /* Перезапуск: то же устройство, то же хранилище ключа, новый процесс. */
-    const { app: restarted } = await device(keystore);
-    await restarted.refreshCloudEncryption();
-
+    /* Перезапуск: тот же keystore, те же настройки, новый процесс. Ничего
+       не зовём руками — только `boot()`, как при запуске приложения. */
+    const { app: restarted } = await device(keystore, {}, prefs);
+    await vi.waitFor(() =>
+      expect(
+        restarted.getState().backendId,
+        'после перезапуска облако не поднялось само',
+      ).toBe('zapiski'),
+    );
     expect(
       restarted.getState().cloudEncryption,
       'после перезапуска у человека снова спросили код',
     ).toBe('encrypted_ready');
+    expect(restarted.getState().cloudRecoveryCode, 'код показан второй раз').toBeNull();
     restarted.dispose();
   });
 });
