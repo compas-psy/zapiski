@@ -157,6 +157,39 @@ function subtreeLineRanges(state: EditorState): Array<{ first: number; last: num
   return ranges;
 }
 
+/**
+ * Ширина шага для Tab (P1-аудит, эскалация из классификации: «ширина
+ * list-indent не совпадает с шириной маркера»).
+ *
+ * Фиксированные два пробела — ширина маркера `-`/`*`/`+` (`"- "` — ровно 2
+ * символа), но НЕ ширина маркера нумерованного списка: `"1. "` — 3 символа,
+ * `"10. "` — 4. CommonMark считает пункт вложенным, только если его
+ * содержимое начинается НЕ РАНЬШЕ колонки, где начинается содержимое
+ * родителя (отступ родителя + ширина его маркера). Фиксированный шаг в 2
+ * пробела для нумерованного списка на единицу-два короче нужного — Tab
+ * визуально сдвигает текст, но настоящий GFM-парсер эту же строку
+ * реального вложения не видит: `"1. Parent\n2. Item"` → Tab на «Item» →
+ * `"1. Parent\n  2. Item"` — тот же самый ПЛОСКИЙ список из двух пунктов,
+ * просто с посторонним отступом внутри второго пункта.
+ *
+ * Шаг берётся из ширины маркера строки НЕПОСРЕДСТВЕННО НАД корнем операции,
+ * если она — пункт списка ТОГО ЖЕ отступа (то есть настоящий сосед по
+ * уровню, под которого корень как раз и уходит вложенным пунктом). Нет
+ * такого соседа — фиксированные 2 пробела остаются разумным умолчанием
+ * (первый пункт списка вложить не подо что, случай вырожденный).
+ */
+function indentStepFor(state: EditorState, rootLineNumber: number): string {
+  const rootMatch = LIST_ITEM.exec(state.doc.line(rootLineNumber).text);
+  if (!rootMatch) return STEP;
+  if (rootLineNumber <= 1) return STEP;
+  const prevLine = state.doc.line(rootLineNumber - 1);
+  const prevMatch = LIST_ITEM.exec(prevLine.text);
+  if (!prevMatch) return STEP;
+  if ((prevMatch[1] ?? '') !== (rootMatch[1] ?? '')) return STEP;
+  const width = (prevMatch[2] ?? '').length;
+  return width > 0 ? ' '.repeat(width) : STEP;
+}
+
 /** Tab — увеличить вложенность выделенных элементов списка (до 6 уровней), вместе со всем их поддеревом. */
 export const indentListItem: StateCommand = ({ state, dispatch }) => {
   const changes: { from: number; insert: string }[] = [];
@@ -166,8 +199,9 @@ export const indentListItem: StateCommand = ({ state, dispatch }) => {
     // Предел глубины проверяется по КОРНЮ операции — глубже вложенные дети
     // корня и так глубже него, отдельно их не проверяем и не пропускаем.
     if (depthOf(rootMatch?.[1] ?? '') >= MAX_LIST_DEPTH - 1) continue;
+    const step = indentStepFor(state, first);
     for (let n = first; n <= last; n++) {
-      changes.push({ from: state.doc.line(n).from, insert: STEP });
+      changes.push({ from: state.doc.line(n).from, insert: step });
     }
   }
   if (!changes.length) return false;
@@ -175,17 +209,68 @@ export const indentListItem: StateCommand = ({ state, dispatch }) => {
   return true;
 };
 
+/**
+ * Родительский `ListItem`, под которым сейчас лежит пункт, начинающийся на
+ * `lineNumber` — то есть СЛЕДУЮЩИЙ `ListItem` вверх по дереву от него
+ * самого. `null`, если пункт уже на верхнем уровне.
+ */
+function parentListItem(
+  state: EditorState,
+  lineNumber: number,
+): ReturnType<typeof syntaxTree>['topNode'] | null {
+  const line = state.doc.line(lineNumber);
+  const match = LIST_ITEM.exec(line.text);
+  const indent = match?.[1] ?? '';
+  let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(
+    line.from + indent.length,
+    1,
+  );
+  let seenOwn = false;
+  for (; node; node = node.parent) {
+    if (node.name !== 'ListItem') continue;
+    if (!seenOwn) {
+      seenOwn = true; // первый встреченный ListItem — сам пункт, не родитель
+      continue;
+    }
+    return node;
+  }
+  return null;
+}
+
+/**
+ * Ширина шага для Shift+Tab — снять ровно столько, сколько отделяет корень
+ * операции от его настоящего родителя по ДЕРЕВУ (не по фиксированному
+ * числу): для нумерованного списка родитель мог занимать 3 или 4 символа
+ * маркером, а не 2, и симметричный откат обязан снимать ровно то, что Tab
+ * когда-то мог добавить, иначе Tab → Shift+Tab не возвращает документ к
+ * тому, с чего начали.
+ */
+function dedentStepWidth(state: EditorState, rootLineNumber: number): number {
+  const rootMatch = LIST_ITEM.exec(state.doc.line(rootLineNumber).text);
+  const rootIndent = (rootMatch?.[1] ?? '').length;
+  const parent = parentListItem(state, rootLineNumber);
+  if (!parent) return Math.min(STEP.length, rootIndent);
+  const parentLine = state.doc.lineAt(parent.from);
+  const parentMatch = LIST_ITEM.exec(parentLine.text);
+  const parentIndent = (parentMatch?.[1] ?? '').length;
+  const width = rootIndent - parentIndent;
+  return width > 0 ? width : Math.min(STEP.length, rootIndent);
+}
+
 /** Shift+Tab — уменьшить вложенность, вместе со всем поддеревом пункта. */
 export const dedentListItem: StateCommand = ({ state, dispatch }) => {
   const changes: { from: number; to: number }[] = [];
   for (const { first, last } of subtreeLineRanges(state)) {
+    const step = dedentStepWidth(state, first);
     for (let n = first; n <= last; n++) {
       const line = state.doc.line(n);
       // У дочерних строк поддерева свой собственный отступ (глубже корня) —
-      // снимаем ровно STEP (или один таб) с КАЖДОЙ строки её же отступом,
-      // не отступом корня: так поддерево остаётся согласованным с собой.
+      // снимаем те же `step` символов (или один таб) с КАЖДОЙ строки её же
+      // отступом, не отступом корня: так поддерево остаётся согласованным
+      // с собой на любой глубине, а числа выравниваются на ширину, которую
+      // именно этому корню когда-то мог добавить Tab.
       const leading = /^[\t ]*/.exec(line.text)?.[0] ?? '';
-      const remove = leading.startsWith('\t') ? 1 : Math.min(STEP.length, leading.length);
+      const remove = leading.startsWith('\t') ? 1 : Math.min(step, leading.length);
       if (remove === 0) continue;
       changes.push({ from: line.from, to: line.from + remove });
     }

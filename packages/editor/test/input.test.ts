@@ -298,4 +298,52 @@ describe('Enter, Tab и Backspace в списках', () => {
       expect(indentListItem(view)).toBe(true);
     });
   });
+
+  /*
+   * P1-аудит closure-pass, эскалация из классификации: «ширина list-indent
+   * не совпадает с шириной маркера». Фиксированные 2 пробела — ширина
+   * маркера `- `, но не `1. ` (3 символа) и тем более не `10. ` (4). Tab на
+   * нумерованном списке визуально сдвигал текст, но настоящий GFM-парсер
+   * вложения не видел вовсе: пункт оставался ПЛОСКИМ соседом того же списка,
+   * просто с посторонним отступом внутри.
+   */
+  describe('шаг Tab для нумерованного списка равен ширине маркера родителя (P1-аудит)', () => {
+    function orderedTopLevelItems(state: EditorState): number {
+      return syntaxTree(state).topNode.getChild('OrderedList')?.getChildren('ListItem').length ?? 0;
+    }
+
+    it('Tab на втором пункте нумерованного списка создаёт настоящее вложение', () => {
+      view = makeView('1. Parent\n2. Item', { selection: { anchor: 10 } });
+      expect(orderedTopLevelItems(view.state)).toBe(2); // пока плоский список из двух пунктов
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('1. Parent\n   2. Item');
+      // После Tab — ровно ОДИН пункт верхнего уровня, второй вложен внутрь.
+      expect(orderedTopLevelItems(view.state)).toBe(1);
+      expect(insideListItem(view.state, view.state.doc.length)).toBe(true);
+    });
+
+    it('двузначный номер: шаг берётся из ширины маркера НАД собой, а не своей', () => {
+      const doc = '9. Item9\n10. Item10';
+      view = makeView(doc, { selection: { anchor: doc.indexOf('10.') } });
+      expect(indentListItem(view)).toBe(true);
+      // «9. » — 3 символа, столько же и добавляется, а не ширина «10. » (4).
+      expect(view.state.doc.toString()).toBe('9. Item9\n   10. Item10');
+      expect(orderedTopLevelItems(view.state)).toBe(1);
+    });
+
+    it('Tab → Shift+Tab возвращает документ к исходному байт-в-байт', () => {
+      const original = '1. Parent\n2. Item';
+      view = makeView(original, { selection: { anchor: 10 } });
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('1. Parent\n   2. Item');
+      expect(dedentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe(original);
+    });
+
+    it('маркированный список — шаг по-прежнему 2 пробела, не задето фиксом', () => {
+      view = makeView('- один\n- два', { selection: { anchor: 8 } });
+      expect(indentListItem(view)).toBe(true);
+      expect(view.state.doc.toString()).toBe('- один\n  - два');
+    });
+  });
 });
