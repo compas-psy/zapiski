@@ -66,7 +66,10 @@ export type SyncKeyDomain = 'content' | 'crdt' | 'versions' | 'manifest';
  * Минимум WebCrypto, который нужен этому модулю. Инъекция — ради тестов и
  * платформ, как это уже сделано в `WebCryptoProvider` (`provider.ts`).
  */
-export type SubtleLike = Pick<SubtleCrypto, 'importKey' | 'deriveKey' | 'encrypt' | 'decrypt' | 'digest'>;
+export type SubtleLike = Pick<
+  SubtleCrypto,
+  'importKey' | 'deriveKey' | 'deriveBits' | 'encrypt' | 'decrypt' | 'digest' | 'sign'
+>;
 
 function subtleOf(subtle?: SubtleLike): SubtleLike {
   return subtle ?? globalThis.crypto.subtle;

@@ -96,6 +96,52 @@ export class ZapiskiCloudBackend implements SyncBackend {
     return this.sync !== undefined;
   }
 
+  /**
+   * SEC-001 §7 — адрес объекта на сервере.
+   *
+   * Без шифрования — путь как есть (совместимость). С шифрованием — токен
+   * `HMAC(K_manifest, путь)`: сервер перестаёт видеть названия папок и
+   * заголовки заметок в `blobs.path`.
+   *
+   * Обратное соответствие держится ЛОКАЛЬНО (`tokenToPath`): токен
+   * детерминирован, поэтому устройство, знающее свой vault, восстанавливает
+   * соответствие само, ничего не спрашивая у сервера. Для путей, которых
+   * это устройство ещё не видело (заметка создана на другом устройстве),
+   * соответствие берётся из зашифрованного манифеста — он и существует
+   * ровно для этого.
+   */
+  private async addressOf(path: VaultPath): Promise<string> {
+    const normalized = normalizePath(path);
+    if (this.sync === undefined) return normalized;
+    const token = await this.sync.pathToken(normalized);
+    this.tokenToPath.set(token, normalized);
+    return token;
+  }
+
+  /** Локальная карта «адрес на сервере → путь в vault'е». */
+  private readonly tokenToPath = new Map<string, VaultPath>();
+
+  /**
+   * Научить бэкенд адресам заметок, которых он ещё не видел.
+   *
+   * Вызывается после расшифровки манифеста: без этого `list()` вернул бы
+   * токены, а синк принял бы их за имена файлов и создал бы на диске мусор
+   * вида `9f3a…`. Пустой список — не ошибка: у аккаунта может не быть ни
+   * одной заметки с другого устройства.
+   */
+  async learnPaths(paths: readonly VaultPath[]): Promise<void> {
+    if (this.sync === undefined) return;
+    for (const path of paths) {
+      const normalized = normalizePath(path);
+      this.tokenToPath.set(await this.sync.pathToken(normalized), normalized);
+    }
+  }
+
+  /** Все пути, которые этот бэкенд умеет адресовать, — для манифеста. */
+  knownPaths(): VaultPath[] {
+    return [...this.tokenToPath.values()];
+  }
+
   /** Адрес облака: тестовый стенд и прод — не одно и то же место. */
   get origin(): string {
     return this.baseUrl;
@@ -150,12 +196,17 @@ export class ZapiskiCloudBackend implements SyncBackend {
     const response = await this.call(VAULT_ENDPOINTS.list);
     if (!response.ok) return [];
     const body = (await response.json()) as CloudListResponse;
-    return (body.entries ?? []).map((entry) => ({
-      path: normalizePath(entry.path),
-      etag: entry.etag,
-      mtime: entry.mtime,
-      size: entry.size,
-    }));
+    return (body.entries ?? [])
+      .map((entry) => {
+        /* SEC-001 §7: с сервера приходит адрес, а не путь. Неизвестный адрес
+           пропускается, а не превращается в файл с именем-токеном: заметка,
+           созданная на другом устройстве, появится после расшифровки
+           манифеста (`learnPaths`), и это лучше, чем мусор на диске. */
+        const path = this.pathOfAddress(entry.path);
+        if (path === null) return null;
+        return { path, etag: entry.etag, mtime: entry.mtime, size: entry.size };
+      })
+      .filter((entry): entry is RemoteEntry => entry !== null);
   }
 
   /**
@@ -174,7 +225,9 @@ export class ZapiskiCloudBackend implements SyncBackend {
     const response = await this.call(url).catch(() => null);
     if (!response || !response.ok) return [];
     const body = (await response.json().catch(() => null)) as CloudListResponse | null;
-    return (body?.removed ?? []).map((path) => normalizePath(path));
+    return (body?.removed ?? [])
+      .map((address) => this.pathOfAddress(address))
+      .filter((path): path is VaultPath => path !== null);
   }
 
   /**
@@ -193,7 +246,8 @@ export class ZapiskiCloudBackend implements SyncBackend {
   }
 
   async get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null> {
-    const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`);
+    const address = await this.addressOf(path);
+    const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`);
     if (response.status === 404) return null;
     if (!response.ok) return null;
     const raw = new Uint8Array(await response.arrayBuffer());
@@ -212,7 +266,8 @@ export class ZapiskiCloudBackend implements SyncBackend {
        нет — ни в теле запроса, ни в памяти сетевого слоя. */
     const body =
       this.sync === undefined ? data : await this.sync.sealContent(normalizePath(path), data);
-    const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`, {
+    const address = await this.addressOf(path);
+    const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`, {
       method: 'PUT',
       headers,
       body: body as unknown as BodyInit,
@@ -226,7 +281,18 @@ export class ZapiskiCloudBackend implements SyncBackend {
   }
 
   async remove(path: VaultPath): Promise<void> {
-    await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`, { method: 'DELETE' });
+    const address = await this.addressOf(path);
+    await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(address)}`, { method: 'DELETE' });
+  }
+
+  /**
+   * Адрес с сервера → путь в vault'е. `null`, если адрес незнаком.
+   *
+   * Без шифрования адрес и есть путь — тогда возвращается он сам.
+   */
+  private pathOfAddress(address: string): VaultPath | null {
+    if (this.sync === undefined) return normalizePath(address);
+    return this.tokenToPath.get(address) ?? null;
   }
 
   /** Мгновенный синк по websocket (ТЗ §4.1, BEHAVIOR §6). */

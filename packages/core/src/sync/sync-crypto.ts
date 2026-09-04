@@ -45,12 +45,13 @@
  */
 import {
   deriveSyncKey,
+  SYNC_KEY_SCHEMA_VERSION,
   SYNC_NONCE_LENGTH,
   syncKeyInfo,
   type SubtleLike,
   type SyncKeyDomain,
 } from '../crypto/sync-keys.js';
-import { concatBytes, randomBytes, utf8 } from '../util/bytes.js';
+import { concatBytes, randomBytes, toHex, utf8 } from '../util/bytes.js';
 
 /** Версия конверта. Растёт вместе с раскладкой или сменой алгоритма. */
 export const SYNC_ENVELOPE_VERSION = 1;
@@ -170,5 +171,68 @@ export class SyncCrypto {
 
   openManifest(envelope: Uint8Array): Promise<Uint8Array | null> {
     return this.open('manifest', undefined, envelope);
+  }
+
+  /**
+   * SEC-001 §7 — непрозрачный адрес объекта вместо пути в vault'е.
+   *
+   * `blobs.path` в Postgres — главный оставшийся источник утечки
+   * метаданных: `Личное/Дневник 12 марта.md` рассказывает и название папки,
+   * и заголовок заметки, не открывая ни байта содержимого. Приёмочный тест
+   * ловит это прямым поиском слова из пути по всей базе.
+   *
+   * Токен — `HMAC-SHA256(K_manifest, нормализованный путь)`, усечённый до
+   * 128 бит и записанный hex. Свойства, которые от него нужны:
+   *
+   *  * **детерминированность** — та же заметка на любом устройстве
+   *    аккаунта даёт тот же адрес, иначе синк раздвоил бы файлы;
+   *  * **необратимость** — без `K_manifest` из токена не достать путь;
+   *  * **отсутствие структуры** — по токену не видно ни глубины папок, ни
+   *    длины названия (в отличие от «зашифруем каждый сегмент отдельно»).
+   *
+   * Это ровно тот компромисс, который design §7 называет «фаза 1»: сервер
+   * перестаёт видеть имена, но по-прежнему видит, что объектов N штук и
+   * какого они размера. Полный переход на адресацию по `note_id` со сменой
+   * схемы — фаза 2.
+   *
+   * Детерминированный адрес по построению допускает подтверждение догадки:
+   * тот, кто знает `K_manifest`, может проверить «есть ли заметка с таким
+   * путём». Ключ знает только владелец аккаунта, так что для угрозы
+   * «скомпрометированный сервер» это ничего не меняет.
+   */
+  async pathToken(path: string): Promise<string> {
+    const key = await this.api.importKey(
+      'raw',
+      (await this.rawManifestSecret()) as BufferSource,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const mac = new Uint8Array(await this.api.sign('HMAC', key, utf8(path) as BufferSource));
+    return toHex(mac.slice(0, 16));
+  }
+
+  /**
+   * Материал для HMAC адресов.
+   *
+   * Взять сам `K_manifest` (неэкспортируемый `CryptoKey` для AES-GCM) для
+   * HMAC нельзя — WebCrypto не даёт использовать ключ вне его алгоритма, и
+   * это правильно. Поэтому из SMK выводится ОТДЕЛЬНЫЙ, экспортируемый
+   * секрет со своей доменной строкой: он не расшифровывает ничего и служит
+   * только для вычисления адресов.
+   */
+  private async rawManifestSecret(): Promise<Uint8Array> {
+    const base = await this.api.importKey('raw', this.smk as BufferSource, 'HKDF', false, ['deriveBits']);
+    const bits = await this.api.deriveBits(
+      {
+        name: 'HKDF',
+        hash: 'SHA-256',
+        salt: this.accountSalt as BufferSource,
+        info: utf8(`zapiski/sync/${SYNC_KEY_SCHEMA_VERSION}/path-token`) as BufferSource,
+      },
+      base,
+      256,
+    );
+    return new Uint8Array(bits);
   }
 }
