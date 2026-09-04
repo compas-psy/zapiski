@@ -26,6 +26,7 @@ import {
   ZapiskiCloudBackend,
   VAULT_ENDPOINTS,
   type Locale,
+  type SyncCrypto,
   type WebSocketLike,
 } from '@zapiski/core';
 import type { SessionStore } from './session.js';
@@ -48,6 +49,17 @@ export interface CloudBackendOptions {
   fetch?: FetchLike;
   /** Фабрика websocket — платформенная; без неё мгновенного синка просто нет. */
   websocket?: (url: string) => WebSocketLike;
+  /**
+   * SEC-001: ключ шифрования синка.
+   *
+   * Прикладной путь Облака Записок обязан ходить сюда через
+   * `createEncryptedCloudBackend` (`state/cloud-access.ts`), который
+   * получает `sync` из разрешённого состояния и без ключа бэкенд вообще
+   * не собирает. Эта фабрика оставлена принимающей `sync` отдельно, чтобы
+   * не переписывать переходник путей и токена, — но вызывать её напрямую
+   * для CMPAS Cloud больше нельзя.
+   */
+  sync?: SyncCrypto;
 }
 
 /**
@@ -71,6 +83,7 @@ export function createCloudBackend(options: CloudBackendOptions): ZapiskiCloudBa
     token: current?.accessToken ?? '',
     deviceId: current?.deviceId ?? '',
     ...(options.locale ? { locale: options.locale } : {}),
+    ...(options.sync ? { sync: options.sync } : {}),
     fetch: (input, init) => translate(String(input), init ?? {}, { raw, session, origin }),
     ...(options.websocket
       ? {

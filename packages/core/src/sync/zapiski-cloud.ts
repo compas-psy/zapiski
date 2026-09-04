@@ -38,6 +38,12 @@ import {
   type CloudPushResponse,
   type CloudSubscribeEvent,
 } from './protocol.js';
+import {
+  buildManifest,
+  MANIFEST_ADDRESS,
+  openManifest,
+  sealManifest,
+} from './manifest.js';
 import { looksLikeEnvelope, SyncCrypto } from './sync-crypto.js';
 import { SyncError, type FetchLike } from './webdav.js';
 
@@ -142,6 +148,51 @@ export class ZapiskiCloudBackend implements SyncBackend {
     return [...this.tokenToPath.values()];
   }
 
+  /**
+   * Забрать манифест с сервера и выучить пути (SEC-001 §7).
+   *
+   * Это ПЕРВОЕ, что делает новое устройство: без него `list()` вернёт
+   * токены, которых устройство не знает, и заметки, созданные на другом
+   * устройстве, окажутся невидимыми. Возвращает число выученных путей —
+   * ноль означает «манифеста ещё нет» (первое устройство аккаунта), а не
+   * ошибку.
+   *
+   * Без шифрования манифест не нужен вовсе: адрес и есть путь.
+   */
+  async pullManifest(): Promise<number> {
+    if (this.sync === undefined) return 0;
+    const response = await this.call(
+      `${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(MANIFEST_ADDRESS)}`,
+    ).catch(() => null);
+    if (!response || !response.ok) return 0;
+    const manifest = await openManifest(this.sync, new Uint8Array(await response.arrayBuffer()));
+    if (manifest === null) return 0;
+    await this.learnPaths(manifest.paths);
+    return manifest.paths.length;
+  }
+
+  /**
+   * Опубликовать манифест из путей, которые знает это устройство.
+   *
+   * Отставший манифест не теряет данные (заметка на сервере есть), поэтому
+   * отказ здесь не срывает синк — он вернёт `false`, и следующий оборот
+   * попробует снова.
+   */
+  async pushManifest(paths: readonly VaultPath[]): Promise<boolean> {
+    if (this.sync === undefined) return false;
+    await this.learnPaths(paths);
+    const sealed = await sealManifest(this.sync, buildManifest(paths));
+    const response = await this.call(
+      `${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(MANIFEST_ADDRESS)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sealed as unknown as BodyInit,
+      },
+    ).catch(() => null);
+    return response !== null && response.ok;
+  }
+
   /** Адрес облака: тестовый стенд и прод — не одно и то же место. */
   get origin(): string {
     return this.baseUrl;
@@ -202,6 +253,7 @@ export class ZapiskiCloudBackend implements SyncBackend {
            пропускается, а не превращается в файл с именем-токеном: заметка,
            созданная на другом устройстве, появится после расшифровки
            манифеста (`learnPaths`), и это лучше, чем мусор на диске. */
+        if (entry.path === MANIFEST_ADDRESS) return null; // служебный объект, не заметка
         const path = this.pathOfAddress(entry.path);
         if (path === null) return null;
         return { path, etag: entry.etag, mtime: entry.mtime, size: entry.size };

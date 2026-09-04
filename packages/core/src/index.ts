@@ -66,6 +66,15 @@ export {
   type SyncKeyState,
 } from './sync/sync-key-onboarding.js';
 export {
+  buildManifest,
+  emptyManifest,
+  MANIFEST_ADDRESS,
+  MANIFEST_VERSION,
+  openManifest,
+  sealManifest,
+  type VaultManifest,
+} from './sync/manifest.js';
+export {
   looksLikeEnvelope,
   SyncCrypto,
   SYNC_ENVELOPE_VERSION,

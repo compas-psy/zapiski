@@ -163,7 +163,13 @@ describe('SEC-001 §4: подключение устройства', () => {
       biometrics: fakeBiometrics(),
     });
     const before = requests;
-    const typo = await second.unlock(`${code.slice(0, -1)}${code.endsWith('A') ? 'B' : 'A'}`);
+    /* Опечатка в СЕРЕДИНЕ, а не в конце: последний символ Base32 несёт
+       только биты выравнивания, и его подмена иногда не меняет декодированные
+       байты вовсе — тест на ней получался плавающим. */
+    const middle = Math.floor(code.length / 2);
+    const at = code[middle] === '-' ? middle + 1 : middle;
+    const typed = `${code.slice(0, at)}${code[at] === 'A' ? 'B' : 'A'}${code.slice(at + 1)}`;
+    const typo = await second.unlock(typed);
 
     expect(typo.ok).toBe(false);
     if (!typo.ok) expect(typo.reason).toBe('typo');

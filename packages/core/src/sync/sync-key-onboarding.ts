@@ -57,7 +57,18 @@ export interface SyncKeyRecord {
 export type SyncKeyState =
   | { status: 'none' }
   | { status: 'needs-code' }
-  | { status: 'ready'; crypto: SyncCrypto };
+  | { status: 'ready'; crypto: SyncCrypto }
+  /**
+   * Сервер недоступен — мы НЕ ЗНАЕМ, есть ли у аккаунта ключ.
+   *
+   * Отдельное состояние, а не `none`: «не дозвонились» и «ключа нет» —
+   * разные вещи, и путать их опасно в одну сторону. Приняв недоступность
+   * за отсутствие ключа, приложение предложило бы СОЗДАТЬ ключ аккаунту,
+   * у которого он, возможно, уже есть, — то есть повело бы человека в
+   * операцию, которая сделала бы нечитаемым всё уже зашифрованное (сервер
+   * её отобьёт, но предлагать её нельзя).
+   */
+  | { status: 'unknown' };
 
 export interface SyncKeyOnboardingOptions {
   baseUrl: string;
@@ -92,7 +103,8 @@ export class SyncKeyOnboarding {
    */
   async state(): Promise<SyncKeyState> {
     const record = await this.record();
-    if (record === null || !record.enrolled) return { status: 'none' };
+    if (record === null) return { status: 'unknown' };
+    if (!record.enrolled) return { status: 'none' };
     const salt = record.accountSalt === undefined ? null : fromBase64(record.accountSalt);
     if (salt === null) return { status: 'needs-code' };
 
