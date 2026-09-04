@@ -1,11 +1,12 @@
 import { createHmac } from 'node:crypto';
 
+import Fastify from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createHarness, createUser, noDatabase, type Harness } from './helpers/app.ts';
 import { createMagicToken } from '../src/services/accounts.ts';
 import { sanitizeHtml } from '../src/lib/sanitizeHtml.ts';
-import { parseTrustProxy } from '../src/config/env.ts';
+import { parseTrustProxy, resolveTrustProxy } from '../src/config/env.ts';
 
 /**
  * Периметр сервера — проверки безопасности (docs/dev/security/AUDIT.md).
@@ -599,5 +600,75 @@ describe('периметр: адрес клиента', () => {
     expect(parseTrustProxy('false')).toBe(false);
     // `true` остаётся доступным, но это отладочный режим — в deploy его нет.
     expect(parseTrustProxy('true')).toBe(true);
+  });
+
+  /*
+   * closure-pass CI: попытка обновить Fastify до 5.12.x (закрывает две
+   * moderate CVE самого Fastify, GHSA-w2qp-rph6-63g4 и GHSA-3m5p-2c4r-xxw2)
+   * провалила typecheck на `trustProxy: ctx.env.trustProxy` — Fastify 5.12
+   * убрал `number` из типа опции. Причина не косметическая: у пакета
+   * поменялась и РАБОТА с числом (`getTrustProxyFn`,
+   * node_modules/fastify/lib/request.js) — hop-count теперь всегда
+   * отклоняется («hop-count-only trust cannot validate the immediate
+   * peer»), и `request.ip` стал бы IP самого nginx на КАЖДЫЙ запрос без
+   * единой ошибки при старте. Прод держит `TRUST_PROXY=1` (SEC-002) именно
+   * как hop-count, и на этом рейт-лимит по IP (`app.ts`, keyGenerator)
+   * слился бы в одну корзину на всех, а `remoteAddressHash` в логе потерял
+   * бы смысл. `resolveTrustProxy` переносит старую формулу
+   * (`hop < hopCount`) наружу явной функцией — и она не зависит от того,
+   * поддерживает ли сама библиотека числа.
+   */
+  describe('resolveTrustProxy переживает апгрейд Fastify — hop-count не отдан библиотеке', () => {
+    it('boolean и список адресов проходят как есть — Fastify их и так понимает', () => {
+      expect(resolveTrustProxy(false)).toBe(false);
+      expect(resolveTrustProxy(true)).toBe(true);
+      expect(resolveTrustProxy(['203.0.113.0/24'])).toEqual(['203.0.113.0/24']);
+    });
+
+    it('числовой hop-count превращается в функцию с тем же смыслом', () => {
+      const fn = resolveTrustProxy(1) as (address: string, hop: number) => boolean;
+      expect(typeof fn).toBe('function');
+      expect(fn('1.2.3.4', 0)).toBe(true);
+      expect(fn('1.2.3.4', 1)).toBe(false);
+      expect(fn('1.2.3.4', 2)).toBe(false);
+    });
+
+    /*
+     * Не юнит на изолированную функцию, а настоящий Fastify + `app.inject`:
+     * ровно та связка, что ловит и ложное «доверяю», и ложное «не доверяю».
+     */
+    it('настоящий Fastify: X-Forwarded-For от одного прокси доверяется, попытка подделать второй хоп — нет', async () => {
+      const app = Fastify({ trustProxy: resolveTrustProxy(1) });
+      app.get('/whoami', async (request) => ({ ip: request.ip }));
+      await app.ready();
+      try {
+        const direct = await app.inject({
+          method: 'GET',
+          url: '/whoami',
+          remoteAddress: '10.0.0.5',
+        });
+        expect(direct.json().ip).toBe('10.0.0.5');
+
+        const viaProxy = await app.inject({
+          method: 'GET',
+          url: '/whoami',
+          remoteAddress: '10.0.0.5',
+          headers: { 'x-forwarded-for': '203.0.113.9' },
+        });
+        expect(viaProxy.json().ip).toBe('203.0.113.9');
+
+        // Клиент дописывает себе слева второй, никем не подтверждённый
+        // адрес — при доверии ровно одному хопу это не должно протащиться.
+        const spoofedSecondHop = await app.inject({
+          method: 'GET',
+          url: '/whoami',
+          remoteAddress: '10.0.0.5',
+          headers: { 'x-forwarded-for': '198.51.100.1, 203.0.113.9' },
+        });
+        expect(spoofedSecondHop.json().ip).toBe('203.0.113.9');
+      } finally {
+        await app.close();
+      }
+    });
   });
 });

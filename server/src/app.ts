@@ -4,6 +4,7 @@ import websocket from '@fastify/websocket';
 import Fastify, { type FastifyInstance } from 'fastify';
 
 import type { AppContext } from './context.ts';
+import { resolveTrustProxy } from './config/env.ts';
 import { ApiError, errors } from './lib/errors.ts';
 import { redactPaths, serializers } from './lib/logging.ts';
 import { registerAuth } from './plugins/auth.ts';
@@ -35,7 +36,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       serializers,
       redact: { paths: redactPaths, censor: '[скрыто]' },
     },
-    trustProxy: ctx.env.trustProxy,
+    trustProxy: resolveTrustProxy(ctx.env.trustProxy),
     bodyLimit: DEFAULT_BODY_LIMIT,
     routerOptions: { ignoreTrailingSlash: true },
   });

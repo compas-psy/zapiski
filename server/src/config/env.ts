@@ -240,6 +240,36 @@ export function parseTrustProxy(raw: string | undefined): TrustProxySetting {
   return splitList(value);
 }
 
+/**
+ * `TrustProxySetting` → форма, которую принимает опция `trustProxy` Fastify.
+ *
+ * Fastify 5.12 убрал `number` из типа и из обработки: числовой hop-count
+ * теперь падает в safe-default «не доверять никому» (собственный комментарий
+ * пакета — «hop-count-only trust cannot validate the immediate peer»,
+ * `node_modules/fastify/lib/request.js`, `getTrustProxyFn`). Для нас это не
+ * абстрактный риск: прод держит `TRUST_PROXY=1` — SEC-002, доверие ровно
+ * одному хопу (nginx), — и на числовом значении `request.ip` молча стал бы
+ * IP самого nginx для каждого запроса: рейт-лимит (`app.ts`, оба
+ * `keyGenerator: (request) => request.ip`) слился бы в одну корзину на всех,
+ * а хеш адреса в логе (`logging.ts`) потерял бы смысл — без единой ошибки
+ * при старте.
+ *
+ * Вместо доверия внутренней обработке числа самим Fastify — та же формула,
+ * что раньше была внутри пакета (`function (address, hop) { return hop < tp
+ * }`), переносится сюда явно и подаётся уже готовой TrustProxyFunction.
+ * Тождественность старому поведению numeric hop-count проверена
+ * `test/security.perimeter.test.ts` через реальный `app.inject()` — не
+ * только юнитом на функцию.
+ */
+export function resolveTrustProxy(
+  setting: TrustProxySetting,
+): boolean | string[] | ((address: string, hop: number) => boolean) {
+  if (typeof setting === 'number') {
+    return (_address: string, hop: number) => hop < setting;
+  }
+  return setting;
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = schema.safeParse(source);
   if (!parsed.success) {
