@@ -59,6 +59,13 @@ export { BILLING_ENABLED } from './billing.js';
 export { OWN_STORAGE_ENABLED } from './storage-choices.js';
 export { CLOUD_SYNC_ENABLED } from './cloud-sync.js';
 export {
+  SyncKeyOnboarding,
+  SYNC_KEY_STORAGE_ID,
+  type SyncKeyOnboardingOptions,
+  type SyncKeyRecord,
+  type SyncKeyState,
+} from './sync/sync-key-onboarding.js';
+export {
   looksLikeEnvelope,
   SyncCrypto,
   SYNC_ENVELOPE_VERSION,
