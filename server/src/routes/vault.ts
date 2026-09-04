@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AppContext } from '../context.ts';
 import { withTransaction, type DbClient } from '../db/pool.ts';
 import { normalizeEtag, sha256Hex, shortHash } from '../lib/crypto.ts';
-import { errors } from '../lib/errors.ts';
+import { ApiError, errors } from '../lib/errors.ts';
 import { isValidNoteId, logPath, normalizeVaultPath } from '../lib/vaultPath.ts';
 import { authOf } from '../plugins/auth.ts';
 import type {
@@ -144,6 +144,14 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
 
       // ТЗ §5.5: писать может только действующая подписка. Читать — все.
       await assertCanWrite(ctx, auth.userId);
+
+      /* SEC-001 §13: аккаунт, прошедший онбординг ключа, больше не принимает
+         открытый текст — даже от клиента, который про шифрование не знает.
+         Проверять это только на клиенте было бы бессмысленно: старая версия
+         приложения на втором устройстве как раз и есть тот клиент, который
+         ничего не проверит и молча перезапишет зашифрованную заметку своей
+         открытой версией. */
+      await assertEnvelopeIfEncrypted(ctx, auth.userId, data);
 
       const ifMatch = headerValue(request, 'if-match');
       const ifNoneMatch = headerValue(request, 'if-none-match');
@@ -402,6 +410,47 @@ export async function assertCanWrite(ctx: AppContext, userId: string): Promise<v
   throw entitlement.status === 'expired'
     ? errors.subscriptionExpired()
     : errors.subscriptionRequired();
+}
+
+/**
+ * SEC-001 §13 — конверт обязателен, если аккаунт уже перешёл на шифрование.
+ *
+ * Раскладка конверта (`packages/core/src/sync/sync-crypto.ts`):
+ * `[версия(1)][нонс(12)][шифротекст+тег(≥16)]`. Сервер не разбирает и не
+ * может разобрать содержимое — он проверяет ровно форму: первый байт равен
+ * версии конверта и длины хватает на нонс с тегом.
+ *
+ * Проверка нарочно грубая. Её задача — не «доказать, что это шифротекст»
+ * (сервер этого не может по построению zero-knowledge), а не дать СТАРОМУ
+ * клиенту молча записать markdown поверх зашифрованной заметки. Markdown
+ * начинается с печатного символа, локальный контейнер `.md.enc` — с `Z`
+ * (`ZPSK`), и оба отбиваются; а под шифрованием синка даже `.md.enc`
+ * приезжает завёрнутым в конверт снаружи (двойное шифрование, design §1),
+ * так что ложных отказов у нового клиента не возникает.
+ */
+const SYNC_ENVELOPE_VERSION = 1;
+const MIN_SYNC_ENVELOPE_LENGTH = 1 + 12 + 16;
+
+export function looksLikeSyncEnvelope(data: Uint8Array): boolean {
+  return data.length >= MIN_SYNC_ENVELOPE_LENGTH && data[0] === SYNC_ENVELOPE_VERSION;
+}
+
+export async function assertEnvelopeIfEncrypted(
+  ctx: AppContext,
+  userId: string,
+  data: Uint8Array,
+): Promise<void> {
+  if (looksLikeSyncEnvelope(data)) return;
+  const { rows } = await ctx.db.query<{ exists: boolean }>(
+    `SELECT true AS exists FROM sync_keys WHERE user_id = $1`,
+    [userId],
+  );
+  if (rows.length === 0) return; // аккаунт ещё не шифруется — принимаем как раньше
+  throw new ApiError(
+    409,
+    'upgrade_required',
+    'Этот аккаунт синхронизируется с шифрованием. Обновите приложение — старая версия не умеет читать и писать зашифрованные заметки.',
+  );
 }
 
 export function requirePath(request: FastifyRequest): string {

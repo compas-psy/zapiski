@@ -166,10 +166,44 @@ describe('zero-knowledge: схема БД', () => {
     expect(offenders.map((c) => `${c.table}.${c.column}`)).toEqual([]);
   });
 
-  it('единственные бинарные колонки — шифротекст CRDT', async () => {
+  /**
+   * Список нарочно закрытый, а не «любые bytea разрешены»: каждая новая
+   * бинарная колонка обязана быть здесь названа и объяснена, иначе однажды
+   * в схему въедет колонка с содержимым заметки под нейтральным именем.
+   *
+   * `sync_keys.*` (SEC-001, миграция 0014) — материал ключа, а не заметки:
+   * SMK, обёрнутый ключом из кода восстановления, публичная соль HKDF и
+   * проверочный конверт. Развернуть их сервер не может ни при какой
+   * компрометации: код восстановления — 256 бит CSPRNG, известных только
+   * человеку, и на сервер он не попадает никогда.
+   */
+  const ALLOWED_BINARY_COLUMNS = [
+    'crdt_updates.ciphertext',
+    'sync_keys.wrapped_smk',
+    'sync_keys.account_salt',
+    'sync_keys.check_blob',
+  ];
+
+  it('бинарные колонки — только шифротекст CRDT и обёрнутый ключ синка', async () => {
     const columns = await columnsFromMigrations();
     const binary = columns.filter((c) => c.type.startsWith('bytea'));
-    expect(binary.map((c) => `${c.table}.${c.column}`)).toEqual(['crdt_updates.ciphertext']);
+    expect(binary.map((c) => `${c.table}.${c.column}`).sort()).toEqual(
+      [...ALLOWED_BINARY_COLUMNS].sort(),
+    );
+  });
+
+  /**
+   * SEC-001: ключ синка обязан лежать ТОЛЬКО обёрнутым. Колонка с сырым
+   * ключом (или с кодом восстановления) сделала бы всю работу бессмысленной
+   * — сервер снова смог бы прочитать заметки.
+   */
+  it('в sync_keys нет колонки с развёрнутым ключом или кодом восстановления', async () => {
+    const columns = await columnsFromMigrations();
+    const own = columns.filter((c) => c.table === 'sync_keys').map((c) => c.column);
+    expect(own).toContain('wrapped_smk');
+    for (const forbidden of ['smk', 'sync_key', 'recovery_code', 'recovery_secret', 'plaintext']) {
+      expect(own, `sync_keys.${forbidden} не имеет права существовать`).not.toContain(forbidden);
+    }
   });
 
   it('содержимое блобов и версий хранится в томе, а не в БД', async () => {

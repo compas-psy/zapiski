@@ -17,6 +17,7 @@ import { registerLegalRoutes } from './routes/legal.ts';
 import { registerLiveRoute } from './routes/live.ts';
 import { registerPublishRoutes } from './routes/publish.ts';
 import { registerUpdateRoutes } from './routes/updates.ts';
+import { registerSyncKeyRoutes } from './routes/sync-key.ts';
 import { registerVaultRoutes } from './routes/vault.ts';
 import { registerVersionRoutes } from './routes/versions.ts';
 
@@ -223,6 +224,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   /* Документы для согласий: `/terms` и `/privacy`. Их открывает браузер по
      ссылке с экрана входа, поэтому они вне `/api` и без аутентификации. */
   await registerLegalRoutes(app);
+  await registerSyncKeyRoutes(app);
   await registerVaultRoutes(app);
   await registerVersionRoutes(app);
   await registerLiveRoute(app);
