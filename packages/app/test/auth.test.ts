@@ -611,7 +611,7 @@ describe('вход замыкается', () => {
     return app;
   }
 
-  it('оболочка отдала возврат — приложение вошло; облако не поднялось, пока действует SEC-001 kill-switch', async () => {
+  it('оболочка отдала возврат — приложение вошло; облако в вебе не поднялось', async () => {
     const app = await bootedApp();
     app.beginSignIn({ name: 'list' });
     expect(app.getState().route).toEqual({ name: 'signin' });
@@ -620,15 +620,15 @@ describe('вход замыкается', () => {
 
     expect(app.getState().account?.email).toBe('marina@ya.ru');
     /*
-     * ДО SEC-001 kill-switch здесь стояло `.toBe('zapiski')`: успешный вход
-     * поднимал облако сразу же. Это доказательство тому, что теперь так не
-     * происходит, — ровно то свойство, которое требует kill-switch: вход в
-     * аккаунт больше не приводит к попытке синка с сервером, который сегодня
-     * получил бы содержимое заметки как есть (`cloud-kill-switch.test.tsx`
-     * проверяет сам выключатель подробнее; здесь — что реальный флоу входа
-     * его не обходит).
+     * Облако при этом НЕ поднимается — и причина именно платформенная, а не
+     * «вход не сработал»: тестовая оболочка это веб (`createTestHost`), а в
+     * вебе ключ синка держать негде (SEC-001 design §3.1, `cloud-gate.test.tsx`).
+     * Сам выключатель SEC-001 давно снят — проверять надо не его, а то, что
+     * вход в аккаунт не обходит платформенный запрет.
      */
-    expect(CLOUD_SYNC_ENABLED, 'когда флаг снова включат, эту проверку надо вернуть').toBe(false);
+    expect(CLOUD_SYNC_ENABLED, 'выключатель SEC-001 снят — облако держит платформенный гейт').toBe(
+      true,
+    );
     expect(app.getState().backendId).toBeNull();
     /* Возвращаемся к тому, ради чего входили, а не «куда-нибудь». */
     expect(app.getState().route).toEqual({ name: 'list' });
@@ -640,7 +640,7 @@ describe('вход замыкается', () => {
     const app = await bootedApp({ initial: { magicToken: 'ottt' } });
     /* boot() уже спросил оболочку — ждём, пока обмен доедет. */
     await vi.waitFor(() => expect(app.getState().account?.email).toBe('marina@ya.ru'));
-    /* См. комментарий выше: kill-switch SEC-001 отключает автоподъём облака. */
+    /* См. комментарий выше: в вебе облако не поднимается по платформенной причине. */
     expect(app.getState().backendId).toBeNull();
     app.dispose();
   });

@@ -663,9 +663,29 @@ export const en: AppCatalog = {
       trialNoticeHint:
         'There is no payment yet. Your notes stay in your folder after the period ends — the cloud simply stops syncing them',
       cloudBadge: 'ZAPISKI+',
-      cloudUnavailableBadge: 'Temporarily unavailable',
+      cloudUnavailableBadge: 'Not available in a browser',
       cloudUnavailableHint:
-        'Cloud sync is temporarily unavailable: we are fixing a known vulnerability (SEC-001) around on-device note encryption. Your notes are safe — they stay in this folder',
+        'The cloud works in the Windows, macOS and Android apps: a browser has nowhere safe to keep the encryption key, and we will not send notes without one. Your notes are safe — they stay in this folder',
+      encryptionPromise:
+        'Notes are encrypted on this device before they are sent. SIMPAS does not keep the decryption key',
+      encryptionEnable: 'Turn the cloud on',
+      recoveryTitle: 'Recovery code',
+      recoveryHint:
+        'Shown once. It opens your notes on a new device — we cannot restore it for you: we do not have the key',
+      recoveryCopy: 'Copy',
+      recoveryCopied: 'Code copied',
+      recoverySaved: 'I have saved the recovery code',
+      recoveryEnterTitle: 'Enter the recovery code',
+      recoveryEnterHint:
+        'This account is already encrypted on another device. The code opens the notes here',
+      recoveryEnterLabel: 'Code',
+      recoveryUnlock: 'Connect',
+      recoveryTypo: 'The code has a typo — check the characters. Nothing has changed',
+      recoveryWrong: 'This code belongs to another account. Your notes are untouched, try another one',
+      recoveryOffline: 'Could not reach the cloud. Try later — nothing is lost',
+      encryptionReady: 'Notes are encrypted on this device. The cloud holds ciphertext only',
+      encryptionWebOnly:
+        'The cloud works in the Windows, macOS and Android apps: a browser has nowhere safe to keep the encryption key. Notes in the web work as before',
       localFolder: 'Folder on this device',
       conflictsMonth: (count: number): string =>
         `Conflicts this month: ${count} — merged automatically, both versions are in history`,

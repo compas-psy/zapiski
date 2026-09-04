@@ -2216,3 +2216,31 @@
 .za-quick__grow {
   flex: 1 1 auto;
 }
+
+/*
+ * SEC-001 §4 — код восстановления и отказ при вводе.
+ *
+ * Код набирается человеком с бумаги или из менеджера паролей, поэтому он
+ * моноширинный и с разрядкой: `0`/`O` и `1`/`l` в пропорциональном шрифте
+ * различаются плохо, а цена опечатки здесь — лишний круг ввода. Перенос по
+ * любому месту (`anywhere`) — чтобы на узком экране код не уезжал за край:
+ * он длинный и без пробелов, кроме собственных дефисов.
+ */
+.za-recovery-code {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-mono-sm);
+  letter-spacing: 0.04em;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--line);
+  background: var(--surface-sunken, var(--surface));
+  user-select: all;
+}
+
+/* Отказ ввода: не «серый текст», а видимая ошибка — человек её ищет. */
+.za-form-error {
+  color: var(--danger-text);
+}

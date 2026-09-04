@@ -7,8 +7,8 @@
  */
 import { useState, type ReactNode } from 'react';
 import { Badge, Button, IconLock, IconPen, IconRefresh, ServiceMark } from '@zapiski/ui';
-import { CLOUD_SYNC_ENABLED } from '@zapiski/core';
 import { useApp, useStrings } from '../state/context.js';
+import { cloudAvailable } from '../state/cloud-access.js';
 
 export interface OnboardingScreenProps {
   step: 1 | 2 | 3;
@@ -101,15 +101,14 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
           <h1 className="za-h1">{strings.onboarding.step2.title}</h1>
 
           {/*
-            SEC-001 kill-switch: Облако Записок сегодня не оборачивает
-            содержимое заметки собственным ключом — предлагать его в первом
-            же экране значило бы вести нового человека прямиком на известную
-            находку, ещё до того, как он вообще что-то написал. Тот, кто
-            выбор уже сделал раньше, видит его в настройках честной
-            надписью (`SettingsScreen.tsx`) — здесь речь только про НОВЫЙ
-            выбор.
+            Облако предлагается только там, где оно действительно работает:
+            нужен и флаг SEC-001, и защищённое хранилище ключа синка
+            (`cloudAvailable`). В вебе второго нет, и предлагать вариант,
+            который на следующем шаге откажет, — худшее из возможного: это
+            первый экран, человек ещё ничего не написал и решает, куда
+            вообще класть заметки.
           */}
-          {(CLOUD_SYNC_ENABLED
+          {(cloudAvailable(app.host.platform)
             ? (['local', 'own', 'cloud'] as StorageChoice[])
             : (['local', 'own'] as StorageChoice[])
           ).map((option) => {

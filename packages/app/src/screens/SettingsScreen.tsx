@@ -31,7 +31,6 @@ import {
 } from '@zapiski/ui';
 import {
   BILLING_ENABLED,
-  CLOUD_SYNC_ENABLED,
   LocalFolderBackend,
   OWN_STORAGE_ENABLED,
   trialDaysFor,
@@ -41,6 +40,7 @@ import {
   LEGAL_URLS,
 } from '@zapiski/core';
 import type { AttachmentPlacement, SettingsSection } from '../contract.js';
+import { cloudAvailable } from '../state/cloud-access.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { Section } from '../components/ScreenStates.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -566,6 +566,10 @@ function SyncSection(): ReactNode {
      подключать. */
   const [openMode, setOpenMode] = useState<SyncBackend['id'] | null>(null);
 
+  /* Доступно ли Облако здесь: флаг SEC-001 И защищённое хранилище ключа
+     (`cloudAvailable`). В вебе второго нет, и карточка это говорит. */
+  const cloudHere = cloudAvailable(app.host.platform);
+
   /**
    * Заметки-копии, которые синк оставил при расхождении версий.
    *
@@ -636,9 +640,15 @@ function SyncSection(): ReactNode {
     if (id === 'zapiski') {
       /* Облако Записок: вошли — подключаем, не вошли — отправляем входить и
          возвращаемся сюда же (ТЗ §5.5, аккаунт нужен только для облака). */
-      void app.connectCloud().then((connected) => {
-        if (!connected) app.beginSignIn({ name: 'settings', section: 'sync' });
-      });
+      /* Вход нужен, только когда сессии НЕТ. Раньше сюда попадал и случай
+         «сессия есть, ключа шифрования ещё нет» — и человека отправляли
+         входить заново вместо того, чтобы предложить включить шифрование
+         (SEC-001 §4). Вход бы прошёл, и всё повторилось бы по кругу. */
+      if (!app.hasSession()) {
+        app.beginSignIn({ name: 'settings', section: 'sync' });
+        return;
+      }
+      void app.connectCloud();
       return;
     }
     if (id === 'yandex') {
@@ -821,44 +831,46 @@ function SyncSection(): ReactNode {
       ) : null}
 
       {/*
-        SEC-001 kill-switch (`CLOUD_SYNC_ENABLED`, `core/cloud-sync.ts`):
-        облако сегодня не оборачивает содержимое заметки собственным ключом
-        синхронизации — сервер получает его как есть. Пока это так, карточка
-        не предлагается заново тому, кто её не выбирал: показывать рабочий
-        на вид вариант, который на деле недоступен, хуже, чем не показывать
-        его вовсе.
+        Облако Записок. Доступность — два условия сразу (`cloudAvailable`):
+        флаг SEC-001 и защищённое хранилище ключа на этой платформе. В вебе
+        второго нет (design §3.1), и карточка честно говорит об этом вместо
+        того, чтобы предлагать действие, которое всё равно откажет.
 
-        У кого Облако УЖЕ было выбрано, карточка остаётся — тот же принцип,
-        что уже применён выше к Яндекс.Диску и WebDAV («прячется выбор, а не
-        уже сделанный выбор»), только с обратным следствием: подключаться
-        кнопка не пробует (см. `state.cloudSyncDisabled`, `AppController.
-        connectCloud`/`resumeCloud`) — честная надпись вместо действия,
-        которое всё равно откажет.
+        Карточка показывается ВСЕГДА, даже там, где недоступна: человек в
+        браузере имеет право узнать, что Облако существует и где именно оно
+        работает, — а не гадать, куда оно делось.
       */}
-      {CLOUD_SYNC_ENABLED || choiceOrBackend === 'zapiski' ? (
-        <ModeCard
-          id="zapiski"
-          title={copy.cloud}
-          /*
-           * `badge` у `ModeCard` не рисуется, когда карточка `chosen` — а она
-           * им и будет здесь почти всегда: у кого облако уже выбрано,
-           * `choiceOrBackend` равен `'zapiski'`, значит именно эта карточка
-           * и подсвечена как текущая (см. комментарий выше про
-           * `cloudNeedsSignIn` — то же самое умышленное поведение: решение
-           * человека остаётся видно, даже когда подключиться не вышло).
-           * Поэтому «временно недоступно» идёт через `hint`, который
-           * рисуется независимо от выбранности.
-           */
-          badge={CLOUD_SYNC_ENABLED ? copy.cloudBadge : undefined}
-          hint={CLOUD_SYNC_ENABLED ? undefined : copy.cloudUnavailableBadge}
-          current={choiceOrBackend}
-          onChoose={
-            CLOUD_SYNC_ENABLED
-              ? () => connect('zapiski')
-              : () => app.toast({ message: strings.errors.cloudSyncDisabled })
-          }
-        />
-      ) : null}
+      <ModeCard
+        id="zapiski"
+        title={copy.cloud}
+        /*
+         * `badge` у `ModeCard` не рисуется, когда карточка `chosen` — а она
+         * им и будет здесь почти всегда: у кого облако уже выбрано,
+         * `choiceOrBackend` равен `'zapiski'`, значит именно эта карточка
+         * и подсвечена как текущая (см. комментарий выше про
+         * `cloudNeedsSignIn` — то же самое умышленное поведение: решение
+         * человека остаётся видно, даже когда подключиться не вышло).
+         * Поэтому «недоступно в браузере» идёт через `hint`, который
+         * рисуется независимо от выбранности.
+         */
+        badge={cloudHere ? copy.cloudBadge : undefined}
+        hint={cloudHere ? undefined : copy.cloudUnavailableBadge}
+        current={choiceOrBackend}
+        /* Раскрыта, когда её выбрали сейчас или выбрали раньше: внутри —
+           шаги шифрования (SEC-001 §4), и человеку надо их видеть и до
+           подключения, и после. */
+        open={openMode === 'zapiski' || choiceOrBackend === 'zapiski'}
+        onChoose={
+          cloudHere
+            ? () => {
+                setOpenMode('zapiski');
+                connect('zapiski');
+              }
+            : () => app.toast({ message: strings.errors.cloudSyncDisabled })
+        }
+      >
+        <CloudEncryptionCard />
+      </ModeCard>
 
       {/*
         Дисклеймер тестовой версии — рядом с карточкой облака и ДО подключения.
@@ -872,10 +884,10 @@ function SyncSection(): ReactNode {
         Стоит здесь, а не в мелком тексте внизу: обещание срока — часть решения
         «подключать ли облако», и узнавать о нём после подключения поздно.
 
-        Пока kill-switch включён, обещание срока бессмысленно — подключить
-        всё равно нельзя, а не только не заплатить.
+        Там, где Облако недоступно (браузер), обещание срока бессмысленно —
+        подключить всё равно нельзя, а не только не заплатить.
       */}
-      {CLOUD_SYNC_ENABLED ? (
+      {cloudHere ? (
         <InfoNote icon={<IconInfo size={15} />}>
           <span className="za-stack za-stack--tight">
             <span>{copy.trialNotice(trialDaysFor(Date.now()))}</span>
@@ -1247,6 +1259,145 @@ function StorageHousekeeping(): ReactNode {
  * всё равно нельзя, а четыре одновременно открытые формы и создавали то самое
  * ощущение, что всё это складывается друг с другом.
  */
+/**
+ * SEC-001 §4 — включение облака, код восстановления, подключение устройства.
+ *
+ * Без дизайн-перфекционизма и намеренно: это не «экран», а три коротких
+ * состояния внутри карточки хранилища, и каждое отвечает на один вопрос
+ * человека — «что вообще произойдёт», «что мне сохранить», «как открыть
+ * заметки здесь».
+ *
+ * ── Почему подтверждение обязательно ─────────────────────────────────────
+ *
+ * Код восстановления показывается ОДИН раз. Он не лежит ни у нас (в этом
+ * весь смысл: сервер держит SMK только обёрнутым), ни на устройстве — там
+ * закэширован уже развёрнутый ключ, из которого код не выводится. Закрыть
+ * этот экран мимо значит потерять возможность подключить второе устройство.
+ * Поэтому кнопка «Я сохранил код восстановления» стоит МЕЖДУ показом кода и
+ * включением синхронизации, а не после неё.
+ *
+ * ── Почему неверный код ничего не ломает ─────────────────────────────────
+ *
+ * Опечатка ловится локально, по контрольной сумме, и до сети не доходит
+ * вовсе. Неверный, но правильно набранный код не разворачивает ключ и не
+ * оставляет огрызка в хранилище устройства. Ни один отказ здесь не трогает
+ * ни ключ аккаунта, ни заметки: «сбросить и начать заново» — не вариант,
+ * который мы предлагаем.
+ */
+function CloudEncryptionCard(): ReactNode {
+  const app = useApp();
+  const state = useAppState();
+  const strings = useStrings();
+  const copy = strings.settings.sync;
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  /* Состояние шифрования спрашивается у сервера, а не угадывается: локальное
+     отсутствие ключа само по себе не значит «ключа нет у аккаунта». */
+  useEffect(() => {
+    void app.refreshCloudEncryption();
+  }, [app]);
+
+  const recovery = state.cloudRecoveryCode;
+
+  /* Единственная минута, когда код вообще виден. */
+  if (recovery !== null) {
+    return (
+      <>
+        <span className="za-card__title">{copy.recoveryTitle}</span>
+        <p className="za-muted">{copy.recoveryHint}</p>
+        <code className="za-recovery-code" data-testid="cloud-recovery-code">
+          {recovery}
+        </code>
+        <div className="za-row-between" style={{ gap: 8 }}>
+          <Button
+            variant="secondary"
+            size="compact"
+            onClick={() => {
+              void navigator.clipboard?.writeText(recovery).then(() => setCopied(true));
+            }}
+          >
+            {copied ? copy.recoveryCopied : copy.recoveryCopy}
+          </Button>
+          <Button onClick={() => void app.confirmRecoveryCodeSaved()}>{copy.recoverySaved}</Button>
+        </div>
+      </>
+    );
+  }
+
+  if (state.cloudEncryption === 'cloud_disabled_platform') {
+    return <p className="za-muted">{copy.encryptionWebOnly}</p>;
+  }
+
+  if (state.cloudEncryption === 'needs_recovery') {
+    return (
+      <>
+        <span className="za-card__title">{copy.recoveryEnterTitle}</span>
+        <p className="za-muted">{copy.recoveryEnterHint}</p>
+        <TextField
+          mono
+          label={copy.recoveryEnterLabel}
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value);
+            setError(null);
+          }}
+        />
+        {error !== null ? <p className="za-form-error">{error}</p> : null}
+        <Button
+          variant="secondary"
+          disabled={code.trim() === '' || busy}
+          onClick={() => {
+            setBusy(true);
+            void app.unlockCloudWithRecoveryCode(code).then((result) => {
+              setBusy(false);
+              if (result === 'ok') {
+                setCode('');
+                setError(null);
+                return;
+              }
+              setError(
+                result === 'typo'
+                  ? copy.recoveryTypo
+                  : result === 'wrong-code'
+                    ? copy.recoveryWrong
+                    : copy.recoveryOffline,
+              );
+            });
+          }}
+        >
+          {copy.recoveryUnlock}
+        </Button>
+      </>
+    );
+  }
+
+  if (
+    state.cloudEncryption === 'encrypted_ready' ||
+    state.cloudEncryption === 'migration_required'
+  ) {
+    return <p className="za-muted">{copy.encryptionReady}</p>;
+  }
+
+  /* `needs_onboarding` и «ещё не выясняли»: обещание и одна кнопка. */
+  return (
+    <>
+      <p className="za-muted">{copy.encryptionPromise}</p>
+      <Button
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void app.enableCloudEncryption().finally(() => setBusy(false));
+        }}
+      >
+        {copy.encryptionEnable}
+      </Button>
+    </>
+  );
+}
+
 function ModeCard({
   id,
   title,

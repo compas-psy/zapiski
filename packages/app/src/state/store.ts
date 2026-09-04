@@ -101,8 +101,10 @@ import { cropImage, type CropRect } from '../lib/crop.js';
 import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
 import {
+  cloudAvailable,
   createEncryptedCloudBackend,
   createOnboarding,
+  platformSupportsSecureKeyStorage,
   resolveCloudAccess,
   type CloudAccess,
 } from './cloud-access.js';
@@ -1432,8 +1434,14 @@ export class AppController {
    * то, что показывает экран настроек честным текстом вместо тихого отказа.
    */
   async connectCloud(): Promise<boolean> {
-    if (!CLOUD_SYNC_ENABLED) {
-      this.patch({ cloudSyncDisabled: true, cloudEncryption: 'cloud_disabled_flag' });
+    /* Недоступность платформы — ПЕРЕД проверкой входа. Иначе в вебе человека
+       отправляли бы входить ради облака, которое и после входа не заработает:
+       ключ синка там держать негде (SEC-001 design §3.1). */
+    if (!cloudAvailable(this.host.platform)) {
+      this.patch({
+        cloudSyncDisabled: true,
+        cloudEncryption: CLOUD_SYNC_ENABLED ? 'cloud_disabled_platform' : 'cloud_disabled_flag',
+      });
       return false;
     }
     if (this.session.current() === null) return false;
@@ -1479,6 +1487,18 @@ export class AppController {
     return true;
   }
 
+  /**
+   * Есть ли действующая сессия.
+   *
+   * Экрану настроек это нужно, чтобы не звать вход зря: `connectCloud`
+   * возвращает `false` и когда сессии нет, и когда ключа шифрования ещё нет
+   * — а это разные вещи, и второй случай лечится не входом, а онбордингом
+   * (SEC-001 §4).
+   */
+  hasSession(): boolean {
+    return this.session.current() !== null;
+  }
+
   /** Текущее состояние шифрования облака. Отдельно — чтобы спросить без подключения. */
   private async resolveCloudAccess(): Promise<CloudAccess> {
     return resolveCloudAccess({
@@ -1504,6 +1524,13 @@ export class AppController {
   async refreshCloudEncryption(): Promise<void> {
     if (!CLOUD_SYNC_ENABLED) {
       this.patch({ cloudEncryption: 'cloud_disabled_flag' });
+      return;
+    }
+    /* Платформа — ДО сессии: в вебе облака нет независимо от того, вошёл
+       человек или нет, и предлагать ему «включить облако» нельзя ни в каком
+       состоянии входа. */
+    if (!platformSupportsSecureKeyStorage(this.host.platform)) {
+      this.patch({ cloudEncryption: 'cloud_disabled_platform' });
       return;
     }
     if (this.session.current() === null) return;
@@ -1621,7 +1648,7 @@ export class AppController {
      * `connectCloud()` ниже тоже откажет по тому же флагу — проверка здесь
      * нужна, чтобы показать честную причину ДО попытки, а не после её провала.
      */
-    if (stored === 'zapiski' && !CLOUD_SYNC_ENABLED) {
+    if (stored === 'zapiski' && !cloudAvailable(this.host.platform)) {
       this.patch({ cloudSyncDisabled: true });
       this.toast({ message: this.strings.errors.cloudSyncDisabled });
       return;

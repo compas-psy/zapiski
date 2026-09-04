@@ -72,6 +72,17 @@ export function platformSupportsSecureKeyStorage(platform: PlatformCapabilities)
   return platform.biometrics !== null;
 }
 
+/**
+ * Доступно ли Облако на этом устройстве вообще — оба условия сразу.
+ *
+ * Флаг `CLOUD_SYNC_ENABLED` и наличие защищённого хранилища ключа — разные
+ * причины, и обе должны сойтись. Экраны спрашивают именно здесь, чтобы не
+ * повторять «флаг И платформа» в каждом месте и не забыть половину.
+ */
+export function cloudAvailable(platform: PlatformCapabilities): boolean {
+  return CLOUD_SYNC_ENABLED && platformSupportsSecureKeyStorage(platform);
+}
+
 export interface ResolveCloudAccessOptions {
   platform: PlatformCapabilities;
   cloudBaseUrl: string;
