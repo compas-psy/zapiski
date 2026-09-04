@@ -187,6 +187,31 @@ describe('SEC-001 A: первое устройство', () => {
   });
 });
 
+describe('SEC-001 A: без входа кнопка не молчит', () => {
+  it('«Включить облако» без сессии ведёт входить, а не делает ничего', async () => {
+    const cloud = sharedCloud();
+    vi.stubGlobal('fetch', cloud.fetch);
+    /* Облако выбрано раньше, а сессия не пережила переустановку: карточка
+       раскрыта, ключа нет, входа нет. */
+    const host = createTestHost({
+      prefs: { onboarded: true, 'sync.backend': 'zapiski' },
+      platform: { kind: 'windows', biometrics: deviceKeystore() },
+    });
+    const app = new AppController(host);
+    await app.boot();
+    mountSettings(app);
+    const beginSignIn = vi.spyOn(app, 'beginSignIn');
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: ru.settings.sync.encryptionEnable }),
+    );
+
+    expect(beginSignIn, 'нажатие не сделало ничего и ничего не сказало').toHaveBeenCalled();
+    expect(cloud.syncKey(), 'ключ аккаунта создан без входа').toBeNull();
+    app.dispose();
+  });
+});
+
 describe('SEC-001 B: перезапуск приложения', () => {
   it('код восстановления второй раз не спрашивают', async () => {
     const cloud = sharedCloud();

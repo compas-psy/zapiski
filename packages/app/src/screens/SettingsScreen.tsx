@@ -1350,6 +1350,14 @@ function CloudEncryptionCard(): ReactNode {
           variant="secondary"
           disabled={code.trim() === '' || busy}
           onClick={() => {
+            /* Та же причина, что у кнопки включения: код открывает ключ
+               АККАУНТА, и без входа проверять его не у кого. Без этой
+               ветки отказ выглядел бы как «облако недоступно», то есть
+               назвал бы неверную причину. */
+            if (!app.hasSession()) {
+              app.beginSignIn({ name: 'settings', section: 'sync' });
+              return;
+            }
             setBusy(true);
             void app.unlockCloudWithRecoveryCode(code).then((result) => {
               setBusy(false);
@@ -1388,6 +1396,14 @@ function CloudEncryptionCard(): ReactNode {
       <Button
         disabled={busy}
         onClick={() => {
+          /* Без входа ключ создавать некому и негде: у ключа есть аккаунт.
+             Раньше нажатие здесь молча не делало НИЧЕГО — `enableCloud
+             Encryption` возвращал `null` и не говорил ни слова. Ведём
+             входить и возвращаемся сюда же. */
+          if (!app.hasSession()) {
+            app.beginSignIn({ name: 'settings', section: 'sync' });
+            return;
+          }
           setBusy(true);
           void app.enableCloudEncryption().finally(() => setBusy(false));
         }}
