@@ -384,7 +384,12 @@ jobs:
   audit:
     name: Уязвимости в зависимостях
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Было 15: с ограниченными повторами pnpm И запасным npm-прогоном по
+    # production-графу (server/package-lock.json, deploy/api.Dockerfile —
+    # туда же реально едет прод) один инцидент недоступности реестра
+    # укладывается дольше одного захода, но не должен захлёбываться таймаутом
+    # раньше, чем оба провайдера честно исчерпают свои повторы.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -397,25 +402,24 @@ jobs:
         with:
           node-version: '22'
 
-      # Валит сборку на high/critical. moderate и low выводятся как заметки:
-      # красный статус, который нельзя погасить, перестают читать через неделю.
-      - name: pnpm audit (воркспейс)
-        run: |
-          set -euo pipefail
-          pnpm audit --audit-level moderate || true
-          echo '--- порог: high ---'
-          pnpm audit --audit-level high
+      # Логика гейта (различение «нашли high» от «реестр недоступен»,
+      # ограниченные повторы, npm-fallback по production-графу) живёт в
+      # scripts/audit-gate.mjs как чистые функции — испытывается
+      # самопроверкой, а не перечитыванием YAML глазами.
+      - name: Самопроверка audit-gate.mjs
+        run: node scripts/audit-gate.mjs --self-test
 
-      # Отдельно и обязательно: образ API собирается `npm ci` по
-      # server/package-lock.json (deploy/api.Dockerfile), то есть в прод едет
-      # именно этот граф зависимостей, а не воркспейсный.
-      - name: npm audit (граф, который реально едет в прод)
-        working-directory: server
-        run: |
-          set -euo pipefail
-          npm audit --audit-level=moderate || true
-          echo '--- порог: high ---'
-          npm audit --audit-level=high
+      # Валит сборку на high/critical; moderate — не гейт (см. доккомент
+      # в самом скрипте). Падение реестра — НЕ то же самое, что находка:
+      # audit-gate.mjs различает их через pnpm audit --ignore-registry-errors
+      # (authoritative-сигнал самого pnpm), ретраит только сетевые/неясные
+      # сбои и переключается на `npm audit` по server/package-lock.json —
+      # тому графу, что реально собирается в прод-образ, — только если pnpm
+      # исчерпал повторы именно по сетевой причине. Находка не ретраится и
+      # не маскируется fallback'ом; если оба провайдера недоступны, джоба
+      # остаётся FAILED, а не GREEN.
+      - name: Уязвимости в зависимостях (pnpm workspace → npm production graph)
+        run: node scripts/audit-gate.mjs run
 
   # ───────────────────────────────────────────────────────────────────────────
   # 4. Security-тесты
