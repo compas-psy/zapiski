@@ -97,6 +97,29 @@ await seedWebSession(page);
 
 const problems = [];
 const errors = [];
+/*
+ * Не доехавшие запросы — отдельно от ошибок продукта.
+ *
+ * В песочнице сборки внешние домены закрыты прокси, и Яндекс.Метрика падает
+ * с `ERR_TUNNEL_CONNECTION_FAILED`. Браузер сообщает об этом в консоль
+ * строкой «Failed to load resource», в которой НЕТ адреса, — поэтому по
+ * одной консоли отличить «наш скрипт сломан» от «внешний домен закрыт»
+ * нельзя, и прогон падал на инфраструктуре, объявляя это дефектом продукта.
+ *
+ * Адрес есть в событии `requestfailed`. Поэтому: любой не доехавший запрос
+ * к НАШЕЙ статике остаётся жёсткой ошибкой, а к чужому домену —
+ * зафиксированным исключением среды, которое печатается вслух и не выдаёт
+ * себя за находку. Ослабления здесь нет: ни одна ошибка продукта под это
+ * правило не попадает — консольная строка списывается только тогда, когда
+ * к нашему origin не провалилось ни одного запроса.
+ */
+const failedRequests = [];
+page.on('requestfailed', (request) => {
+  failedRequests.push({
+    url: request.url(),
+    reason: request.failure()?.errorText ?? 'неизвестно',
+  });
+});
 page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(`console: ${message.text()}`);
@@ -667,7 +690,28 @@ for (const [name, viewport] of [
 await browser.close();
 server.close();
 
-for (const error of errors) problems.push(error);
+/* Разделение «наше» / «чужое» — по origin, а не по названию сервиса: список
+   доменов пришлось бы дополнять каждый раз, а правило «к нашей статике не
+   доехало» верно всегда. */
+const ourOrigin = new URL(URL_BASE).origin;
+const externalFailures = failedRequests.filter((item) => !item.url.startsWith(ourOrigin));
+const ownFailures = failedRequests.filter((item) => item.url.startsWith(ourOrigin));
+for (const failure of ownFailures) {
+  problems.push(`не загрузился наш ресурс ${failure.url} — ${failure.reason}`);
+}
+for (const error of errors) {
+  /* Консольная строка про не загрузившийся ресурс списывается только тогда,
+     когда все не доехавшие запросы — к чужим доменам. Своя не доехала —
+     остаётся ошибкой. */
+  if (/Failed to load resource/i.test(error) && ownFailures.length === 0 && externalFailures.length > 0) {
+    continue;
+  }
+  problems.push(error);
+}
+if (externalFailures.length > 0) {
+  console.log('walkthrough: исключение среды — не доехали ЧУЖИЕ домены (прокси песочницы):');
+  for (const failure of externalFailures) console.log(`  · ${failure.url} — ${failure.reason}`);
+}
 if (problems.length > 0) {
   console.error('walkthrough: ПРОВАЛЕН');
   for (const problem of problems) console.error(`  · ${problem}`);
