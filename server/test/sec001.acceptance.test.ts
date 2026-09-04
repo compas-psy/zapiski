@@ -35,7 +35,9 @@ import { createHarness, createUser, noDatabase, type Harness, type TestUser } fr
  */
 const ENVELOPE_VERSION = 1;
 
-async function domainKey(smk: Uint8Array, salt: Uint8Array, info: string): Promise<CryptoKey> {
+/* Тип ключа выводится сам: у сервера нет DOM-библиотеки TypeScript, и
+   имени `CryptoKey` в его конфигурации не существует. */
+async function domainKey(smk: Uint8Array, salt: Uint8Array, info: string) {
   const base = await globalThis.crypto.subtle.importKey('raw', smk, 'HKDF', false, ['deriveKey']);
   return globalThis.crypto.subtle.deriveKey(
     { name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode(info) },
