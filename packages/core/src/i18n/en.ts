@@ -17,6 +17,7 @@ export const en: Catalog = {
     vaultLooksEmpty:
       'The notes folder is empty right now, though it used to hold files. Nothing is being deleted from the cloud — check access to the folder',
     cloudSignInAgain: 'Your cloud session expired — sign in again to resume syncing',
+    cloudSyncDisabled: 'Cloud sync is temporarily unavailable — your notes stay on this device',
     settingNotSaved: 'Could not save the setting — it will revert on restart',
     webdavAuth: 'The server did not accept the login or password',
     webdavUnreachable: 'The server is not responding · Retry',

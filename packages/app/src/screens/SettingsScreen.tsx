@@ -31,6 +31,7 @@ import {
 } from '@zapiski/ui';
 import {
   BILLING_ENABLED,
+  CLOUD_SYNC_ENABLED,
   LocalFolderBackend,
   OWN_STORAGE_ENABLED,
   trialDaysFor,
@@ -726,6 +727,15 @@ function SyncSection(): ReactNode {
         </InfoNote>
       ) : null}
 
+      {/*
+        SEC-001 kill-switch: не «вход истёк» (у `cloudNeedsSignIn` выше уже
+        есть своя плашка с кнопкой «Войти») — здесь другая причина, и
+        повторный вход её не лечит, поэтому кнопки нет вовсе.
+      */}
+      {state.cloudSyncDisabled ? (
+        <InfoNote icon={<IconInfo size={15} />}>{copy.cloudUnavailableHint}</InfoNote>
+      ) : null}
+
       <ModeCard
         id={null}
         title={copy.modeLocalOnly}
@@ -810,13 +820,45 @@ function SyncSection(): ReactNode {
       </ModeCard>
       ) : null}
 
-      <ModeCard
-        id="zapiski"
-        title={copy.cloud}
-        badge={copy.cloudBadge}
-        current={choiceOrBackend}
-        onChoose={() => connect('zapiski')}
-      />
+      {/*
+        SEC-001 kill-switch (`CLOUD_SYNC_ENABLED`, `core/cloud-sync.ts`):
+        облако сегодня не оборачивает содержимое заметки собственным ключом
+        синхронизации — сервер получает его как есть. Пока это так, карточка
+        не предлагается заново тому, кто её не выбирал: показывать рабочий
+        на вид вариант, который на деле недоступен, хуже, чем не показывать
+        его вовсе.
+
+        У кого Облако УЖЕ было выбрано, карточка остаётся — тот же принцип,
+        что уже применён выше к Яндекс.Диску и WebDAV («прячется выбор, а не
+        уже сделанный выбор»), только с обратным следствием: подключаться
+        кнопка не пробует (см. `state.cloudSyncDisabled`, `AppController.
+        connectCloud`/`resumeCloud`) — честная надпись вместо действия,
+        которое всё равно откажет.
+      */}
+      {CLOUD_SYNC_ENABLED || choiceOrBackend === 'zapiski' ? (
+        <ModeCard
+          id="zapiski"
+          title={copy.cloud}
+          /*
+           * `badge` у `ModeCard` не рисуется, когда карточка `chosen` — а она
+           * им и будет здесь почти всегда: у кого облако уже выбрано,
+           * `choiceOrBackend` равен `'zapiski'`, значит именно эта карточка
+           * и подсвечена как текущая (см. комментарий выше про
+           * `cloudNeedsSignIn` — то же самое умышленное поведение: решение
+           * человека остаётся видно, даже когда подключиться не вышло).
+           * Поэтому «временно недоступно» идёт через `hint`, который
+           * рисуется независимо от выбранности.
+           */
+          badge={CLOUD_SYNC_ENABLED ? copy.cloudBadge : undefined}
+          hint={CLOUD_SYNC_ENABLED ? undefined : copy.cloudUnavailableBadge}
+          current={choiceOrBackend}
+          onChoose={
+            CLOUD_SYNC_ENABLED
+              ? () => connect('zapiski')
+              : () => app.toast({ message: strings.errors.cloudSyncDisabled })
+          }
+        />
+      ) : null}
 
       {/*
         Дисклеймер тестовой версии — рядом с карточкой облака и ДО подключения.
@@ -829,13 +871,18 @@ function SyncSection(): ReactNode {
 
         Стоит здесь, а не в мелком тексте внизу: обещание срока — часть решения
         «подключать ли облако», и узнавать о нём после подключения поздно.
+
+        Пока kill-switch включён, обещание срока бессмысленно — подключить
+        всё равно нельзя, а не только не заплатить.
       */}
-      <InfoNote icon={<IconInfo size={15} />}>
-        <span className="za-stack za-stack--tight">
-          <span>{copy.trialNotice(trialDaysFor(Date.now()))}</span>
-          <span className="za-muted">{copy.trialNoticeHint}</span>
-        </span>
-      </InfoNote>
+      {CLOUD_SYNC_ENABLED ? (
+        <InfoNote icon={<IconInfo size={15} />}>
+          <span className="za-stack za-stack--tight">
+            <span>{copy.trialNotice(trialDaysFor(Date.now()))}</span>
+            <span className="za-muted">{copy.trialNoticeHint}</span>
+          </span>
+        </InfoNote>
+      ) : null}
 
       {/* Где лежит сама папка — часть того же вопроса, а не отдельный раздел. */}
       <VaultLocationChoice />

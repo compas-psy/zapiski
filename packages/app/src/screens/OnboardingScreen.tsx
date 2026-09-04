@@ -7,6 +7,7 @@
  */
 import { useState, type ReactNode } from 'react';
 import { Badge, Button, IconLock, IconPen, IconRefresh, ServiceMark } from '@zapiski/ui';
+import { CLOUD_SYNC_ENABLED } from '@zapiski/core';
 import { useApp, useStrings } from '../state/context.js';
 
 export interface OnboardingScreenProps {
@@ -99,7 +100,19 @@ export function OnboardingScreen({ step }: OnboardingScreenProps): ReactNode {
           <Steps current={2} />
           <h1 className="za-h1">{strings.onboarding.step2.title}</h1>
 
-          {(['local', 'own', 'cloud'] as StorageChoice[]).map((option) => {
+          {/*
+            SEC-001 kill-switch: Облако Записок сегодня не оборачивает
+            содержимое заметки собственным ключом — предлагать его в первом
+            же экране значило бы вести нового человека прямиком на известную
+            находку, ещё до того, как он вообще что-то написал. Тот, кто
+            выбор уже сделал раньше, видит его в настройках честной
+            надписью (`SettingsScreen.tsx`) — здесь речь только про НОВЫЙ
+            выбор.
+          */}
+          {(CLOUD_SYNC_ENABLED
+            ? (['local', 'own', 'cloud'] as StorageChoice[])
+            : (['local', 'own'] as StorageChoice[])
+          ).map((option) => {
             const copy = strings.onboarding.step2.options[option];
             return (
               <button

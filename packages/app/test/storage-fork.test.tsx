@@ -96,9 +96,18 @@ describe('место хранения — один список', () => {
     expect(screen.queryByLabelText(ru.settings.sync.yandexToken) !== null).toBe(
       OWN_STORAGE_ENABLED,
     );
-    /* Облако и локальный режим при этом на месте: прячем конкурента, а не выбор. */
+    /*
+     * Локальный режим при этом на месте: прячем конкурента, а не выбор.
+     *
+     * Облака Записок здесь больше нет — не из-за этого решения, а из-за
+     * ДРУГОГО, независимого выключателя (`CLOUD_SYNC_ENABLED`, SEC-001
+     * kill-switch, см. `cloud-kill-switch.test.tsx`): у кого оно не было
+     * выбрано раньше, карточка вообще не предлагается, пока не устранена
+     * известная уязвимость. Этот тест по-прежнему проверяет только судьбу
+     * Яндекс.Диска и WebDAV.
+     */
     const titles = screen.getAllByRole('radio').map((node) => node.textContent ?? '');
-    expect(titles.some((text) => text.includes(ru.settings.sync.cloud))).toBe(true);
+    expect(titles.some((text) => text.includes(ru.settings.sync.cloud))).toBe(false);
     expect(titles.some((text) => text.includes(ru.settings.sync.modeLocalOnly))).toBe(true);
   });
 

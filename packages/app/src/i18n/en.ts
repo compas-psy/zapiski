@@ -61,7 +61,7 @@ export const en: AppCatalog = {
         own: { title: 'Your own cloud', text: 'WebDAV or Yandex.Disk', badge: 'free' },
         cloud: {
           title: 'Zapiski Cloud',
-          text: 'end-to-end encryption, version history, instant sync',
+          text: 'version history, instant sync across devices',
           badge: 'subscription',
         },
       },
@@ -105,7 +105,7 @@ export const en: AppCatalog = {
     emailPlaceholder: 'marina@ya.ru',
     sendLink: 'Send me a sign-in link',
     promise: 'We send a link by email — one tap and you are in. No password to invent',
-    privacy: 'We do not read your notes — technically we cannot',
+    privacy: 'A note with a password is unreadable even to us — technically we cannot open it',
     sentTitle: (email: string): string => `The email is on its way to ${email} · check your inbox`,
     recentTitle: (email: string): string =>
       `An email to ${email} was already sent — open it on the device that asked for it`,
@@ -663,6 +663,9 @@ export const en: AppCatalog = {
       trialNoticeHint:
         'There is no payment yet. Your notes stay in your folder after the period ends — the cloud simply stops syncing them',
       cloudBadge: 'ZAPISKI+',
+      cloudUnavailableBadge: 'Temporarily unavailable',
+      cloudUnavailableHint:
+        'Cloud sync is temporarily unavailable: we are fixing a known vulnerability (SEC-001) around on-device note encryption. Your notes are safe — they stay in this folder',
       localFolder: 'Folder on this device',
       conflictsMonth: (count: number): string =>
         `Conflicts this month: ${count} — merged automatically, both versions are in history`,

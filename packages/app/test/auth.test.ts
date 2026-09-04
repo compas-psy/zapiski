@@ -10,7 +10,7 @@
  *  • сессия обновляется сама по истечении access-токена;
  *  • пути ядра переведены в пути сервера.
  */
-import { LEGAL_VERSION } from '@zapiski/core';
+import { CLOUD_SYNC_ENABLED, LEGAL_VERSION } from '@zapiski/core';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
@@ -611,7 +611,7 @@ describe('вход замыкается', () => {
     return app;
   }
 
-  it('оболочка отдала возврат — приложение вошло и подняло облако', async () => {
+  it('оболочка отдала возврат — приложение вошло; облако не поднялось, пока действует SEC-001 kill-switch', async () => {
     const app = await bootedApp();
     app.beginSignIn({ name: 'list' });
     expect(app.getState().route).toEqual({ name: 'signin' });
@@ -619,18 +619,29 @@ describe('вход замыкается', () => {
     await app.completeSignIn({ magicToken: 'ottt' });
 
     expect(app.getState().account?.email).toBe('marina@ya.ru');
-    expect(app.getState().backendId).toBe('zapiski');
+    /*
+     * ДО SEC-001 kill-switch здесь стояло `.toBe('zapiski')`: успешный вход
+     * поднимал облако сразу же. Это доказательство тому, что теперь так не
+     * происходит, — ровно то свойство, которое требует kill-switch: вход в
+     * аккаунт больше не приводит к попытке синка с сервером, который сегодня
+     * получил бы содержимое заметки как есть (`cloud-kill-switch.test.tsx`
+     * проверяет сам выключатель подробнее; здесь — что реальный флоу входа
+     * его не обходит).
+     */
+    expect(CLOUD_SYNC_ENABLED, 'когда флаг снова включат, эту проверку надо вернуть').toBe(false);
+    expect(app.getState().backendId).toBeNull();
     /* Возвращаемся к тому, ради чего входили, а не «куда-нибудь». */
     expect(app.getState().route).toEqual({ name: 'list' });
     expect(app.getState().authError).toBeNull();
     app.dispose();
   });
 
-  it('возврат холодного старта забирается сам, без единого нажатия', async () => {
+  it('возврат холодного старта забирается сам, без единого нажатия — облако не поднимается', async () => {
     const app = await bootedApp({ initial: { magicToken: 'ottt' } });
     /* boot() уже спросил оболочку — ждём, пока обмен доедет. */
     await vi.waitFor(() => expect(app.getState().account?.email).toBe('marina@ya.ru'));
-    expect(app.getState().backendId).toBe('zapiski');
+    /* См. комментарий выше: kill-switch SEC-001 отключает автоподъём облака. */
+    expect(app.getState().backendId).toBeNull();
     app.dispose();
   });
 
@@ -650,10 +661,13 @@ describe('вход замыкается', () => {
     app.dispose();
   });
 
-  it('выход из аккаунта отключает облако и не трогает заметки', async () => {
+  it('выход из аккаунта не трогает заметки (облако и так не поднято — SEC-001 kill-switch)', async () => {
     const app = await bootedApp();
     await app.completeSignIn({ magicToken: 'ottt' });
-    expect(app.getState().backendId).toBe('zapiski');
+    /* См. комментарий выше: пока действует kill-switch, вход не поднимает
+       облако — значит и выходу отключать здесь нечего, но заметки обязаны
+       остаться доступны в любом случае. */
+    expect(app.getState().backendId).toBeNull();
 
     await app.signOutCloud();
 

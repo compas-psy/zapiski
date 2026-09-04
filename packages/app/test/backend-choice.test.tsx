@@ -54,6 +54,16 @@ function mount(app: AppController): void {
 }
 
 describe('выбор хранилища переживает потерю входа', () => {
+  /*
+   * SEC-001 kill-switch (`CLOUD_SYNC_ENABLED`, `core/cloud-sync.ts`) стоит В
+   * `resumeCloud` РАНЬШЕ проверки сессии — и это меняет то, что видят оба
+   * теста ниже. «Войдите снова» здесь было бы неправдой: пока флаг выключен,
+   * повторный вход тоже не подключит облако, а сообщать причину, которая не
+   * лечится предложенным действием, хуже, чем не сообщать вовсе. Сам
+   * механизм `cloudNeedsSignIn` не removed — он снова станет достижим, как
+   * только флаг вернут; отдельного покрытия эта комбинация (флаг включён +
+   * сессия истекла) пока не имеет, см. `cloud-kill-switch.test.tsx`.
+   */
   it('облако остаётся выбранным, а не подменяется локальной папкой', async () => {
     const app = await bootWithoutSession();
     await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
@@ -63,13 +73,13 @@ describe('выбор хранилища переживает потерю вхо
       'подключения нет — и это правда, менять её не надо',
     ).toBeNull();
     expect(
-      app.getState().cloudNeedsSignIn,
-      'приложение молчит о том, что вход истёк',
+      app.getState().cloudSyncDisabled,
+      'приложение молчит о том, что синхронизация выключена',
     ).toBe(true);
     app.dispose();
   });
 
-  it('на экране отмечено облако и предложено войти', async () => {
+  it('на экране отмечено облако и сказано, что синхронизация временно недоступна', async () => {
     const app = await bootWithoutSession();
     await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
     mount(app);
@@ -83,10 +93,9 @@ describe('выбор хранилища переживает потерю вхо
     const local = screen.getByText(ru.settings.sync.modeLocalOnly).closest('.za-card');
     expect(local?.className).not.toContain('za-card--selected');
 
-    /* И сказано, что делать: войти, а не «повторить». Текст встречается
-       дважды — плашкой на экране и тостом, — и это не дубль: тост живёт шесть
-       секунд и уходит, плашка остаётся, пока человек не войдёт. */
-    expect(screen.getAllByText(ru.errors.cloudSignInAgain).length).toBeGreaterThan(0);
+    /* Текст встречается дважды — плашкой на экране и тостом, — и это не
+       дубль: тост живёт шесть секунд и уходит, плашка остаётся. */
+    expect(screen.getAllByText(ru.errors.cloudSyncDisabled).length).toBeGreaterThan(0);
     app.dispose();
   });
 

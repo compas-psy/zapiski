@@ -78,9 +78,16 @@ describe('онбординг в браузере', () => {
     await app.boot();
     mount(app);
 
-    /* Даже когда выбрано облако: в браузере следующий шаг — вход, а не
-       файловый диалог. */
-    fireEvent.click(screen.getByText(ru.onboarding.step2.options.cloud.title));
+    /*
+     * Даже когда выбрано не «На этом устройстве»: в браузере следующий шаг —
+     * не файловый диалог. Раньше здесь кликали по «Облако Записок» — сейчас
+     * этот вариант временно не предлагается вовсе (SEC-001 kill-switch,
+     * `CLOUD_SYNC_ENABLED`, `cloud-kill-switch.test.tsx`), а сама проверка
+     * (`asksForFolder` в `OnboardingScreen.tsx` зависит только от платформы,
+     * не от выбора) от этого не перестаёт быть верной — переключаем на
+     * «Своё облако», единственный оставшийся не-локальный вариант.
+     */
+    fireEvent.click(screen.getByText(ru.onboarding.step2.options.own.title));
     expect(screen.getByRole('button', { name: ru.onboarding.step2.next })).toBeTruthy();
     expect(screen.queryByRole('button', { name: ru.onboarding.step2.pickFolder })).toBeNull();
     app.dispose();

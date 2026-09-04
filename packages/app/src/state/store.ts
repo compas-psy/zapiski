@@ -53,6 +53,7 @@ import {
   type AddAttachmentOptions,
   type AttachmentEntry,
   type AttachmentNaming,
+  CLOUD_SYNC_ENABLED,
   type MasterKey,
   type Note,
   type NoteMeta,
@@ -235,6 +236,13 @@ export interface AppState {
    * а «войти», и человеку надо сказать именно это.
    */
   cloudNeedsSignIn: boolean;
+  /**
+   * Облако выбрано (в т.ч. раньше, на другом запуске), но синхронизация
+   * временно отключена целиком — SEC-001 kill-switch (`CLOUD_SYNC_ENABLED`,
+   * `core/cloud-sync.ts`). В отличие от `cloudNeedsSignIn` повторный вход
+   * тут не поможет: сказать нужно другое и без кнопки «Войти».
+   */
+  cloudSyncDisabled: boolean;
   online: boolean;
 
   /**
@@ -392,6 +400,7 @@ function initialState(locale: Locale): AppState {
     backendId: null,
     backendChoice: null,
     cloudNeedsSignIn: false,
+    cloudSyncDisabled: false,
     online: true,
     expandedFolders: [],
     libraryOpen: false,
@@ -1380,8 +1389,20 @@ export class AppController {
     }
   }
 
-  /** Подключить Облако Записок как бэкенд синка. Без сессии — не подключать. */
+  /**
+   * Подключить Облако Записок как бэкенд синка. Без сессии — не подключать.
+   *
+   * SEC-001 kill-switch: пока `CLOUD_SYNC_ENABLED === false`, отказываем ДО
+   * `createCloudBackend`/`attachBackend` — ни один байт заметки не должен
+   * уйти в открытом виде только потому, что человек когда-то нажал
+   * «Облако», ещё не зная про находку. `cloudSyncDisabled` в состоянии —
+   * то, что показывает экран настроек честным текстом вместо тихого отказа.
+   */
   async connectCloud(): Promise<boolean> {
+    if (!CLOUD_SYNC_ENABLED) {
+      this.patch({ cloudSyncDisabled: true });
+      return false;
+    }
     if (this.session.current() === null) return false;
     this.attachBackend(
       createCloudBackend({
@@ -1436,6 +1457,21 @@ export class AppController {
       }
     }
     if (stored !== null && stored !== 'zapiski') return;
+    /*
+     * SEC-001 kill-switch: у кого Облако было подключено ДО того, как стало
+     * известно про SEC-001, приложение обязано отказаться его молча
+     * переподключать на этом старте — это ровно тот случай, из-за которого
+     * kill-switch нужен вообще («существующий человек с уже включённым
+     * Облаком не должен продолжать слать открытый текст»). Выбор человека
+     * при этом не стирается (`backendChoice` выше уже выставлен), и
+     * `connectCloud()` ниже тоже откажет по тому же флагу — проверка здесь
+     * нужна, чтобы показать честную причину ДО попытки, а не после её провала.
+     */
+    if (stored === 'zapiski' && !CLOUD_SYNC_ENABLED) {
+      this.patch({ cloudSyncDisabled: true });
+      this.toast({ message: this.strings.errors.cloudSyncDisabled });
+      return;
+    }
     if (this.session.current() === null) {
       /*
        * Облако выбрано, а входа нет: сессия истекла, была отозвана или не
@@ -4048,6 +4084,7 @@ export class AppController {
       backendId: backend?.id ?? null,
       backendChoice: backend?.id ?? null,
       cloudNeedsSignIn: false,
+      cloudSyncDisabled: false,
     });
     this.persistPref(PREF.backend, backend?.id ?? null);
     /*
