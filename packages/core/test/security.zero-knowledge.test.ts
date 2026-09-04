@@ -21,6 +21,8 @@ import { MemoryVaultStorage } from '../src/memory-storage.js';
 import { CrdtStore } from '../src/crdt/store.js';
 import { NoteDoc } from '../src/crdt/doc.js';
 import { VersionHistory } from '../src/sync/versions.js';
+import { SyncCrypto } from '../src/sync/sync-crypto.js';
+import { generateSmk } from '../src/crypto/sync-keys.js';
 import { ZapiskiCloudBackend } from '../src/sync/zapiski-cloud.js';
 import { utf8, fromUtf8 } from '../src/util/bytes.js';
 
@@ -276,7 +278,18 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
    * умолчанию), уезжает в облако открытым текстом — вместе с путём, в котором
    * лежит её заголовок.
    */
-  it('[ДЕФЕКТ] незашифрованная заметка уходит в облако как есть', async () => {
+  /** Аккаунт, прошедший онбординг SMK: тот самый ключ, что даёт `SyncCrypto`. */
+  const encrypting = (): SyncCrypto =>
+    new SyncCrypto({ smk: generateSmk(), accountSalt: provider.randomSalt() });
+
+  /**
+   * Аккаунт БЕЗ онбординга SMK — то, как облако работало до SEC-001 и как
+   * оно обязано продолжать работать для тех, кто ещё не включил шифрование
+   * (design §13, раскатка по аккаунту). Здесь это фиксируется тестом, а не
+   * подразумевается: иначе «переход на шифрование» однажды окажется
+   * исчезновением уже лежащих в облаке заметок.
+   */
+  it('без онбординга SMK бэкенд по-прежнему отправляет байты как есть', async () => {
     const { sent, fetch: fetchImpl } = capture();
     const backend = new ZapiskiCloudBackend({
       baseUrl: 'https://zapiski.test',
@@ -287,23 +300,121 @@ describe('SEC-001: что уходит в облако КОМПАС', () => {
 
     await backend.put('Личное/Дневник 12 марта.md', utf8(SECRET));
 
+    expect(backend.encrypts).toBe(false);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.body).toContain('тревога перед защитой');
-    // И путь, в котором лежат заголовок заметки и имя папки, — в URL запроса.
-    expect(decodeURIComponent(sent[0]!.url)).toContain('Дневник 12 марта.md');
   });
 
-  it.fails('[SEC-001] в облако не уходит ни байта открытого текста', async () => {
+  it('[SEC-001] в облако не уходит ни байта открытого текста', async () => {
     const { sent, fetch: fetchImpl } = capture();
     const backend = new ZapiskiCloudBackend({
       baseUrl: 'https://zapiski.test',
       token: 'токен',
       deviceId: 'device-1',
       fetch: fetchImpl as never,
+      sync: encrypting(),
     });
 
     await backend.put('Личное/Дневник 12 марта.md', utf8(SECRET));
+
+    expect(backend.encrypts).toBe(true);
+    expect(sent).toHaveLength(1);
+    // Ни целиком, ни подстрокой — частичная утечка тоже утечка (design §15.1).
     expect(sent[0]!.body).not.toContain('тревога перед защитой');
+    expect(sent[0]!.body).not.toContain('Дневник');
+    expect(sent[0]!.body).not.toContain('79990000000');
+    for (const word of SECRET.split(/\s+/).filter((w) => w.length >= 5)) {
+      expect(sent[0]!.body, `слово «${word}»`).not.toContain(word);
+    }
+  });
+
+  it('[SEC-001] CRDT-апдейт уходит шифротекстом, своим доменным ключом', async () => {
+    const sent: Array<{ url: string; body: string }> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      sent.push({ url, body: String(init?.body ?? '') });
+      return new Response(JSON.stringify({ accepted: 1 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const backend = new ZapiskiCloudBackend({
+      baseUrl: 'https://zapiski.test',
+      token: 'токен',
+      deviceId: 'device-1',
+      fetch: fetchImpl as never,
+      sync: encrypting(),
+    });
+
+    await backend.pushUpdates([{ noteId: 'note-1', update: utf8(SECRET) }]);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.body).not.toContain('тревога перед защитой');
+    // Тело — JSON с base64: проверяем и расшифрованное представление тоже.
+    const decoded = Buffer.from(
+      (JSON.parse(sent[0]!.body) as { updates: Array<{ update: string }> }).updates[0]!.update,
+      'base64',
+    ).toString('utf8');
+    expect(decoded).not.toContain('тревога перед защитой');
+  });
+
+  it('[SEC-001] раунд-трип: своё же расшифровывается обратно без потерь', async () => {
+    const sync = encrypting();
+    const store = new Map<string, Uint8Array>();
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = decodeURIComponent(new URL(url).searchParams.get('path') ?? '');
+      if (init?.method === 'PUT') {
+        store.set(path, new Uint8Array(init.body as unknown as Uint8Array));
+        return new Response(null, { status: 200, headers: { etag: '"1"' } });
+      }
+      const found = store.get(path);
+      if (!found) return new Response(null, { status: 404 });
+      return new Response(found as unknown as BodyInit, { status: 200, headers: { etag: '"1"' } });
+    }) as unknown as typeof fetch;
+
+    const backend = new ZapiskiCloudBackend({
+      baseUrl: 'https://zapiski.test',
+      token: 'токен',
+      deviceId: 'device-1',
+      fetch: fetchImpl as never,
+      sync,
+    });
+
+    await backend.put('Личное/Дневник 12 марта.md', utf8(SECRET));
+    // На «диске сервера» лежит шифротекст…
+    const stored = store.get('Личное/Дневник 12 марта.md')!;
+    expect(fromUtf8(stored)).not.toContain('тревога перед защитой');
+    // …а клиент читает обратно ровно то, что положил.
+    const back = await backend.get('Личное/Дневник 12 марта.md');
+    expect(fromUtf8(back!.data)).toBe(SECRET);
+  });
+
+  it('[SEC-001] чужой ключ не открывает чужой аккаунт (design §15.3)', async () => {
+    const store = new Map<string, Uint8Array>();
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const path = decodeURIComponent(new URL(url).searchParams.get('path') ?? '');
+      if (init?.method === 'PUT') {
+        store.set(path, new Uint8Array(init.body as unknown as Uint8Array));
+        return new Response(null, { status: 200, headers: { etag: '"1"' } });
+      }
+      const found = store.get(path);
+      if (!found) return new Response(null, { status: 404 });
+      return new Response(found as unknown as BodyInit, { status: 200, headers: { etag: '"1"' } });
+    }) as unknown as typeof fetch;
+
+    const common = {
+      baseUrl: 'https://zapiski.test',
+      token: 'токен',
+      deviceId: 'device-1',
+      fetch: fetchImpl as never,
+    };
+    const alice = new ZapiskiCloudBackend({ ...common, sync: encrypting() });
+    const bob = new ZapiskiCloudBackend({ ...common, sync: encrypting() });
+
+    await alice.put('Дневник.md', utf8(SECRET));
+    // Ключ Боба не открывает блоб Алисы — и это НЕ выглядит как пустая заметка.
+    await expect(bob.get('Дневник.md')).resolves.toBeNull();
+    // А сама Алиса читает свой блоб как обычно.
+    expect(fromUtf8((await alice.get('Дневник.md'))!.data)).toBe(SECRET);
   });
 });
 

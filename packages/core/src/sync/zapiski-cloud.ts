@@ -3,16 +3,18 @@
  * `/api/v1/vault/*`. Типы запросов и ответов — из `sync/protocol.ts`, того же
  * файла, который импортирует сервер.
  *
- * СЕГОДНЯ сервер видит содержимое заметки как есть — SEC-001 ещё не
- * реализован (`docs/dev/security/SEC-001-zero-knowledge-design.md`),
- * граница шифрования на этом бэкенде не стоит. Строка о зашифрованных
- * байтах была верна только для замысла, не для факта, и держать её тут
- * дальше значило бы повторять ту же ложь, которую §12 design-документа
- * просит убрать из пользовательских текстов.
+ * ЗДЕСЬ СТОИТ ГРАНИЦА ШИФРОВАНИЯ SEC-001 (design §1). Если бэкенду отдан
+ * `sync` (`SyncCrypto`), то за `put`/`pushUpdates` открытого текста больше
+ * нет — на сервер уходит только конверт AES-256-GCM под доменным ключом
+ * заметки, а `get`/`pullUpdates` снимают конверт на входе.
  *
- * Сам класс от этого не выключен: он остаётся тем местом, куда ляжет
- * граница шифрования (SEC-001 design §1), и продолжает жить в тестах
- * ядра как честная модель протокола. Временный kill-switch
+ * `sync` необязателен, и это не лазейка, а требование совместимости
+ * (design §13): аккаунт остаётся незашифрованным до первого добровольного
+ * онбординга SMK, и до него бэкенд обязан читать уже лежащие в облаке
+ * открытые объекты — иначе включение шифрования выглядело бы как пропажа
+ * заметок. Что аккаунт уже перешёл на шифрование, видно по `encrypts`.
+ *
+ * Временный kill-switch
  * (`CLOUD_SYNC_ENABLED`, `core/cloud-sync.ts`) стоит НЕ здесь, а на
  * прикладном уровне: `createCloudBackend`
  * (`packages/app/src/state/cloud.ts`) отказывается собрать этот бэкенд
@@ -36,6 +38,7 @@ import {
   type CloudPushResponse,
   type CloudSubscribeEvent,
 } from './protocol.js';
+import { looksLikeEnvelope, SyncCrypto } from './sync-crypto.js';
 import { SyncError, type FetchLike } from './webdav.js';
 
 export interface ZapiskiCloudOptions {
@@ -48,6 +51,18 @@ export interface ZapiskiCloudOptions {
   locale?: Locale;
   /** Фабрика websocket — платформенная, поэтому инъекция (ARCHITECTURE §2). */
   websocket?: (url: string) => WebSocketLike;
+  /**
+   * SEC-001: граница шифрования. Если задана — НИ ОДИН байт содержимого не
+   * уходит на сервер и не приходит с него без конверта (design §1).
+   *
+   * Необязательна намеренно: аккаунт остаётся незашифрованным до первого
+   * добровольного онбординга SMK (design §13, «раскатка по аккаунту, не
+   * мгновенно и не принудительно»), и до него бэкенд обязан продолжать
+   * работать со старыми открытыми объектами, иначе у человека пропадут уже
+   * лежащие в облаке заметки. Как только `sync` задан — новые записи идут
+   * только шифротекстом.
+   */
+  sync?: SyncCrypto;
 }
 
 export interface WebSocketLike {
@@ -64,6 +79,7 @@ export class ZapiskiCloudBackend implements SyncBackend {
   private readonly fetchImpl: FetchLike;
   private readonly locale: Locale;
   private readonly websocket: ((url: string) => WebSocketLike) | undefined;
+  private readonly sync: SyncCrypto | undefined;
 
   constructor(options: ZapiskiCloudOptions) {
     this.baseUrl = (options.baseUrl ?? 'https://zapiski.cmpas.ru').replace(/\/+$/, '');
@@ -72,6 +88,12 @@ export class ZapiskiCloudBackend implements SyncBackend {
     this.fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.locale = options.locale ?? DEFAULT_LOCALE;
     this.websocket = options.websocket;
+    this.sync = options.sync;
+  }
+
+  /** Включено ли шифрование синка на этом бэкенде (SEC-001). */
+  get encrypts(): boolean {
+    return this.sync !== undefined;
   }
 
   /** Адрес облака: тестовый стенд и прод — не одно и то же место. */
@@ -155,12 +177,30 @@ export class ZapiskiCloudBackend implements SyncBackend {
     return (body?.removed ?? []).map((path) => normalizePath(path));
   }
 
+  /**
+   * SEC-001: снятие конверта на входе.
+   *
+   * Открытые байты (аккаунт ещё не перешифрован, design §10) пропускаются
+   * как есть — иначе переход на шифрование выглядел бы как исчезновение уже
+   * лежащих в облаке заметок. Конверт, который НЕ открылся нашим ключом, —
+   * это не «пустая заметка»: возвращаем `null`, и синк обходится с ним как
+   * с недоступным объектом (design §9), а не подсовывает человеку мусор.
+   */
+  private async unseal(path: VaultPath, data: Uint8Array): Promise<Uint8Array | null> {
+    if (this.sync === undefined) return data;
+    if (!looksLikeEnvelope(data)) return data;
+    return this.sync.openContent(normalizePath(path), data);
+  }
+
   async get(path: VaultPath): Promise<{ data: Uint8Array; etag: string } | null> {
     const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`);
     if (response.status === 404) return null;
     if (!response.ok) return null;
+    const raw = new Uint8Array(await response.arrayBuffer());
+    const data = await this.unseal(path, raw);
+    if (data === null) return null;
     return {
-      data: new Uint8Array(await response.arrayBuffer()),
+      data,
       etag: response.headers.get('etag')?.replace(/"/g, '') ?? '',
     };
   }
@@ -168,10 +208,14 @@ export class ZapiskiCloudBackend implements SyncBackend {
   async put(path: VaultPath, data: Uint8Array, ifMatch?: string): Promise<{ etag: string }> {
     const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' };
     if (ifMatch !== undefined && ifMatch !== '') headers['If-Match'] = `"${ifMatch}"`;
+    /* SEC-001, граница §1: за этой строкой открытого текста заметки больше
+       нет — ни в теле запроса, ни в памяти сетевого слоя. */
+    const body =
+      this.sync === undefined ? data : await this.sync.sealContent(normalizePath(path), data);
     const response = await this.call(`${VAULT_ENDPOINTS.blob}?path=${encodeURIComponent(normalizePath(path))}`, {
       method: 'PUT',
       headers,
-      body: data as unknown as BodyInit,
+      body: body as unknown as BodyInit,
     });
     if (response.status === 409 || response.status === 412) {
       const error = (await response.json().catch(() => ({ code: 'conflict' }))) as CloudErrorDto;
@@ -205,9 +249,17 @@ export class ZapiskiCloudBackend implements SyncBackend {
 
   /** Пакетная выгрузка CRDT-обновлений (delta-синк, ТЗ §4.1). */
   async pushUpdates(updates: Array<{ noteId: NoteId; update: Uint8Array }>): Promise<CloudPushResponse> {
+    /* SEC-001 §8.4: CRDT-апдейт — такой же шифротекст, как содержимое, и под
+       СВОИМ доменным ключом (`K_crdt` заметки), а не общим с содержимым. */
+    const sealed = await Promise.all(
+      updates.map(async (item) => ({
+        noteId: item.noteId,
+        update: this.sync === undefined ? item.update : await this.sync.sealCrdt(item.noteId, item.update),
+      })),
+    );
     const payload: CloudPushRequest = {
       deviceId: this.deviceId,
-      updates: updates.map((item) => ({ noteId: item.noteId, update: toBase64(item.update) })),
+      updates: sealed.map((item) => ({ noteId: item.noteId, update: toBase64(item.update) })),
     };
     const response = await this.call(VAULT_ENDPOINTS.push, {
       method: 'POST',
@@ -233,6 +285,18 @@ export class ZapiskiCloudBackend implements SyncBackend {
     });
     if (!response.ok) throw new SyncError(this.strings.errors.syncFailed, 'server');
     const body = (await response.json()) as CloudPullResponse;
-    return (body.updates ?? []).map((item) => ({ noteId: item.noteId, update: fromBase64(item.update) }));
+    const raw = (body.updates ?? []).map((item) => ({ noteId: item.noteId, update: fromBase64(item.update) }));
+    if (this.sync === undefined) return raw;
+    const opened = await Promise.all(
+      raw.map(async (item) => {
+        if (!looksLikeEnvelope(item.update)) return item; // ещё не перешифрованный апдейт
+        const update = await this.sync!.openCrdt(item.noteId, item.update);
+        return update === null ? null : { noteId: item.noteId, update };
+      }),
+    );
+    /* Не открывшийся чужим ключом апдейт молча выбрасывается, а не применяется
+       мусором к документу: применить нерасшифрованные байты к CRDT — верный
+       способ повредить заметку (design §9). */
+    return opened.filter((item): item is { noteId: NoteId; update: Uint8Array } => item !== null);
   }
 }

@@ -59,6 +59,12 @@ export { BILLING_ENABLED } from './billing.js';
 export { OWN_STORAGE_ENABLED } from './storage-choices.js';
 export { CLOUD_SYNC_ENABLED } from './cloud-sync.js';
 export {
+  looksLikeEnvelope,
+  SyncCrypto,
+  SYNC_ENVELOPE_VERSION,
+  type SyncCryptoOptions,
+} from './sync/sync-crypto.js';
+export {
   deriveContentKey,
   deriveCrdtKey,
   deriveManifestKey,
