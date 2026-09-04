@@ -84,15 +84,27 @@ interface Region {
 
 /**
  * Таблицей считается подряд идущий кусок строк с палками, у которого ВТОРАЯ
- * строка — разделитель `| --- | --- |`.
+ * строка — разделитель `| --- | --- |` С ТЕМ ЖЕ ЧИСЛОМ СТОЛБЦОВ, что и у
+ * шапки.
  *
  * Без разделителя GFM таблицы не видит, и мы её тоже не рисуем: иначе строка
  * «вариант А | вариант Б» превратилась бы в таблицу самоуправством, и в чужом
  * редакторе тот же файл выглядел бы иначе. Набранной руками таблице
  * разделитель дописывает `table-format.ts`, как только курсор из неё выйдет.
+ *
+ * Число столбцов — та же проверка, только та же самая ошибка ещё коварнее
+ * (P1-аудит closure-pass, эскалация из классификации доп. находок): шапка
+ * в 3 столбца и разделитель в 2 «похожи на таблицу» синтаксически (палки на
+ * месте, вторая строка — тире), но настоящий GFM-разбор по спецификации
+ * («header row must match the delimiter row in the number of cells») ТАКОЙ
+ * блок таблицей не считает вовсе — падает в обычный абзац. Без этой проверки
+ * виджет рисовал аккуратную интерактивную таблицу для текста, который любой
+ * другой markdown-инструмент (GitHub, Obsidian, pandoc) покажет тремя
+ * строками палок и тире — то есть врал о собственной структуре заметки.
  */
-function isTableRun(count: number, second: string): boolean {
-  return count >= 2 && TABLE_DIVIDER.test(second);
+function isTableRun(count: number, first: string, second: string): boolean {
+  if (count < 2 || !TABLE_DIVIDER.test(second)) return false;
+  return cellSpans(first).length === cellSpans(second).length;
 }
 
 /** Таблицы в строках [fromLine..toLine]. Строки берутся одним проходом. */
@@ -101,6 +113,7 @@ function scanLines(doc: Text, fromLine: number, toLine: number): TableSpan[] {
   let pos = doc.line(fromLine).from;
   let runFrom = -1;
   let runCount = 0;
+  let runFirst = '';
   let runSecond = '';
 
   for (const text of doc.iterLines(fromLine, toLine + 1)) {
@@ -108,17 +121,21 @@ function scanLines(doc: Text, fromLine: number, toLine: number): TableSpan[] {
       if (runFrom < 0) {
         runFrom = pos;
         runCount = 0;
+        runFirst = '';
         runSecond = '';
       }
       runCount += 1;
+      if (runCount === 1) runFirst = text;
       if (runCount === 2) runSecond = text;
     } else if (runFrom >= 0) {
-      if (isTableRun(runCount, runSecond)) out.push({ from: runFrom, to: pos - 1 });
+      if (isTableRun(runCount, runFirst, runSecond)) out.push({ from: runFrom, to: pos - 1 });
       runFrom = -1;
     }
     pos += text.length + 1;
   }
-  if (runFrom >= 0 && isTableRun(runCount, runSecond)) out.push({ from: runFrom, to: pos - 1 });
+  if (runFrom >= 0 && isTableRun(runCount, runFirst, runSecond)) {
+    out.push({ from: runFrom, to: pos - 1 });
+  }
   return out;
 }
 

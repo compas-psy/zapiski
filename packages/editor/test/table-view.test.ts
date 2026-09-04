@@ -25,6 +25,7 @@
  */
 import { EditorView } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
+import { syntaxTree } from '@codemirror/language';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { makeState, makeView } from './helpers.js';
@@ -146,6 +147,39 @@ describe('где таблицы в документе', () => {
     const doc = 'До.\n| а | б |\n| - | - |\nПосле.';
     const [span] = spansOf(doc);
     expect(doc.slice(span?.[0], span?.[1])).toBe('| а | б |\n| - | - |');
+  });
+
+  /*
+   * P1-аудит closure-pass, эскалация из классификации доп. находок: шапка в
+   * 3 столбца и разделитель в 2 «похожи на таблицу» синтаксически (палки на
+   * месте, вторая строка — тире), но настоящий GFM-разбор такой блок
+   * таблицей не считает вовсе — падает в обычный абзац (проверено отдельно
+   * деревом ниже). Без проверки числа столбцов виджет рисовал аккуратную
+   * таблицу для текста, который любой другой markdown-инструмент покажет
+   * палками и тире — врал о структуре заметки.
+   */
+  it('несовпадение числа столбцов шапки и разделителя — не таблица', () => {
+    const doc = '| A | B | C |\n| --- | --- |\n| 1 | 2 | 3 |';
+    expect(spansOf(doc)).toHaveLength(0);
+  });
+
+  it('то же самое подтверждает настоящий GFM-парсер — блок остаётся абзацем', () => {
+    const doc = '| A | B | C |\n| --- | --- |\n| 1 | 2 | 3 |';
+    const state = makeState(doc);
+    const table = syntaxTree(state).topNode.getChild('Table');
+    expect(table, 'настоящий парсер не должен видеть здесь Table').toBeNull();
+  });
+
+  it('лишние ячейки в ТЕЛЕ строки (не в разделителе) — валидный GFM, не задето фиксом', () => {
+    // Разделитель совпадает с шапкой — по GFM это допустимо, тело просто
+    // шире и лишние ячейки не показываются; здесь по-прежнему таблица.
+    const doc = '| A | B |\n| --- | --- |\n| 1 | 2 | 3 | 4 |';
+    expect(spansOf(doc)).toHaveLength(1);
+  });
+
+  it('совпадающее число столбцов — обычная таблица, не задета фиксом', () => {
+    const doc = '| A | B | C |\n| --- | --- | --- |\n| 1 | 2 | 3 |';
+    expect(spansOf(doc)).toHaveLength(1);
   });
 });
 
