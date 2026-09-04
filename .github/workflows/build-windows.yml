@@ -13,6 +13,17 @@ name: Сборка Windows
 #   release — только на теге: GitHub Release + выкладка latest.json и
 #             установщика в /var/www/zapiski.cmpas.ru/updates/ по ssh.
 #
+# PRODUCTION-ПУТЬ (/updates/latest) — ТОЛЬКО PROMOTED.
+#   P1-аудит closure-pass нашёл: шаг доставки на сервер копировал .exe в
+#   постоянную ссылку /updates/latest/zapiski-setup.exe БЕЗ проверки ветки —
+#   ручной запуск с любой feature-ветки перезаписывал её. Теперь это решает
+#   `apps/desktop/scripts/windows-release-gate.mjs` (`resolvePromoted`,
+#   тест — `apps/desktop/test/windows-release-gate.test.ts`), тот же приём,
+#   что уже есть у Android (`android-release-gate.mjs`). PROMOTED = тег ИЛИ
+#   ветка по умолчанию. Сборка ЛЮБОЙ ветки по-прежнему проходит целиком и
+#   кладётся в GitHub-артефакт и в `builds/<slug>` на сервере — гейт закрывает
+#   только копирование в `/updates/latest`, не саму сборку.
+#
 # ПОДПИСЬ ОБНОВЛЕНИЙ — НЕОБЯЗАТЕЛЬНА ДЛЯ СБОРКИ.
 #   Пока секретов подписи нет, сборка обязана проходить: без неё мы не знаем
 #   даже того, компилируется ли Rust под Windows, — а это важнее подписи.
@@ -214,6 +225,18 @@ jobs:
           pnpm --version
           rustc --version
           cargo --version
+
+      # P1-аудит closure-pass: решение «можно ли трогать production-путь
+      # /updates/latest» вычисляется ЗДЕСЬ, ОДИН раз, ДО того, как что-либо
+      # копируется на сервер — а не только в последнем шаге job'а, как было.
+      # Формула та же самая (`resolvePromoted`, windows-release-gate.mjs),
+      # только раньше по времени: тег или ветка по умолчанию. Тот же приём,
+      # что уже есть у Android (`android-release-gate.mjs`, `resolveChannel`).
+      - name: Решить, промотируется ли сборка
+        id: promote_gate
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: node apps/desktop/scripts/windows-release-gate.mjs promoted
 
       - name: Установка зависимостей
         run: |
@@ -631,7 +654,11 @@ jobs:
       # Каталог сборок, а НЕ фид обновлений. Неподписанный установщик рядом с
       # latest.json был бы вреден: апдейтер предложил бы его пользователям.
       # Здесь он лежит отдельно, скачивается руками и ни на что не влияет.
-      - name: Отдать установщик на сервер
+      #
+      # Ветка в имени каталога — на ЛЮБОЙ ветке, безусловно: параллельные
+      # ветки не затирают друг друга, а сам каталог `builds/<slug>` никогда
+      # не был production-путём и раньше (см. следующий шаг про `latest`).
+      - name: Отдать установщик на сервер (сборка ветки)
         id: ship
         continue-on-error: true
         if: env.HAS_SERVER == 'true'
@@ -651,7 +678,6 @@ jobs:
           icacls "$(cygpath -w ~/.ssh/deploy_key)" /inheritance:r /grant:r "${USERNAME}:F" >/dev/null 2>&1 || true
           ssh-keyscan -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
 
-          # Ветка в имени каталога: параллельные ветки не затирают друг друга.
           # Всё, кроме букв, цифр и дефиса, схлопывается — из имени ветки
           # приходят слэши, а они создали бы дерево каталогов.
           slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
@@ -668,9 +694,36 @@ jobs:
           tar -C release -cf - . | ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" "mkdir -p '${target}' && tar -C '${target}' -xf -"
           echo "Установщик ${VERSION} лежит в ${target} — https://zapiski.cmpas.ru/updates/builds/${slug}/"
 
-          # Постоянный адрес свежего установщика — по той же причине, что и у
-          # APK: каталог называется по ветке, файл по версии, и такую ссылку
-          # нельзя ни дать человеку, ни положить на промостраницу.
+      # ── Production-путь: ТОЛЬКО promoted-сборка ────────────────────────────
+      #
+      # P1-аудит closure-pass: раньше этот шаг не отделялся от предыдущего и
+      # выполнялся на ЛЮБОЙ ветке при доступном сервере — ручной запуск с
+      # feature-ветки перезаписывал `/updates/latest/zapiski-setup.exe`,
+      # постоянную ссылку, с которой автообновление и `/promo` раздают
+      # установщик всем людям одновременно. Гейт стоит здесь, В `if:` шага,
+      # ДО операции копирования — не только в последующей проверке результата.
+      - name: Обновить постоянную ссылку /updates/latest
+        id: promote
+        continue-on-error: true
+        if: env.HAS_SERVER == 'true' && steps.promote_gate.outputs.promoted == 'true'
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key || true
+          icacls "$(cygpath -w ~/.ssh/deploy_key)" /inheritance:r /grant:r "${USERNAME}:F" >/dev/null 2>&1 || true
+          ssh-keyscan -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Тот же каталог ветки, что и в предыдущем шаге — пересчитан здесь
+          # заново, а не передан переменной окружения между шагами: каждый
+          # `run:` — свой процесс, а не переменная передавалась бы в любом
+          # случае надёжнее ссылкой на уже загруженное на сервер.
+          slug="$(printf '%s' "${GITHUB_REF_NAME}" | tr -c 'A-Za-z0-9-' '-' | cut -c1-60)"
+          target="/var/www/zapiski.cmpas.ru/updates/builds/${slug}"
           latest="/var/www/zapiski.cmpas.ru/updates/latest"
           ssh -i ~/.ssh/deploy_key "${SERVER_USER}@${SERVER_HOST}" sh -s -- "${target}" "${latest}" <<'REMOTE'
           set -eu
@@ -695,25 +748,25 @@ jobs:
         env:
           ARTIFACT: ${{ steps.artifact.outcome }}
           SHIP: ${{ steps.ship.outcome }}
-          # Сборки этой ветки и теги — те самые, что предлагает /promo.
-          PROMOTED: ${{ (github.ref_type == 'tag' || github.ref_name == github.event.repository.default_branch) && 'true' || 'false' }}
+          PROMOTE: ${{ steps.promote.outcome }}
+          PROMOTED: ${{ steps.promote_gate.outputs.promoted }}
         run: |
           set -euo pipefail
-          echo "Артефакт GitHub: ${ARTIFACT}; сервер: ${SHIP}."
+          echo "Артефакт GitHub: ${ARTIFACT}; сервер (сборка ветки): ${SHIP}; production-путь: ${PROMOTE} (promoted=${PROMOTED})."
           if [ "${ARTIFACT}" = 'success' ] || [ "${SHIP}" = 'success' ]; then
             if [ "${ARTIFACT}" != 'success' ]; then
               echo '::warning::Артефакт GitHub не сохранён (обычная причина — исчерпанная квота хранилища аккаунта). Установщик забирайте с сервера.'
             fi
             if [ "${SHIP}" != 'success' ] && [ "${SHIP}" != 'skipped' ]; then
-              # На ветке, чьи сборки предлагает промостраница, неудачная
-              # доставка — провал, а не предупреждение: ссылка обещает свежий
-              # установщик, а отдаёт вчерашний, и узнаётся это от человека,
-              # который скачал и не нашёл в сборке починенного.
-              if [ "${PROMOTED}" = 'true' ]; then
-                echo "::error::Установщик не уехал на сервер, а промостраница отдаёт именно его — https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe остался прежним."
-                exit 1
-              fi
-              echo '::warning::Установщик не уехал на сервер. Он есть в артефактах прогона.'
+              echo '::warning::Установщик не уехал в каталог сборки ветки на сервере. Он есть в артефактах прогона.'
+            fi
+            # На ветке, чьи сборки предлагает промостраница, неудачная доставка
+            # в /updates/latest — провал, а не предупреждение: ссылка обещает
+            # свежий установщик, а отдаёт вчерашний, и узнаётся это от
+            # человека, который скачал и не нашёл в сборке починенного.
+            if [ "${PROMOTED}" = 'true' ] && [ "${PROMOTE}" != 'success' ]; then
+              echo "::error::Установщик не уехал в /updates/latest, а эта ветка/тег — promoted, промостраница отдаёт именно его — https://zapiski.cmpas.ru/updates/latest/zapiski-setup.exe остался прежним."
+              exit 1
             fi
             exit 0
           fi
