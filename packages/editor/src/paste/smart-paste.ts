@@ -19,7 +19,7 @@ import { EditorView } from '@codemirror/view';
 import type { Command } from '@codemirror/view';
 import { editorRuntime } from '../runtime.js';
 import { htmlToMarkdown } from './html-to-markdown.js';
-import { pasteNeedsBlankLineBefore } from '../syntax/block-boundary.js';
+import { pasteNeedsBlankLineAfter, pasteNeedsBlankLineBefore } from '../syntax/block-boundary.js';
 
 /** Ссылка целиком, без пробелов внутри. */
 const URL_ONLY = /^(https?:\/\/|mailto:|obsidian:\/\/|zapiski:\/\/)\S+$/i;
@@ -55,13 +55,23 @@ export const plainPaste: Command = () => {
  * позицию курсора, включая середину слова: абзац рвался пополам, а хвост
  * строки превращался в самостоятельный список или цитату вместо буквальной
  * вставки. Внутри строки вставка ведёт себя как обычный набор символов.
+ *
+ * Симметричная защита нужна и СНИЗУ (P1-аудит): если вставка многострочная
+ * и заканчивается закрывающей оградой код-блока, а после точки курсора на
+ * исходной строке ещё остаётся текст — этот хвост приклеится к закрывающей
+ * ограде, она перестанет быть «голой» closing-строкой по CommonMark, и
+ * код-блок поглотит всё, что было ниже, вместо буквальной вставки рядом с
+ * ним. См. `pasteNeedsBlankLineAfter`.
  */
 function insertText(view: EditorView, text: string): void {
   const tr = view.state.changeByRange((range) => {
     const line = view.state.doc.lineAt(range.from);
     const atLineStart = range.from === line.from;
-    const insert =
-      atLineStart && pasteNeedsBlankLineBefore(view.state, line.number, text) ? `\n${text}` : text;
+    const prefix =
+      atLineStart && pasteNeedsBlankLineBefore(view.state, line.number, text) ? '\n' : '';
+    const hasTrailingText = range.to !== line.to;
+    const suffix = hasTrailingText && pasteNeedsBlankLineAfter(text) ? '\n' : '';
+    const insert = `${prefix}${text}${suffix}`;
     return {
       changes: { from: range.from, to: range.to, insert },
       range: EditorSelection.cursor(range.from + insert.length),
@@ -145,12 +155,16 @@ export const smartPaste: Extension = EditorView.domEventHandlers({
     }
 
     // Обычный текст без HTML — своя вставка только если первая строка
-    // способна переопределить блок над курсором; иначе, как и раньше, отдаём
-    // событие стандартному обработчику CodeMirror.
+    // способна переопределить блок над курсором ИЛИ последняя строка вставки
+    // рискует проглотить хвост исходной строки (P1-аудит: ограда код-блока
+    // без своей строки — см. `pasteNeedsBlankLineAfter`); иначе, как и
+    // раньше, отдаём событие стандартному обработчику CodeMirror.
     if (text) {
       const range = view.state.selection.main;
-      const lineNumber = view.state.doc.lineAt(range.from).number;
-      if (pasteNeedsBlankLineBefore(view.state, lineNumber, text)) {
+      const line = view.state.doc.lineAt(range.from);
+      const needsBefore = pasteNeedsBlankLineBefore(view.state, line.number, text);
+      const needsAfter = range.to !== line.to && pasteNeedsBlankLineAfter(text);
+      if (needsBefore || needsAfter) {
         event.preventDefault();
         insertText(view, text);
         return true;
