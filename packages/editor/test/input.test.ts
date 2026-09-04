@@ -15,7 +15,7 @@ import {
   listNewline,
   MAX_LIST_DEPTH,
 } from '../src/input/lists.js';
-import { makeView } from './helpers.js';
+import { makeView, pressEnter } from './helpers.js';
 
 /** Строка курсора не принадлежит ни одному `ListItem` — список действительно позади. */
 function insideListItem(state: EditorState, pos: number): boolean {
@@ -345,5 +345,69 @@ describe('Enter, Tab и Backspace в списках', () => {
       expect(indentListItem(view)).toBe(true);
       expect(view.state.doc.toString()).toBe('- один\n  - два');
     });
+  });
+});
+
+/**
+ * P1-аудит closure-pass, эскалация из классификации доп. находок: «выход
+ * Enter из пустой цитаты занимает 3 нажатия и глотает текст» — «NOT
+ * ACCEPTABLE — RECOMMEND IMMEDIATE FIX».
+ *
+ * У списка пустой пункт выходит на ВТОРОМ Enter (доказано выше, «выход из
+ * списка на пустом пункте верхнего уровня»). До этого фикса цитата на тот
+ * же жест отвечала иначе: второй Enter на пустой строке `>` не выходил из
+ * цитаты, а добавлял ещё одну пустую цитируемую строку — выход происходил
+ * только на ТРЕТЬЕМ нажатии. Хуже количества нажатий: человек, ожидающий
+ * поведения списка, набирал текст сразу после второго Enter — и текст
+ * молча становился НОВЫМ ПРОЦИТИРОВАННЫМ абзацем внутри всё ещё открытой
+ * цитаты, а не обычным абзацем, каким он должен был стать.
+ */
+describe('выход из цитаты на пустой строке — тот же жест, что и у списка (P1-аудит)', () => {
+  function insideBlockquote(state: EditorState, pos: number): boolean {
+    let node: ReturnType<typeof syntaxTree>['topNode'] | null = syntaxTree(state).resolveInner(pos, -1);
+    for (; node; node = node.parent) {
+      if (node.name === 'Blockquote') return true;
+    }
+    return false;
+  }
+
+  it('второй Enter на пустой строке цитаты — настоящий выход, тот же счёт нажатий, что у списка', () => {
+    view = makeView('> Цитата', { selection: { anchor: 8 } });
+    expect(pressEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> Цитата\n> ');
+    expect(insideBlockquote(view.state, view.state.doc.length)).toBe(true);
+
+    expect(pressEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> Цитата\n\n');
+    expect(view.state.selection.main.head).toBe(view.state.doc.length);
+    expect(insideBlockquote(view.state, view.state.doc.length)).toBe(false);
+  });
+
+  it('текст, набранный сразу после второго Enter, — обычный абзац, а не новая цитируемая строка', () => {
+    view = makeView('> Цитата', { selection: { anchor: 8 } });
+    pressEnter(view);
+    pressEnter(view);
+    const pos = view.state.selection.main.head;
+    view.dispatch({ changes: { from: pos, insert: 'Текст' }, selection: { anchor: pos + 5 } });
+    expect(view.state.doc.toString()).toBe('> Цитата\n\nТекст');
+    expect(insideBlockquote(view.state, view.state.doc.length)).toBe(false);
+
+    const paragraphs = syntaxTree(view.state).topNode.getChildren('Paragraph');
+    expect(paragraphs.some((p) => view?.state.sliceDoc(p.from, p.to) === 'Текст')).toBe(true);
+  });
+
+  it('цитата не в конце документа: следующий абзац сохраняет тип, а не остаётся в цитате', () => {
+    view = makeView('> Цитата\n> \nВторой абзац', { selection: { anchor: 11 } });
+    expect(pressEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> Цитата\n\nВторой абзац');
+    expect(insideBlockquote(view.state, view.state.doc.length)).toBe(false);
+  });
+
+  it('undo возвращает пустую строку цитаты одним логическим шагом', () => {
+    view = makeView('> Цитата\n> ', { selection: { anchor: 11 } });
+    expect(pressEnter(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> Цитата\n\n');
+    expect(undo(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe('> Цитата\n> ');
   });
 });

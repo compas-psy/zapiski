@@ -36,6 +36,7 @@ import {
 } from './formatting.js';
 import { completeDivider, completeFencedCode } from '../input/autoformat.js';
 import { enterAtBlockStart } from '../input/block-start.js';
+import { blockquoteNewline } from '../input/blockquote.js';
 import { dedentListItem, indentListItem, listBackspace, listNewline } from '../input/lists.js';
 import { tableEnter } from './table.js';
 import { toggleTaskAtCursor } from '../live-preview/interactions.js';
@@ -152,6 +153,13 @@ const bindings: KeyBinding[] = [
      превращал заголовок в обычный текст на глазах у человека, который ничего
      такого не просил (см. `input/block-start.ts`). */
   { key: 'Enter', run: enterAtBlockStart },
+  /* ДО listNewline: у `listNewline` есть общий откат на штатную
+     `continueMarkup` (`insertNewlineContinueMarkupCommand`), которая сама
+     умеет продолжать И цитаты — не только списки. Если бы `blockquoteNewline`
+     стояла после, `listNewline` перехватывала бы Enter внутри цитаты первой
+     через этот откат, и до собственной проверки цитаты дело бы не доходило
+     никогда (поймано падением всех новых тестов цитаты сразу). */
+  { key: 'Enter', run: blockquoteNewline },
   { key: 'Enter', run: listNewline },
   // Tab: сперва принять подсказку, потом вложенность списка (до 6 уровней).
   { key: 'Tab', run: acceptCompletion },

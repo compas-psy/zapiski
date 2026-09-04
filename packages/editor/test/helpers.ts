@@ -13,6 +13,7 @@ import type { EditorRuntime } from '../src/runtime.js';
 import { buildLivePreview } from '../src/live-preview/decorations.js';
 import { completeDivider, completeFencedCode } from '../src/input/autoformat.js';
 import { enterAtBlockStart } from '../src/input/block-start.js';
+import { blockquoteNewline } from '../src/input/blockquote.js';
 import { dedentListItem, indentListItem, listBackspace, listNewline } from '../src/input/lists.js';
 import { tableEnter } from '../src/commands/table.js';
 
@@ -104,13 +105,14 @@ export function makeView(doc: string, options: StateOptions = {}): EditorView {
  * команду CodeMirror, когда ни один наш обработчик не сработал.
  */
 
-/** Enter: код-блок → разделитель → таблица → начало размеченной строки → список → CM. */
+/** Enter: код-блок → разделитель → таблица → начало размеченной строки → цитата → список → CM. */
 export function pressEnter(view: EditorView): boolean {
   return (
     completeFencedCode(view) ||
     completeDivider(view) ||
     tableEnter(view) ||
     enterAtBlockStart(view) ||
+    blockquoteNewline(view) ||
     listNewline(view) ||
     insertNewlineAndIndent(view)
   );
