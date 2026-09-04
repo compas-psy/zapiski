@@ -89,9 +89,21 @@ jobs:
             return bits;
           };
 
+          /**
+           * Абсолютный путь к файлу — не секрет сам по себе, даже если имя
+           * переменной содержит SECRET/TOKEN/PASSWORD (`*_SECRET_FILE='/etc/…'`
+           * — обычное дело: секрет читается ИЗ этого пути, а не лежит в
+           * переменной как значение). Без этого исключения сканер путает
+           * «где лежит секрет» с «вот секрет» на каждой такой строке.
+           */
+          const looksLikePath = (value) => /^\.{0,2}\/[\w./-]+$/.test(value);
+
           /** Похоже ли значение на настоящий секрет, а не на пример в документации. */
           const looksRandom = (value) =>
-            !/[А-Яа-яЁё\s]/.test(value) && value.length >= 16 && entropy(value) >= 3.2;
+            !looksLikePath(value) &&
+            !/[А-Яа-яЁё\s]/.test(value) &&
+            value.length >= 16 &&
+            entropy(value) >= 3.2;
 
           const RULES = [
             { id: 'private-key', re: /-----BEGIN (RSA |EC |OPENSSH |PGP )?PRIVATE KEY-----/ },
