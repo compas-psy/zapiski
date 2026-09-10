@@ -29,11 +29,12 @@ describe.skipIf(noDatabase())('способы входа', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('без ключей Яндекса честно говорит «нет»', async () => {
-    /* Стенд поднимается без YANDEX_CLIENT_ID — тот же случай, что на сервере
-       до регистрации приложения в Яндекс OAuth. */
+  it('без ключей ни один способ не объявляется', async () => {
+    /* Стенд поднимается без YANDEX_CLIENT_ID и без SIMPASID_CLIENT_SECRET —
+       тот же случай, что на сервере до регистрации приложения у поставщика.
+       Объявить способ, которого нет, значит показать кнопку, ведущую в 404. */
     const response = await harness.app.inject({ method: 'GET', url: '/api/v1/auth/methods' });
-    expect(response.json()).toEqual({ yandex: false });
+    expect(response.json()).toEqual({ yandex: false, simpas: false });
   });
 
   it('в ответе нет ни ключей, ни адресов', async () => {

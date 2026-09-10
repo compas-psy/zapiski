@@ -7,6 +7,7 @@ import { pruneMagicTokens } from './services/accounts.ts';
 import { BlobStore } from './services/blobStore.ts';
 import { LiveBus } from './services/liveBus.ts';
 import { SmtpMailer } from './services/mailer.ts';
+import { createSimpas } from './services/simpas.ts';
 import { YandexOAuth } from './services/yandex.ts';
 import { createPracticeBridge, retryPracticeForwarding } from './services/practiceBridge.ts';
 import { pruneExpiredVersions } from './routes/versions.ts';
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
       from: env.MAIL_FROM,
     }),
     live: new LiveBus(),
+    simpas: createSimpas(env),
     yandex:
       env.YANDEX_CLIENT_ID && env.YANDEX_CLIENT_SECRET
         ? new YandexOAuth({

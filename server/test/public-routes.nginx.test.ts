@@ -182,6 +182,7 @@ describe('публичные страницы API проведены через 
       mailer: new MemoryMailer(),
       live: new LiveBus(),
       yandex: null,
+      simpas: null,
       practiceBridge: null,
       retention: { trialDays: 7, paidDays: 90 },
       now: () => new Date(),

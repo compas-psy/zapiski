@@ -3,6 +3,8 @@ import type { Db } from './db/pool.ts';
 import type { BlobStore } from './services/blobStore.ts';
 import type { LiveBus } from './services/liveBus.ts';
 import type { Mailer } from './services/mailer.ts';
+import type { SimpasClient } from '@simpas/id-client';
+
 import type { YandexOAuth } from './services/yandex.ts';
 import type { PracticeBridge } from './services/practiceBridge.ts';
 import type { RetentionPolicy } from './services/subscription.ts';
@@ -20,6 +22,8 @@ export interface AppContext {
   live: LiveBus;
   /** null, если YANDEX_CLIENT_ID/SECRET не заданы — вход по почте работает. */
   yandex: YandexOAuth | null;
+  /** Единый вход СИМПАС. `null` — ключ клиента не задан, способ не предлагается. */
+  simpas: SimpasClient | null;
   /**
    * null, если PRACTICE_INGEST_URL/SECRET не заданы (C4) — приём аналитики
    * работает как раньше, пересылки в контур ПРАКТИКИ просто нет; `index.ts`

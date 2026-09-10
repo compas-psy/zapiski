@@ -22,6 +22,7 @@
     "@fastify/cors": "^10.0.2",
     "@fastify/rate-limit": "^10.2.2",
     "@fastify/websocket": "^11.0.2",
+    "@simpas/id-client": "github:compas-psy/auth#main&path:/packages/id-client",
     "fastify": "^5.12.3",
     "nodemailer": "^9.1.1",
     "pg": "^8.13.1",

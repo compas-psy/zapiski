@@ -378,6 +378,9 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.2
         version: 11.3.0
+      '@simpas/id-client':
+        specifier: github:compas-psy/auth#main&path:/packages/id-client
+        version: https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client
       fastify:
         specifier: ^5.12.3
         version: 5.12.3
@@ -1163,6 +1166,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@simpas/id-client@https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client':
+    resolution: {path: /packages/id-client, tarball: https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285}
+    version: 1.0.0
+
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
 
@@ -1711,6 +1718,9 @@ packages:
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
+
+  jose@5.10.0:
+    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
 
   js-tokens@10.0.0:
     resolution: {integrity: sha512-lM/UBzQmfJRo9ABXbPWemivdCW8V2G8FHaHdypQaIy523snUjog0W71ayWXTjiR+ixeMyVHN2XcpnTd/liPg/Q==}
@@ -3221,6 +3231,10 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
 
+  '@simpas/id-client@https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client':
+    dependencies:
+      jose: 5.10.0
+
   '@tauri-apps/api@2.11.1': {}
 
   '@tauri-apps/cli-darwin-arm64@2.11.4':
@@ -3806,6 +3820,8 @@ snapshots:
       '@isaacs/cliui': 8.0.2
     optionalDependencies:
       '@pkgjs/parseargs': 0.11.0
+
+  jose@5.10.0: {}
 
   js-tokens@10.0.0: {}
 

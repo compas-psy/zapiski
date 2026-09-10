@@ -9,6 +9,10 @@ import { ApiError, errors } from '../lib/errors.ts';
 import { signJwt, verifyJwt } from '../lib/jwt.ts';
 import { mailSent } from '../lib/messages.ts';
 import { isValidDeviceKey } from '../lib/vaultPath.ts';
+import { createPkcePair, createState, SimpasError } from '@simpas/id-client';
+
+import { openVerifier, sealVerifier, simpasRedirectUri } from '../services/simpas.ts';
+import { linkSimpasIdentity } from '../services/simpasLinks.ts';
 import { describeMailError } from '../services/mailer.ts';
 import { authOf } from '../plugins/auth.ts';
 import {
@@ -149,6 +153,11 @@ const yandexCallbackQuery = z.object({
   state: z.string().min(1).max(4096),
   error: z.string().optional(),
 });
+
+/* Единый вход СИМПАС. Форма та же, что у Яндекса: другой поставщик, но те же
+   согласия, тот же device_id и тот же возврат в оболочку. */
+const simpasStartQuery = yandexStartQuery;
+const simpasCallbackQuery = yandexCallbackQuery;
 
 const refreshBody = z.object({ refreshToken: z.string().min(16).max(512) });
 const analyticsBody = z.object({ optIn: z.boolean() });
@@ -336,6 +345,9 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
          значение по умолчанию, и «настроен» по нему не отличить от
          «оставлен как есть». Врать о готовности хуже, чем молчать. */
       yandex: ctx.yandex !== null,
+      /* Единый вход. Признак — наличие ключа клиента: без него обмен кода
+         невозможен, и объявлять способ значило бы обещать кнопку в 404. */
+      simpas: ctx.simpas !== null,
     }),
   );
 
@@ -399,6 +411,118 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const user = await upsertUserByYandex(ctx.db, identity.id, identity.email);
+    await recordConsents(
+      ctx.db,
+      user.id,
+      {
+        termsVersion: typeof state.claims['terms'] === 'string' ? state.claims['terms'] : null,
+        marketingOptIn: state.claims['marketing'] === true,
+      },
+      ctx.now(),
+    );
+    const session = await issueSession(ctx, user.id, deviceKey, platform);
+    return respondWithSession(ctx, reply, session, undefined, platform, nonce);
+  }));
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Единый вход СИМПАС (`auth.cmpas.ru`)
+  //
+  // Рецепт: `compas-psy/auth`, `docs/integration/zapiski.md`. Клиент заведён у
+  // них как `zapiski-web`, проверка подлинности `client_secret_basic`.
+  //
+  // Обмен кода и проверка id_token — ИХ SDK, а не свой `fetch` к `/token`:
+  // разбор ответа, проверка подписи и сверка `nonce` — то место, где ошибаются,
+  // и ошибка выглядит как работающий вход.
+  // ───────────────────────────────────────────────────────────────────────────
+
+  app.get('/api/v1/auth/simpas', browser(ctx, 'Вход через СИМПАС не удался', async (request, reply) => {
+    const simpas = ctx.simpas;
+    if (simpas === null) throw errors.notFound('simpas_not_configured');
+
+    const parsed = simpasStartQuery.safeParse(request.query);
+    if (!parsed.success) throw errors.badRequest('device_id_required');
+
+    const { codeVerifier, codeChallenge } = createPkcePair();
+    const oidcNonce = createState();
+
+    /* Состояние — короткоживущий подписанный JWT, как у Яндекса: отдельной
+       таблицы под OAuth не заводим. Верификатор PKCE едет ЗАПЕЧАТАННЫМ:
+       подпись содержимое не прячет, а верификатор — секрет по определению
+       (`services/simpas.ts`). */
+    const state = signJwt(
+      {
+        sub: 'oauth',
+        terms: parsed.data.terms,
+        marketing: parsed.data.marketing === '1',
+        sid: 'oauth',
+        did: parsed.data.device_id,
+        nonce: parsed.data.nonce ?? null,
+        typ: 'simpas_state',
+        platform: parsed.data.platform ?? null,
+        pkce: sealVerifier(codeVerifier, ctx.env.AUTH_SECRET),
+        oidc_nonce: oidcNonce,
+      },
+      ctx.env.AUTH_SECRET,
+      600,
+      ctx.now().getTime(),
+    );
+
+    const url = await simpas.getAuthorizationUrl({
+      redirectUri: simpasRedirectUri(ctx.env),
+      state,
+      nonce: oidcNonce,
+      codeChallenge,
+    });
+    return reply.redirect(url, 302);
+  }));
+
+  app.get('/api/v1/auth/simpas/callback', browser(ctx, 'Вход через СИМПАС не удался', async (request, reply) => {
+    const simpas = ctx.simpas;
+    if (simpas === null) throw errors.notFound('simpas_not_configured');
+
+    const parsed = simpasCallbackQuery.safeParse(request.query);
+    if (!parsed.success) throw errors.badRequest('bad_oauth_callback');
+    if (parsed.data.error !== undefined || parsed.data.code === undefined) {
+      throw errors.badRequest('oauth_declined');
+    }
+
+    const state = verifyJwt(parsed.data.state, ctx.env.AUTH_SECRET, ctx.now().getTime());
+    if (!state.ok || state.claims.typ !== 'simpas_state') throw errors.badRequest('bad_state');
+    const deviceKey = state.claims.did;
+    if (typeof deviceKey !== 'string' || !isValidDeviceKey(deviceKey)) {
+      throw errors.badRequest('bad_state');
+    }
+    const platform = typeof state.claims['platform'] === 'string' ? state.claims['platform'] : null;
+    const nonce = typeof state.claims['nonce'] === 'string' ? state.claims['nonce'] : null;
+
+    const sealed = state.claims['pkce'];
+    const oidcNonce = state.claims['oidc_nonce'];
+    if (typeof sealed !== 'string' || typeof oidcNonce !== 'string') {
+      throw errors.badRequest('bad_state');
+    }
+    const codeVerifier = openVerifier(sealed, ctx.env.AUTH_SECRET);
+    if (codeVerifier === null) throw errors.badRequest('bad_state');
+
+    let claims;
+    try {
+      const tokens = await simpas.exchangeCode({
+        code: parsed.data.code,
+        codeVerifier,
+        redirectUri: simpasRedirectUri(ctx.env),
+      });
+      /* Сверка `nonce` обязательна и делается ЗДЕСЬ, а не «когда-нибудь»: без
+         неё id_token от другого входа подошёл бы к этому состоянию. */
+      claims = await simpas.verifyIdToken(tokens.id_token, { nonce: oidcNonce });
+    } catch (error) {
+      const code = error instanceof SimpasError ? error.code : 'exchange_failed';
+      request.log.warn({ event: 'simpas_login_failed', stage: code }, 'вход не удался');
+      throw errors.badRequest(`simpas_${code}`);
+    }
+
+    const email = typeof claims.email === 'string' ? claims.email : null;
+    if (email === null || email === '') throw errors.badRequest('simpas_no_email');
+
+    const user = await linkSimpasIdentity(ctx.db, { sub: claims.sub, email });
     await recordConsents(
       ctx.db,
       user.id,

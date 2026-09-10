@@ -708,6 +708,10 @@ jobs:
           # Т-Банк: имена ровно те, что заказчик завёл в секретах репозитория.
           TINKOFF_TERMINAL_KEY: ${{ secrets.TINKOFF_TERMINAL_KEY }}
           TINKOFF_PASSWORD: ${{ secrets.TINKOFF_PASSWORD }}
+          # Единый вход СИМПАС. Только ключ: адрес сервиса и имя клиента
+          # (`zapiski-web`) секретами не являются и стоят значениями по
+          # умолчанию в server/src/config/env.ts.
+          SIMPASID_CLIENT_SECRET: ${{ secrets.SIMPASID_CLIENT_SECRET }}
         run: |
           set -euo pipefail
           # Секреты уезжают одним base64-блобом, а не отдельными аргументами.
@@ -718,9 +722,10 @@ jobs:
           #   2) пустой аргумент схлопывается при склейке ssh-команды, и
           #      незаданный ID сдвинул бы SECRET на его место. Один блоб
           #      непустой всегда, поэтому позиции не разъезжаются.
-          payload_b64="$(printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\nTINKOFF_TERMINAL_KEY=%s\nTINKOFF_PASSWORD=%s\n' \
+          payload_b64="$(printf 'YANDEX_CLIENT_ID=%s\nYANDEX_CLIENT_SECRET=%s\nTINKOFF_TERMINAL_KEY=%s\nTINKOFF_PASSWORD=%s\nSIMPASID_CLIENT_SECRET=%s\n' \
             "${YANDEX_CLIENT_ID}" "${YANDEX_CLIENT_SECRET}" \
-            "${TINKOFF_TERMINAL_KEY}" "${TINKOFF_PASSWORD}" | base64 -w0)"
+            "${TINKOFF_TERMINAL_KEY}" "${TINKOFF_PASSWORD}" \
+            "${SIMPASID_CLIENT_SECRET}" | base64 -w0)"
 
           ssh -i ~/.ssh/deploy_key \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \

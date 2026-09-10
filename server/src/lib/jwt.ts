@@ -16,7 +16,10 @@ export interface JwtClaims {
   sid: string;
   /** device id (внутренний uuid устройства) */
   did: string;
-  typ: 'access' | 'oauth_state';
+  /* 'simpas_state' — состояние единого входа СИМПАС: тот же короткоживущий
+     подписанный state, что у Яндекса, но со своим именем, чтобы состояние
+     одного поставщика нельзя было предъявить на возврате другого. */
+  typ: 'access' | 'oauth_state' | 'simpas_state';
   iat: number;
   exp: number;
   /** Свободные поля для короткоживущего state OAuth. */

@@ -52,6 +52,8 @@ export interface Harness {
 
 export interface HarnessOptions {
   env?: Partial<Record<string, string>>;
+  /** Подставной клиент единого входа: настоящий ходил бы в сеть. */
+  simpas?: AppContext['simpas'];
 }
 
 export async function createHarness(options: HarnessOptions = {}): Promise<Harness> {
@@ -84,6 +86,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     mailer,
     live: new LiveBus(),
     yandex: null,
+    simpas: options.simpas ?? null,
     // Как в проде: env по умолчанию не задаёт PRACTICE_INGEST_URL/SECRET, и
     // мост выключен. Тесты моста (C4) подменяют `harness.ctx.practiceBridge`
     // напрямую (тот же приём, что для mailer/now) — ctx общий объект,

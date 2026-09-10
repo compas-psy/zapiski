@@ -52,6 +52,23 @@ const schema = z.object({
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'BLOB_ENCRYPTION_KEY: ожидаются 64 шестнадцатеричных знака'),
 
+  /*
+   * Единый вход СИМПАС (`auth.cmpas.ru`). Клиент заведён в их реестре как
+   * `zapiski-web`, проверка подлинности — `client_secret_basic`.
+   *
+   * Значения по умолчанию стоят у всего, кроме ключа: адрес их сервиса и имя
+   * клиента — не секреты, они записаны в issue интеграции и в их реестре.
+   * Ключ значения по умолчанию не имеет и иметь не может.
+   *
+   * Признак «настроено» — наличие КЛЮЧА, а не адреса: без него обмен кода
+   * невозможен, и предлагать человеку кнопку было бы обманом.
+   */
+  SIMPASID_ISSUER: z.string().url().default('https://auth.cmpas.ru'),
+  SIMPASID_CLIENT_ID: z.string().default('zapiski-web'),
+  SIMPASID_CLIENT_SECRET: z.string().min(1).optional(),
+  /** Пусто — соберём из `PUBLIC_BASE_URL`; порядок имён как у Яндекса. */
+  SIMPASID_REDIRECT_URI: z.string().url().optional(),
+
   /** HS256-секрет для access-JWT. Минимум 32 символа. */
   AUTH_SECRET: z.string().min(32),
   AUTH_ACCESS_TTL_SECONDS: int(15 * 60),
