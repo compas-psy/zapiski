@@ -68,21 +68,38 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
   const [marketing, setMarketing] = useState(false);
   const [busy, setBusy] = useState(false);
   /**
-   * Умеет ли сервер вход через Яндекс. `null` — ещё не спросили.
+   * Какие способы входа умеет сервер. `null` — ещё не спросили.
    *
-   * Кнопка показывалась всегда и по нажатию уводила в системный браузер, где
-   * без настроенного client_id лежал голый JSON `404 yandex_not_configured`.
-   * Человек возвращался ни с чем и без единого слова о причине — ровно то, на
-   * что жаловался пользователь.
-   *
-   * До ответа кнопка рисуется: сервер отвечает за миллисекунды, и мигание
-   * кнопкой на каждом открытии экрана хуже, чем краткая её жизнь в редком
-   * случае, когда Яндекс не настроен.
+   * Спрашивается затем, чтобы не показывать кнопку, ведущую в тупик: без
+   * ключей сервер отвечает 404, а человек к этому моменту уже в системном
+   * браузере и видит голый JSON. Недоступность сети — не повод прятать
+   * кнопку: за ней всё равно откроется браузер.
    */
-  const [yandexReady, setYandexReady] = useState<boolean | null>(null);
+  const [methods, setMethods] = useState<{ yandex: boolean; simpas: boolean } | null>(null);
+
+  /**
+   * Аварийная дверь почтового входа: без кнопки, но достижимая по адресу
+   * `?door=email`.
+   *
+   * Просьба агента единого входа, и она обоснована его же опытом: «маршрут, до
+   * которого человеку не добраться, аварийным путём не является». У ПРАКТИКИ
+   * такая дверь уже пригодилась в день, когда сломался вход через Яндекс, —
+   * кнопки на экране при этом не было.
+   *
+   * Раз СИМПАС становится единственной дверью, его недоступность = наша
+   * недоступность для новых входов. Эта дверь — то, чем это лечится, пока
+   * СИМПАС не поднимется.
+   */
+  const emailDoor =
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('door') === 'email';
+
+  /* Единый вход настроен и человек не пришёл за аварийной дверью — тогда на
+     экране ровно одна кнопка. Решение учредителя: Яндекс и почта уходят. */
+  const onlySimpas = methods?.simpas === true && !emailDoor;
 
   useEffect(() => {
-    void app.yandexAvailable().then(setYandexReady);
+    void app.loginMethods().then(setMethods);
   }, [app]);
 
   useEffect(() => {
@@ -197,57 +214,60 @@ export function SignInScreen({ initialStage = 'form', gate = false }: SignInScre
             </label>
             <p className="za-muted za-hint">{strings.signIn.consentMarketingHint}</p>
 
-            {yandexReady !== false ? (
+            {onlySimpas ? (
+              <Button
+                variant="primary"
+                fullWidth
+                onClick={() => void app.startSimpasSignIn({ marketing })}
+              >
+                {strings.signIn.simpas}
+              </Button>
+            ) : (
               <>
+                {methods?.yandex !== false ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      fullWidth
+                      iconStart={
+                        <img
+                          className="za-yandex-logo"
+                          src={YANDEX_ID_LOGO}
+                          alt=""
+                          width={20}
+                          height={20}
+                        />
+                      }
+                      onClick={() => void app.startYandexSignIn({ marketing })}
+                    >
+                      {strings.signIn.yandex}
+                    </Button>
+
+                    <div className="za-divider-text">{strings.signIn.divider}</div>
+                  </>
+                ) : null}
+
+                <TextField
+                  type="email"
+                  mono
+                  label={strings.signIn.emailLabel}
+                  placeholder={strings.signIn.emailPlaceholder}
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                />
                 <Button
-                  variant="outline"
+                  variant="secondary"
                   fullWidth
-                  iconStart={
-                    <img
-                      className="za-yandex-logo"
-                      src={YANDEX_ID_LOGO}
-                      alt=""
-                      width={20}
-                      height={20}
-                    />
-                  }
-                  onClick={() => void app.startYandexSignIn({ marketing })}
+                  loading={busy || state.authBusy}
+                  disabled={!email.includes('@')}
+                  onClick={() => void sendLink()}
                 >
-                  {strings.signIn.yandex}
+                  {strings.signIn.sendLink}
                 </Button>
-
-                <div className="za-divider-text">{strings.signIn.divider}</div>
               </>
-            ) : null}
+            )}
 
-            <TextField
-              type="email"
-              mono
-              label={strings.signIn.emailLabel}
-              placeholder={strings.signIn.emailPlaceholder}
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-            <Button
-              variant="secondary"
-              fullWidth
-              loading={busy || state.authBusy}
-              disabled={!email.includes('@')}
-              onClick={() => void sendLink()}
-            >
-              {strings.signIn.sendLink}
-            </Button>
-
-            {/*
-              Подсказка, а не «успех».
-
-              Стояла зелёной плашкой с галочкой — до того, как что-либо
-              произошло. Заказчик прочитал её как тост о результате: «внизу
-              зелёный тост, где упоминается смс, который мы не отправляем».
-              Зелёное с галочкой обязано означать случившееся; обещание — это
-              обычная строка под кнопкой.
-            */}
             <p className="za-muted">{strings.signIn.promise}</p>
             {state.authError !== null ? <p className="za-muted">{state.authError}</p> : null}
           </>

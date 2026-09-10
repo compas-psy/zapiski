@@ -1335,6 +1335,26 @@ export class AppController {
   }
 
   /** Яндекс ID — основной путь входа. Открывается системным браузером. */
+  /** Какие способы входа умеет сервер. Экран спрашивает один раз. */
+  async loginMethods(): Promise<{ yandex: boolean; simpas: boolean }> {
+    return this.session.loginMethods();
+  }
+
+  /**
+   * Вход через единый СИМПАС — системным браузером, как и Яндекс.
+   *
+   * Чужая страница входа открывается СВОИМ окном браузера намеренно: внутри
+   * нашего WebView человеку неоткуда узнать, кому он отдаёт пароль.
+   */
+  async startSimpasSignIn(consents: Consents): Promise<void> {
+    this.patch({ authError: null });
+    try {
+      await this.host.openExternal(await this.session.simpasUrl(consents));
+    } catch (error) {
+      this.patch({ authError: this.authMessage(error) });
+    }
+  }
+
   async startYandexSignIn(consents: Consents): Promise<void> {
     this.patch({ authError: null });
     try {

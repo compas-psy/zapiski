@@ -215,6 +215,48 @@ export class SessionStore {
   }
 
   /**
+   * Адрес начала входа через единый СИМПАС.
+   *
+   * Форма та же, что у Яндекса: другой поставщик, но те же согласия, тот же
+   * device_id и тот же возврат в оболочку.
+   */
+  async simpasUrl(consents: Consents): Promise<string> {
+    const deviceId = await this.deviceId();
+    const nonce = await this.freshNonce();
+    const query = new URLSearchParams({
+      device_id: deviceId,
+      platform: this.platform,
+      terms: LEGAL_VERSION,
+      marketing: consents.marketing ? '1' : '0',
+      nonce,
+    });
+    return `${this.base}/auth/simpas?${query.toString()}`;
+  }
+
+  /**
+   * Какие способы входа сервер реально умеет.
+   *
+   * Один запрос вместо двух: экрану нужны оба признака сразу, а спрашивать
+   * `/auth/methods` дважды подряд — лишний круг и лишний повод разъехаться,
+   * если ответы придут разными.
+   *
+   * Недоступность сети трактуется в пользу СИМПАС (`simpas: true`): за
+   * кнопкой всё равно откроется браузер, и разбираться с оффлайном будет он.
+   * Прятать единственную дверь из-за пропавшей сети нельзя — человек решит,
+   * что войти нечем.
+   */
+  async loginMethods(): Promise<{ yandex: boolean; simpas: boolean }> {
+    try {
+      const response = await this.send(`${this.base}/auth/methods`, { method: 'GET' });
+      if (!response.ok) return { yandex: false, simpas: false };
+      const body = (await response.json()) as { yandex?: unknown; simpas?: unknown };
+      return { yandex: body.yandex === true, simpas: body.simpas === true };
+    } catch {
+      return { yandex: true, simpas: true };
+    }
+  }
+
+  /**
    * Умеет ли сервер вход через Яндекс.
    *
    * Спрашивается затем, чтобы не показывать кнопку, ведущую в тупик: без
