@@ -27,6 +27,8 @@ import { ensureQuotaRow } from '../../src/services/quota.ts';
  */
 
 export const TEST_AUTH_SECRET = 'test-secret-for-hs256-not-used-anywhere-else';
+/** Ключ тома для стенда: не совпадает ни с одним боевым и никуда не выкладывается. */
+export const TEST_BLOB_KEY = '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff';
 
 export function databaseUrl(): string | null {
   const url = process.env['TEST_DATABASE_URL'];
@@ -62,6 +64,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
     DATABASE_URL: url,
     AUTH_SECRET: TEST_AUTH_SECRET,
     BLOB_ROOT: blobRoot,
+    BLOB_ENCRYPTION_KEY: TEST_BLOB_KEY,
     LOG_LEVEL: 'silent',
     PUBLIC_BASE_URL: 'https://zapiski.test',
     ...options.env,
@@ -77,7 +80,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
   const ctx: AppContext = {
     env,
     db,
-    blobs: new BlobStore(blobRoot),
+    blobs: new BlobStore(blobRoot, Buffer.from(env.BLOB_ENCRYPTION_KEY, 'hex')),
     mailer,
     live: new LiveBus(),
     yandex: null,
