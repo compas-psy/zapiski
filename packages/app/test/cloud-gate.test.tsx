@@ -86,6 +86,41 @@ describe('без входа отказ называется своим имен�
   });
 });
 
+describe('«Синхронизировать сейчас» не молчит', () => {
+  /*
+   * Заказчик: «когда нажимаю на синхронизацию, не происходит ничего». Так и
+   * было: без подключённого бэкенда `syncNow` выходил первой же строкой, не
+   * сказав ни слова. Человек нажимает и заключает, что сломано приложение —
+   * ровно тот же дефект, что «Справка есть, а дороги к ней нет».
+   */
+  async function toastsOf(prefs: Record<string, unknown>): Promise<string[]> {
+    const host = createTestHost({ files: { 'Идеи.md': '# Идеи\n' }, prefs });
+    const app = new AppController(host);
+    await app.boot();
+    const said: string[] = [];
+    app.setToastSink((request) => said.push(request.message));
+    await app.syncNow();
+    app.dispose();
+    return said;
+  }
+
+  it('без выбранного хранилища объясняет, что синхронизировать не с чем', async () => {
+    const said = await toastsOf({ onboarded: true });
+
+    expect(said, 'нажатие осталось без ответа').not.toEqual([]);
+    expect(said).toContain(ru.errors.syncNoBackend);
+  });
+
+  it('облако выбрано, но вход истёк — зовёт войти, а не жалуется на синк', async () => {
+    const said = await toastsOf({ onboarded: true, 'sync.backend': 'zapiski' });
+
+    expect(said).toContain(ru.errors.cloudSignInAgain);
+    expect(said, 'сказано «не с чем синхронизировать» там, где нужен вход').not.toContain(
+      ru.errors.syncNoBackend,
+    );
+  });
+});
+
 describe('чужие бэкенды это не трогает', () => {
   it('WebDAV подключается как обычно', async () => {
     const { WebDAVBackend } = await import('@zapiski/core');

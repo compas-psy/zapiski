@@ -19,6 +19,8 @@ export const en: Catalog = {
     cloudSignInAgain: 'Your cloud session expired — sign in again to resume syncing',
     cloudSyncDisabled:
       'The cloud works in the Windows, macOS and Android apps — a browser has nowhere safe to keep the encryption key. Your notes stay on this device',
+    syncNoBackend:
+      'Notes live on this device only — there is nothing to sync with. Pick a storage in settings',
     settingNotSaved: 'Could not save the setting — it will revert on restart',
     webdavAuth: 'The server did not accept the login or password',
     webdavUnreachable: 'The server is not responding · Retry',

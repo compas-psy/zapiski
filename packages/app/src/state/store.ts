@@ -4229,7 +4229,28 @@ export class AppController {
 
   async syncNow(options: { announce?: boolean } = {}): Promise<void> {
     const engine = this.engine;
-    if (!engine) return;
+    if (!engine) {
+      /*
+       * Молчаливый отказ — тот же дефект, за который мы уже платили: человек
+       * нажимает «Синхронизировать сейчас» и не получает НИЧЕГО, даже
+       * причины, и заключает, что сломано приложение.
+       *
+       * Причин ровно две, и они лечатся разным. Облако выбрано, но вход
+       * истёк — тогда нужен вход, и кнопка входа прилагается к сообщению.
+       * Хранилище не выбрано вовсе — тогда синхронизировать действительно не
+       * с чем, и сказать надо именно это, а не «ошибка синхронизации».
+       */
+      if (this.state.cloudNeedsSignIn) {
+        this.toast({
+          message: this.strings.errors.cloudSignInAgain,
+          actionLabel: this.strings.settings.account.signIn,
+          onAction: () => this.beginSignIn({ name: 'settings', section: 'sync' }),
+        });
+      } else {
+        this.toast({ message: this.strings.errors.syncNoBackend });
+      }
+      return;
+    }
     if (!this.state.online) {
       /* Оффлайн — нормальный режим, а не сбой (SCREENS §10). */
       this.patch({ sync: { ...this.state.sync, state: 'offline' }, syncError: null });
