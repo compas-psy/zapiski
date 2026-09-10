@@ -685,7 +685,7 @@ function SyncSection(): ReactNode {
       {screenState === 'error' && state.syncError ? (
         <div className="za-row-between">
           <span className="za-muted">{state.syncError}</span>
-          <Button variant="text" size="compact" onClick={() => void app.syncNow()}>
+          <Button variant="text" size="compact" onClick={() => void app.syncNow({ byHand: true })}>
             {strings.actions.retry}
           </Button>
         </div>

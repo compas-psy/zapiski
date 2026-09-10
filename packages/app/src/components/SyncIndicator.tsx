@@ -50,7 +50,7 @@ export function SyncIndicator(): ReactNode {
           <Button
             variant="secondary"
             onClick={() => {
-              void app.syncNow();
+              void app.syncNow({ byHand: true });
               setOpen(false);
             }}
           >

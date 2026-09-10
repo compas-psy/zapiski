@@ -99,7 +99,7 @@ describe('«Синхронизировать сейчас» не молчит', 
     await app.boot();
     const said: string[] = [];
     app.setToastSink((request) => said.push(request.message));
-    await app.syncNow();
+    await app.syncNow({ byHand: true });
     app.dispose();
     return said;
   }
@@ -118,6 +118,26 @@ describe('«Синхронизировать сейчас» не молчит', 
     expect(said, 'сказано «не с чем синхронизировать» там, где нужен вход').not.toContain(
       ru.errors.syncNoBackend,
     );
+  });
+
+  it('автоматический заход молчит — тост не лезет поверх панели', async () => {
+    /*
+     * Куплено дорого: объяснение, показанное на КАЖДОМ автоматическом заходе,
+     * на телефоне ложилось поверх панели начертаний и делало «Ж», «К», «Ч»,
+     * «З» ненажимаемыми — поймала браузерная проверка check-inline-format.mjs
+     * через полчаса после того, как объяснение было добавлено. Человек об
+     * автоматическом заходе не просил, значит и объяснять ему нечего.
+     */
+    const host = createTestHost({ files: { 'Идеи.md': '# Идеи\n' }, prefs: { onboarded: true } });
+    const app = new AppController(host);
+    await app.boot();
+    const said: string[] = [];
+    app.setToastSink((request) => said.push(request.message));
+
+    await app.syncNow();
+
+    expect(said, 'автоматический заход заговорил без спроса').toEqual([]);
+    app.dispose();
   });
 });
 
