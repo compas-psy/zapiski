@@ -1,20 +1,24 @@
 /**
- * SEC-001 — приёмка A–D через НАСТОЯЩИЙ экран настроек.
+ * Приёмка облака через НАСТОЯЩИЙ экран настроек.
  *
- * Проверяется не наличие классов, а сценарий человека: нажал «Включить
- * облако» → получил код → подтвердил → облако работает; перезапустил → код
- * не спрашивают; на втором устройстве ввёл код → заметки открылись; ввёл
- * чужой код → понятная ошибка и НИЧЕГО не сломалось.
+ * ── Что изменилось ──────────────────────────────────────────────────────────
  *
- * Сервер здесь подставной, но повторяет настоящий: одна строка ключа на
- * аккаунт, блобы по адресам, отказ 409 при попытке перезаписать чужой ключ.
- * Хранилище ключа устройства — тоже подставное, зато переживает
- * «перезапуск», как Keychain/Keystore/DPAPI.
+ * Прежний набор проверял сценарий с кодом восстановления: включил → получил
+ * код → подтвердил → на втором устройстве ввёл. Решение владельца этот
+ * сценарий отменяет: сквозное шифрование уходит из MVP, кода больше нет.
+ * Поэтому проверяется другое — что человеку теперь вообще ничего не нужно
+ * вводить, и что тот, кто успел включить шифрование, не потерял заметки.
  *
- * Остальные буквы приёмки живут там, где им место:
- *   E — `cloud-access.test.ts` (fail-closed фабрика: ключа нет → бэкенда нет);
- *   F — `server/test/sec001.acceptance.test.ts` (сервер против настоящей
- *       Postgres: ни одного открытого байта в blobs/versions/crdt).
+ * ── Про адреса в стенде ─────────────────────────────────────────────────────
+ *
+ * Стенд отвечает на СЕРВЕРНЫЕ адреса (`/vault/manifest`,
+ * `/vault/blob/<путь>`, `/vault/crdt/...`), а не на адреса ядра
+ * (`/vault/list`, `/vault/blob?path=`): между ними стоит переводчик в
+ * `state/cloud.ts`, и подставлять надо то, что уходит из приложения наружу.
+ * Проверять стоит именно этот слой — он и есть прикладной путь.
+ *
+ * Каждая проверка смотрит в облако, а не только на состояние: «состояние
+ * стало ready» проходит и тогда, когда ни один байт до сервера не долетел.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { PlatformCapabilities, VaultStorage } from '@zapiski/core';
@@ -61,6 +65,11 @@ function sharedCloud(): {
         syncKeyRow = body;
         return json({ enrolled: true }, 201);
       }
+      if (method === 'DELETE') {
+        const had = syncKeyRow !== null;
+        syncKeyRow = null;
+        return json({ removed: had }, 200);
+      }
       return syncKeyRow === null
         ? json({ enrolled: false }, 200)
         : json({ enrolled: true, ...syncKeyRow }, 200);
@@ -93,6 +102,13 @@ function sharedCloud(): {
       const found = blobs.get(address);
       if (!found) return new Response(null, { status: 404 });
       return new Response(found as unknown as BodyInit, { status: 200, headers: { etag: '"1"' } });
+    }
+
+    /* CRDT-обмен: прикладной слой переписывает push/pull ядра в
+       `/vault/crdt/:noteId`. Без ответа синк честно падает. */
+    if (url.pathname.startsWith('/api/v1/vault/crdt')) return json({ updates: [], accepted: 0 }, 200);
+    if (url.pathname === '/api/v1/auth/refresh') {
+      return json({ accessToken: 'токен', refreshToken: 'обновление' }, 200);
     }
 
     return new Response(null, { status: 404 });
@@ -155,159 +171,168 @@ async function openCloudCard(): Promise<void> {
   fireEvent.click(card as HTMLButtonElement);
 }
 
-describe('SEC-001 A: первое устройство', () => {
-  it('включил облако → увидел код → подтвердил → облако работает', async () => {
+describe('A: первое устройство', () => {
+  it('вошёл — облако уже работает, вводить и нажимать нечего', async () => {
     const cloud = sharedCloud();
     vi.stubGlobal('fetch', cloud.fetch);
-    const { app } = await device(deviceKeystore(), { 'Личное/Дневник.md': '# Личное\n\nтревога\n' });
+    const { app } = await device(deviceKeystore(), { 'Идеи.md': '# Идеи\n' });
+
+    /* Ни одного нажатия: живая сессия — и облако подключилось само. Это и
+       есть требование «человек не должен заморачиваться»; прежде здесь была
+       цепочка из четырёх действий и код, который надо было сохранить. */
+    await waitFor(() => expect(app.getState().backendId).toBe('zapiski'));
+    expect(app.getState().cloudEncryption).toBe('ready');
+
+    /* Ключа аккаунта не появилось: ключей больше не создают. Появится —
+       значит прежний онбординг вернулся незаметно для всех. */
+    expect(cloud.syncKey(), 'создан ключ аккаунта, хотя онбординга больше нет').toBeNull();
+
+    await app.syncNow();
+    expect([...cloud.blobs.keys()], 'заметка не долетела до облака').toContain('Идеи.md');
+
     mountSettings(app);
     await openCloudCard();
-
-    /* 1. Обещание — теми словами, что решил заказчик. */
-    expect(await screen.findByText(ru.settings.sync.encryptionPromise)).toBeTruthy();
-
-    /* 2. Одна кнопка — «Включить облако». */
-    fireEvent.click(screen.getByRole('button', { name: ru.settings.sync.encryptionEnable }));
-
-    /* 3. Код показан один раз и он настоящий: длинный и разбит на группы. */
-    const shown = await screen.findByTestId('cloud-recovery-code');
-    const code = shown.textContent ?? '';
-    expect(code.length).toBeGreaterThan(20);
-    expect(code).toMatch(/^[0-9A-Z-]+$/);
-    /* Ключ на сервере — только обёрнутый: сам код туда не уезжал. */
-    expect(JSON.stringify(cloud.syncKey())).not.toContain(code.replace(/-/g, ''));
-
-    /* 4. Пока не подтвердил — облако НЕ подключено. */
-    expect(app.getState().backendId, 'облако включилось до подтверждения кода').toBeNull();
-
-    /* 5. «Я сохранил код восстановления» — и только теперь оно работает. */
-    fireEvent.click(screen.getByRole('button', { name: ru.settings.sync.recoverySaved }));
-    await waitFor(() => expect(app.getState().backendId).toBe('zapiski'));
-    expect(app.getState().cloudEncryption).toBe('encrypted_ready');
-    /* Код из состояния стёрт: второй раз его не показывают и негде взять. */
-    expect(app.getState().cloudRecoveryCode).toBeNull();
-
+    expect(await screen.findByText(ru.settings.sync.cloudReady)).toBeTruthy();
     app.dispose();
   });
 });
 
-describe('SEC-001 A: без входа кнопка не молчит', () => {
-  it('«Включить облако» без сессии ведёт входить, а не делает ничего', async () => {
+describe('A′: без входа кнопка не молчит', () => {
+  it('ведёт на экран входа, а не делает вид, что нажатия не было', async () => {
     const cloud = sharedCloud();
     vi.stubGlobal('fetch', cloud.fetch);
-    /* Облако выбрано раньше, а сессия не пережила переустановку: карточка
-       раскрыта, ключа нет, входа нет. */
     const host = createTestHost({
-      prefs: { onboarded: true, 'sync.backend': 'zapiski' },
+      files: {},
       platform: { kind: 'windows', biometrics: deviceKeystore() },
+      prefs: { onboarded: true },
     });
     const app = new AppController(host);
     await app.boot();
+
     mountSettings(app);
-    const beginSignIn = vi.spyOn(app, 'beginSignIn');
+    await openCloudCard();
+    fireEvent.click(await screen.findByRole('button', { name: ru.settings.sync.cloudEnable }));
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: ru.settings.sync.encryptionEnable }),
-    );
-
-    expect(beginSignIn, 'нажатие не сделало ничего и ничего не сказало').toHaveBeenCalled();
-    expect(cloud.syncKey(), 'ключ аккаунта создан без входа').toBeNull();
+    await waitFor(() => expect(app.getState().route.name).toBe('signin'));
     app.dispose();
   });
 });
 
-describe('SEC-001 B: перезапуск приложения', () => {
-  it('облако поднимается само, кода не спрашивают', async () => {
+describe('B: перезапуск приложения', () => {
+  it('облако возвращается само — ничего не спрашивают', async () => {
+    const cloud = sharedCloud();
+    vi.stubGlobal('fetch', cloud.fetch);
+    /* Общие настройки и общее хранилище ключа = ТО ЖЕ устройство. Иначе
+       «перезапуск» проверял бы новое устройство и доказывал не то. */
+    const prefsStore = memoryPreferences({ onboarded: true, 'auth.session': SESSION });
+    const keystore = deviceKeystore();
+
+    const first = await device(keystore, { 'Идеи.md': '# Идеи\n' }, prefsStore);
+    expect(await first.app.connectCloud()).toBe(true);
+    await first.app.syncNow();
+    first.app.dispose();
+
+    // Перезапуск: только boot(), без единого нажатия.
+    const second = await device(keystore, {}, prefsStore);
+    await waitFor(() => expect(second.app.getState().backendId).toBe('zapiski'));
+    second.app.dispose();
+  });
+});
+
+describe('C: второе устройство', () => {
+  it('только вход — и заметки первого уже здесь', async () => {
+    const cloud = sharedCloud();
+    vi.stubGlobal('fetch', cloud.fetch);
+
+    const first = await device(deviceKeystore(), { 'Идеи.md': '# Идеи\n' });
+    expect(await first.app.connectCloud()).toBe(true);
+    await first.app.syncNow();
+    first.app.dispose();
+
+    /* Второе устройство: своё хранилище ключа, пустое. Прежде здесь
+       требовался код восстановления; теперь — ничего. */
+    const second = await device(deviceKeystore(), {});
+    expect(await second.app.connectCloud()).toBe(true);
+    await second.app.syncNow();
+
+    await waitFor(() => expect(second.storage.read('Идеи.md')).resolves.not.toBeNull());
+    second.app.dispose();
+  });
+});
+
+describe('D: аккаунт, успевший включить прежнее шифрование', () => {
+  /**
+   * Заводит на общем облаке ключ и кладёт заметку шифротекстом.
+   *
+   * Через ПРИКЛАДНУЮ фабрику, а не через ядро напрямую: между ядром и
+   * сервером стоит переводчик адресов (`state/cloud.ts`), и посев в обход
+   * него разговаривал бы с сервером не на том языке.
+   */
+  async function encryptedAccount(
+    cloud: ReturnType<typeof sharedCloud>,
+    keystore: NonNullable<PlatformCapabilities['biometrics']>,
+  ): Promise<void> {
+    const core = await import('@zapiski/core');
+    const { createCloudBackend } = await import('../src/state/cloud.js');
+    const onboarding = new core.SyncKeyOnboarding({
+      baseUrl: 'https://zapiski.cmpas.ru',
+      fetch: cloud.fetch as never,
+      biometrics: keystore,
+    });
+    const created = await onboarding.create();
+    const session = {
+      current: () => SESSION,
+      accessToken: async () => SESSION.accessToken,
+      refresh: async () => null,
+    } as never;
+    const backend = createCloudBackend({
+      cloudBaseUrl: 'https://zapiski.cmpas.ru/api/v1',
+      session,
+      sync: created!.crypto,
+      fetch: cloud.fetch as never,
+    });
+    await backend.put('Идеи.md', new TextEncoder().encode('# Идеи\n'));
+    await backend.pushManifest(['Идеи.md']);
+  }
+
+  it('на устройстве с ключом переводится сам — заметки на месте', async () => {
     const cloud = sharedCloud();
     vi.stubGlobal('fetch', cloud.fetch);
     const keystore = deviceKeystore();
-    /* Настройки устройства переживают перезапуск — как настоящие. */
-    const prefs = memoryPreferences({ onboarded: true, 'auth.session': SESSION });
+    await encryptedAccount(cloud, keystore);
+    expect(cloud.syncKey(), 'предусловие: ключ аккаунта есть').not.toBeNull();
 
-    const { app: first } = await device(keystore, {}, prefs);
-    await first.enableCloudEncryption();
-    await first.confirmRecoveryCodeSaved();
-    expect(first.getState().backendId).toBe('zapiski');
-    first.dispose();
+    const { app } = await device(keystore, {});
+    expect(await app.connectCloud()).toBe(true);
 
-    /* Перезапуск: тот же keystore, те же настройки, новый процесс. Ничего
-       не зовём руками — только `boot()`, как при запуске приложения. */
-    const { app: restarted } = await device(keystore, {}, prefs);
-    await vi.waitFor(() =>
-      expect(
-        restarted.getState().backendId,
-        'после перезапуска облако не поднялось само',
-      ).toBe('zapiski'),
-    );
+    expect(app.getState().cloudEncryption).toBe('ready');
+    expect(cloud.syncKey(), 'ключ обязан быть снят после перевода').toBeNull();
+    expect([...cloud.blobs.keys()], 'заметка не вернулась по своему пути').toContain('Идеи.md');
     expect(
-      restarted.getState().cloudEncryption,
-      'после перезапуска у человека снова спросили код',
-    ).toBe('encrypted_ready');
-    expect(restarted.getState().cloudRecoveryCode, 'код показан второй раз').toBeNull();
-    restarted.dispose();
+      [...cloud.blobs.keys()].some((a) => /^[0-9a-f]{32}$/.test(a)),
+      'токенизированные копии остались',
+    ).toBe(false);
+    app.dispose();
   });
-});
 
-describe('SEC-001 C: второе устройство', () => {
-  it('просит код, принимает верный и подключает облако', async () => {
+  it('на устройстве без ключа — честное сообщение и НИЧЕГО разрушительного', async () => {
     const cloud = sharedCloud();
     vi.stubGlobal('fetch', cloud.fetch);
+    await encryptedAccount(cloud, deviceKeystore()); // ключ остался на ТОМ устройстве
+    const before = new Map(cloud.blobs);
 
-    const { app: first } = await device(deviceKeystore());
-    const code = await first.enableCloudEncryption();
-    expect(code).not.toBeNull();
-    await first.confirmRecoveryCodeSaved();
-    first.dispose();
+    const { app } = await device(deviceKeystore(), {}); // а это — другое
+    expect(await app.connectCloud()).toBe(false);
+    expect(app.getState().cloudEncryption).toBe('locked_elsewhere');
 
-    /* Другое устройство: своё пустое хранилище ключа. */
-    const { app: second } = await device(deviceKeystore());
-    mountSettings(second);
+    mountSettings(app);
     await openCloudCard();
+    expect(await screen.findByText(ru.settings.sync.cloudLockedTitle)).toBeTruthy();
 
-    expect(await screen.findByText(ru.settings.sync.recoveryEnterTitle)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText(ru.settings.sync.recoveryEnterLabel), {
-      target: { value: code as string },
-    });
-    fireEvent.click(screen.getByRole('button', { name: ru.settings.sync.recoveryUnlock }));
-
-    await waitFor(() => expect(second.getState().backendId).toBe('zapiski'));
-    expect(second.getState().cloudEncryption).toBe('encrypted_ready');
-    second.dispose();
-  });
-});
-
-describe('SEC-001 D: неверный код', () => {
-  it('понятная ошибка и ничего разрушительного', async () => {
-    const cloud = sharedCloud();
-    vi.stubGlobal('fetch', cloud.fetch);
-
-    const { app: first } = await device(deviceKeystore());
-    await first.enableCloudEncryption();
-    await first.confirmRecoveryCodeSaved();
-    const keyBefore = JSON.stringify(cloud.syncKey());
-    first.dispose();
-
-    const { app: second, storage } = await device(deviceKeystore(), { 'Своя.md': '# Своя\n' });
-    mountSettings(second);
-    await openCloudCard();
-    await screen.findByText(ru.settings.sync.recoveryEnterTitle);
-
-    /* Правильно набранный, но ЧУЖОЙ код: ключ им не разворачивается. */
-    fireEvent.change(screen.getByLabelText(ru.settings.sync.recoveryEnterLabel), {
-      target: { value: 'ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: ru.settings.sync.recoveryUnlock }));
-
-    /* Сказано человеческими словами... */
-    const message = await screen.findByText(
-      (text) => text === ru.settings.sync.recoveryWrong || text === ru.settings.sync.recoveryTypo,
-    );
-    expect(message).toBeTruthy();
-    /* ...и ничего не разрушено: ключ аккаунта на месте, заметки на месте,
-       облако не подключилось «наполовину». */
-    expect(JSON.stringify(cloud.syncKey())).toBe(keyBefore);
-    expect(second.getState().backendId).toBeNull();
-    expect(await storage.read('Своя.md')).not.toBeNull();
-    second.dispose();
+    /* Самое важное: заметки и ключ целы. «Сбросить и начать заново» — не тот
+       выход, который мы предлагаем человеку, у которого всё на месте. */
+    expect(cloud.syncKey()).not.toBeNull();
+    expect([...cloud.blobs.keys()].sort()).toEqual([...before.keys()].sort());
+    app.dispose();
   });
 });

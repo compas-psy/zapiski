@@ -1,24 +1,25 @@
 /**
- * SEC-001 — облако включено, и включено по ДВУМ условиям.
+ * Облако включено и доступно ВЕЗДЕ.
  *
  * ── Что здесь было раньше ───────────────────────────────────────────────────
  *
- * Этот файл назывался `cloud-kill-switch.test.tsx` и стерёг обратное:
- * `CLOUD_SYNC_ENABLED === false`. Выключатель ставили потому, что облако не
- * оборачивало содержимое заметки собственным ключом — сервер получал его как
- * есть. Дефекта больше нет: конверт AES-256-GCM под ключами из SMK, путь
- * заменён токеном, а прикладная фабрика физически не собирает бэкенд без
- * ключа (`state/cloud-access.ts`, `cloud-access.test.ts`, сквозной сценарий —
- * `packages/core/test/sec001.e2e.test.ts`).
+ * Файл дважды менял смысл вместе с продуктом, и это стоит держать перед
+ * глазами. Сначала он назывался `cloud-kill-switch.test.tsx` и стерёг
+ * `CLOUD_SYNC_ENABLED === false` — облако было выключено целиком, потому что
+ * содержимое уходило на сервер как есть. Потом стерёг ДВА условия: флаг и
+ * платформу, потому что ключ сквозного шифрования негде держать в браузере.
  *
  * ── Что стережётся теперь ───────────────────────────────────────────────────
  *
- * Второе условие никуда не делось и оно платформенное: ключ синка обязан
- * лежать в хранилище уровня Keychain/Keystore/DPAPI. У браузера аппаратного
- * эквивалента нет (design §3.1), поэтому в вебе Облако выключено ЧЕСТНО и по
- * названной причине — а не тихо и не «пока не успели». Именно это и
- * проверяется: что веб не предлагает того, чего не может, а Windows, macOS и
- * Android этим не задерживаются.
+ * Решение владельца — убрать сквозное шифрование из MVP и вернуть позже через
+ * внешнюю ключницу — снимает ВТОРОЕ условие: ключа на пути пользователя нет,
+ * хранить в вебе нечего, и платформенный замок стал запретом без причины. Он
+ * стоил дорого: облака не было ни в вебе, ни на телефоне без биометрии, и
+ * человек узнавал об этом, только добравшись до настроек.
+ *
+ * Поэтому здесь проверяется обратное прежнему: облако предлагается на КАЖДОЙ
+ * платформе, включая веб; отказ без входа ведёт на вход, а не в тупик; и
+ * чужие бэкенды всё это по-прежнему не трогает.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { CLOUD_SYNC_ENABLED, type PlatformCapabilities } from '@zapiski/core';
@@ -62,114 +63,23 @@ describe('выключатель снят — это решение, а не с�
   });
 });
 
-describe('в вебе Облако не предлагается — и причина названа', () => {
-  it('в настройках карточка есть, но помечена недоступной', async () => {
+describe('в вебе Облако предлагается наравне со всеми', () => {
+  it('в настройках карточка не помечена недоступной', async () => {
     const host = createTestHost({ files: {}, prefs: { onboarded: true } });
     const app = new AppController(host);
     await app.boot();
     mountSettings(app);
 
-    /* Карточка на месте — но сказано, что в браузере она не работает, и
-       почему. Спрятать её значило бы оставить человека гадать. */
-    expect(await screen.findByText(ru.settings.sync.cloudUnavailableBadge)).toBeTruthy();
-    expect(screen.getByText(ru.settings.sync.modeLocalOnly)).toBeTruthy();
+    expect(await screen.findByText(ru.settings.sync.cloud)).toBeTruthy();
+    expect(
+      screen.queryByText(ru.settings.sync.cloudUnavailableBadge),
+      'веб снова помечен недоступным — платформенный замок вернулся',
+    ).toBeNull();
     app.dispose();
   });
 
-  it('в онбординге варианта «Облако Записок» нет', async () => {
+  it('в онбординге вариант «Облако Записок» есть', async () => {
     const host = createTestHost({ files: {}, prefs: {} });
-    const app = new AppController(host);
-    await app.boot();
-    render(
-      <ThemeProvider persist={false}>
-        <ToastProvider>
-          <AppProvider host={host} controller={app}>
-            <OnboardingScreen step={2} />
-          </AppProvider>
-        </ToastProvider>
-      </ThemeProvider>,
-    );
-
-    expect(screen.queryByText(ru.onboarding.step2.options.cloud.title)).toBeNull();
-    expect(screen.getByText(ru.onboarding.step2.options.local.title)).toBeTruthy();
-    expect(screen.getByText(ru.onboarding.step2.options.own.title)).toBeTruthy();
-    app.dispose();
-  });
-
-  it('connectCloud() отказывает ДО сети — ни один байт не уходит', async () => {
-    const host = createTestHost({ files: { 'Идеи.md': '# Идеи\n' }, prefs: { onboarded: true } });
-    const app = new AppController(host);
-    await app.boot();
-    const fetchSpy = vi.fn(async () => new Response(null, { status: 500 }));
-    vi.stubGlobal('fetch', fetchSpy);
-
-    expect(await app.connectCloud()).toBe(false);
-
-    expect(app.getState().backendId).toBeNull();
-    expect(app.getState().cloudSyncDisabled, 'причина не названа').toBe(true);
-    expect(fetchSpy, 'запрос ушёл, хотя облако недоступно на этой платформе').not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
-    app.dispose();
-  });
-});
-
-describe('у кого облако было выбрано в вебе — оно не переподключается молча', () => {
-  async function bootWithCloudAlreadyChosen(): Promise<AppController> {
-    const host = createTestHost({
-      files: { 'Идеи.md': '# Идеи\n' },
-      prefs: { onboarded: true, 'sync.backend': 'zapiski' },
-    });
-    const app = new AppController(host);
-    await app.boot();
-    return app;
-  }
-
-  it('resumeCloud() отказывается переподключать облако при старте', async () => {
-    const app = await bootWithCloudAlreadyChosen();
-    await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
-
-    /* Выбор человека помнится... */
-    expect(app.getState().backendChoice, 'выбор стёрт вместо честного отказа').toBe('zapiski');
-    /* ...но подключения нет: ключ синка в браузере держать негде. */
-    expect(app.getState().backendId, 'облако подключилось само на неподдержанной платформе').toBeNull();
-    expect(app.getState().cloudSyncDisabled, 'причина не названа').toBe(true);
-    app.dispose();
-  });
-
-  it('на экране карточка честно недоступна, а не притворяется рабочей', async () => {
-    const app = await bootWithCloudAlreadyChosen();
-    await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
-    mountSettings(app);
-
-    const cloud = (await screen.findByText(ru.settings.sync.cloud)).closest('.za-card');
-    expect(cloud, 'карточка Облака пропала у того, кто её уже выбирал').not.toBeNull();
-    expect(cloud?.className).toContain('za-card--selected');
-
-    /* Честный текст — и плашкой в разделе, и внутри самой карточки. */
-    expect(screen.getAllByText(ru.errors.cloudSyncDisabled).length).toBeGreaterThan(0);
-    expect(await screen.findByText(ru.settings.sync.encryptionWebOnly)).toBeTruthy();
-    app.dispose();
-  });
-
-  it('нажатие на карточку не уводит на экран входа — вход тут не помог бы', async () => {
-    const app = await bootWithCloudAlreadyChosen();
-    await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
-    mountSettings(app);
-
-    const beginSignIn = vi.spyOn(app, 'beginSignIn');
-    const card = (await screen.findByText(ru.settings.sync.cloud)).closest('button');
-    expect(card, 'у карточки нет собственной кнопки').not.toBeNull();
-    fireEvent.click(card as HTMLButtonElement);
-
-    expect(beginSignIn, 'клик по недоступной карточке отправил человека входить').not.toHaveBeenCalled();
-    expect(app.getState().backendId).toBeNull();
-    app.dispose();
-  });
-});
-
-describe('там, где хранилище ключа есть, облако предлагается', () => {
-  it('Windows: вариант «Облако Записок» виден в онбординге', async () => {
-    const host = createTestHost({ files: {}, prefs: {}, platform: nativePlatform() });
     const app = new AppController(host);
     await app.boot();
     render(
@@ -186,14 +96,73 @@ describe('там, где хранилище ключа есть, облако п
     app.dispose();
   });
 
-  it('Windows: карточка в настройках не помечена недоступной', async () => {
-    const host = createTestHost({ files: {}, prefs: { onboarded: true }, platform: nativePlatform() });
+  it('без входа connectCloud() не ходит в сеть, но и не врёт про платформу', async () => {
+    const host = createTestHost({ files: { 'Идеи.md': '# Идеи\n' }, prefs: { onboarded: true } });
+    const app = new AppController(host);
+    await app.boot();
+    const fetchSpy = vi.fn(async () => new Response(null, { status: 500 }));
+    vi.stubGlobal('fetch', fetchSpy);
+
+    /* Сессии нет — подключать нечего. Но причина теперь другая: не «эта
+       платформа не умеет», а «сначала войдите». Поэтому `cloudSyncDisabled`
+       НЕ поднимается: он означает «облако выключено совсем», и поднять его
+       здесь значило бы назвать неверную причину и спрятать кнопку входа. */
+    expect(await app.connectCloud()).toBe(false);
+
+    expect(app.getState().backendId).toBeNull();
+    expect(app.getState().cloudSyncDisabled, 'облако объявлено выключенным без причины').toBe(false);
+    expect(fetchSpy, 'запрос ушёл без сессии').not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+    app.dispose();
+  });
+
+  it('нажатие на карточку ведёт на вход, а не в тупик', async () => {
+    const host = createTestHost({ files: {}, prefs: { onboarded: true } });
+    const app = new AppController(host);
+    await app.boot();
+    mountSettings(app);
+
+    /* Карточка режима свёрнута, пока её не выбрали, — как и у остальных
+       вариантов синка. Сначала раскрываем её, потом жмём кнопку внутри. */
+    fireEvent.click(await screen.findByText(ru.settings.sync.cloud));
+    fireEvent.click(await screen.findByRole('button', { name: ru.settings.sync.cloudEnable }));
+
+    await waitFor(() => expect(app.getState().route.name).toBe('signin'));
+    app.dispose();
+  });
+});
+
+describe('нативная платформа без биометрии тоже не заперта', () => {
+  it('Windows без хранилища ключа: карточка доступна', async () => {
+    const host = createTestHost({
+      files: {},
+      prefs: { onboarded: true },
+      platform: { kind: 'windows', biometrics: null },
+    });
     const app = new AppController(host);
     await app.boot();
     mountSettings(app);
 
     expect(await screen.findByText(ru.settings.sync.cloud)).toBeTruthy();
     expect(screen.queryByText(ru.settings.sync.cloudUnavailableBadge)).toBeNull();
+    app.dispose();
+  });
+
+  it('Windows с хранилищем: как было', async () => {
+    const host = createTestHost({ files: {}, prefs: {}, platform: nativePlatform() });
+    const app = new AppController(host);
+    await app.boot();
+    render(
+      <ThemeProvider persist={false}>
+        <ToastProvider>
+          <AppProvider host={host} controller={app}>
+            <OnboardingScreen step={2} />
+          </AppProvider>
+        </ToastProvider>
+      </ThemeProvider>,
+    );
+
+    expect(screen.getByText(ru.onboarding.step2.options.cloud.title)).toBeTruthy();
     app.dispose();
   });
 });

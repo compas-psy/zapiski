@@ -1,14 +1,20 @@
 /**
- * SEC-001 — fail-closed доступ к Облаку Записок.
+ * Доступ к Облаку Записок: что решает состояние.
  *
- * Самый важный тест здесь — сценарий E из задания: аккаунт УЖЕ перешёл на
- * шифрование, а локального ключа на этом устройстве нет. Ожидается
- * `needs_recovery` и ОТСУТСТВИЕ бэкенда — не открытый `ZapiskiCloudBackend`,
- * который тихо синхронизировал бы заметки в открытом виде.
+ * Прежде здесь стерёгся инвариант «без ключа шифрования бэкенда не
+ * существует». Решение владельца — убрать сквозное шифрование из MVP —
+ * этот инвариант снял, и вместе с ним ушёл сценарий E. Осталось то, что
+ * по-прежнему обязано держаться:
+ *
+ *   • аккаунт с ключом ПРОШЛОЙ схемы не получает обычный бэкенд молча —
+ *     иначе человек увидел бы пустое облако вместо своих заметок;
+ *   • устройство без этого ключа получает `locked_elsewhere` и ЧЕСТНОЕ
+ *     сообщение, а не разрушительное «сбросить и начать заново»;
+ *   • недоступная сеть даёт `unavailable`, а не «поехали как есть»;
+ *   • облако доступно на ВСЕХ платформах, включая веб.
  *
  * Проверяется через настоящую прикладную фабрику, а не через прямой
- * `new ZapiskiCloudBackend()`: дефект, который мы закрываем, жил именно в
- * прикладном пути.
+ * `new ZapiskiCloudBackend()`: дефекты этого класса живут в прикладном пути.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -16,7 +22,8 @@ import type { BiometricProvider, PlatformCapabilities } from '@zapiski/core';
 import { SyncKeyOnboarding } from '@zapiski/core';
 
 import {
-  createEncryptedCloudBackend,
+  cloudAvailable,
+  createCloudBackendFor,
   platformSupportsSecureKeyStorage,
   resolveCloudAccess,
   type CloudAccess,
@@ -76,83 +83,23 @@ const session = {
 } as unknown as SessionStore;
 const backendOptions = { cloudBaseUrl: 'https://zapiski.test/api/v1', session };
 
-describe('SEC-001 E: зашифрованный аккаунт без локального ключа', () => {
-  it('даёт needs_recovery, а НЕ открытый бэкенд — критический инвариант', async () => {
+describe('аккаунт с ключом прошлой схемы', () => {
+  it('без локального ключа — locked_elsewhere, и бэкенда нет', async () => {
     const access = await resolveCloudAccess({
-      platform: platform('windows', keychain()), // хранилище пустое
+      platform: platform('windows', keychain()), // хранилище есть, ключа в нём нет
       cloudBaseUrl: 'https://zapiski.test/api/v1',
-      fetch: enrolledServer() as never,
+      fetch: enrolledServer(),
     });
 
-    expect(access.status).toBe('needs_recovery');
-    // И, главное, бэкенда из этого состояния не собрать.
-    expect(createEncryptedCloudBackend(access, backendOptions)).toBeNull();
+    expect(access.status).toBe('locked_elsewhere');
+    /* Молча подключить обычный бэкенд нельзя: на сервере лежит шифротекст по
+       токенизированным адресам, и обычный бэкенд его не видит вовсе —
+       человек получил бы ПУСТОЕ облако вместо своих заметок. */
+    expect(createCloudBackendFor(access, backendOptions)).toBeNull();
   });
 
-  it('недоступная сеть тоже закрывает доступ, а не открывает его', async () => {
-    const offline = (async () => {
-      throw new Error('network down');
-    }) as unknown as typeof fetch;
-
-    const access = await resolveCloudAccess({
-      platform: platform('windows', keychain()),
-      cloudBaseUrl: 'https://zapiski.test/api/v1',
-      fetch: offline as never,
-    });
-
-    expect(access.status).toBe('needs_recovery');
-    expect(createEncryptedCloudBackend(access, backendOptions)).toBeNull();
-  });
-
-  it('ни одно состояние без ключа не отдаёт бэкенд', () => {
-    const closed: CloudAccess[] = [
-      { status: 'cloud_disabled', reason: 'flag' },
-      { status: 'cloud_disabled', reason: 'platform' },
-      { status: 'needs_onboarding' },
-      { status: 'needs_recovery' },
-    ];
-    for (const access of closed) {
-      expect(createEncryptedCloudBackend(access, backendOptions), access.status).toBeNull();
-    }
-  });
-});
-
-describe('SEC-001: платформа решает, доступно ли облако', () => {
-  it('Windows/macOS/Android с защищённым хранилищем — доступно', () => {
-    for (const kind of ['windows', 'macos', 'android'] as const) {
-      expect(platformSupportsSecureKeyStorage(platform(kind, keychain())), kind).toBe(true);
-    }
-  });
-
-  /**
-   * Веб выключен ЧЕСТНО и по причине, а не «не успели»: у браузера нет
-   * аппаратного эквивалента Keychain/Keystore/DPAPI, а держать извлекаемый
-   * ключ в origin-читаемом хранилище — другой уровень защиты (design §3.1).
-   */
-  it('веб — недоступно, даже если биометрия формально есть', () => {
-    expect(platformSupportsSecureKeyStorage(platform('web', keychain()))).toBe(false);
-    expect(platformSupportsSecureKeyStorage(platform('web', null))).toBe(false);
-  });
-
-  it('нативная платформа без хранилища — тоже недоступно', () => {
-    expect(platformSupportsSecureKeyStorage(platform('android', null))).toBe(false);
-  });
-
-  it('в вебе состояние — cloud_disabled по причине platform', async () => {
-    const access = await resolveCloudAccess({
-      platform: platform('web', keychain()),
-      cloudBaseUrl: 'https://zapiski.test/api/v1',
-      fetch: enrolledServer() as never,
-    });
-    expect(access).toEqual({ status: 'cloud_disabled', reason: 'platform' });
-  });
-});
-
-describe('SEC-001: состояние с ключом действительно открывает облако', () => {
-  it('encrypted_ready отдаёт бэкенд, и он шифрует', async () => {
-    /* Устройство, у которого ключ в хранилище есть: это и есть «перезапуск
-       приложения» — код восстановления второй раз не нужен. */
-    const smk = new Uint8Array(32).fill(3);
+  it('с локальным ключом — unlock_required, и бэкенд умеет читать шифротекст', async () => {
+    const smk = new Uint8Array(32).fill(7);
     const onboarding = new SyncKeyOnboarding({
       baseUrl: 'https://zapiski.test',
       fetch: enrolledServer() as never,
@@ -162,14 +109,79 @@ describe('SEC-001: состояние с ключом действительно
       {
         platform: platform('windows', keychain(smk)),
         cloudBaseUrl: 'https://zapiski.test/api/v1',
-        fetch: enrolledServer() as never,
+        fetch: enrolledServer(),
       },
       onboarding,
     );
 
-    expect(access.status).toBe('encrypted_ready');
-    const backend = createEncryptedCloudBackend(access, backendOptions);
-    expect(backend).not.toBeNull();
-    expect(backend!.encrypts).toBe(true);
+    expect(access.status).toBe('unlock_required');
+    /* Ключ обязан доехать до бэкенда: без него перевод не прочитает ни
+       одного объекта, и переводить будет нечего. */
+    expect(createCloudBackendFor(access, backendOptions)).not.toBeNull();
+  });
+
+  it('недоступная сеть даёт unavailable, а не «поехали как есть»', async () => {
+    const access = await resolveCloudAccess({
+      platform: platform('windows', keychain()),
+      cloudBaseUrl: 'https://zapiski.test/api/v1',
+      fetch: (async () => {
+        throw new Error('сети нет');
+      }) as unknown as typeof fetch,
+    });
+
+    expect(access.status).toBe('unavailable');
+    expect(createCloudBackendFor(access, backendOptions)).toBeNull();
+  });
+
+  it('ни одно нерабочее состояние бэкенда не отдаёт', () => {
+    const closed: CloudAccess[] = [
+      { status: 'cloud_disabled', reason: 'flag' },
+      { status: 'unavailable' },
+      { status: 'locked_elsewhere' },
+    ];
+    for (const access of closed) {
+      expect(createCloudBackendFor(access, backendOptions), access.status).toBeNull();
+    }
+  });
+});
+
+describe('облако доступно везде', () => {
+  /*
+   * Платформенный замок снят. Из-за него облака не было ни в вебе, ни на
+   * телефоне без биометрии — то есть у части людей его не было вовсе, и
+   * узнавали они об этом, только добравшись до настроек.
+   */
+  it('веб — доступно', () => {
+    expect(cloudAvailable(platform('web', null))).toBe(true);
+  });
+
+  it('нативная платформа без биометрии — тоже доступно', () => {
+    expect(cloudAvailable(platform('windows', null))).toBe(true);
+  });
+
+  it('чистый аккаунт получает рабочий бэкенд', async () => {
+    const empty = (async (input: string) =>
+      String(input).includes('/vault/sync-key')
+        ? new Response(JSON.stringify({ enrolled: false }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : new Response(null, { status: 404 })) as unknown as typeof fetch;
+
+    const access = await resolveCloudAccess({
+      platform: platform('web', null),
+      cloudBaseUrl: 'https://zapiski.test/api/v1',
+      fetch: empty,
+    });
+
+    expect(access.status).toBe('ready');
+    expect(createCloudBackendFor(access, backendOptions)).not.toBeNull();
+  });
+
+  it('признак защищённого хранилища сохранён — он понадобится ключнице', () => {
+    /* Функция больше ничего не решает, но её условие верно и вернётся в дело,
+       когда ключ начнёт приходить извне. Стережём, чтобы не «упростили». */
+    expect(platformSupportsSecureKeyStorage(platform('web', null))).toBe(false);
+    expect(platformSupportsSecureKeyStorage(platform('windows', keychain()))).toBe(true);
   });
 });

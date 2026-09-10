@@ -1289,126 +1289,71 @@ function CloudEncryptionCard(): ReactNode {
   const state = useAppState();
   const strings = useStrings();
   const copy = strings.settings.sync;
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  /* Состояние шифрования спрашивается у сервера, а не угадывается: локальное
-     отсутствие ключа само по себе не значит «ключа нет у аккаунта». */
+  /* Состояние спрашивается у сервера, а не угадывается: у аккаунта мог
+     остаться ключ прошлой схемы, и локальное «ключа нет» об этом не говорит. */
   useEffect(() => {
     void app.refreshCloudEncryption();
   }, [app]);
 
-  const recovery = state.cloudRecoveryCode;
+  /* Без входа подключать нечего: у облака есть аккаунт. Раньше нажатие в
+     этом случае молча не делало НИЧЕГО — ведём входить и возвращаемся сюда. */
+  const connect = (): void => {
+    if (!app.hasSession()) {
+      app.beginSignIn({ name: 'settings', section: 'sync' });
+      return;
+    }
+    setBusy(true);
+    void app.connectCloud().finally(() => setBusy(false));
+  };
 
-  /* Единственная минута, когда код вообще виден. */
-  if (recovery !== null) {
+  /* «Подключено» — это про ВЫБРАННЫЙ бэкенд, а не про состояние аккаунта.
+     Состояние `ready` означает лишь «облако можно подключить»; спутать их
+     значит показать человеку «Облако подключено» там, где он ещё ничего не
+     нажимал, и спрятать от него единственную кнопку. */
+  if (state.backendId === 'zapiski') {
+    return <p className="za-muted">{copy.cloudReady}</p>;
+  }
+
+  if (state.cloudEncryption === 'locked_elsewhere') {
     return (
       <>
-        <span className="za-card__title">{copy.recoveryTitle}</span>
-        <p className="za-muted">{copy.recoveryHint}</p>
-        <code className="za-recovery-code" data-testid="cloud-recovery-code">
-          {recovery}
-        </code>
-        <div className="za-row-between" style={{ gap: 8 }}>
-          <Button
-            variant="secondary"
-            size="compact"
-            onClick={() => {
-              void navigator.clipboard?.writeText(recovery).then(() => setCopied(true));
-            }}
-          >
-            {copied ? copy.recoveryCopied : copy.recoveryCopy}
-          </Button>
-          <Button onClick={() => void app.confirmRecoveryCodeSaved()}>{copy.recoverySaved}</Button>
-        </div>
+        <span className="za-card__title">{copy.cloudLockedTitle}</span>
+        <p className="za-muted">{copy.cloudLockedHint}</p>
       </>
     );
   }
 
-  if (state.cloudEncryption === 'cloud_disabled_platform') {
-    return <p className="za-muted">{copy.encryptionWebOnly}</p>;
-  }
-
-  if (state.cloudEncryption === 'needs_recovery') {
+  if (state.cloudEncryption === 'unlock_required') {
     return (
       <>
-        <span className="za-card__title">{copy.recoveryEnterTitle}</span>
-        <p className="za-muted">{copy.recoveryEnterHint}</p>
-        <TextField
-          mono
-          label={copy.recoveryEnterLabel}
-          value={code}
-          onChange={(event) => {
-            setCode(event.target.value);
-            setError(null);
-          }}
-        />
-        {error !== null ? <p className="za-form-error">{error}</p> : null}
-        <Button
-          variant="secondary"
-          disabled={code.trim() === '' || busy}
-          onClick={() => {
-            /* Та же причина, что у кнопки включения: код открывает ключ
-               АККАУНТА, и без входа проверять его не у кого. Без этой
-               ветки отказ выглядел бы как «облако недоступно», то есть
-               назвал бы неверную причину. */
-            if (!app.hasSession()) {
-              app.beginSignIn({ name: 'settings', section: 'sync' });
-              return;
-            }
-            setBusy(true);
-            void app.unlockCloudWithRecoveryCode(code).then((result) => {
-              setBusy(false);
-              if (result === 'ok') {
-                setCode('');
-                setError(null);
-                return;
-              }
-              setError(
-                result === 'typo'
-                  ? copy.recoveryTypo
-                  : result === 'wrong-code'
-                    ? copy.recoveryWrong
-                    : copy.recoveryOffline,
-              );
-            });
-          }}
-        >
-          {copy.recoveryUnlock}
+        <span className="za-card__title">{copy.cloudUnlockTitle}</span>
+        <p className="za-muted">{copy.cloudUnlockHint}</p>
+        <Button disabled={busy} onClick={connect}>
+          {copy.cloudUnlockAction}
         </Button>
       </>
     );
   }
 
-  if (
-    state.cloudEncryption === 'encrypted_ready' ||
-    state.cloudEncryption === 'migration_required'
-  ) {
-    return <p className="za-muted">{copy.encryptionReady}</p>;
+  if (state.cloudEncryption === 'unavailable') {
+    return (
+      <>
+        <p className="za-muted">{copy.cloudUnknown}</p>
+        <Button variant="secondary" disabled={busy} onClick={connect}>
+          {copy.cloudEnable}
+        </Button>
+      </>
+    );
   }
 
-  /* `needs_onboarding` и «ещё не выясняли»: обещание и одна кнопка. */
+  /* «Ещё не выясняли» и обычный путь: честное обещание и одна кнопка. */
   return (
     <>
-      <p className="za-muted">{copy.encryptionPromise}</p>
-      <Button
-        disabled={busy}
-        onClick={() => {
-          /* Без входа ключ создавать некому и негде: у ключа есть аккаунт.
-             Раньше нажатие здесь молча не делало НИЧЕГО — `enableCloud
-             Encryption` возвращал `null` и не говорил ни слова. Ведём
-             входить и возвращаемся сюда же. */
-          if (!app.hasSession()) {
-            app.beginSignIn({ name: 'settings', section: 'sync' });
-            return;
-          }
-          setBusy(true);
-          void app.enableCloudEncryption().finally(() => setBusy(false));
-        }}
-      >
-        {copy.encryptionEnable}
+      <p className="za-muted">{copy.cloudPromise}</p>
+      <Button disabled={busy} onClick={connect}>
+        {copy.cloudEnable}
       </Button>
     </>
   );
