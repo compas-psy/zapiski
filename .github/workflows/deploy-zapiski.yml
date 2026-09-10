@@ -784,20 +784,33 @@ jobs:
       - name: Проверить, что возврат после входа открывает приложение
         run: |
           set -uo pipefail
-          url='https://zapiski.cmpas.ru/auth/callback'
           bad=0
 
-          # Заголовки браузерные: переход по адресу возврата делает браузер,
-          # и если ответ зависит от них, увидеть это надо здесь, а не от
-          # заказчика.
-          code=$(curl -sS -m 20 -o /tmp/outside.html -w '%{http_code}' \
-            -H 'Accept: text/html,application/xhtml+xml' \
-            -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' \
-            "${url}" 2>/dev/null || echo '000')
-          shell_outside=нет
-          if grep -q 'id="root"' /tmp/outside.html 2>/dev/null; then shell_outside=да; fi
-          echo "снаружи (раннер): ${code}, оболочка приложения: ${shell_outside}"
-          if [ "${code}" != '200' ] || [ "${shell_outside}" != 'да' ]; then bad=1; fi
+          # Адресов ДВА, и второй важнее первого.
+          #
+          # `/auth/callback` — куда сервер уводит браузер. `/notes/index.html` —
+          # оболочка, за которой по ИМЕНИ ходит service worker (`SHELL_URL` в
+          # apps/web/public/sw.js). Возврат после входа воркер отвечает из
+          # оболочки, поэтому сломанный второй адрес ломает вход целиком, а
+          # первый при этом отвечает 200 — до него дело просто не доходит.
+          #
+          # Ровно так и было: проверка первого адреса горела зелёным, пока у
+          # заказчика на сайте стоял `404 Not Found nginx`. Проверка, зелёная
+          # при сломанном продукте, — не сторож.
+          #
+          # Заголовки браузерные: если ответ зависит от них, увидеть это надо
+          # здесь, а не от заказчика.
+          for url in 'https://zapiski.cmpas.ru/auth/callback' \
+                     'https://zapiski.cmpas.ru/notes/index.html'; do
+            code=$(curl -sS -m 20 -o /tmp/outside.html -w '%{http_code}' \
+              -H 'Accept: text/html,application/xhtml+xml' \
+              -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' \
+              "${url}" 2>/dev/null || echo '000')
+            shell_outside=нет
+            if grep -q 'id="root"' /tmp/outside.html 2>/dev/null; then shell_outside=да; fi
+            echo "снаружи (раннер) ${url}: ${code}, оболочка приложения: ${shell_outside}"
+            if [ "${code}" != '200' ] || [ "${shell_outside}" != 'да' ]; then bad=1; fi
+          done
 
           inside=$(ssh -i ~/.ssh/deploy_key \
             "${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}" \
