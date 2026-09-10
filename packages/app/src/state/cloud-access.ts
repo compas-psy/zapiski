@@ -1,44 +1,39 @@
 /**
- * Доступ к Облаку Записок: где мы находимся и можно ли создавать бэкенд.
+ * SEC-001 — состояние доступа к Облаку Записок и fail-closed фабрика.
  *
- * ── Что изменилось и почему ──────────────────────────────────────────────
+ * ── Зачем отдельный модуль, а не флаг внутри `createCloudBackend` ─────────
  *
- * Раньше здесь держался инвариант «бэкенд Облака НЕ СУЩЕСТВУЕТ без ключа
- * шифрования». Решение владельца — убрать сквозное шифрование из MVP и
- * вернуть его позже через внешнюю ключницу — этот инвариант снимает: ключа
- * на пути пользователя больше нет, а значит требовать его от фабрики
- * бессмысленно.
+ * Инвариант, который здесь держится, один и он критический:
  *
- * Снятие инварианта НЕ означает «стало всё равно». Оно означает, что
- * граница безопасности переехала, и переехала целиком:
+ *   бэкенд Облака Записок НЕ СУЩЕСТВУЕТ без ключа шифрования.
  *
- *   • содержимое шифруется на диске сервера (`services/blobStore.ts`) —
- *     закрыт доступ к файлам в обход приложения;
- *   • заметки одного человека от другого отделяет теперь ТОЛЬКО серверная
- *     авторизация, и она покрыта сторожами IDOR по всем методам
- *     (`server/test/security.perimeter.test.ts`);
- *   • сервер содержимое прочитать МОЖЕТ. Это осознанная плата, и интерфейс
- *     обязан говорить о ней честно, а не повторять прежнее обещание.
+ * Не «создаётся и потом проверяет», не «создаётся с `sync?: undefined` и
+ * работает как раньше» — а не создаётся вовсе. Поэтому тип
+ * `CloudAccess` — единственный вход в фабрику: чтобы получить бэкенд,
+ * вызывающий обязан СНАЧАЛА разрешить состояние, и только состояние
+ * `encrypted_ready` несёт в себе `SyncCrypto`. Забыть проверку нельзя —
+ * её нечем обойти, кроме как подделав значение, которое умеет собирать
+ * только `resolveCloudAccess`.
  *
- * Модуль оставлен на месте, а не удалён: он же будет точкой возврата
- * шифрования, когда ключ начнёт приходить из ключницы. Криптография в ядре
- * (`SyncCrypto`, `SyncKeyOnboarding`) тоже осталась и покрыта тестами — она
- * нужна прямо сейчас для перевода тех, кто успел включить шифрование.
+ * До этой правки `sync` был необязательным параметром, и «забыли передать»
+ * означало тихую отправку открытого текста. Необязательность осталась в
+ * ядре — там она нужна тестам и совместимости с уже лежащими в облаке
+ * открытыми объектами, — но прикладной путь CMPAS Cloud её больше не
+ * использует.
  *
  * ── Состояния ────────────────────────────────────────────────────────────
  *
- *   `cloud_disabled`   — облако выключено флагом целиком;
- *   `unavailable`      — состояние облака выяснить не удалось (нет сети).
- *                        Не «поехали как есть»: у аккаунта МОГ остаться
- *                        ключ, и запись открытого текста поверх шифротекста
- *                        всё равно была бы отбита сервером;
- *   `ready`            — обычный путь: синхронизация без шифрования;
- *   `unlock_required`  — у аккаунта остался ключ прошлой схемы, и он есть на
- *                        ЭТОМ устройстве: перевести и продолжить;
- *   `locked_elsewhere` — ключ у аккаунта есть, а на этом устройстве его нет.
- *                        Единственное честное действие — сказать человеку
- *                        открыть облако на том устройстве, где оно уже
- *                        работало. Ничего разрушительного.
+ *   `cloud_disabled`     — облако выключено: флагом или платформой;
+ *   `needs_onboarding`   — у аккаунта ещё нет ключа, надо создать и показать
+ *                          код восстановления;
+ *   `needs_recovery`     — ключ у аккаунта ЕСТЬ, а на этом устройстве его
+ *                          нет: нужен код восстановления. Именно сюда
+ *                          обязан приводить отсутствующий локальный ключ —
+ *                          НЕ к созданию открытого бэкенда;
+ *   `encrypted_ready`    — ключ есть, шифрование работает;
+ *   `migration_required` — у аккаунта остались незашифрованные объекты
+ *                          прошлых версий (см. `docs/dev/security/
+ *                          SEC-001-legacy-check.sql`).
  */
 import {
   CLOUD_SYNC_ENABLED,
@@ -51,24 +46,26 @@ import {
 import { createCloudBackend, originOf, type CloudBackendOptions } from './cloud.js';
 
 export type CloudAccess =
-  | { status: 'cloud_disabled'; reason: 'flag' }
-  | { status: 'unavailable' }
-  | { status: 'ready' }
-  | { status: 'unlock_required'; sync: SyncCrypto }
-  | { status: 'locked_elsewhere' };
+  | { status: 'cloud_disabled'; reason: 'flag' | 'platform' }
+  | { status: 'needs_onboarding' }
+  | { status: 'needs_recovery' }
+  | { status: 'encrypted_ready'; sync: SyncCrypto }
+  | { status: 'migration_required'; sync: SyncCrypto };
 
 /**
- * Есть ли на этой платформе защищённое хранилище для ключа.
+ * Есть ли на этой платформе защищённое хранилище для ключа синка.
  *
- * Windows (DPAPI), macOS (Keychain), Android (Keystore) — есть. Web — НЕТ:
- * браузер не даёт аппаратного эквивалента, а `IndexedDB` читается любым JS
- * того же origin.
+ * Windows (DPAPI), macOS (Keychain), Android (Keystore) — есть, и оно того
+ * же класса, что уже принят для пароля vault'а. Web — НЕТ: браузер не даёт
+ * аппаратного эквивалента, а `IndexedDB` читается любым JS того же origin
+ * (design §3.1, признано прямо). Держать там извлекаемый SMK — не
+ * «немного слабее», а другой уровень защиты, и делать вид, что это одно и
+ * то же, нельзя.
  *
- * Сейчас на доступность Облака это НЕ влияет и влиять не должно: ключа на
- * пути пользователя нет, хранить в вебе нечего, и запирать веб было бы
- * запретом без причины. Функция оставлена, потому что понадобится снова,
- * когда шифрование вернётся из ключницы, — и потому что её условие
- * по-прежнему верно, просто больше ничего не решает.
+ * Поэтому Облако в вебе пока выключено ЧЕСТНО, отдельным состоянием с
+ * причиной `platform`, а не тихо. Локальные ЗАПИСКИ в вебе работают как
+ * работали — блокируется только облако. Windows/macOS/Android этим не
+ * задерживаются.
  */
 export function platformSupportsSecureKeyStorage(platform: PlatformCapabilities): boolean {
   if (platform.kind === 'web') return false;
@@ -76,15 +73,14 @@ export function platformSupportsSecureKeyStorage(platform: PlatformCapabilities)
 }
 
 /**
- * Доступно ли Облако на этом устройстве.
+ * Доступно ли Облако на этом устройстве вообще — оба условия сразу.
  *
- * Одно условие вместо прежних двух. Платформенный замок снят намеренно:
- * из-за него облака не было ни в вебе, ни на телефоне без биометрии — то
- * есть у части людей его не было вовсе, и они об этом узнавали, только
- * добравшись до настроек.
+ * Флаг `CLOUD_SYNC_ENABLED` и наличие защищённого хранилища ключа — разные
+ * причины, и обе должны сойтись. Экраны спрашивают именно здесь, чтобы не
+ * повторять «флаг И платформа» в каждом месте и не забыть половину.
  */
-export function cloudAvailable(_platform: PlatformCapabilities): boolean {
-  return CLOUD_SYNC_ENABLED;
+export function cloudAvailable(platform: PlatformCapabilities): boolean {
+  return CLOUD_SYNC_ENABLED && platformSupportsSecureKeyStorage(platform);
 }
 
 export interface ResolveCloudAccessOptions {
@@ -92,9 +88,11 @@ export interface ResolveCloudAccessOptions {
   cloudBaseUrl: string;
   /** Уже авторизованный `fetch` — токен ставит вызывающий. */
   fetch: (input: string, init?: RequestInit) => Promise<Response>;
+  /** Есть ли у аккаунта незашифрованные объекты прошлых версий. */
+  hasLegacyPlaintext?: () => Promise<boolean>;
 }
 
-/** Клиент ключа для этого устройства. Вынесен, чтобы тесты его подменяли. */
+/** Онбординг-клиент для этого устройства. Вынесен, чтобы тесты его подменяли. */
 export function createOnboarding(options: ResolveCloudAccessOptions): SyncKeyOnboarding {
   return new SyncKeyOnboarding({
     baseUrl: originOf(options.cloudBaseUrl),
@@ -104,43 +102,47 @@ export function createOnboarding(options: ResolveCloudAccessOptions): SyncKeyOnb
 }
 
 /**
- * Где мы находимся.
+ * Где мы находимся — единственный законный способ узнать.
  *
- * Опрос ключа остался, хотя ключей больше не создают: у аккаунта, успевшего
- * пройти онбординг прошлой схемы, ключ есть, и молча синхронизировать поверх
- * его шифротекста нельзя — сервер такую запись всё равно отобьёт, а человек
- * увидел бы пустое облако без объяснения.
+ * Сеть недоступна → `needs_recovery`, а НЕ «поехали без шифрования»:
+ * неизвестность обязана трактоваться в пользу закрытого состояния.
  */
 export async function resolveCloudAccess(
   options: ResolveCloudAccessOptions,
   onboarding: SyncKeyOnboarding = createOnboarding(options),
 ): Promise<CloudAccess> {
   if (!CLOUD_SYNC_ENABLED) return { status: 'cloud_disabled', reason: 'flag' };
+  if (!platformSupportsSecureKeyStorage(options.platform)) {
+    return { status: 'cloud_disabled', reason: 'platform' };
+  }
 
   const state = await onboarding.state().catch(() => null);
-  if (state === null || state.status === 'unknown') return { status: 'unavailable' };
-  if (state.status === 'none') return { status: 'ready' };
-  if (state.status === 'needs-code') return { status: 'locked_elsewhere' };
-  return { status: 'unlock_required', sync: state.crypto };
+  /* Неизвестность — в пользу закрытого состояния. `unknown` (сервер не
+     ответил) НЕ означает «ключа нет»: предложить создать ключ аккаунту,
+     у которого он уже есть, — прямой путь к потере доступа к своим же
+     зашифрованным заметкам. */
+  if (state === null || state.status === 'unknown') return { status: 'needs_recovery' };
+  if (state.status === 'none') return { status: 'needs_onboarding' };
+  if (state.status === 'needs-code') return { status: 'needs_recovery' };
+
+  if (options.hasLegacyPlaintext !== undefined) {
+    const legacy = await options.hasLegacyPlaintext().catch(() => false);
+    if (legacy) return { status: 'migration_required', sync: state.crypto };
+  }
+  return { status: 'encrypted_ready', sync: state.crypto };
 }
 
 /**
- * Бэкенд Облака из разрешённого состояния.
+ * Бэкенд Облака Записок — ТОЛЬКО из состояния, которое несёт ключ.
  *
- * `unlock_required` получает бэкенд С ключом — иначе он не прочитает
- * шифротекст, который как раз и предстоит перевести. Все остальные рабочие
- * состояния получают обычный бэкенд без шифрования.
- *
- * `null` — не «мягкий отказ»: вызывающий обязан показать человеку состояние,
- * а не синхронизировать молча что-то другое.
+ * `null` во всех остальных случаях, и это не «мягкий отказ»: вызывающий
+ * обязан показать человеку состояние (введите код / включите облако /
+ * недоступно на этой платформе), а не молча синхронизировать что-то ещё.
  */
-export function createCloudBackendFor(
+export function createEncryptedCloudBackend(
   access: CloudAccess,
   options: CloudBackendOptions,
 ): ZapiskiCloudBackend | null {
-  if (access.status === 'unlock_required') {
-    return createCloudBackend({ ...options, sync: access.sync });
-  }
-  if (access.status === 'ready') return createCloudBackend(options);
-  return null;
+  if (access.status !== 'encrypted_ready' && access.status !== 'migration_required') return null;
+  return createCloudBackend({ ...options, sync: access.sync });
 }

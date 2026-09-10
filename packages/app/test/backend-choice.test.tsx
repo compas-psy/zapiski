@@ -55,15 +55,14 @@ function mount(app: AppController): void {
 
 describe('выбор хранилища переживает потерю входа', () => {
   /*
-   * Прежде оба теста ниже видели другое: до проверки сессии в `resumeCloud`
-   * срабатывал замок — сперва выключатель SEC-001, потом платформенный, — и
-   * приложение говорило «синхронизация недоступна». Сказать «войдите снова»
-   * тогда было бы неправдой: повторный вход облако всё равно не поднял бы.
-   *
-   * Замков больше нет, и ветка `cloudNeedsSignIn`, которую прежний
-   * комментарий обещал вернуть, стала достижимой. Теперь причина названа
-   * верно И лечится предложенным действием — а это разные вещи, и вторая
-   * важнее.
+   * SEC-001 kill-switch (`CLOUD_SYNC_ENABLED`, `core/cloud-sync.ts`) стоит В
+   * `resumeCloud` РАНЬШЕ проверки сессии — и это меняет то, что видят оба
+   * теста ниже. «Войдите снова» здесь было бы неправдой: пока флаг выключен,
+   * повторный вход тоже не подключит облако, а сообщать причину, которая не
+   * лечится предложенным действием, хуже, чем не сообщать вовсе. Сам
+   * механизм `cloudNeedsSignIn` не removed — он снова станет достижим, как
+   * только флаг вернут; отдельного покрытия эта комбинация (флаг включён +
+   * сессия истекла) пока не имеет, см. `cloud-kill-switch.test.tsx`.
    */
   it('облако остаётся выбранным, а не подменяется локальной папкой', async () => {
     const app = await bootWithoutSession();
@@ -74,17 +73,13 @@ describe('выбор хранилища переживает потерю вхо
       'подключения нет — и это правда, менять её не надо',
     ).toBeNull();
     expect(
-      app.getState().cloudNeedsSignIn,
-      'приложение молчит о том, что нужно войти снова',
-    ).toBe(true);
-    expect(
       app.getState().cloudSyncDisabled,
-      'облако объявлено выключенным — это неверная причина, оно просто без входа',
-    ).toBe(false);
+      'приложение молчит о том, что синхронизация выключена',
+    ).toBe(true);
     app.dispose();
   });
 
-  it('на экране отмечено облако, а причина — вход, и её можно исправить', async () => {
+  it('на экране отмечено облако и сказано, что синхронизация временно недоступна', async () => {
     const app = await bootWithoutSession();
     await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
     mount(app);
@@ -98,7 +93,9 @@ describe('выбор хранилища переживает потерю вхо
     const local = screen.getByText(ru.settings.sync.modeLocalOnly).closest('.za-card');
     expect(local?.className).not.toContain('za-card--selected');
 
-    expect(screen.getAllByText(ru.errors.cloudSignInAgain).length).toBeGreaterThan(0);
+    /* Текст встречается дважды — плашкой на экране и тостом, — и это не
+       дубль: тост живёт шесть секунд и уходит, плашка остаётся. */
+    expect(screen.getAllByText(ru.errors.cloudSyncDisabled).length).toBeGreaterThan(0);
     app.dispose();
   });
 

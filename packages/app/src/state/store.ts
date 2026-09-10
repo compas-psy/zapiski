@@ -54,6 +54,7 @@ import {
   type AttachmentEntry,
   type AttachmentNaming,
   CLOUD_SYNC_ENABLED,
+  formatRecoveryCode,
   type MasterKey,
   type Note,
   type NoteMeta,
@@ -101,8 +102,9 @@ import { downscaleImage } from '../lib/downscale.js';
 import { createCloudBackend } from './cloud.js';
 import {
   cloudAvailable,
-  createCloudBackendFor,
+  createEncryptedCloudBackend,
   createOnboarding,
+  platformSupportsSecureKeyStorage,
   resolveCloudAccess,
   type CloudAccess,
 } from './cloud-access.js';
@@ -251,19 +253,29 @@ export interface AppState {
    */
   cloudSyncDisabled: boolean;
   /**
-   * Где находится облако на этом устройстве.
+   * SEC-001: где находится шифрование облака на этом устройстве.
    *
    * `null` — ещё не выясняли. Остальное — состояния `CloudAccess`
    * (`state/cloud-access.ts`), по которым экран настроек решает, что
-   * показать человеку.
+   * показать: предложение включить облако, поле ввода кода восстановления
+   * или честное «в вебе пока недоступно».
    */
   cloudEncryption:
     | null
     | 'cloud_disabled_flag'
-    | 'unavailable'
-    | 'ready'
-    | 'unlock_required'
-    | 'locked_elsewhere';
+    | 'cloud_disabled_platform'
+    | 'needs_onboarding'
+    | 'needs_recovery'
+    | 'encrypted_ready'
+    | 'migration_required';
+  /**
+   * Код восстановления, показываемый ОДИН раз сразу после создания ключа.
+   *
+   * Держится в памяти состояния и стирается, как только человек подтвердил,
+   * что сохранил его: на диск он не попадает никогда и восстановить его
+   * потом неоткуда — в этом и смысл.
+   */
+  cloudRecoveryCode: string | null;
   online: boolean;
 
   /**
@@ -423,6 +435,7 @@ function initialState(locale: Locale): AppState {
     cloudNeedsSignIn: false,
     cloudSyncDisabled: false,
     cloudEncryption: null,
+    cloudRecoveryCode: null,
     online: true,
     expandedFolders: [],
     libraryOpen: false,
@@ -1414,14 +1427,21 @@ export class AppController {
   /**
    * Подключить Облако Записок как бэкенд синка. Без сессии — не подключать.
    *
-   * Флаг `CLOUD_SYNC_ENABLED` проверяется ДО создания бэкенда: если облако
-   * выключено целиком, ни один байт заметки не должен уйти только потому,
-   * что человек когда-то нажал «Облако». `cloudSyncDisabled` в состоянии —
+   * SEC-001 kill-switch: пока `CLOUD_SYNC_ENABLED === false`, отказываем ДО
+   * `createCloudBackend`/`attachBackend` — ни один байт заметки не должен
+   * уйти в открытом виде только потому, что человек когда-то нажал
+   * «Облако», ещё не зная про находку. `cloudSyncDisabled` в состоянии —
    * то, что показывает экран настроек честным текстом вместо тихого отказа.
    */
   async connectCloud(): Promise<boolean> {
+    /* Недоступность платформы — ПЕРЕД проверкой входа. Иначе в вебе человека
+       отправляли бы входить ради облака, которое и после входа не заработает:
+       ключ синка там держать негде (SEC-001 design §3.1). */
     if (!cloudAvailable(this.host.platform)) {
-      this.patch({ cloudSyncDisabled: true, cloudEncryption: 'cloud_disabled_flag' });
+      this.patch({
+        cloudSyncDisabled: true,
+        cloudEncryption: CLOUD_SYNC_ENABLED ? 'cloud_disabled_platform' : 'cloud_disabled_flag',
+      });
       return false;
     }
     if (this.session.current() === null) return false;
@@ -1429,44 +1449,39 @@ export class AppController {
     const access = await this.resolveCloudAccess();
     this.patch({ cloudEncryption: encryptionStateOf(access) });
 
-    const backendOptions = {
+    /*
+     * SEC-001, критический инвариант: бэкенд Облака Записок не существует
+     * без ключа. Здесь это видно буквально — `createEncryptedCloudBackend`
+     * возвращает `null` во всех состояниях, кроме тех, что несут `sync`, и
+     * дальше подключать просто нечего.
+     *
+     * Раньше на этом месте бэкенд собирался всегда, а шифрование было
+     * необязательным параметром — то есть «забыли передать ключ» означало
+     * тихую отправку открытого текста. Теперь забыть нечего.
+     */
+    const backend = createEncryptedCloudBackend(access, {
       cloudBaseUrl: this.host.cloudBaseUrl,
       session: this.session,
       locale: this.state.locale,
       ...(typeof WebSocket === 'function'
         ? { websocket: (url: string) => new WebSocket(url) }
         : {}),
-    };
-
-    /*
-     * Аккаунт, успевший включить шифрование прошлой схемы, переводится
-     * ПЕРЕД тем, как подключить обычный бэкенд. Порядок обязателен: пока на
-     * сервере лежит ключ, любая запись открытым текстом отбивается, а
-     * шифротекст по токенизированным адресам обычный бэкенд не видит вовсе —
-     * человек получил бы пустое облако вместо своих заметок.
-     */
-    if (access.status === 'unlock_required') {
-      const encrypted = createCloudBackendFor(access, backendOptions);
-      const moved = await encrypted!
-        .migrateToPlaintext(() => this.createOnboarding().dropAccountKey())
-        .catch(() => null);
-      if (moved === null) {
-        /* Перевод не завершён. Данные при этом не потеряны — они либо ещё
-           зашифрованы, либо уже открыты, — но подключать обычный бэкенд
-           нельзя: он не увидит непереведённое. Повторим при следующем
-           подключении. */
-        this.patch({ cloudEncryption: 'unlock_required' });
-        return false;
-      }
-      this.patch({ cloudEncryption: 'ready' });
-    }
-
-    const backend = createCloudBackendFor({ status: 'ready' }, backendOptions);
-    if (backend === null || access.status === 'unavailable' || access.status === 'locked_elsewhere') {
+    });
+    if (backend === null) {
       this.patch({ cloudSyncDisabled: access.status === 'cloud_disabled' });
       return false;
     }
 
+    /* Манифест — ПЕРЕД первым списком: иначе заметки, созданные на другом
+       устройстве, приедут непрозрачными адресами и окажутся невидимыми
+       (SEC-001 §7). */
+    await backend.pullManifest().catch(() => 0);
+    /* Объекты прошлых версий — сразу и молча (SEC-001 §10). До перехода
+       Облако адресовало заметку её путём и хранило открытый текст; после —
+       такой объект для клиента не существует вовсе, а на сервере лежит
+       незашифрованным. Переезд разбирается с обоими следствиями сразу и
+       ничего не спрашивает: спрашивать тут не о чем. */
+    await backend.migrateLegacy().catch(() => 0);
     this.attachBackend(backend);
     this.patch({ cloudSyncDisabled: false });
     return true;
@@ -1484,22 +1499,7 @@ export class AppController {
     return this.session.current() !== null;
   }
 
-  /**
-   * Клиент ключа аккаунта.
-   *
-   * Ключей больше не создают, но опрашивать и СНИМАТЬ их нужно: у аккаунта,
-   * успевшего включить шифрование прошлой схемы, ключ есть, и без снятия он
-   * навсегда запретил бы серверу принимать открытый текст.
-   */
-  private createOnboarding(): ReturnType<typeof createOnboarding> {
-    return createOnboarding({
-      platform: this.host.platform,
-      cloudBaseUrl: this.host.cloudBaseUrl,
-      fetch: (input, init) => this.cloudFetch(input, init),
-    });
-  }
-
-  /** Текущее состояние облака. Отдельно — чтобы спросить без подключения. */
+  /** Текущее состояние шифрования облака. Отдельно — чтобы спросить без подключения. */
   private async resolveCloudAccess(): Promise<CloudAccess> {
     return resolveCloudAccess({
       platform: this.host.platform,
@@ -1526,25 +1526,77 @@ export class AppController {
       this.patch({ cloudEncryption: 'cloud_disabled_flag' });
       return;
     }
+    /* Платформа — ДО сессии: в вебе облака нет независимо от того, вошёл
+       человек или нет, и предлагать ему «включить облако» нельзя ни в каком
+       состоянии входа. */
+    if (!platformSupportsSecureKeyStorage(this.host.platform)) {
+      this.patch({ cloudEncryption: 'cloud_disabled_platform' });
+      return;
+    }
     if (this.session.current() === null) return;
     const access = await this.resolveCloudAccess();
     this.patch({ cloudEncryption: encryptionStateOf(access) });
   }
 
-  /*
-   * Здесь стояли `enableCloudEncryption`, `confirmRecoveryCodeSaved` и
-   * `unlockCloudWithRecoveryCode` — создание ключа, подтверждение кода
-   * восстановления и разблокировка нового устройства этим кодом.
+  /**
+   * Включить облако на ПЕРВОМ устройстве аккаунта: создать ключ.
    *
-   * Убраны по решению владельца: код восстановления был платой за то, что
-   * ключ не хранится нигде, кроме устройств человека, и эта плата признана
-   * слишком высокой для MVP. Сама криптография осталась в ядре и покрыта
-   * тестами — она нужна для перевода тех, кто успел шифрование включить, и
-   * будет точкой возврата, когда ключ начнёт приходить из внешней ключницы.
-   *
-   * Восстанавливать эти три метода в прежнем виде не нужно: возвращать надо
-   * будет не «покажи код и запомни», а «спроси ключ у ключницы».
+   * Возвращает код восстановления — единственный раз, когда его вообще
+   * можно увидеть. Он же кладётся в состояние, чтобы экран показал его и
+   * потребовал подтверждения; `confirmRecoveryCodeSaved` его стирает.
    */
+  async enableCloudEncryption(): Promise<string | null> {
+    if (!CLOUD_SYNC_ENABLED) return null;
+    if (this.session.current() === null) return null;
+    const onboarding = createOnboarding({
+      platform: this.host.platform,
+      cloudBaseUrl: this.host.cloudBaseUrl,
+      fetch: (input, init) => this.cloudFetch(input, init),
+    });
+    const created = await onboarding.create().catch(() => null);
+    if (created === null) {
+      this.toast({ message: this.strings.errors.syncFailed });
+      return null;
+    }
+    const code = formatRecoveryCode(created.recovery);
+    this.patch({ cloudEncryption: 'encrypted_ready', cloudRecoveryCode: code });
+    return code;
+  }
+
+  /**
+   * «Я сохранил код восстановления» — только после этого облако включается.
+   *
+   * Подтверждение обязательно и стоит здесь, а не в UI: код показывается
+   * один раз, и человек, закрывший экран мимо, потеряет доступ к синку с
+   * новых устройств навсегда. Дешевле спросить.
+   */
+  async confirmRecoveryCodeSaved(): Promise<boolean> {
+    this.patch({ cloudRecoveryCode: null });
+    return this.connectCloud();
+  }
+
+  /**
+   * Подключить ЭТО устройство кодом восстановления.
+   *
+   * Неверный код — понятное сообщение и НИКАКИХ разрушительных действий:
+   * ключ аккаунта не трогается, локальное хранилище не чистится, заметки
+   * на месте.
+   */
+  async unlockCloudWithRecoveryCode(
+    code: string,
+  ): Promise<'ok' | 'typo' | 'wrong-code' | 'offline'> {
+    if (!CLOUD_SYNC_ENABLED) return 'offline';
+    const onboarding = createOnboarding({
+      platform: this.host.platform,
+      cloudBaseUrl: this.host.cloudBaseUrl,
+      fetch: (input, init) => this.cloudFetch(input, init),
+    });
+    const result = await onboarding.unlock(code).catch(() => null);
+    if (result === null) return 'offline';
+    if (!result.ok) return result.reason === 'no-key' ? 'offline' : result.reason;
+    await this.connectCloud();
+    return 'ok';
+  }
 
   /**
    * Яндекс.Диск как бэкенд синка (ТЗ §4.1).
@@ -4626,6 +4678,8 @@ export { isEncryptedPath, stemOf, countWords };
 
 /** `CloudAccess` → короткая метка состояния для интерфейса. */
 function encryptionStateOf(access: CloudAccess): AppState['cloudEncryption'] {
-  if (access.status === 'cloud_disabled') return 'cloud_disabled_flag';
+  if (access.status === 'cloud_disabled') {
+    return access.reason === 'platform' ? 'cloud_disabled_platform' : 'cloud_disabled_flag';
+  }
   return access.status;
 }
