@@ -217,7 +217,7 @@ export async function pruneExpiredVersions(ctx: AppContext, now: Date = new Date
 
   const seen = new Set<string>();
   for (const row of rows) {
-    const key = `${row.user_id}\u0000${row.storage_key}`;
+    const key = `${row.user_id} ${row.storage_key}`;
     if (seen.has(key)) continue;
     seen.add(key);
 

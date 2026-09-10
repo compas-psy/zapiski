@@ -31,7 +31,7 @@ async function main(): Promise<void> {
   const ctx: AppContext = {
     env,
     db,
-    blobs: new BlobStore(env.BLOB_ROOT, Buffer.from(env.BLOB_ENCRYPTION_KEY, 'hex')),
+    blobs: new BlobStore(env.BLOB_ROOT),
     mailer: new SmtpMailer({
       host: env.SMTP_HOST,
       port: env.SMTP_PORT,

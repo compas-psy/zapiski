@@ -160,22 +160,6 @@ prepare_env() {
     log 'AUTH_SECRET сгенерирован.'
   fi
 
-  # Ключ шифрования тома (server/src/services/blobStore.ts): 32 байта для
-  # AES-256-GCM. Генерируем ТОЛЬКО при отсутствии — и это правило здесь строже,
-  # чем у AUTH_SECRET. Перегенерация AUTH_SECRET разлогинивает всех, неприятно и
-  # обратимо; перегенерация этого ключа делает НЕЧИТАЕМЫМИ все файлы, уже
-  # лежащие в томе, то есть теряет заметки людей безвозвратно. Никакой ветки
-  # «обновить ключ» тут нет намеренно: смена ключа — это отдельная процедура с
-  # перешифровкой тома, а не строчка в скрипте выкладки.
-  local blob_key
-  blob_key=$(grep '^BLOB_ENCRYPTION_KEY=' "${ENV_FILE}" 2>/dev/null | cut -d= -f2- || true)
-  if [ -z "${blob_key}" ]; then
-    upsert_env BLOB_ENCRYPTION_KEY "$(openssl rand -hex 32)"
-    log 'BLOB_ENCRYPTION_KEY сгенерирован (первый раз на этой машине).'
-  else
-    log 'BLOB_ENCRYPTION_KEY уже задан — не трогаем.'
-  fi
-
   resolve_analytics_gate
   resolve_practice_ingest
 }

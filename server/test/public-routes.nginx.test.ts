@@ -34,7 +34,6 @@ import type { FastifyInstance } from 'fastify';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { buildApp } from '../src/app.ts';
-import { TEST_BLOB_KEY } from './helpers/app.ts';
 import { loadEnv } from '../src/config/env.ts';
 import type { AppContext } from '../src/context.ts';
 import { createPool } from '../src/db/pool.ts';
@@ -174,11 +173,10 @@ describe('публичные страницы API проведены через 
         DATABASE_URL: 'postgres://unused/unused',
         AUTH_SECRET: 'x'.repeat(40),
         BLOB_ROOT: blobRoot,
-        BLOB_ENCRYPTION_KEY: TEST_BLOB_KEY,
         LOG_LEVEL: 'silent',
       } as NodeJS.ProcessEnv),
       db: createPool('postgres://unused/unused', 1),
-      blobs: new BlobStore(blobRoot, Buffer.from(TEST_BLOB_KEY, 'hex')),
+      blobs: new BlobStore(blobRoot),
       mailer: new MemoryMailer(),
       live: new LiveBus(),
       yandex: null,

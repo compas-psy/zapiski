@@ -49,8 +49,8 @@ services:
       - .env
 
     # Имена переменных — контракт server/src/config/env.ts. Секреты
-    # (AUTH_SECRET, BLOB_ENCRYPTION_KEY, YANDEX_*, TINKOFF_*) сюда не пишутся:
-    # они приходят из deploy/.env выше.
+    # (AUTH_SECRET, YANDEX_*, TINKOFF_*) сюда не пишутся: они
+    # приходят из deploy/.env выше.
     environment:
       NODE_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
