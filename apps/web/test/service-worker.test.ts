@@ -373,3 +373,121 @@ describe('nginx: корень — промо, /notes/ — приложение, 
     expect(block, 'кодировка не задана в заголовке ответа').toMatch(/charset\s+utf-8;/);
   });
 });
+
+/**
+ * Воркер просит у сервера ФАЙЛЫ ПО ИМЕНИ — и сервер обязан их отдать.
+ *
+ * ── Дефект, ради которого написан этот блок ─────────────────────────────────
+ *
+ * Заказчик входил через СИМПАС на сайте и получал `404 Not Found nginx`. В
+ * установленном приложении тот же вход проходил: оно возвращается по
+ * `zapiski://` и веб-сервера не касается.
+ *
+ * Журнал nginx показал, что запросов на `/auth/callback` от него НЕ БЫЛО
+ * вовсе — только мои проверки, все с кодом 200. То есть 404 сочинял не сервер:
+ * до сервера запрос не доезжал.
+ *
+ * Сочинял его воркер. Возврат после входа он отдаёт из `appShell()`, а тот
+ * идёт за `SHELL_URL` = `/notes/index.html`. В nginx этот адрес попадает не в
+ * `location /notes` (обычный префикс), а в regex-блок `~* \.html$`: regex
+ * проверяется РАНЬШЕ простых префиксов. У regex-блока нет `try_files`, значит
+ * отдаётся файл по физическому пути `/notes/index.html`, которого в сборке
+ * нет — Vite меняет ссылки, но файлов не переносит. 404 воркер возвращал
+ * как есть.
+ *
+ * ── Почему прежние проверки этого не видели ─────────────────────────────────
+ *
+ * Все они читают блок ПО ИМЕНИ: «есть ли `location /notes` и ведёт ли он на
+ * `/index.html`». Есть и ведёт. Только nginx до него не доходит.
+ *
+ * Поэтому здесь не поиск блока по имени, а ВЫБОР блока по правилам nginx:
+ * точное совпадение → `^~` (самый длинный) → regex в порядке файла → обычный
+ * префикс (самый длинный). Соседние адреса (`/notes/assets/`,
+ * `/notes/manifest.webmanifest`) от этой же ловушки уже защищены `^~` и `=`;
+ * про `index.html` просто забыли.
+ */
+describe('адреса, которые воркер просит у сервера, сервер умеет отдать', () => {
+  const vhost = readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../deploy/zapiski.cmpas.ru.nginx.conf'),
+    'utf8',
+  );
+
+  interface Block {
+    modifier: string;
+    pattern: string;
+    body: string;
+  }
+
+  function locations(conf: string): Block[] {
+    const found: Block[] = [];
+    const head = /location\s+(=|\^~|~\*|~)?\s*(\S+)\s*\{/g;
+    let match: RegExpExecArray | null;
+    while ((match = head.exec(conf)) !== null) {
+      let depth = 1;
+      let at = head.lastIndex;
+      while (at < conf.length && depth > 0) {
+        if (conf[at] === '{') depth += 1;
+        else if (conf[at] === '}') depth -= 1;
+        at += 1;
+      }
+      found.push({
+        modifier: match[1] ?? '',
+        pattern: match[2] ?? '',
+        body: conf.slice(head.lastIndex, at - 1),
+      });
+    }
+    return found;
+  }
+
+  /** Какой блок выберет nginx. Порядок — из документации, не из интуиции. */
+  function pick(pathname: string, blocks: Block[]): Block | undefined {
+    const exact = blocks.find((b) => b.modifier === '=' && b.pattern === pathname);
+    if (exact) return exact;
+
+    const prefixed = blocks
+      .filter((b) => b.modifier === '^~' && pathname.startsWith(b.pattern))
+      .sort((a, b) => b.pattern.length - a.pattern.length)[0];
+    if (prefixed) return prefixed;
+
+    const regex = blocks.find((b) => {
+      if (b.modifier !== '~' && b.modifier !== '~*') return false;
+      return new RegExp(b.pattern, b.modifier === '~*' ? 'i' : '').test(pathname);
+    });
+    if (regex) return regex;
+
+    return blocks
+      .filter((b) => b.modifier === '' && pathname.startsWith(b.pattern))
+      .sort((a, b) => b.pattern.length - a.pattern.length)[0];
+  }
+
+  /** Куда блок в итоге ведёт: цель `rewrite` либо последний аргумент try_files. */
+  function resolvesTo(block: Block): string | undefined {
+    const rewrite = /rewrite\s+\S+\s+(\S+)/.exec(block.body);
+    if (rewrite) return rewrite[1];
+    const tryFiles = /try_files\s+([^;]+);/.exec(block.body);
+    if (tryFiles) return tryFiles[1]!.trim().split(/\s+/).at(-1);
+    return undefined;
+  }
+
+  it('SHELL_URL воркера доводится сервером до оболочки приложения', () => {
+    const source = readFileSync(SW, 'utf8');
+    const shellUrl = /const SHELL_URL = '([^']+)'/.exec(source)?.[1];
+    expect(shellUrl, 'в sw.js не найден SHELL_URL').toBeDefined();
+
+    const block = pick(shellUrl!, locations(vhost));
+    expect(block, `для ${shellUrl!} в vhost не нашлось ни одного блока`).toBeDefined();
+
+    const target = resolvesTo(block!);
+    const where = `«location ${block!.modifier} ${block!.pattern}»`.replace('  ', ' ');
+    const beef =
+      target === undefined
+        ? `${where} отдаёт файл по физическому пути — а такого файла в сборке нет: ` +
+          'Vite меняет ссылки, но файлов не переносит'
+        : `${where} доводит адрес до «${target}» вместо оболочки приложения`;
+    expect(
+      target,
+      `${shellUrl!} попадает в ${beef}. Воркер вернёт эту страницу вместо ` +
+        'оболочки — и её увидит каждый, кто входит на сайте',
+    ).toBe('/index.html');
+  });
+});
