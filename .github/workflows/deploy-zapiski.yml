@@ -800,16 +800,44 @@ jobs:
           #
           # Заголовки браузерные: если ответ зависит от них, увидеть это надо
           # здесь, а не от заказчика.
+          # Три попытки на адрес, а не одна.
+          #
+          # Первый же прогон этой проверки лёг на обрыве связи: запрос упёрся в
+          # таймаут, а следующий к тому же адресу прошёл за полсекунды. Красный
+          # деплой от разовой сетевой икоты — это не строгость, а приучение
+          # смотреть на красное сквозь пальцы, и цена такой привычки уже
+          # известна.
+          #
+          # Падаем, только если адрес не ответил ни разу. Обрыв, после которого
+          # ответ пришёл, назван вслух — молчать о нём тоже нельзя.
+          probe() {
+            local url="$1" attempt code
+            for attempt in 1 2 3; do
+              # Файл сносится перед каждой попыткой: при обрыве curl его не
+              # трогает вовсе, и в нём осталась бы страница ПРЕДЫДУЩЕГО адреса.
+              rm -f /tmp/outside.html
+              code=$(curl -sS -m 20 -o /tmp/outside.html \
+                -w '%{http_code}' \
+                -H 'Accept: text/html,application/xhtml+xml' \
+                -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' \
+                "${url}" 2>/dev/null) || code='000'
+              if [ "${code}" = '200' ] && grep -q 'id="root"' /tmp/outside.html 2>/dev/null; then
+                if [ "${attempt}" != '1' ]; then
+                  echo "снаружи (раннер) ${url}: 200 с попытки ${attempt} — связь рвалась"
+                else
+                  echo "снаружи (раннер) ${url}: 200, оболочка приложения"
+                fi
+                return 0
+              fi
+              echo "снаружи (раннер) ${url}: попытка ${attempt} — код ${code}"
+              sleep 5
+            done
+            return 1
+          }
+
           for url in 'https://zapiski.cmpas.ru/auth/callback' \
                      'https://zapiski.cmpas.ru/notes/index.html'; do
-            code=$(curl -sS -m 20 -o /tmp/outside.html -w '%{http_code}' \
-              -H 'Accept: text/html,application/xhtml+xml' \
-              -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' \
-              "${url}" 2>/dev/null || echo '000')
-            shell_outside=нет
-            if grep -q 'id="root"' /tmp/outside.html 2>/dev/null; then shell_outside=да; fi
-            echo "снаружи (раннер) ${url}: ${code}, оболочка приложения: ${shell_outside}"
-            if [ "${code}" != '200' ] || [ "${shell_outside}" != 'да' ]; then bad=1; fi
+            probe "${url}" || bad=1
           done
 
           inside=$(ssh -i ~/.ssh/deploy_key \
