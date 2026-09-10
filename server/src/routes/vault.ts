@@ -151,7 +151,12 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
          приложения на втором устройстве как раз и есть тот клиент, который
          ничего не проверит и молча перезапишет зашифрованную заметку своей
          открытой версией. */
-      await assertEnvelopeIfEncrypted(ctx, auth.userId, data);
+      await assertEnvelopeIfEncrypted(
+        ctx,
+        auth.userId,
+        data,
+        headerValue(request, 'x-migrate-plaintext') === '1',
+      );
 
       const ifMatch = headerValue(request, 'if-match');
       const ifNoneMatch = headerValue(request, 'if-none-match');
@@ -435,11 +440,33 @@ export function looksLikeSyncEnvelope(data: Uint8Array): boolean {
   return data.length >= MIN_SYNC_ENVELOPE_LENGTH && data[0] === SYNC_ENVELOPE_VERSION;
 }
 
+/**
+ * @param migrating владелец аккаунта переводит его обратно на открытый текст
+ *   (заголовок `X-Migrate-Plaintext: 1`).
+ *
+ *   Заслон существует против СТАРОГО КЛИЕНТА: тот, что не знает про
+ *   шифрование, молча записал бы markdown поверх зашифрованной заметки и
+ *   сделал бы её нечитаемой для остальных устройств. Старый клиент этого
+ *   заголовка не шлёт и знать о нём не может, поэтому заслон против него
+ *   остаётся в полной силе.
+ *
+ *   Владельцу же аккаунта заслон новых прав не отнимает и не даёт: с валидным
+ *   токеном он и так может удалить объект и записать на его место что угодно.
+ *   Разница только в том, что перевод проходит одной операцией и обратимо, а
+ *   не «удалить, а потом надеяться».
+ *
+ *   Порядок на клиенте важен и продуман: открытый текст пишется, ПОКА ключ
+ *   аккаунта ещё жив, и ключ снимается последним. Обратный порядок оставил бы
+ *   при обрыве связи шифротекст без соли, которой он расшифровывается, —
+ *   возобновить перевод было бы нечем.
+ */
 export async function assertEnvelopeIfEncrypted(
   ctx: AppContext,
   userId: string,
   data: Uint8Array,
+  migrating = false,
 ): Promise<void> {
+  if (migrating) return;
   if (looksLikeSyncEnvelope(data)) return;
   const { rows } = await ctx.db.query<{ exists: boolean }>(
     `SELECT true AS exists FROM sync_keys WHERE user_id = $1`,

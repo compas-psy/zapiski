@@ -92,6 +92,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
         'x-device-id',
         'x-note-id',
         'x-vault-path',
+        'x-migrate-plaintext',
         'x-version-source',
         'x-version-merged',
         'x-device-name',

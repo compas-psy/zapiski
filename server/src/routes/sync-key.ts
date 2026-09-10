@@ -137,4 +137,53 @@ export async function registerSyncKeyRoutes(app: FastifyInstance): Promise<void>
 
     return reply.code(201).send({ enrolled: true, keyVersion: body.data.keyVersion ?? 1 });
   });
+
+  /**
+   * Снятие ключа аккаунта — перевод обратно на открытый текст.
+   *
+   * ── Зачем оно есть ─────────────────────────────────────────────────────
+   *
+   * Решение владельца — убрать сквозное шифрование из MVP и вернуть позже
+   * через внешнюю ключницу. У аккаунта, успевшего пройти онбординг, на
+   * сервере лежит шифротекст, а `assertEnvelopeIfEncrypted` не примет поверх
+   * него открытый текст — и правильно сделает. Без этого маршрута такой
+   * аккаунт заперт навсегда: клиент больше не шифрует, сервер больше не
+   * принимает.
+   *
+   * ── Почему это не «тихое отключение шифрования» ────────────────────────
+   *
+   * Новых прав операция не даёт: у того, кто дошёл сюда с валидным токеном,
+   * и так есть чтение и запись всего аккаунта. Опасность у неё другая —
+   * она лишает ОСТАЛЬНЫЕ устройства возможности развернуть ключ по коду
+   * восстановления. Поэтому снятый материал возвращается в ответе: обрыв
+   * связи посреди перевода не имеет права оставить человека без ключа и с
+   * шифротекстом, который этим ключом только и открывается.
+   *
+   * Порядок на клиенте обязан быть именно такой: сначала расшифровать всё
+   * своим локальным ключом, и только потом снимать. Обратный порядок
+   * невозможен технически — открытый текст до снятия отбивается 409.
+   */
+  app.delete('/api/v1/vault/sync-key', { preHandler: app.requireAuth }, async (request, reply) => {
+    const auth = authOf(request);
+    const { rows } = await ctx.db.query<SyncKeyRow>(
+      `DELETE FROM sync_keys WHERE user_id = $1
+       RETURNING wrapped_smk, account_salt, check_blob, key_version, created_at`,
+      [auth.userId],
+    );
+
+    const removed = rows[0];
+    if (!removed) {
+      // Идемпотентность: перевод может оборваться и повториться, и «ключа уже
+      // нет» — это успех операции «ключа быть не должно», а не ошибка.
+      return reply.code(200).send({ removed: false });
+    }
+
+    return reply.code(200).send({
+      removed: true,
+      wrappedSmk: removed.wrapped_smk.toString('base64'),
+      accountSalt: removed.account_salt.toString('base64'),
+      checkBlob: removed.check_blob.toString('base64'),
+      keyVersion: removed.key_version,
+    });
+  });
 }
