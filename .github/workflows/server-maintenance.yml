@@ -1,0 +1,189 @@
+name: Обслуживание сервера (место на диске)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Зачем этот workflow существует
+#
+# `updates/builds/<ветка>/` копит установщик КАЖДОЙ сборки и никогда ничего не
+# удаляет: 28 МБ APK плюс ~10 МБ .exe на каждый прогон. Отсюда первый видимый
+# отказ — доставка APK на сервер встала на передаче 28 МБ и была убита по
+# таймауту (прогон 233, exit 124). Полный диск выглядит не как «диск полон», а
+# как «зависла загрузка» и «синхронизация ничего не делает».
+#
+# Запускается двумя способами. Руками (`workflow_dispatch`) — когда нужно
+# посмотреть или убрать прямо сейчас. И по расписанию, раз в неделю: уборка,
+# которая держится на том, что кто-то о ней вспомнит, — не механизм, а
+# намерение, и диск переполнится ровно в тот раз, когда не вспомнили.
+#
+# Расписание безопасно именно потому, что рамки ниже узкие: оно оставляет три
+# последних каталога сборок и не касается ни `latest`, ни заметок.
+#
+# ── Рамки, за которые он не выходит ─────────────────────────────────────────
+#
+#   * трогает ТОЛЬКО `/var/www/zapiski.cmpas.ru/updates/builds/`;
+#   * `updates/latest/` не трогает НИКОГДА — на него смотрит промостраница и
+#     автообновление;
+#   * тома с заметками (`zapiski_blobs`) и базы не касается вовсе;
+#   * по умолчанию НИЧЕГО не удаляет: сначала отчёт, удаление — отдельным
+#     запуском с `dry_run: false`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  schedule:
+    # Воскресенье, 04:10 UTC — заведомо вне рабочих часов и вне окна выкладок.
+    - cron: '10 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: 'Сколько последних каталогов сборок оставить'
+        required: false
+        default: '3'
+      dry_run:
+        description: 'Только показать, ничего не удалять'
+        required: false
+        default: 'true'
+      prune_docker:
+        description: 'Убрать висячие образы Docker (безопасно, только dangling)'
+        required: false
+        default: 'false'
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверить, что сервер объявлен
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SERVER_HOST:-}" ]; then
+            echo '::error::SERVER_HOST не задан — идти некуда.'
+            exit 1
+          fi
+
+      - name: Загрузить SSH-ключ
+        timeout-minutes: 3
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          # Ловушка называет, на чём встали: потолок шага сам по себе оставляет
+          # в логе только «job cancelled», и разбирать нечего.
+          phase='подготовка ключа'
+          trap 'echo "::error::Обслуживание встало на: ${phase}"' ERR
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "${SSH_PRIVATE_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Разрешение имени — отдельной командой со своим потолком:
+          # ConnectTimeout его НЕ покрывает, ssh блокируется в getaddrinfo.
+          phase='разрешение имени сервера в адрес'
+          echo "→ ${phase}"
+          timeout 20 getent hosts "${SERVER_HOST}" > /dev/null \
+            || { echo "::error::${SERVER_HOST} не разрешается в адрес"; exit 1; }
+
+          phase='приём ключа хоста'
+          echo "→ ${phase}"
+          timeout 30 ssh-keyscan -T 10 -H "${SERVER_HOST}" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # BatchMode отменяет любой интерактивный вопрос — иначе ssh, не приняв
+          # ключ, спросит пароль и будет ждать ответа, которого на раннере не
+          # будет никогда. ConnectTimeout закрывает установку связи,
+          # ServerAlive* — уже установленную: встать можно и посреди разговора.
+          cat >> ~/.ssh/config <<'SSHCFG'
+          Host *
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          SSHCFG
+          chmod 600 ~/.ssh/config
+
+      - name: Отчёт и уборка
+        timeout-minutes: 10
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          # `inputs` пусты при запуске по расписанию — отсюда значения по
+          # умолчанию прямо здесь. Расписание убирает по-настоящему: сухой
+          # прогон раз в неделю не освободил бы ни байта.
+          KEEP: ${{ inputs.keep || '3' }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          PRUNE_DOCKER: ${{ inputs.prune_docker || 'false' }}
+        run: |
+          set -euo pipefail
+          phase='отчёт и уборка на сервере'
+          trap 'echo "::error::Обслуживание встало на: ${phase}"' ERR
+          echo "→ ${phase}"
+          timeout 300 ssh -i ~/.ssh/deploy_key \
+            "${SERVER_USER}@${SERVER_HOST}" \
+            sh -s -- "${KEEP}" "${DRY_RUN}" "${PRUNE_DOCKER}" <<'REMOTE'
+          set -eu
+          keep="$1"; dry="$2"; prune_docker="$3"
+          root='/var/www/zapiski.cmpas.ru/updates'
+          builds="${root}/builds"
+
+          echo '── место на диске ─────────────────────────────────────────'
+          df -h / || true
+
+          echo
+          echo '── что занимает updates/ ──────────────────────────────────'
+          du -sh "${root}"/* 2>/dev/null | sort -h || true
+
+          echo
+          echo '── каталоги сборок, от новых к старым ─────────────────────'
+          if [ ! -d "${builds}" ]; then
+            echo "каталога ${builds} нет — убирать нечего"
+          else
+            ls -1t "${builds}" 2>/dev/null | while read -r name; do
+              [ -n "${name}" ] || continue
+              printf '%s\t%s\n' "$(du -sh "${builds}/${name}" 2>/dev/null | cut -f1)" "${name}"
+            done
+
+            echo
+            echo "── к удалению (оставляем ${keep} последних) ───────────────"
+            # `latest` лежит СОСЕДОМ, а не внутри builds, и в список не попадает
+            # по построению. Проверка ниже — вторая линия на случай, если
+            # раскладка когда-нибудь изменится.
+            doomed="$(ls -1t "${builds}" 2>/dev/null | tail -n +"$((keep + 1))" || true)"
+            if [ -z "${doomed}" ]; then
+              echo 'нечего удалять'
+            else
+              echo "${doomed}"
+              if [ "${dry}" = 'false' ]; then
+                echo
+                echo '── удаляю ────────────────────────────────────────────'
+                echo "${doomed}" | while read -r name; do
+                  [ -n "${name}" ] || continue
+                  case "${name}" in
+                    latest|.|..|'') echo "пропуск: ${name}"; continue ;;
+                  esac
+                  target="${builds}/${name}"
+                  case "${target}" in
+                    "${builds}/"*) rm -rf "${target}" && echo "убран ${name}" ;;
+                    *) echo "ОТКАЗ: ${target} вне ${builds}" ;;
+                  esac
+                done
+              else
+                echo '(сухой прогон — ничего не удалено)'
+              fi
+            fi
+          fi
+
+          if [ "${prune_docker}" = 'true' ] && [ "${dry}" = 'false' ]; then
+            echo
+            echo '── висячие образы Docker ──────────────────────────────────'
+            # Только dangling: `-a` убрал бы образы, на которых стоят
+            # остановленные контейнеры, в том числе чужие проекты на этой машине.
+            docker image prune -f 2>/dev/null || echo 'docker недоступен'
+          fi
+
+          echo
+          echo '── место после ────────────────────────────────────────────'
+          df -h / || true
+          REMOTE
+
+      - name: Убрать ключ
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

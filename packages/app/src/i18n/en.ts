@@ -677,6 +677,7 @@ export const en: AppCatalog = {
       publisher: 'Publisher',
       publisherName: 'SIMPAS',
       version: 'Version',
+      build: 'Build',
       legal: 'Legal documents',
       legalTerms: 'Terms of use',
       legalNotes: 'Special Terms for ZAPISKI',

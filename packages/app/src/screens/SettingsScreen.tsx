@@ -41,6 +41,7 @@ import {
 } from '@zapiski/core';
 import type { AttachmentPlacement, SettingsSection } from '../contract.js';
 import { cloudAvailable } from '../state/cloud-access.js';
+import { BUILD_ID } from '../build-info.js';
 import { useApp, useAppState, useStrings } from '../state/context.js';
 import { Section } from '../components/ScreenStates.js';
 import { ConfirmDialog } from '../components/ConfirmDialog.js';
@@ -1625,6 +1626,15 @@ function AboutSection(): ReactNode {
         {/* Моноширинным, как все технические значения: номер сборки читают
             и переписывают в письмо, а не просматривают. */}
         <span className="za-info__value za-info__value--mono">{app.host.platform.version}</span>
+      </div>
+      <div className="za-info__row">
+        {/* Отпечаток сборки. Номер версии не меняется годами, а этот —
+            меняется с каждым коммитом, и по нему единственному видно, доехала
+            ли починка до устройства. Тем же моноширинным: его переписывают. */}
+        <span>{copy.build}</span>
+        <span className="za-info__value za-info__value--mono" data-testid="build-id">
+          {BUILD_ID}
+        </span>
       </div>
 
       {/*
