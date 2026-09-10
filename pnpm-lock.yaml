@@ -378,12 +378,12 @@ importers:
       '@fastify/websocket':
         specifier: ^11.0.2
         version: 11.3.0
-      '@simpas/id-client':
-        specifier: github:compas-psy/auth#main&path:/packages/id-client
-        version: https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client
       fastify:
         specifier: ^5.12.3
         version: 5.12.3
+      jose:
+        specifier: ^5.9.6
+        version: 5.10.0
       nodemailer:
         specifier: ^9.1.1
         version: 9.1.1
@@ -1165,10 +1165,6 @@ packages:
     resolution: {integrity: sha512-zD6NdeWEByGE9QF9vCrlJ5YQB4oq9q91kPZS37Jwj5hOkvR1lTBSpsKhKDw4IJtbQ35LsTS1HD9DZYGKIshU1Q==}
     cpu: [x64]
     os: [win32]
-
-  '@simpas/id-client@https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client':
-    resolution: {path: /packages/id-client, tarball: https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285}
-    version: 1.0.0
 
   '@tauri-apps/api@2.11.1':
     resolution: {integrity: sha512-M2FPuYND2m+wh5hfW9ZpSdxMPdEJovPBWwoHJmwUpysTYNHaOkVFN419m/K0LIgjb/7KU2vBgsUepJWugQCvAA==}
@@ -3230,10 +3226,6 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.62.4':
     optional: true
-
-  '@simpas/id-client@https://codeload.github.com/compas-psy/auth/tar.gz/508362e091119134d412065bdb564d83a8c60285#path:/packages/id-client':
-    dependencies:
-      jose: 5.10.0
 
   '@tauri-apps/api@2.11.1': {}
 

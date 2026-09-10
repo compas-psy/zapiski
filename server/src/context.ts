@@ -3,7 +3,7 @@ import type { Db } from './db/pool.ts';
 import type { BlobStore } from './services/blobStore.ts';
 import type { LiveBus } from './services/liveBus.ts';
 import type { Mailer } from './services/mailer.ts';
-import type { SimpasClient } from '@simpas/id-client';
+import type { SimpasClient } from './vendor/simpas-id-client.ts';
 
 import type { YandexOAuth } from './services/yandex.ts';
 import type { PracticeBridge } from './services/practiceBridge.ts';

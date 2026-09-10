@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
-import { createSimpasClient, type SimpasClient } from '@simpas/id-client';
+import { createSimpasClient, type SimpasClient } from '../vendor/simpas-id-client.ts';
 
 import type { Env } from '../config/env.ts';
 

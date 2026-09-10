@@ -17,7 +17,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import type { AuthorizationUrlInput, IdTokenClaims, SimpasClient } from '@simpas/id-client';
+import type { AuthorizationUrlInput, IdTokenClaims, SimpasClient } from '../src/vendor/simpas-id-client.ts';
 
 import { createHarness, noDatabase, type Harness } from './helpers/app.ts';
 import { openVerifier, sealVerifier } from '../src/services/simpas.ts';

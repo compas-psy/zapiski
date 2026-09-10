@@ -9,7 +9,7 @@ import { ApiError, errors } from '../lib/errors.ts';
 import { signJwt, verifyJwt } from '../lib/jwt.ts';
 import { mailSent } from '../lib/messages.ts';
 import { isValidDeviceKey } from '../lib/vaultPath.ts';
-import { createPkcePair, createState, SimpasError } from '@simpas/id-client';
+import { createPkcePair, createState, SimpasError } from '../vendor/simpas-id-client.ts';
 
 import { openVerifier, sealVerifier, simpasRedirectUri } from '../services/simpas.ts';
 import { linkSimpasIdentity } from '../services/simpasLinks.ts';
