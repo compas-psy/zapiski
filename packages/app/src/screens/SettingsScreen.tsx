@@ -856,10 +856,6 @@ function SyncSection(): ReactNode {
         badge={cloudHere ? copy.cloudBadge : undefined}
         hint={cloudHere ? undefined : copy.cloudUnavailableBadge}
         current={choiceOrBackend}
-        /* Раскрыта, когда её выбрали сейчас или выбрали раньше: внутри —
-           шаги шифрования (SEC-001 §4), и человеку надо их видеть и до
-           подключения, и после. */
-        open={openMode === 'zapiski' || choiceOrBackend === 'zapiski'}
         onChoose={
           cloudHere
             ? () => {
@@ -868,9 +864,7 @@ function SyncSection(): ReactNode {
               }
             : () => app.toast({ message: strings.errors.cloudSyncDisabled })
         }
-      >
-        <CloudEncryptionCard />
-      </ModeCard>
+      />
 
       {/*
         Дисклеймер тестовой версии — рядом с карточкой облака и ДО подключения.
@@ -1259,161 +1253,6 @@ function StorageHousekeeping(): ReactNode {
  * всё равно нельзя, а четыре одновременно открытые формы и создавали то самое
  * ощущение, что всё это складывается друг с другом.
  */
-/**
- * SEC-001 §4 — включение облака, код восстановления, подключение устройства.
- *
- * Без дизайн-перфекционизма и намеренно: это не «экран», а три коротких
- * состояния внутри карточки хранилища, и каждое отвечает на один вопрос
- * человека — «что вообще произойдёт», «что мне сохранить», «как открыть
- * заметки здесь».
- *
- * ── Почему подтверждение обязательно ─────────────────────────────────────
- *
- * Код восстановления показывается ОДИН раз. Он не лежит ни у нас (в этом
- * весь смысл: сервер держит SMK только обёрнутым), ни на устройстве — там
- * закэширован уже развёрнутый ключ, из которого код не выводится. Закрыть
- * этот экран мимо значит потерять возможность подключить второе устройство.
- * Поэтому кнопка «Я сохранил код восстановления» стоит МЕЖДУ показом кода и
- * включением синхронизации, а не после неё.
- *
- * ── Почему неверный код ничего не ломает ─────────────────────────────────
- *
- * Опечатка ловится локально, по контрольной сумме, и до сети не доходит
- * вовсе. Неверный, но правильно набранный код не разворачивает ключ и не
- * оставляет огрызка в хранилище устройства. Ни один отказ здесь не трогает
- * ни ключ аккаунта, ни заметки: «сбросить и начать заново» — не вариант,
- * который мы предлагаем.
- */
-function CloudEncryptionCard(): ReactNode {
-  const app = useApp();
-  const state = useAppState();
-  const strings = useStrings();
-  const copy = strings.settings.sync;
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  /* Состояние шифрования спрашивается у сервера, а не угадывается: локальное
-     отсутствие ключа само по себе не значит «ключа нет у аккаунта». */
-  useEffect(() => {
-    void app.refreshCloudEncryption();
-  }, [app]);
-
-  const recovery = state.cloudRecoveryCode;
-
-  /* Единственная минута, когда код вообще виден. */
-  if (recovery !== null) {
-    return (
-      <>
-        <span className="za-card__title">{copy.recoveryTitle}</span>
-        <p className="za-muted">{copy.recoveryHint}</p>
-        <code className="za-recovery-code" data-testid="cloud-recovery-code">
-          {recovery}
-        </code>
-        <div className="za-row-between" style={{ gap: 8 }}>
-          <Button
-            variant="secondary"
-            size="compact"
-            onClick={() => {
-              void navigator.clipboard?.writeText(recovery).then(() => setCopied(true));
-            }}
-          >
-            {copied ? copy.recoveryCopied : copy.recoveryCopy}
-          </Button>
-          <Button onClick={() => void app.confirmRecoveryCodeSaved()}>{copy.recoverySaved}</Button>
-        </div>
-      </>
-    );
-  }
-
-  if (state.cloudEncryption === 'cloud_disabled_platform') {
-    return <p className="za-muted">{copy.encryptionWebOnly}</p>;
-  }
-
-  if (state.cloudEncryption === 'needs_recovery') {
-    return (
-      <>
-        <span className="za-card__title">{copy.recoveryEnterTitle}</span>
-        <p className="za-muted">{copy.recoveryEnterHint}</p>
-        <TextField
-          mono
-          label={copy.recoveryEnterLabel}
-          value={code}
-          onChange={(event) => {
-            setCode(event.target.value);
-            setError(null);
-          }}
-        />
-        {error !== null ? <p className="za-form-error">{error}</p> : null}
-        <Button
-          variant="secondary"
-          disabled={code.trim() === '' || busy}
-          onClick={() => {
-            /* Та же причина, что у кнопки включения: код открывает ключ
-               АККАУНТА, и без входа проверять его не у кого. Без этой
-               ветки отказ выглядел бы как «облако недоступно», то есть
-               назвал бы неверную причину. */
-            if (!app.hasSession()) {
-              app.beginSignIn({ name: 'settings', section: 'sync' });
-              return;
-            }
-            setBusy(true);
-            void app.unlockCloudWithRecoveryCode(code).then((result) => {
-              setBusy(false);
-              if (result === 'ok') {
-                setCode('');
-                setError(null);
-                return;
-              }
-              setError(
-                result === 'typo'
-                  ? copy.recoveryTypo
-                  : result === 'wrong-code'
-                    ? copy.recoveryWrong
-                    : copy.recoveryOffline,
-              );
-            });
-          }}
-        >
-          {copy.recoveryUnlock}
-        </Button>
-      </>
-    );
-  }
-
-  if (
-    state.cloudEncryption === 'encrypted_ready' ||
-    state.cloudEncryption === 'migration_required'
-  ) {
-    return <p className="za-muted">{copy.encryptionReady}</p>;
-  }
-
-  /* `needs_onboarding` и «ещё не выясняли»: обещание и одна кнопка. */
-  return (
-    <>
-      <p className="za-muted">{copy.encryptionPromise}</p>
-      <Button
-        disabled={busy}
-        onClick={() => {
-          /* Без входа ключ создавать некому и негде: у ключа есть аккаунт.
-             Раньше нажатие здесь молча не делало НИЧЕГО — `enableCloud
-             Encryption` возвращал `null` и не говорил ни слова. Ведём
-             входить и возвращаемся сюда же. */
-          if (!app.hasSession()) {
-            app.beginSignIn({ name: 'settings', section: 'sync' });
-            return;
-          }
-          setBusy(true);
-          void app.enableCloudEncryption().finally(() => setBusy(false));
-        }}
-      >
-        {copy.encryptionEnable}
-      </Button>
-    </>
-  );
-}
-
 function ModeCard({
   id,
   title,

@@ -73,13 +73,17 @@ describe('выбор хранилища переживает потерю вхо
       'подключения нет — и это правда, менять её не надо',
     ).toBeNull();
     expect(
-      app.getState().cloudSyncDisabled,
-      'приложение молчит о том, что синхронизация выключена',
+      app.getState().cloudNeedsSignIn,
+      'приложение молчит о том, что нужно войти снова',
     ).toBe(true);
+    expect(
+      app.getState().cloudSyncDisabled,
+      'облако объявлено выключенным — неверная причина, оно просто без входа',
+    ).toBe(false);
     app.dispose();
   });
 
-  it('на экране отмечено облако и сказано, что синхронизация временно недоступна', async () => {
+  it('на экране отмечено облако, а причина — вход, и её можно исправить', async () => {
     const app = await bootWithoutSession();
     await waitFor(() => expect(app.getState().backendChoice).toBe('zapiski'));
     mount(app);
@@ -95,7 +99,7 @@ describe('выбор хранилища переживает потерю вхо
 
     /* Текст встречается дважды — плашкой на экране и тостом, — и это не
        дубль: тост живёт шесть секунд и уходит, плашка остаётся. */
-    expect(screen.getAllByText(ru.errors.cloudSyncDisabled).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(ru.errors.cloudSignInAgain).length).toBeGreaterThan(0);
     app.dispose();
   });
 

@@ -151,7 +151,6 @@ export async function registerVaultRoutes(app: FastifyInstance): Promise<void> {
          приложения на втором устройстве как раз и есть тот клиент, который
          ничего не проверит и молча перезапишет зашифрованную заметку своей
          открытой версией. */
-      await assertEnvelopeIfEncrypted(ctx, auth.userId, data);
 
       const ifMatch = headerValue(request, 'if-match');
       const ifNoneMatch = headerValue(request, 'if-none-match');
@@ -412,46 +411,23 @@ export async function assertCanWrite(ctx: AppContext, userId: string): Promise<v
     : errors.subscriptionRequired();
 }
 
-/**
- * SEC-001 §13 — конверт обязателен, если аккаунт уже перешёл на шифрование.
+/*
+ * Здесь стоял заслон `assertEnvelopeIfEncrypted` с распознавателем конверта
+ * `looksLikeSyncEnvelope`: аккаунт, перешедший на сквозное шифрование,
+ * переставал принимать открытый текст — чтобы старый клиент не затёр
+ * шифротекст markdown'ом и не сделал заметку нечитаемой на остальных
+ * устройствах.
  *
- * Раскладка конверта (`packages/core/src/sync/sync-crypto.ts`):
- * `[версия(1)][нонс(12)][шифротекст+тег(≥16)]`. Сервер не разбирает и не
- * может разобрать содержимое — он проверяет ровно форму: первый байт равен
- * версии конверта и длины хватает на нонс с тегом.
+ * Снят вместе со всей продуктовой функцией сквозного шифрования. Оставлять
+ * его было нельзя: у аккаунта, успевшего эту функцию включить, он НАВСЕГДА
+ * запретил бы обычную синхронизацию — клиент больше не шифрует, а сервер
+ * продолжал бы отбивать его записи 409. Именно это в прошлый заход и загнало
+ * в тупик все три оболочки сразу.
  *
- * Проверка нарочно грубая. Её задача — не «доказать, что это шифротекст»
- * (сервер этого не может по построению zero-knowledge), а не дать СТАРОМУ
- * клиенту молча записать markdown поверх зашифрованной заметки. Markdown
- * начинается с печатного символа, локальный контейнер `.md.enc` — с `Z`
- * (`ZPSK`), и оба отбиваются; а под шифрованием синка даже `.md.enc`
- * приезжает завёрнутым в конверт снаружи (двойное шифрование, design §1),
- * так что ложных отказов у нового клиента не возникает.
+ * Содержимое от постороннего чтения защищает теперь шифрование ТОМА ключом
+ * сервера (`services/blobStore.ts`), а заметки одного человека от другого —
+ * серверная авторизация (`test/security.perimeter.test.ts`).
  */
-const SYNC_ENVELOPE_VERSION = 1;
-const MIN_SYNC_ENVELOPE_LENGTH = 1 + 12 + 16;
-
-export function looksLikeSyncEnvelope(data: Uint8Array): boolean {
-  return data.length >= MIN_SYNC_ENVELOPE_LENGTH && data[0] === SYNC_ENVELOPE_VERSION;
-}
-
-export async function assertEnvelopeIfEncrypted(
-  ctx: AppContext,
-  userId: string,
-  data: Uint8Array,
-): Promise<void> {
-  if (looksLikeSyncEnvelope(data)) return;
-  const { rows } = await ctx.db.query<{ exists: boolean }>(
-    `SELECT true AS exists FROM sync_keys WHERE user_id = $1`,
-    [userId],
-  );
-  if (rows.length === 0) return; // аккаунт ещё не шифруется — принимаем как раньше
-  throw new ApiError(
-    409,
-    'upgrade_required',
-    'Этот аккаунт синхронизируется с шифрованием. Обновите приложение — старая версия не умеет читать и писать зашифрованные заметки.',
-  );
-}
 
 export function requirePath(request: FastifyRequest): string {
   const params = request.params as Record<string, unknown>;

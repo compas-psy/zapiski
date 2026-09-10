@@ -620,16 +620,13 @@ describe('вход замыкается', () => {
 
     expect(app.getState().account?.email).toBe('marina@ya.ru');
     /*
-     * Облако при этом НЕ поднимается — и причина именно платформенная, а не
-     * «вход не сработал»: тестовая оболочка это веб (`createTestHost`), а в
-     * вебе ключ синка держать негде (SEC-001 design §3.1, `cloud-gate.test.tsx`).
-     * Сам выключатель SEC-001 давно снят — проверять надо не его, а то, что
-     * вход в аккаунт не обходит платформенный запрет.
+     * Облако ПОДНИМАЕТСЯ — ради этого вход и нужен. Прежде здесь стояло
+     * обратное: в вебе облака не было, потому что негде держать ключ
+     * сквозного шифрования. Шифрование вырезано из MVP, замок снят, и вход
+     * означает ровно то, чего человек от него ждёт.
      */
-    expect(CLOUD_SYNC_ENABLED, 'выключатель SEC-001 снят — облако держит платформенный гейт').toBe(
-      true,
-    );
-    expect(app.getState().backendId).toBeNull();
+    expect(CLOUD_SYNC_ENABLED).toBe(true);
+    await vi.waitFor(() => expect(app.getState().backendId).toBe('zapiski'));
     /* Возвращаемся к тому, ради чего входили, а не «куда-нибудь». */
     expect(app.getState().route).toEqual({ name: 'list' });
     expect(app.getState().authError).toBeNull();
@@ -640,8 +637,8 @@ describe('вход замыкается', () => {
     const app = await bootedApp({ initial: { magicToken: 'ottt' } });
     /* boot() уже спросил оболочку — ждём, пока обмен доедет. */
     await vi.waitFor(() => expect(app.getState().account?.email).toBe('marina@ya.ru'));
-    /* См. комментарий выше: в вебе облако не поднимается по платформенной причине. */
-    expect(app.getState().backendId).toBeNull();
+    /* См. комментарий выше: вход поднимает облако, в том числе в вебе. */
+    await vi.waitFor(() => expect(app.getState().backendId).toBe('zapiski'));
     app.dispose();
   });
 
@@ -661,13 +658,12 @@ describe('вход замыкается', () => {
     app.dispose();
   });
 
-  it('выход из аккаунта не трогает заметки (облако и так не поднято — SEC-001 kill-switch)', async () => {
+  it('выход из аккаунта отключает облако, но не трогает заметки', async () => {
     const app = await bootedApp();
     await app.completeSignIn({ magicToken: 'ottt' });
-    /* См. комментарий выше: пока действует kill-switch, вход не поднимает
-       облако — значит и выходу отключать здесь нечего, но заметки обязаны
-       остаться доступны в любом случае. */
-    expect(app.getState().backendId).toBeNull();
+    /* Вход теперь действительно поднимает облако — значит выходу есть что
+       отключать, и проверка стала осмысленной. */
+    await vi.waitFor(() => expect(app.getState().backendId).toBe('zapiski'));
 
     await app.signOutCloud();
 

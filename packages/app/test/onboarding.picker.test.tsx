@@ -103,7 +103,7 @@ describe('шаг 2: выбор места для заметок', () => {
     app.dispose();
   });
 
-  it('Windows: варианта «Облако Записок» в онбординге больше нет (SEC-001 kill-switch)', () => {
+  it('Windows: вариант «Облако Записок» предлагается', () => {
     /*
       Раньше здесь проверялось «выбор облака тоже ведёт к папке, и кнопка об
       этом говорит» — прежде при выборе облака кнопка говорила «Дальше», а
@@ -121,7 +121,7 @@ describe('шаг 2: выбор места для заметок', () => {
     };
 
     const app = mount(host);
-    expect(screen.queryByText(ru.onboarding.step2.options.cloud.title)).toBeNull();
+    expect(screen.getByText(ru.onboarding.step2.options.cloud.title)).toBeTruthy();
     app.dispose();
   });
 
