@@ -294,88 +294,116 @@ if ((await page.locator('.z-sheet, .z-modal, [role=dialog]').count()) > 0) {
   await page.waitForTimeout(700);
 }
 
-// ── 6. Настройки → Безопасность ───────────────────────────────────────────
+// ── 6-7. Настройки → Безопасность ─────────────────────────────────────────
+//
+// Раздел бывает ЗАКРЫТ — решение заказчика «сделай неактивным и подписью
+// СКОРО» (`SECURITY_SETTINGS_ENABLED`, docs/product/hidden-in-ui.md). Тогда
+// ни поля пароля, ни диалога смены на экране нет, и требовать их — значит
+// требовать держать раздел открытым ради самой проверки.
+//
+// Состояние берётся С ЭКРАНА, а не из флага: прогон смотрит на продукт теми
+// же глазами, что человек, и вернётся к проверкам сам, как только пункт снова
+// станет нажимаемым. Пропуск назван вслух — молчаливый выглядел бы пройденным.
 await page.getByRole('button', { name: 'Настройки', exact: true }).first().click();
 await page.waitForTimeout(1000);
-await page.getByRole('button', { name: /Безопасность/ }).first().click();
-await page.waitForTimeout(800);
 
-/*
- * Поле пароля обязано стоять ВЫШЕ тумблера биометрии.
- *
- * Оно стояло ниже, и естественный жест — сначала переключить — уходил в
- * `setBiometricsEnabled(true, '')`: ключ выводился из пустой строки и уезжал
- * в защищённый модуль. Тумблер вставал в «включено», палец не открывал
- * ничего. Порядок на экране здесь — часть починки, поэтому он и проверяется.
- */
-const biometricsRow = page.locator('.za-field-row', {
-  has: page.locator('text=Разблокировать биометрией'),
-});
-if (await biometricsRow.count()) {
-  const geometry = await page.evaluate(() => {
-    const label = [...document.querySelectorAll('.z-field__label')].find(
-      (node) => node.textContent.trim() === 'Пароль хранилища',
-    );
-    const toggle = [...document.querySelectorAll('.za-field-row')].find((node) =>
-      node.textContent.includes('Разблокировать биометрией'),
-    );
-    if (!label || !toggle) return null;
-    return {
-      password: Math.round(label.getBoundingClientRect().top),
-      toggle: Math.round(toggle.getBoundingClientRect().top),
-      disabled: toggle.querySelector('input')?.disabled ?? null,
-    };
-  });
-  check(geometry !== null, 'в «Безопасности» не нашлись поле пароля и тумблер биометрии');
-  if (geometry) {
-    check(
-      geometry.password < geometry.toggle,
-      'поле пароля хранилища стоит НИЖЕ тумблера биометрии — включение уйдёт с пустым паролем',
-      JSON.stringify(geometry),
-    );
-    check(
-      geometry.disabled === true,
-      'тумблер биометрии нажимается при пустом поле пароля',
-      JSON.stringify(geometry),
-    );
-  }
+const securityItem = page.getByRole('button', { name: /Безопасность/ }).first();
+const securityClosed = await securityItem.isDisabled();
+
+if (securityClosed) {
+  console.log('  · раздел «Безопасность» закрыт («СКОРО») — порядок поля пароля и смена пароля не проверялись');
+  /* Закрыт — не значит «пусто»: адрес мог остаться в закладке, и пустой экран
+     по нему был бы тупиком. Это здесь и проверяется, чтобы шаг не превращался
+     в чистый пропуск. */
+  check(
+    (await securityItem.textContent())?.includes('СКОРО') === true,
+    'закрытый раздел «Безопасность» ничем не подписан — человек решит, что он сломался',
+  );
 } else {
-  /* Платформа без модуля обязана СКРЫВАТЬ тумблер (BEHAVIOR §5.1) — это
-     законный исход, и молчать о нём нельзя: иначе проверка выглядит пройденной. */
-  console.log('  · биометрии в этом браузере нет — тумблер скрыт, проверка порядка пропущена');
+  await page.getByRole('button', { name: /Безопасность/ }).first().click();
+  await page.waitForTimeout(800);
+
+  /*
+   * Поле пароля обязано стоять ВЫШЕ тумблера биометрии.
+   *
+   * Оно стояло ниже, и естественный жест — сначала переключить — уходил в
+   * `setBiometricsEnabled(true, '')`: ключ выводился из пустой строки и уезжал
+   * в защищённый модуль. Тумблер вставал в «включено», палец не открывал
+   * ничего. Порядок на экране здесь — часть починки, поэтому он и проверяется.
+   */
+  const biometricsRow = page.locator('.za-field-row', {
+    has: page.locator('text=Разблокировать биометрией'),
+  });
+  if (await biometricsRow.count()) {
+    const geometry = await page.evaluate(() => {
+      const label = [...document.querySelectorAll('.z-field__label')].find(
+        (node) => node.textContent.trim() === 'Пароль хранилища',
+      );
+      const toggle = [...document.querySelectorAll('.za-field-row')].find((node) =>
+        node.textContent.includes('Разблокировать биометрией'),
+      );
+      if (!label || !toggle) return null;
+      return {
+        password: Math.round(label.getBoundingClientRect().top),
+        toggle: Math.round(toggle.getBoundingClientRect().top),
+        disabled: toggle.querySelector('input')?.disabled ?? null,
+      };
+    });
+    check(geometry !== null, 'в «Безопасности» не нашлись поле пароля и тумблер биометрии');
+    if (geometry) {
+      check(
+        geometry.password < geometry.toggle,
+        'поле пароля хранилища стоит НИЖЕ тумблера биометрии — включение уйдёт с пустым паролем',
+        JSON.stringify(geometry),
+      );
+      check(
+        geometry.disabled === true,
+        'тумблер биометрии нажимается при пустом поле пароля',
+        JSON.stringify(geometry),
+      );
+    }
+  } else {
+    /* Платформа без модуля обязана СКРЫВАТЬ тумблер (BEHAVIOR §5.1) — это
+       законный исход, и молчать о нём нельзя: иначе проверка выглядит пройденной. */
+    console.log('  · биометрии в этом браузере нет — тумблер скрыт, проверка порядка пропущена');
+  }
+
+  // ── 7. Смена пароля: отказ обязан назвать причину ─────────────────────────
+  await page.getByRole('button', { name: /^Сменить пароль$/ }).first().click();
+  await page.waitForTimeout(600);
+
+  const submitButton = page.locator('.z-modal .z-overlay__footer button').last();
+  await fill('Текущий пароль', PASSWORD, '.z-modal');
+  await fill('Новый пароль', 'коротк', '.z-modal');
+  await fill('Повторите пароль', 'коротк', '.z-modal');
+  check(await submitButton.isDisabled(), 'кнопка смены активна при новом пароле короче восьми');
+  const shortWhy = await messageUnder('Новый пароль', '.z-modal');
+  check(
+    shortWhy.length > 0,
+    'короткий новый пароль не объяснён — ровно это заказчик увидел как «кнопка не активируется»',
+    JSON.stringify(shortWhy),
+  );
+
+  await fill('Новый пароль', 'новыйпароль99', '.z-modal');
+  await fill('Повторите пароль', 'новыйпароль9', '.z-modal');
+  check(await submitButton.isDisabled(), 'кнопка смены активна при несовпавшем повторе');
+  const mismatchWhy = await messageUnder('Повторите пароль', '.z-modal');
+  check(mismatchWhy.length > 0, 'несовпавший повтор не объяснён', JSON.stringify(mismatchWhy));
+
+  await fill('Повторите пароль', 'новыйпароль99', '.z-modal');
+  check(
+    !(await submitButton.isDisabled()),
+    'кнопка смены не включилась, когда все три поля заполнены верно',
+  );
 }
 
-// ── 7. Смена пароля: отказ обязан назвать причину ─────────────────────────
-await page.getByRole('button', { name: /^Сменить пароль$/ }).first().click();
-await page.waitForTimeout(600);
-
-const submitButton = page.locator('.z-modal .z-overlay__footer button').last();
-await fill('Текущий пароль', PASSWORD, '.z-modal');
-await fill('Новый пароль', 'коротк', '.z-modal');
-await fill('Повторите пароль', 'коротк', '.z-modal');
-check(await submitButton.isDisabled(), 'кнопка смены активна при новом пароле короче восьми');
-const shortWhy = await messageUnder('Новый пароль', '.z-modal');
-check(
-  shortWhy.length > 0,
-  'короткий новый пароль не объяснён — ровно это заказчик увидел как «кнопка не активируется»',
-  JSON.stringify(shortWhy),
-);
-
-await fill('Новый пароль', 'новыйпароль99', '.z-modal');
-await fill('Повторите пароль', 'новыйпароль9', '.z-modal');
-check(await submitButton.isDisabled(), 'кнопка смены активна при несовпавшем повторе');
-const mismatchWhy = await messageUnder('Повторите пароль', '.z-modal');
-check(mismatchWhy.length > 0, 'несовпавший повтор не объяснён', JSON.stringify(mismatchWhy));
-
-await fill('Повторите пароль', 'новыйпароль99', '.z-modal');
-check(
-  !(await submitButton.isDisabled()),
-  'кнопка смены не включилась, когда все три поля заполнены верно',
-);
-
 // ── 8. Снятие шифрования достижимо и просит пароль ────────────────────────
-await page.getByRole('button', { name: /Отмена/ }).first().click();
-await page.waitForTimeout(400);
+/* Диалог смены пароля открывался только в шаге 7 — при закрытом разделе его
+   нет, и «Отмена» искать не в чем. */
+if (!securityClosed) {
+  await page.getByRole('button', { name: /Отмена/ }).first().click();
+  await page.waitForTimeout(400);
+}
 await page.getByRole('button', { name: /Назад/ }).first().click();
 await page.waitForTimeout(800);
 /*

@@ -38,6 +38,8 @@ import {
   type AttachmentNaming,
   type SyncBackend,
   LEGAL_URLS,
+  FOLDER_COPY_ENABLED,
+  SECURITY_SETTINGS_ENABLED,
 } from '@zapiski/core';
 import type { AttachmentPlacement, SettingsSection } from '../contract.js';
 import { cloudAvailable } from '../state/cloud-access.js';
@@ -93,17 +95,32 @@ export function SettingsScreen({ section }: SettingsScreenProps): ReactNode {
 
       <div className="za-settings">
         <nav className="za-settings__nav" aria-label={strings.settings.nav}>
-          {SECTIONS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`za-settings__nav-item${item === section ? ' za-settings__nav-item--active' : ''}`}
-              aria-current={item === section || undefined}
-              onClick={() => app.navigate({ name: 'settings', section: item }, { replace: true })}
-            >
-              {strings.settings.sections[item]}
-            </button>
-          ))}
+          {SECTIONS.map((item) => {
+            /*
+              «Безопасность» пока не открывается — решение заказчика, см.
+              `SECURITY_SETTINGS_ENABLED`. Пункт остаётся видимым и подписан
+              «СКОРО»: это обещание, а не серая кнопка-обманка, и человек,
+              однажды его видевший, не решит, что настройки урезали молча.
+
+              `disabled`, а не `onClick`-заглушка: кнопка, которая на вид
+              нажимается и ничего не делает, — худший из вариантов, и с
+              клавиатуры она бы ещё и забирала фокус.
+            */
+            const soon = item === 'security' && !SECURITY_SETTINGS_ENABLED;
+            return (
+              <button
+                key={item}
+                type="button"
+                disabled={soon}
+                className={`za-settings__nav-item${item === section ? ' za-settings__nav-item--active' : ''}${soon ? ' za-settings__nav-item--soon' : ''}`}
+                aria-current={item === section || undefined}
+                onClick={() => app.navigate({ name: 'settings', section: item }, { replace: true })}
+              >
+                {strings.settings.sections[item]}
+                {soon ? <Badge>{strings.settings.security.soon}</Badge> : null}
+              </button>
+            );
+          })}
         </nav>
 
         <div className="za-scroll">
@@ -116,7 +133,12 @@ export function SettingsScreen({ section }: SettingsScreenProps): ReactNode {
                 можно набрать себе несколько. Старый адрес продолжает работать
                 и ведёт сюда же. */}
             {section === 'sync' || section === 'storage' ? <SyncSection /> : null}
-            {section === 'security' ? <SecuritySection /> : null}
+            {/* Адрес `section=security` мог остаться в закладке или в чужой
+                ссылке. Пустой экран по такому адресу — тупик, поэтому раздел
+                отвечает словами, а не молчанием. */}
+            {section === 'security' ? (
+              SECURITY_SETTINGS_ENABLED ? <SecuritySection /> : <SecuritySoon />
+            ) : null}
             {section === 'transfer' ? <TransferSection /> : null}
             {section === 'account' ? <AccountSection /> : null}
             {section === 'plus' ? <PlusSection /> : null}
@@ -755,14 +777,24 @@ function SyncSection(): ReactNode {
         onChoose={() => void app.switchBackend(null)}
       />
 
-      {/* Копия в другой папке есть там, где платформа умеет её выбрать. */}
-      <ModeCard
-        id="local"
-        title={copy.modeCopy}
-        hint={copy.modeCopyHint}
-        current={choiceOrBackend}
-        onChoose={() => connect('local')}
-      />
+      {/*
+        «Копия в другой папке» — решение заказчика «убрать»: папка чужого
+        облачного клиента (Яндекс.Диск и подобные) подменяет собой наше облако.
+
+        Правило то же, что у Яндекс.Диска и WebDAV ниже, и по той же причине:
+        прячется ВЫБОР, а не сделанный выбор. У кого заметки лежат в такой
+        папке сейчас, карточка остаётся — иначе человек не увидел бы, где они,
+        и не смог бы оттуда уйти.
+      */}
+      {FOLDER_COPY_ENABLED || choiceOrBackend === 'local' ? (
+        <ModeCard
+          id="local"
+          title={copy.modeCopy}
+          hint={copy.modeCopyHint}
+          current={choiceOrBackend}
+          onChoose={() => connect('local')}
+        />
+      ) : null}
 
       {/*
         Яндекс.Диск и WebDAV — решение заказчика «пока скрыть: они по сути
@@ -854,7 +886,17 @@ function SyncSection(): ReactNode {
          * Поэтому «недоступно в браузере» идёт через `hint`, который
          * рисуется независимо от выбранности.
          */
-        badge={cloudHere ? copy.cloudBadge : undefined}
+        /*
+         * Бейдж «ЗАПИСКИ+» — только когда тарифы существуют.
+         *
+         * Пока `BILLING_ENABLED` выключен, облако бесплатно всем вошедшим, и
+         * подпись именем платного тарифа обещает ограничение, которого нет.
+         * Это то же правило, по которому в «Аккаунте» спрятана строка про
+         * тариф: «ответ на вопрос, которого человек не задавал, и намёк на
+         * ограничение». Здесь оно вдобавок расходится с самим продуктом —
+         * никакого «ЗАПИСКИ+» человеку негде ни увидеть, ни купить.
+         */
+        badge={cloudHere && BILLING_ENABLED ? copy.cloudBadge : undefined}
         hint={cloudHere ? undefined : copy.cloudUnavailableBadge}
         current={choiceOrBackend}
         onChoose={
@@ -937,6 +979,25 @@ function SyncSection(): ReactNode {
  * оно уже включено. Оба ожили вместе с иерархией ключей: без общего пароля
  * хранилища ни тому, ни другому не на чем было работать (ТЗ §3.3).
  */
+/**
+ * Что стоит по адресу «Безопасность», пока раздел закрыт.
+ *
+ * Не пустой экран и не редирект: адрес мог остаться в закладке, а увести
+ * человека молча в другой раздел — значит соврать ему о том, куда он нажал.
+ * Здесь сказано, что раздел вернётся, и куда идти за шифрованием сейчас.
+ */
+function SecuritySoon(): ReactNode {
+  const strings = useStrings();
+  const copy = strings.settings.security;
+
+  return (
+    <>
+      <Section>{copy.soonTitle}</Section>
+      <InfoNote icon={<IconInfo size={15} />}>{copy.soonNote}</InfoNote>
+    </>
+  );
+}
+
 function SecuritySection(): ReactNode {
   const app = useApp();
   const strings = useStrings();

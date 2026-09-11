@@ -10,6 +10,7 @@
 | [scope.md](scope.md) | P0 / P1 / P2 / анти-скоуп с честной отметкой фактического состояния кода |
 | [platforms.md](platforms.md) | Платформы, приоритеты и таблица возможностей — сверено с `PlatformCapabilities` |
 | [monetization.md](monetization.md) | Тарифы, что входит, правила paywall, бандл с Дневником |
+| [hidden-in-ui.md](hidden-in-ui.md) | Что есть в коде, но человеку не показывается: выключатели, решения и как вернуть |
 | [metrics.md](metrics.md) | NSM, активация, retention, конверсия |
 | [roadmap.md](roadmap.md) | Этапы 0–6 с текущим статусом каждого |
 | [changelog.md](changelog.md) | Что вошло в версию |

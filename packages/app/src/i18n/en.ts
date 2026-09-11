@@ -695,6 +695,10 @@ export const en: AppCatalog = {
       siteUrl: 'https://zapiski.pro',
     },
     security: {
+      soon: 'SOON',
+      soonTitle: 'This section opens soon',
+      soonNote:
+        'Vault password, biometrics and auto-lock move here together with the new protection — modern biometrics and Yandex Key. For now a note is encrypted from its own menu, and the password is asked when you open it.',
       encryptDefault: 'Encrypt new notes',
       encryptDefaultHint: 'While the vault is unlocked. After auto-lock — as usual',
       encryptDefaultNoPassword: 'Encrypt any note first — that is when the vault password appears',

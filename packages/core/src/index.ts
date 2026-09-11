@@ -56,7 +56,8 @@ export { MemoryVaultStorage, type MemoryVaultStorageOptions } from './memory-sto
 /* Редакция документов, на которые даётся согласие при регистрации. */
 export { LEGAL_URLS, LEGAL_VERSION } from './legal.js';
 export { BILLING_ENABLED } from './billing.js';
-export { OWN_STORAGE_ENABLED } from './storage-choices.js';
+export { OWN_STORAGE_ENABLED, FOLDER_COPY_ENABLED } from './storage-choices.js';
+export { SECURITY_SETTINGS_ENABLED } from './security-settings.js';
 export { CLOUD_SYNC_ENABLED } from './cloud-sync.js';
 export {
   SyncKeyOnboarding,

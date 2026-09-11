@@ -1267,6 +1267,18 @@
   background-color: var(--accent-soft);
   color: var(--accent-on-soft);
 }
+/* Раздел, который ещё не открыт: подпись «СКОРО» бейджем рядом с именем.
+   Цвета берутся у темы, а не задаются: бейдж сам по себе `--surface-sunken` +
+   `--text-secondary`, и в тёмной теме читается так же, как в светлой. */
+.za-settings__nav-item--soon {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  color: var(--text-tertiary);
+  /* Не `opacity`: она гасит и бейдж, и вместе с ним контраст подписи ниже
+     порога. Приглушается только цвет текста, у которого роль это позволяет. */
+  cursor: default;
+}
 .za-field-row {
   display: flex;
   align-items: center;

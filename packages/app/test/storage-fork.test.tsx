@@ -15,6 +15,8 @@
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import {
+  BILLING_ENABLED,
+  FOLDER_COPY_ENABLED,
   LocalFolderBackend,
   MemoryVaultStorage,
   OWN_STORAGE_ENABLED,
@@ -107,6 +109,66 @@ describe('место хранения — один список', () => {
      */
     const titles = screen.getAllByRole('radio').map((node) => node.textContent ?? '');
     expect(titles.some((text) => text.includes(ru.settings.sync.modeLocalOnly))).toBe(true);
+  });
+
+  /**
+   * Решение заказчика: «из хранилища и синхронизации убери „Копия в другой
+   * папке“ (то, что касается Яндекс.Диска)».
+   *
+   * Тот же случай, что с Яндекс.Диском и WebDAV выше, и та же пара проверок:
+   * предложения нет — но у того, кто уже там, карточка остаётся.
+   */
+  it('копия в другой папке не предлагается, пока выключена', async () => {
+    await mount();
+    /* По заголовку карточки, а не по подсказке: слово «папка» встречается и в
+       соседних текстах, и проверка по нему поймала бы не карточку. */
+    const titles = screen.getAllByRole('radio').map((node) => node.textContent ?? '');
+    expect(
+      titles.some((text) => text.includes(ru.settings.sync.modeCopy)),
+      'карточка «Копия в другой папке» показывается вопреки выключателю',
+    ).toBe(FOLDER_COPY_ENABLED);
+  });
+
+  it('у кого заметки уже в такой папке — карточка остаётся', async () => {
+    /*
+     * Прячется ВЫБОР, а не сделанный выбор. Без этого человек не увидел бы,
+     * где лежат его заметки, и не смог бы оттуда уйти: ровно то «приложение
+     * само сменило место хранения», которое мы уже проходили.
+     */
+    const app = await mount();
+    const storage = new MemoryVaultStorage({ files: {} });
+    await app.switchBackend(new LocalFolderBackend(storage, { title: 'Флешка' }));
+
+    const titles = screen.getAllByRole('radio').map((node) => node.textContent ?? '');
+    expect(
+      titles.some((text) => text.includes(ru.settings.sync.modeCopy)),
+      'выбранное человеком место хранения исчезло с экрана',
+    ).toBe(true);
+  });
+
+  /**
+   * Бейдж платного тарифа на карточке облака — пока тарифов нет, его быть не
+   * должно.
+   *
+   * Найдено живым браузером, а не чтением: на экране, где облако НЕ выбрано,
+   * его карточка носила подпись «ЗАПИСКИ+». Купить это негде — `BILLING_ENABLED`
+   * выключен, экран тарифов спрятан, строка про тариф в «Аккаунте» скрыта
+   * ровно по этой причине. Обещание ограничения, которого нет.
+   */
+  it('карточка облака не носит имя тарифа, пока тарифов нет', async () => {
+    const app = await mount();
+    /* Бейдж рисуется только у НЕвыбранной карточки, поэтому уводим выбор. */
+    const storage = new MemoryVaultStorage({ files: {} });
+    await app.switchBackend(new LocalFolderBackend(storage, { title: 'Флешка' }));
+
+    const cloud = screen
+      .getAllByRole('radio')
+      .find((node) => (node.textContent ?? '').includes(ru.settings.sync.cloud));
+    expect(cloud, 'карточки облака нет вовсе').toBeTruthy();
+    expect(
+      (cloud?.textContent ?? '').includes(ru.settings.sync.cloudBadge),
+      'облако подписано платным тарифом, которого человеку негде купить',
+    ).toBe(BILLING_ENABLED);
   });
 
   it('выбор другого режима снимает прежний', async () => {
